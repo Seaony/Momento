@@ -405,6 +405,7 @@ private struct MomentoLibrarySwitcherMenu: View {
     @State private var hoveredActionID: String?
     @State private var activeMoreLibraryID: RecentLibraryReference.ID?
     @State private var hoveredMoreActionID: String?
+    @State private var displayedLibraries: [RecentLibraryReference] = []
     @State private var draggingLibraryID: RecentLibraryReference.ID?
 
     var body: some View {
@@ -412,7 +413,7 @@ private struct MomentoLibrarySwitcherMenu: View {
             menuPanel
 
             if let activeLibrary = activeMoreLibrary,
-               let activeIndex = recentLibraries.firstIndex(where: { $0.id == activeLibrary.id }) {
+               let activeIndex = visibleLibraries.firstIndex(where: { $0.id == activeLibrary.id }) {
                 libraryMoreMenu(activeLibrary)
                     .offset(libraryMoreMenuOffset(for: activeIndex))
                     .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .topLeading)))
@@ -420,13 +421,21 @@ private struct MomentoLibrarySwitcherMenu: View {
             }
         }
         .frame(width: MomentoTheme.librarySwitcherWidth + 178, alignment: .topLeading)
+        .onAppear(perform: syncDisplayedLibraries)
+        .onChange(of: recentLibraries) { _, libraries in
+            guard draggingLibraryID == nil else {
+                return
+            }
+
+            displayedLibraries = libraries
+        }
     }
 
     private var menuPanel: some View {
         VStack(alignment: .leading, spacing: 5) {
-            if !recentLibraries.isEmpty {
+            if !visibleLibraries.isEmpty {
                 VStack(spacing: 2) {
-                    ForEach(recentLibraries) { library in
+                    ForEach(visibleLibraries) { library in
                         libraryRow(library)
                     }
                 }
@@ -471,12 +480,20 @@ private struct MomentoLibrarySwitcherMenu: View {
         .shadow(color: .black.opacity(0.22), radius: 18, y: 10)
     }
 
+    private var visibleLibraries: [RecentLibraryReference] {
+        displayedLibraries.isEmpty ? recentLibraries : displayedLibraries
+    }
+
     private var activeMoreLibrary: RecentLibraryReference? {
         guard let activeMoreLibraryID else {
             return nil
         }
 
-        return recentLibraries.first { $0.id == activeMoreLibraryID }
+        return visibleLibraries.first { $0.id == activeMoreLibraryID }
+    }
+
+    private func syncDisplayedLibraries() {
+        displayedLibraries = recentLibraries
     }
 
     private func libraryRow(_ library: RecentLibraryReference) -> some View {
@@ -554,9 +571,9 @@ private struct MomentoLibrarySwitcherMenu: View {
         } preview: {
             libraryDragPreview(library)
         }
-        .onDrop(of: [.text], delegate: LibraryReorderDropDelegate(
+        .onDrop(of: [.plainText], delegate: LibraryReorderDropDelegate(
             targetLibrary: library,
-            recentLibraries: recentLibraries,
+            displayedLibraries: $displayedLibraries,
             draggingLibraryID: $draggingLibraryID,
             onMoveLibrary: onMoveLibrary
         ))
@@ -786,15 +803,29 @@ private struct MomentoLibrarySwitcherMenu: View {
 
 private struct LibraryReorderDropDelegate: DropDelegate {
     var targetLibrary: RecentLibraryReference
-    var recentLibraries: [RecentLibraryReference]
+    @Binding var displayedLibraries: [RecentLibraryReference]
     @Binding var draggingLibraryID: RecentLibraryReference.ID?
     var onMoveLibrary: (RecentLibraryReference.ID, RecentLibraryReference.ID, Bool) -> Void
 
     func dropEntered(info: DropInfo) {
+        reorderIfNeeded(info: info)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        reorderIfNeeded(info: info)
+        return DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingLibraryID = nil
+        return true
+    }
+
+    private func reorderIfNeeded(info: DropInfo) {
         guard let draggedID = draggingLibraryID,
               draggedID != targetLibrary.id,
-              let sourceIndex = recentLibraries.firstIndex(where: { $0.id == draggedID }),
-              let targetIndex = recentLibraries.firstIndex(where: { $0.id == targetLibrary.id }) else {
+              let sourceIndex = displayedLibraries.firstIndex(where: { $0.id == draggedID }),
+              let targetIndex = displayedLibraries.firstIndex(where: { $0.id == targetLibrary.id }) else {
             return
         }
 
@@ -807,17 +838,16 @@ private struct LibraryReorderDropDelegate: DropDelegate {
         }
 
         withAnimation(.smooth(duration: 0.14)) {
+            let movedLibrary = displayedLibraries.remove(at: sourceIndex)
+            guard let updatedTargetIndex = displayedLibraries.firstIndex(where: { $0.id == targetLibrary.id }) else {
+                displayedLibraries.insert(movedLibrary, at: sourceIndex)
+                return
+            }
+
+            let insertionIndex = insertAfterTarget ? updatedTargetIndex + 1 : updatedTargetIndex
+            displayedLibraries.insert(movedLibrary, at: min(insertionIndex, displayedLibraries.endIndex))
             onMoveLibrary(draggedID, targetLibrary.id, insertAfterTarget)
         }
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        draggingLibraryID = nil
-        return true
     }
 }
 
