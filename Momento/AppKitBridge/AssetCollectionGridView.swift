@@ -11,7 +11,7 @@ import UniformTypeIdentifiers
 private enum AssetCollectionMetrics {
     static let masonryItemWidth: CGFloat = 164
     static let masonryImageInset: CGFloat = 3
-    static let hoverScale: CGFloat = 1.08
+    static let hoverScale: CGFloat = 1.30
     static let hoverShadowOpacity: Float = 0.34
     static let hoverShadowRadius: CGFloat = 20
     static let hoverShadowOffset = CGSize(width: 0, height: 10)
@@ -937,9 +937,9 @@ private final class HoverSelectionView: NSView {
         layer?.borderWidth = 0
 
         if isHovered {
-            layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.18).cgColor
+            layer?.backgroundColor = NSColor.controlAccentColor.cgColor
         } else if isSelected {
-            layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.12).cgColor
+            layer?.backgroundColor = NSColor.controlAccentColor.cgColor
         } else {
             layer?.backgroundColor = NSColor.clear.cgColor
         }
