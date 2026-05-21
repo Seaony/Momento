@@ -105,6 +105,9 @@ final class LiquidGlassSourceTests: XCTestCase {
         let footerStart = try XCTUnwrap(sidebarSource.range(of: "private var bottomActionBar: some View {"))
         let footerEnd = try XCTUnwrap(sidebarSource[footerStart.lowerBound...].range(of: "    private func sidebarFooterButton("))
         let footerSource = String(sidebarSource[footerStart.lowerBound..<footerEnd.lowerBound])
+        let backgroundStart = try XCTUnwrap(sidebarSource.range(of: "    private func sidebarFooterIconBackground("))
+        let backgroundEnd = try XCTUnwrap(sidebarSource[backgroundStart.lowerBound...].range(of: "    private func updateFooterHover("))
+        let backgroundSource = String(sidebarSource[backgroundStart.lowerBound..<backgroundEnd.lowerBound])
 
         XCTAssertTrue(sidebarSource.contains("sidebarBottomSeparator"))
         XCTAssertTrue(sidebarSource.contains("MomentoTheme.subtleStroke.opacity(1)"))
@@ -124,6 +127,8 @@ final class LiquidGlassSourceTests: XCTestCase {
         XCTAssertTrue(sidebarSource.contains("updateFooterHover(id: id, isHovering: hovering)"))
         XCTAssertTrue(sidebarSource.contains("MomentoTheme.primaryText"))
         XCTAssertTrue(sidebarSource.contains("sidebarFooterIconBackground(id: id, isSelected: isSelected)"))
+        XCTAssertTrue(backgroundSource.contains("Color.white.opacity(0.08)"))
+        XCTAssertFalse(backgroundSource.contains(".glassEffect(.regular, in: shape)"))
     }
 
     func testFloatingSidebarWidthIsUserResizableWithoutSplitViewBorders() throws {

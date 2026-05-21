@@ -212,8 +212,7 @@ struct MomentoSidebarView: View {
         let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
 
         if isSelected || hoveredFooterActionID == id {
-            Color.clear
-                .glassEffect(.regular, in: shape)
+            shape.fill(Color.white.opacity(0.08))
         } else {
             Color.clear
         }
