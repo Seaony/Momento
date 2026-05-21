@@ -79,12 +79,18 @@ final class WelcomeViewSourceTests: XCTestCase {
     func testWelcomeButtonsUseSharedFixedMetrics() throws {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 
-        XCTAssertTrue(source.contains("welcomeButtonWidth: CGFloat = 124"))
-        XCTAssertTrue(source.contains("welcomeButtonHeight: CGFloat = 42"))
+        XCTAssertTrue(source.contains("welcomeButtonWidth: CGFloat = 116"))
+        XCTAssertTrue(source.contains("welcomeButtonHeight: CGFloat = 36"))
+        XCTAssertTrue(source.contains("welcomeButtonFontSize: CGFloat = 13"))
         let fixedSizeFrameCount = source
             .components(separatedBy: ".frame(width: welcomeButtonWidth, height: welcomeButtonHeight)")
             .count - 1
         XCTAssertGreaterThanOrEqual(fixedSizeFrameCount, 2)
+
+        let buttonFontCount = source
+            .components(separatedBy: ".font(.system(size: welcomeButtonFontSize, weight: .semibold))")
+            .count - 1
+        XCTAssertGreaterThanOrEqual(buttonFontCount, 2)
     }
 
     func testWelcomeButtonsUseRequestedSymbols() throws {

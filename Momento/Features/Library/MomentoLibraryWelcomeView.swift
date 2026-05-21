@@ -1,7 +1,8 @@
 import SwiftUI
 
-private let welcomeButtonWidth: CGFloat = 124
-private let welcomeButtonHeight: CGFloat = 42
+private let welcomeButtonWidth: CGFloat = 116
+private let welcomeButtonHeight: CGFloat = 36
+private let welcomeButtonFontSize: CGFloat = 13
 
 struct MomentoLibraryWelcomeView: View {
     @Environment(\.appLocalization) private var localization
@@ -34,7 +35,7 @@ struct MomentoLibraryWelcomeView: View {
                     } label: {
                         Label(localization.string("Create Library"), systemImage: "plus.circle.fill")
                             .labelStyle(.titleAndIcon)
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.system(size: welcomeButtonFontSize, weight: .semibold))
                             .frame(width: welcomeButtonWidth, height: welcomeButtonHeight)
                     }
                     .buttonStyle(.glassProminent)
@@ -50,7 +51,7 @@ struct MomentoLibraryWelcomeView: View {
                     } label: {
                         Label(localization.string("Open Library"), systemImage: "folder.fill.badge.plus")
                             .labelStyle(.titleAndIcon)
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.system(size: welcomeButtonFontSize, weight: .semibold))
                             .frame(width: welcomeButtonWidth, height: welcomeButtonHeight)
                     }
                     .buttonStyle(.glass)
