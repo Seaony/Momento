@@ -4,17 +4,12 @@
 //
 
 import AppKit
-import QuartzCore
 import SwiftUI
 import UniformTypeIdentifiers
 
 private enum AssetCollectionMetrics {
     static let masonryItemWidth: CGFloat = 164
     static let masonryImageInset: CGFloat = 3
-    static let hoverScale: CGFloat = 1.30
-    static let hoverShadowOpacity: Float = 0.34
-    static let hoverShadowRadius: CGFloat = 20
-    static let hoverShadowOffset = CGSize(width: 0, height: 10)
     static let selectionCornerRadius: CGFloat = 12
     static let imageCornerRadius: CGFloat = 10
     static let dimensionBadgeCornerRadius: CGFloat = 5
@@ -469,23 +464,19 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     private var masonryConstraints: [NSLayoutConstraint] = []
     private var listConstraints: [NSLayoutConstraint] = []
     private var mode: AssetViewMode = .grid
-    private var isHovering = false
     private let gridTitleHeight: CGFloat = 16
     private let gridSubtitleHeight: CGFloat = 14
 
     override var isSelected: Bool {
         didSet {
             contentView.isSelected = isSelected
-            updateContainerScale(animated: true)
         }
     }
 
     override func loadView() {
         containerView.translatesAutoresizingMaskIntoConstraints = false
         containerView.hoverChanged = { [weak self] isHovered in
-            self?.isHovering = isHovered
             self?.contentView.isHovered = isHovered
-            self?.updateContainerScale(animated: true)
             if isHovered {
                 self?.onHoverFocus?()
             }
@@ -587,10 +578,8 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         dimensionBadgeView.stringValue = ""
         dimensionBadgeView.isHidden = true
         onHoverFocus = nil
-        isHovering = false
         contentView.isHovered = false
         contentView.isSelected = false
-        updateContainerScale(animated: false)
         mode = .grid
     }
 
@@ -601,7 +590,6 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         dimensionBadgeView.stringValue = subtitle(for: asset)
         previewImageView.image = previewImage(for: asset)
         applyModeLayout()
-        updateContainerScale(animated: false)
     }
 
     private func applyModeLayout() {
@@ -670,95 +658,6 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
         let rectInWindow = contentView.convert(contentView.bounds, to: nil)
         return window.convertToScreen(rectInWindow)
-    }
-
-    private func updateContainerScale(animated: Bool) {
-        guard let layer = contentView.layer else {
-            return
-        }
-
-        let isElevated = mode == .masonry && isHovering
-        let scale = isElevated ? AssetCollectionMetrics.hoverScale : 1
-        let targetTransform = CATransform3DMakeScale(scale, scale, 1)
-        let currentTransform = layer.presentation()?.transform ?? layer.transform
-        let targetShadowOpacity = isElevated ? AssetCollectionMetrics.hoverShadowOpacity : 0
-        let targetShadowRadius = isElevated ? AssetCollectionMetrics.hoverShadowRadius : 0
-        let targetShadowOffset = isElevated ? AssetCollectionMetrics.hoverShadowOffset : .zero
-        let currentShadowOpacity = layer.presentation()?.shadowOpacity ?? layer.shadowOpacity
-        let currentShadowRadius = layer.presentation()?.shadowRadius ?? layer.shadowRadius
-        let currentShadowOffset = layer.presentation()?.shadowOffset ?? layer.shadowOffset
-        let shouldAnimate = animated && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-
-        contentView.updateShadowPath()
-        layer.shadowColor = NSColor.black.withAlphaComponent(0.52).cgColor
-        layer.zPosition = isElevated ? 12 : 0
-
-        guard shouldAnimate else {
-            layer.removeAnimation(forKey: "hoverScale")
-            layer.removeAnimation(forKey: "hoverShadowOpacity")
-            layer.removeAnimation(forKey: "hoverShadowRadius")
-            layer.removeAnimation(forKey: "hoverShadowOffset")
-            layer.transform = targetTransform
-            layer.shadowOpacity = targetShadowOpacity
-            layer.shadowRadius = targetShadowRadius
-            layer.shadowOffset = targetShadowOffset
-            return
-        }
-
-        layer.transform = targetTransform
-        layer.shadowOpacity = targetShadowOpacity
-        layer.shadowRadius = targetShadowRadius
-        layer.shadowOffset = targetShadowOffset
-
-        let timingFunction = CAMediaTimingFunction(name: .easeOut)
-        addAnimation(
-            to: layer,
-            keyPath: "transform",
-            fromValue: currentTransform,
-            toValue: targetTransform,
-            timingFunction: timingFunction,
-            animationKey: "hoverScale"
-        )
-        addAnimation(
-            to: layer,
-            keyPath: "shadowOpacity",
-            fromValue: currentShadowOpacity,
-            toValue: targetShadowOpacity,
-            timingFunction: timingFunction,
-            animationKey: "hoverShadowOpacity"
-        )
-        addAnimation(
-            to: layer,
-            keyPath: "shadowRadius",
-            fromValue: currentShadowRadius,
-            toValue: targetShadowRadius,
-            timingFunction: timingFunction,
-            animationKey: "hoverShadowRadius"
-        )
-        addAnimation(
-            to: layer,
-            keyPath: "shadowOffset",
-            fromValue: NSValue(size: currentShadowOffset),
-            toValue: NSValue(size: targetShadowOffset),
-            timingFunction: timingFunction,
-            animationKey: "hoverShadowOffset"
-        )
-    }
-
-    private func addAnimation(
-        to layer: CALayer,
-        keyPath: String,
-        fromValue: Any?,
-        toValue: Any?,
-        timingFunction: CAMediaTimingFunction,
-        animationKey: String
-    ) {
-        let animation = CABasicAnimation(keyPath: keyPath)
-        animation.fromValue = fromValue
-        animation.toValue = toValue
-        animation.duration = 0.16
-        animation.timingFunction = timingFunction
-        layer.add(animation, forKey: animationKey)
     }
 }
 
@@ -838,32 +737,6 @@ private final class HoverTrackingView: NSView {
     }
 }
 
-private final class CenterAnchoredLayer: CALayer {
-    nonisolated override init() {
-        super.init()
-        super.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-    }
-
-    nonisolated override init(layer: Any) {
-        super.init(layer: layer)
-        super.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-    }
-
-    nonisolated required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        super.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-    }
-
-    nonisolated override var anchorPoint: CGPoint {
-        get {
-            CGPoint(x: 0.5, y: 0.5)
-        }
-        set {
-            super.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-        }
-    }
-}
-
 private final class HoverSelectionView: NSView {
     var isHovered = false {
         didSet {
@@ -877,10 +750,6 @@ private final class HoverSelectionView: NSView {
     }
 
     private let glassBackgroundView = NSGlassEffectView()
-
-    override func makeBackingLayer() -> CALayer {
-        CenterAnchoredLayer()
-    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
