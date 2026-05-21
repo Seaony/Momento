@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct MomentoShellView<Content: View>: View {
+    @Environment(\.appLocalization) private var localization
+
     @Binding var sidebarSelection: MomentoSidebarItem.ID?
     @Binding var searchQuery: String
     @Binding var isCommandPalettePresented: Bool
@@ -70,7 +72,10 @@ struct MomentoShellView<Content: View>: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            floatingSidebar
+            if !isSidebarCollapsed {
+                floatingSidebar
+                    .transition(.move(edge: .leading).combined(with: .opacity))
+            }
 
             VStack(spacing: 0) {
                 content()
@@ -84,6 +89,11 @@ struct MomentoShellView<Content: View>: View {
         }
         .animation(.smooth(duration: 0.18), value: isInspectorPresented)
         .animation(.smooth(duration: 0.18), value: isSidebarCollapsed)
+        .overlay(alignment: .topLeading) {
+            sidebarToggleButton
+                .padding(.leading, sidebarToggleLeadingInset)
+                .padding(.top, MomentoTheme.sidebarTitlebarButtonTopInset)
+        }
         .momentoCommandPalette(
             isPresented: $isCommandPalettePresented,
             commands: commands,
@@ -104,15 +114,11 @@ struct MomentoShellView<Content: View>: View {
             onCreateLibrary: onCreateLibrary,
             onOpenLibrary: onOpenLibrary,
             onSwitchLibrary: onSwitchLibrary,
-            onCloseLibrary: onCloseLibrary,
-            isCollapsed: isSidebarCollapsed,
-            onToggleCollapsed: toggleSidebarCollapsed
+            onCloseLibrary: onCloseLibrary
         )
-        .frame(width: isSidebarCollapsed ? MomentoTheme.collapsedSidebarWidth : sidebarWidth)
+        .frame(width: sidebarWidth)
         .overlay(alignment: .trailing) {
-            if !isSidebarCollapsed {
-                sidebarResizeHandle
-            }
+            sidebarResizeHandle
         }
         .padding(.leading, MomentoTheme.floatingSidebarInset)
         .padding(.trailing, MomentoTheme.floatingSidebarInset)
@@ -148,6 +154,30 @@ struct MomentoShellView<Content: View>: View {
                         sidebarResizeStartWidth = nil
                     }
             )
+    }
+
+    private var sidebarToggleButton: some View {
+        let label = localization.string(isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar")
+
+        return Button(action: toggleSidebarCollapsed) {
+            Image(systemName: "sidebar.left")
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(MomentoTheme.primaryText)
+                .frame(width: MomentoTheme.sidebarTitlebarButtonSize, height: MomentoTheme.sidebarTitlebarButtonSize)
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .help(label)
+        .accessibilityLabel(label)
+    }
+
+    private var sidebarToggleLeadingInset: CGFloat {
+        if isSidebarCollapsed {
+            return MomentoTheme.collapsedSidebarToggleLeadingInset
+        }
+
+        return MomentoTheme.floatingSidebarInset + sidebarWidth - MomentoTheme.sidebarTitlebarButtonTrailingInset - MomentoTheme.sidebarTitlebarButtonSize
     }
 
     private func toggleSidebarCollapsed() {
