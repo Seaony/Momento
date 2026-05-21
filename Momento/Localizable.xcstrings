@@ -225,6 +225,23 @@
         }
       }
     },
+    "Choose Save Location" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Save Location"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择保存路径"
+          }
+        }
+      }
+    },
     "Close Library" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -442,6 +459,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "英文"
+          }
+        }
+      }
+    },
+    "Enter a name for this library, then choose where to save it." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a name for this library, then choose where to save it."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请输入资源库的名称（例：我的灵感、设计素材），并点击下方按钮选择资源库保存的路径。"
           }
         }
       }
@@ -666,6 +700,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "资源库"
+          }
+        }
+      }
+    },
+    "Library Name" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Library Name"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "资源库名称"
           }
         }
       }

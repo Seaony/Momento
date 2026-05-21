@@ -151,6 +151,26 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertTrue(source.contains("try store.createLibrary(at: packageURL)"))
     }
 
+    func testCreateLibraryDialogUsesReferenceGlassLayout() throws {
+        let source = try String(contentsOf: createLibraryDialogURL(), encoding: .utf8)
+
+        XCTAssertTrue(source.contains("private let createLibraryDialogWidth: CGFloat = 760"))
+        XCTAssertTrue(source.contains("private let createLibraryDialogIconSize: CGFloat = 72"))
+        XCTAssertTrue(source.contains("HStack(alignment: .top, spacing: 32)"))
+        XCTAssertTrue(source.contains("Image(systemName: \"archivebox.fill\")"))
+        XCTAssertTrue(source.contains("MomentoGlassBackground(glass: .regular.tint(Color.accentColor), cornerRadius: 18)"))
+        XCTAssertTrue(source.contains("Text(localization.string(\"Enter a name for this library, then choose where to save it.\"))"))
+        XCTAssertTrue(source.contains("TextField(localization.string(\"Library Name\"), text: $libraryName)"))
+        XCTAssertTrue(source.contains(".textFieldStyle(.plain)"))
+        XCTAssertTrue(source.contains("createLibraryNameFieldBackground"))
+        XCTAssertTrue(source.contains("isNameFocused ? Color.accentColor : MomentoTheme.subtleStroke"))
+        XCTAssertTrue(source.contains("Text(localization.string(\"Choose Save Location\"))"))
+        XCTAssertTrue(source.contains(".frame(width: 214, height: 64)"))
+        XCTAssertTrue(source.contains(".frame(width: 360, height: 64)"))
+        XCTAssertFalse(source.contains(".textFieldStyle(.roundedBorder)"))
+        XCTAssertFalse(source.contains("Text(localization.string(\"Continue\"))"))
+    }
+
     func testWelcomeButtonsUseNativeCapsuleBorderShape() throws {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 
@@ -194,6 +214,13 @@ final class WelcomeViewSourceTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("Momento/ContentView.swift")
+    }
+
+    private func createLibraryDialogURL() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Momento/Features/Library/MomentoCreateLibraryDialog.swift")
     }
 
     private func sidebarViewURL() -> URL {
