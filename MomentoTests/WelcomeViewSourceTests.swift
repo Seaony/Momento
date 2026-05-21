@@ -24,10 +24,19 @@ final class WelcomeViewSourceTests: XCTestCase {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 
         XCTAssertTrue(source.contains("@Environment(\\.appearsActive)"))
-        XCTAssertTrue(source.contains("inactiveBackdropOpacity = 0.88"))
-        XCTAssertTrue(source.contains("focusedBackdropOpacity = 0.76"))
+        XCTAssertTrue(source.contains("inactiveBackdropOpacity = 1.0"))
+        XCTAssertTrue(source.contains("focusedBackdropOpacity = 0.28"))
         XCTAssertTrue(source.contains("appearsActive ? focusedBackdropOpacity : inactiveBackdropOpacity"))
         XCTAssertFalse(source.contains("@Environment(\\.controlActiveState)"))
+    }
+
+    func testWelcomeConfiguresTransparentWindowForBehindWindowGlass() throws {
+        let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
+
+        XCTAssertTrue(source.contains("WelcomeWindowTransparencyConfigurator"))
+        XCTAssertTrue(source.contains("window.isOpaque = false"))
+        XCTAssertTrue(source.contains("window.backgroundColor = .clear"))
+        XCTAssertTrue(source.contains("restoreWindowConfiguration()"))
     }
 
     func testWelcomeButtonsUseSharedFixedMetrics() throws {
