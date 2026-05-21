@@ -15,11 +15,13 @@ final class WelcomeViewSourceTests: XCTestCase {
     func testWelcomeButtonsUseNativeGlassEffects() throws {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 
-        XCTAssertTrue(source.contains(".glassEffect(.regular.tint(Color.accentColor).interactive(), in: Capsule(style: .continuous))"))
-        XCTAssertTrue(source.contains(".glassEffect(.regular.interactive(), in: Capsule(style: .continuous))"))
+        XCTAssertTrue(source.contains(".buttonStyle(.glassProminent)"))
+        XCTAssertTrue(source.contains(".buttonStyle(.glass)"))
         XCTAssertFalse(source.contains("WelcomePrimaryButtonStyle"))
         XCTAssertFalse(source.contains("WelcomeGlassButtonStyle"))
+        XCTAssertFalse(source.contains(".buttonStyle(.plain)"))
         XCTAssertFalse(source.contains(".overlay(alignment: .top)"))
+        XCTAssertFalse(source.contains(".shadow("))
     }
 
     func testWelcomeBackdropAdjustsOpacityWhenWindowIsFocused() throws {
@@ -87,9 +89,17 @@ final class WelcomeViewSourceTests: XCTestCase {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 
         XCTAssertTrue(source.contains(".foregroundStyle(Color.white)"))
-        XCTAssertTrue(source.contains(".glassEffect(.regular.interactive(), in: Capsule(style: .continuous))"))
+        XCTAssertTrue(source.contains(".buttonStyle(.glass)"))
         XCTAssertTrue(source.contains(".environment(\\.appearsActive, true)"))
         XCTAssertFalse(source.contains("isOpenHovered ? Color.primary : MomentoTheme.secondaryText"))
+    }
+
+    func testWelcomeBackdropUsesNativeGlassEffect() throws {
+        let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
+
+        XCTAssertTrue(source.contains(".glassEffect(.regular, in: Rectangle())"))
+        XCTAssertFalse(source.contains("MomentoVisualEffectView("))
+        XCTAssertFalse(source.contains("NSVisualEffectView"))
     }
 
     private func welcomeViewURL() -> URL {

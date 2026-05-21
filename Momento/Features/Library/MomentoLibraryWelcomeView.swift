@@ -8,8 +8,6 @@ private let welcomeButtonHeight: CGFloat = 42
 
 struct MomentoLibraryWelcomeView: View {
     @Environment(\.appLocalization) private var localization
-    @State private var isCreateHovered = false
-    @State private var isOpenHovered = false
 
     var onCreateLibrary: () -> Void
     var onOpenLibrary: () -> Void
@@ -45,23 +43,12 @@ struct MomentoLibraryWelcomeView: View {
                             .font(.system(size: 14, weight: .semibold))
                             .frame(width: welcomeButtonWidth, height: welcomeButtonHeight)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.glassProminent)
+                    .tint(Color.accentColor)
                     .foregroundStyle(Color.white)
                     .contentShape(Capsule(style: .continuous))
-                    .glassEffect(.regular.tint(Color.accentColor).interactive(), in: Capsule(style: .continuous))
                     .environment(\.appearsActive, true)
-                    .scaleEffect(isCreateHovered ? 1.025 : 1)
-                    .shadow(
-                        color: .black.opacity(isCreateHovered ? 0.24 : 0.18),
-                        radius: isCreateHovered ? 14 : 10,
-                        x: 0,
-                        y: isCreateHovered ? 8 : 5
-                    )
-                    .onHover { hovering in
-                        isCreateHovered = hovering
-                    }
                     .pointerStyle(.link)
-                    .animation(.smooth(duration: 0.16), value: isCreateHovered)
 
                     Button {
                         onOpenLibrary()
@@ -71,23 +58,11 @@ struct MomentoLibraryWelcomeView: View {
                             .font(.system(size: 14, weight: .semibold))
                             .frame(width: welcomeButtonWidth, height: welcomeButtonHeight)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.glass)
                     .foregroundStyle(Color.white)
                     .contentShape(Capsule(style: .continuous))
-                    .glassEffect(.regular.interactive(), in: Capsule(style: .continuous))
                     .environment(\.appearsActive, true)
-                    .scaleEffect(isOpenHovered ? 1.025 : 1)
-                    .shadow(
-                        color: .black.opacity(isOpenHovered ? 0.18 : 0.10),
-                        radius: isOpenHovered ? 14 : 8,
-                        x: 0,
-                        y: isOpenHovered ? 8 : 4
-                    )
-                    .onHover { hovering in
-                        isOpenHovered = hovering
-                    }
                     .pointerStyle(.link)
-                    .animation(.smooth(duration: 0.16), value: isOpenHovered)
                 }
             }
         }
@@ -174,12 +149,8 @@ private struct WelcomeGlassBackdrop: View {
 
     var body: some View {
         ZStack {
-            MomentoVisualEffectView(
-                material: .underWindowBackground,
-                blendingMode: .behindWindow,
-                state: .active,
-                emphasized: true
-            )
+            Color.clear
+                .glassEffect(.regular, in: Rectangle())
 
             Color(nsColor: .windowBackgroundColor)
                 .opacity(windowBackgroundOpacity)

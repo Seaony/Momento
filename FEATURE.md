@@ -68,12 +68,13 @@ Momento 是一个 macOS 原生素材管理应用。
 视觉要求：
 
 - 大量使用：
-  - Liquid Glass
-  - NSVisualEffectView
-  - Gaussian Blur
+  - macOS 26 原生 Liquid Glass
+  - SwiftUI `.glassEffect`
+  - SwiftUI `.buttonStyle(.glass)` / `.buttonStyle(.glassProminent)`
   - Vibrancy
-  - Smooth Shadow
   - Layer Depth
+- `NSVisualEffectView` 仅用于 AppKit 语义材质背景，不允许用它叠加 blur / stroke / shadow 来模拟 Liquid Glass
+- 不允许自定义 Gaussian Blur 或 Smooth Shadow 伪造 Liquid Glass
 
 动画要求：
 

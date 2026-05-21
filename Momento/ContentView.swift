@@ -252,7 +252,7 @@ struct ContentView: View {
         }
         .padding(28)
         .background {
-            MomentoGlassBackground(material: .hudWindow, cornerRadius: 18)
+            MomentoGlassBackground(cornerRadius: 18)
         }
     }
 
@@ -273,7 +273,7 @@ struct ContentView: View {
         .padding(.horizontal, 14)
         .frame(minHeight: 34)
         .background {
-            MomentoGlassBackground(material: .hudWindow, cornerRadius: 11)
+            MomentoGlassBackground(cornerRadius: 11)
         }
     }
 

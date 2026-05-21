@@ -37,33 +37,25 @@ struct MomentoVisualEffectView: NSViewRepresentable {
 }
 
 struct MomentoGlassBackground: View {
-    var material: NSVisualEffectView.Material
+    var glass: Glass
     var cornerRadius: CGFloat
-    var strokeOpacity: Double
 
     init(
-        material: NSVisualEffectView.Material = .hudWindow,
-        cornerRadius: CGFloat = 16,
-        strokeOpacity: Double = 0.16
+        glass: Glass = .regular,
+        cornerRadius: CGFloat = 16
     ) {
-        self.material = material
+        self.glass = glass
         self.cornerRadius = cornerRadius
-        self.strokeOpacity = strokeOpacity
     }
 
     var body: some View {
-        MomentoVisualEffectView(material: material)
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(.white.opacity(strokeOpacity), lineWidth: 1)
-            }
-            .shadow(color: .black.opacity(0.12), radius: 18, x: 0, y: 12)
+        Color.clear
+            .glassEffect(glass, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 }
 
 struct MomentoGlassPanelModifier: ViewModifier {
-    var material: NSVisualEffectView.Material
+    var glass: Glass
     var cornerRadius: CGFloat
     var padding: CGFloat
 
@@ -71,20 +63,20 @@ struct MomentoGlassPanelModifier: ViewModifier {
         content
             .padding(padding)
             .background {
-                MomentoGlassBackground(material: material, cornerRadius: cornerRadius)
+                MomentoGlassBackground(glass: glass, cornerRadius: cornerRadius)
             }
     }
 }
 
 extension View {
     func momentoGlassPanel(
-        material: NSVisualEffectView.Material = .hudWindow,
+        glass: Glass = .regular,
         cornerRadius: CGFloat = 16,
         padding: CGFloat = 12
     ) -> some View {
         modifier(
             MomentoGlassPanelModifier(
-                material: material,
+                glass: glass,
                 cornerRadius: cornerRadius,
                 padding: padding
             )

@@ -99,7 +99,7 @@ struct MomentoCommandPalette: View {
             }
             .frame(width: 560)
             .background {
-                MomentoGlassBackground(material: .hudWindow, cornerRadius: 18, strokeOpacity: 0.2)
+                MomentoGlassBackground(cornerRadius: 18)
             }
             .onAppear {
                 selectionID = filteredCommands.first?.id
