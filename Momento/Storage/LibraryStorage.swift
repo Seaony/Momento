@@ -1,7 +1,9 @@
 import Foundation
 
 nonisolated struct LibraryStorage: Sendable {
-    static let packageExtension = "momentolibrary"
+    static let packageExtension = "momento"
+    static let legacyPackageExtension = "momentolibrary"
+    static let supportedPackageExtensions = [packageExtension, legacyPackageExtension]
 
     var applicationSupportRoot: URL
     var trashURLs: [URL]

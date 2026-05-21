@@ -31,6 +31,21 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         XCTAssertEqual(manifest.updatedAt.timeIntervalSince1970, library.createdAt.timeIntervalSince1970, accuracy: 1)
     }
 
+    func testLibraryPackageCreationAppendsMomentoExtensionWhenMissing() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let storage = LibraryStorage()
+        let inputURL = environment.rootURL.appendingPathComponent("Workspace", isDirectory: true)
+        let expectedPackageURL = environment.rootURL.appendingPathComponent("Workspace.momento", isDirectory: true)
+
+        let library = try storage.createLibraryPackage(at: inputURL, name: "Workspace")
+
+        XCTAssertEqual(library.packageURL, expectedPackageURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: expectedPackageURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: inputURL.path))
+    }
+
     func testOpeningUnsupportedManifestVersionFails() throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }
@@ -156,7 +171,7 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         defer { environment.cleanup() }
 
         try FileManager.default.createDirectory(at: environment.trashURL, withIntermediateDirectories: true)
-        let trashedPackageURL = environment.trashURL.appendingPathComponent("Test.momentolibrary", isDirectory: true)
+        let trashedPackageURL = environment.trashURL.appendingPathComponent("Test.momento", isDirectory: true)
         let storage = LibraryStorage(applicationSupportRoot: environment.rootURL, trashURLs: [environment.trashURL])
         let store = LibraryStore(
             defaultViewMode: .grid,
@@ -243,7 +258,7 @@ private struct TestEnvironment {
         rootURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         inputURL = rootURL.appendingPathComponent("input", isDirectory: true)
-        packageURL = rootURL.appendingPathComponent("Test.momentolibrary", isDirectory: true)
+        packageURL = rootURL.appendingPathComponent("Test.momento", isDirectory: true)
         trashURL = rootURL.appendingPathComponent(".Trash", isDirectory: true)
         defaultsSuiteName = "MomentoTests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: defaultsSuiteName)!

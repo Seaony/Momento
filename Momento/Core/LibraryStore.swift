@@ -119,7 +119,7 @@ final class LibraryStore {
     }
 
     func openLibrary(at packageURL: URL) throws {
-        guard packageURL.pathExtension == LibraryStorage.packageExtension else {
+        guard LibraryStorage.supportedPackageExtensions.contains(packageURL.pathExtension) else {
             throw LibraryStoreError.unsupportedLibraryURL
         }
 
@@ -376,7 +376,7 @@ enum LibraryStoreError: LocalizedError {
         case .missingRecentLibrary:
             "This recent library is no longer available."
         case .unsupportedLibraryURL:
-            "Choose a .momentolibrary package."
+            "Choose a .momento package."
         }
     }
 }

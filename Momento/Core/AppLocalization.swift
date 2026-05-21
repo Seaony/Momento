@@ -74,7 +74,7 @@ struct AppLocalization: Equatable {
         case .missingRecentLibrary:
             string("This recent library is no longer available.")
         case .unsupportedLibraryURL:
-            string("Choose a .momentolibrary package.")
+            string("Choose a .momento package.")
         }
     }
 

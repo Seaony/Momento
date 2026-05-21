@@ -157,19 +157,19 @@
         }
       }
     },
-    "Choose a .momentolibrary package." : {
+    "Choose a .momento package." : {
       "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Choose a .momentolibrary package."
+            "value" : "Choose a .momento package."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "请选择 .momentolibrary 资源库包。"
+            "value" : "请选择 .momento 资源库包。"
           }
         }
       }
