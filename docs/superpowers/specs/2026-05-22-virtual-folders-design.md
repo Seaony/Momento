@@ -1,41 +1,48 @@
-# Virtual Folders Design
+# Virtual Folders And Import Metadata Design
 
 ## 背景
 
-Momento 目前已经有资源库包、资源导入、最近资源库列表、侧边栏导航和资源网格，但“文件夹”仍只是侧边栏里的空 UI 壳：
+Momento 目前已经有资源库包、资源导入、最近资源库列表、侧边栏导航和资源网格，但“文件夹”和“图片导入衍生元数据”还没有成为真实数据能力：
 
 - `Momento/Core/AssetModels.swift` 只有 `AssetItem`、`TagItem` 和 `SidebarSelection.folderManagement`，没有文件夹模型。
 - `Momento/Storage/MomentoModel.xcdatamodeld` 目前只有 `AssetRecord` 一个 Core Data 实体。
-- `Momento/Storage/LibraryMetadataStore.swift` 只负责读取和保存资源，没有保存文件夹或资源-文件夹关系。
+- `Momento/Storage/LibraryMetadataStore.swift` 只负责读取和保存资源，没有保存文件夹、资源-文件夹关系或图片主色板。
 - `Momento/Core/LibraryStore.swift` 的 `.uncategorized` 当前仍返回全部资源，这只是临时行为，不符合真实文件夹语义。
-- `Momento/Services/AssetImportService.swift` 会用已有 hash 跳过库内重复资源；如果用户把同一张图再次导入到某个文件夹，当前流程无法只新增“文件夹关联”。
+- `Momento/Services/AssetImportService.swift` 已经会读取图片尺寸，但还不会像 Eagle 一样在导入时分析图片颜色构成和占比，也不会为大图生成列表页可用的缩略图。
 
-这次要实现的是虚拟文件夹，而不是把 `.momento/assets` 里的物理文件按 Finder 目录移动。
+这次要实现的是虚拟文件夹、导入图片时的主色板元数据，以及导入图片时的缩略图生成。虚拟文件夹不移动 `.momento/assets` 里的物理文件；颜色元数据不能混进 tags；列表页也不能直接加载大图原图。
 
 ## 外部参考
 
 - Eagle Plugin API 的 item 数据上有 `folders: string[]`，并提供 `isUnfiled` 查询条件。这说明一项资源可以属于多个文件夹，未分类是由文件夹关联为空推导出来的。
 - Eagle Plugin API 的 folder 数据有 `id`、`name`、`parent`、`children`，说明文件夹本身是独立元数据，和磁盘目录不是一回事。
 - SwiftUI 官方文档中 `fileImporter` 用于系统文件选择，并要求处理 security-scoped resource；Momento 当前导入服务已经遵循这个方向。
-- SwiftUI 官方文档中列表排序可通过 `onMove` 或自定义 drop 流程更新底层数组；本次先不做文件夹拖拽排序，只保留 `sortIndex` 数据字段，避免把 UI 交互复杂度一次拉满。
+- Core Data 官方文档要求通过自动迁移选项处理版本化 store 的 lightweight migration。本次不能直接原地改唯一模型文件后假设旧库能打开。
+- Apple Accelerate 示例使用 k-means 提取图片 dominant colors。本次不引入第三方库，优先用系统框架完成导入时主色分析。
+- Image I/O 的 `CGImageSourceCreateThumbnailAtIndex` 支持按最大像素尺寸创建缩略图。本次缩略图生成优先使用 Image I/O，而不是手写全图缩放。
 
 参考链接：
 
 - [Eagle item API](https://developer.eagle.cool/plugin-api/api/item)
 - [Eagle folder API](https://developer.eagle.cool/plugin-api/api/folder)
 - [SwiftUI fileImporter](https://developer.apple.com/documentation/swiftui/view/fileimporter%28ispresented%3Aallowedcontenttypes%3Aallowsmultipleselection%3Aoncompletion%3Aoncancellation%3A%29)
-- [SwiftUI lists and move actions](https://developer.apple.com/documentation/swiftui/lists)
+- [Core Data automatic migration](https://developer.apple.com/documentation/coredata/migrating-your-data-model-automatically)
+- [Apple Accelerate dominant colors sample](https://developer.apple.com/documentation/accelerate/vimage/calculating_the_dominant_colors_in_an_image)
+- [CGImageSourceCreateThumbnailAtIndex](https://developer.apple.com/documentation/imageio/cgimagesourcecreatethumbnailatindex%28_%3A_%3A_%3A%29)
 
 ## 目标
 
-1. 资源库内支持创建和删除文件夹。
+1. 资源库内支持创建和删除顶层文件夹。
 2. 文件夹是虚拟分类，一张资源可以关联多个文件夹。
 3. 点击侧边栏文件夹时，只显示关联到该文件夹的资源。
 4. `未分类` 只显示没有任何文件夹关联的资源。
-5. 用户在某个文件夹上下文中导入图片、GIF、SVG、视频、PDF 或文件夹时，新导入资源会自动关联当前文件夹。
-6. 用户把 Finder 文件拖到侧边栏某个文件夹上时，资源会导入并关联这个文件夹。
-7. 删除文件夹只删除文件夹元数据和关联关系，不删除资源文件，也不删除资源记录。
-8. 已有资源库可以通过轻量迁移继续打开。
+5. 无论当前正在查看哪个侧边栏项，外部文件导入后默认都没有文件夹关联，也就是进入 `未分类`。
+6. 用户后续通过显式操作把库内已有资源关联到文件夹。
+7. 如果导入的是库内已有资源，保持现有去重语义，不复制物理文件，也不自动改变它的文件夹关联。
+8. 删除文件夹只删除文件夹元数据和关联关系，不删除资源文件，也不删除资源记录。
+9. 导入可解码的图片时，分析主色板，保存颜色 hex 和占比，用于 Inspector 展示类似 Eagle 的颜色条。
+10. 导入可解码的图片时，生成小/中/大缩略图，列表页和检查器优先使用缩略图，不直接加载原图。
+11. 已有资源库可以通过明确的 Core Data 轻量迁移继续打开。
 
 ## 非目标
 
@@ -44,8 +51,12 @@ Momento 目前已经有资源库包、资源导入、最近资源库列表、侧
 - 不实现文件夹拖拽排序、拖拽嵌套、重命名、颜色、图标选择。
 - 不实现智能文件夹、筛选规则、批量移动、右键完整菜单。
 - 不实现跨资源库复制文件夹结构。
+- 不实现外部 Finder 文件拖到文件夹后自动归类。外部导入始终进入 `未分类`。
+- 不对旧资源做后台颜色回填。
+- 不对旧资源做后台缩略图回填。
+- 不对 SVG、PDF、视频做第一版颜色分析或缩略图生成。
 
-这些能力可以在虚拟文件夹的数据基础上继续扩展，但不放进这次实现。
+这些能力可以在虚拟文件夹和颜色元数据基础上继续扩展，但不放进这次实现。
 
 ## 核心决策
 
@@ -66,27 +77,92 @@ Momento 目前已经有资源库包、资源导入、最近资源库列表、侧
 - 资源去重仍然按 content hash 工作。
 - 后续导出时可以按虚拟文件夹结构生成真实目录，但那是导出层逻辑，不污染库内存储。
 
+### 导入默认进入未分类
+
+导入只负责把外部文件放进当前资源库，不负责分类：
+
+- 新导入资源的 `folderIDs` 必须是空数组。
+- 导入重复文件时保持 no-op，不复制物理文件，也不修改已有资源的 `folderIDs`。
+- 用户要把资源放进文件夹，必须通过显式的“关联到文件夹”动作。
+
+这个规则比“按当前文件夹自动归类”更稳定：导入行为不会因为当前侧边栏选区变化而产生隐式副作用，`未分类` 也成为真实的导入收件箱。
+
+### 资源关联文件夹是独立动作
+
+第一版需要有一个真实可用的显式关联路径：
+
+- 用户在资源网格中选择一个或多个资源。
+- 将这些资源拖到侧边栏某个文件夹行。
+- App 创建这些资源到目标文件夹的 membership。
+- 关联完成后可以选中目标文件夹，让用户看到结果。
+
+外部 Finder URL drop 仍然是导入，不是归类；App 内资源 drag 才是关联。
+
+### 第一版只创建顶层文件夹
+
+`AssetFolder.parentID` 会进入模型，但第一版 UI 只创建 `parentID == nil` 的顶层文件夹。
+
+保留 `parentID` 的原因：
+
+- Eagle 的 folder 模型有 `parent` 和 `children`。
+- 未来做嵌套文件夹时不需要再迁移一次基础字段。
+- 删除文件夹时递归处理后代是数据完整性保护，不代表第一版 UI 支持嵌套创建。
+
 ### 删除文件夹采用“删除分类，不删资源”
 
 删除文件夹时：
 
 - 删除该文件夹记录。
-- 删除该文件夹以及子文件夹的所有资源关联记录。
+- 删除该文件夹以及所有后代文件夹的资源关联记录。
 - 资源记录和物理文件保留。
 - 如果某个资源因此不再属于任何文件夹，它会自然出现在 `未分类`。
 
 如果当前正在查看被删除的文件夹，删除完成后切回 `全部`。
 
-### 导入流程要允许“重复资源补关联”
+### 文件夹名称规则
 
-当前导入服务会用已有 hash 跳过库内重复资源。虚拟文件夹上线后，这个行为需要调整：
+第一版采用保守规则：
 
-- 导入服务仍然做批内去重，避免同一次导入重复处理同一个 hash。
-- 不再因为“库里已有相同 hash”直接跳过结果。
-- 持久化层如果发现 `AssetRecord` 已存在，返回已有资源。
-- 持久化层再为这些新资源或已有资源创建文件夹关联。
+- 创建文件夹时先 trim 首尾空白和换行。
+- trim 后为空则报错。
+- 同一个父级下不允许出现大小写不敏感的重名文件夹。
+- 第一版只创建顶层文件夹，所以等价于“顶层文件夹不允许重名”。
 
-这样用户把已经存在的图片导入到新文件夹时，不会复制文件，但会把这张图片加入该文件夹。
+不把同级重名写成 Core Data uniqueness constraint。`parentID` 是可选值，SQLite 对 `NULL` 唯一性语义容易产生不符合直觉的结果；第一版用存储层显式查询和错误提示处理，逻辑更清楚。
+
+### 图片色彩分析在导入时完成
+
+导入 raster 图片时提取主色板：
+
+- 只处理 `AssetKind.image` 和 `AssetKind.gif`。
+- GIF 第一版只分析第一帧。
+- SVG、PDF、视频第一版不分析，`paletteColors` 为空。
+- 色彩分析失败不阻止资源导入，但必须得到空 palette，而不是伪造颜色。
+- 颜色按占比从高到低排序，最多保留 8 个颜色。
+- 占比保存为 `0...1` 的 `Double`，UI 展示时格式化成百分比。
+
+色彩分析不能写进 `TagItem.colorHex`。tags 是用户语义标签，palette 是导入元数据，两者必须分开。
+
+### 图片缩略图在导入时生成
+
+导入 raster 图片时同时生成缩略图：
+
+- 只处理 `AssetKind.image` 和 `AssetKind.gif`。
+- GIF 第一版只用第一帧生成静态缩略图。
+- SVG、PDF、视频第一版不生成缩略图。
+- 缩略图是派生缓存，不是资源原文件；原文件仍保存在 `.momento/assets`。
+- 列表页、瀑布流、Inspector 预览优先使用缩略图。
+- 如果缩略图缺失，UI 显示占位或通用图标，不在列表页直接回退加载原图。
+
+缩略图文件放在现有库包目录中：
+
+```text
+.momento/thumbnails/small/<contentHash>.png
+.momento/thumbnails/medium/<contentHash>.png
+.momento/thumbnails/large/<contentHash>.png
+```
+
+第一版统一输出 PNG，保留透明图的 alpha。虽然照片类 PNG 可能比 JPEG 大，但缩略图尺寸受控，且不需要额外持久化“这个缩略图到底是 jpg 还是 png”的路径状态。后续如果要优化磁盘占用，可以再引入格式选择和 thumbnail metadata。
 
 ## 数据模型
 
@@ -104,12 +180,29 @@ nonisolated struct AssetFolder: Identifiable, Hashable, Codable, Sendable {
     var createdAt: Date
     var updatedAt: Date
 }
+
+nonisolated struct AssetColor: Identifiable, Hashable, Codable, Sendable {
+    var id: String
+    var libraryID: String
+    var assetID: String
+    var hex: String
+    var coverage: Double
+    var sortIndex: Int
+}
+
+nonisolated struct AssetThumbnailSet: Hashable, Codable, Sendable {
+    var smallURL: URL
+    var mediumURL: URL
+    var largeURL: URL
+}
 ```
 
 修改 `AssetItem`：
 
 ```swift
 var folderIDs: [String]
+var paletteColors: [AssetColor]
+var thumbnailURLs: AssetThumbnailSet?
 ```
 
 修改 `SidebarSelection`：
@@ -122,7 +215,16 @@ case folder(String)
 
 ### Core Data 实体
 
-在 `MomentoModel.xcdatamodeld` 新增两个实体。
+必须先创建新的 Core Data model version，再修改新版本。不要只原地编辑当前唯一的 `MomentoModel.xcdatamodel`。
+
+预期结构：
+
+```text
+MomentoModel.xcdatamodeld/
+  MomentoModel.xcdatamodel/       # v1，保留现状
+  MomentoModel v2.xcdatamodel/    # v2，新增文件夹和颜色实体，设为 current
+  .xccurrentversion
+```
 
 `FolderRecord`：
 
@@ -150,50 +252,205 @@ case folder(String)
 
 - `libraryID + assetID + folderID`
 
-暂时不加 Core Data relationship，保持和现有 `LibraryMetadataStore` 一样的 key-value `NSManagedObject` 风格。这样实现简单，迁移风险也低。
+`AssetColorRecord`：
+
+- `id: String`
+- `libraryID: String`
+- `assetID: String`
+- `hex: String`
+- `coverage: Double`
+- `sortIndex: Integer 64`
+
+唯一约束：
+
+- `libraryID + assetID + sortIndex`
+
+暂时不加 Core Data relationship，保持和现有 `LibraryMetadataStore` 一样的 key-value `NSManagedObject` 风格。这样实现简单，也避免一口气把现有存储层改成 managed object graph。
 
 ### 迁移
 
-`MomentoCoreDataStack` 需要打开轻量迁移：
+`MomentoCoreDataStack` 需要明确打开轻量迁移：
 
 ```swift
 storeDescription.shouldMigrateStoreAutomatically = true
 storeDescription.shouldInferMappingModelAutomatically = true
 ```
 
-这次只新增实体和字段，不修改 `AssetRecord` 现有字段语义，适合轻量迁移。
+这次只新增实体，不修改 `AssetRecord` 现有字段语义，适合 lightweight migration。
+
+迁移验证不能只用当前模型新建数据库。必须覆盖真实旧库路径：
+
+1. 用 v1 model 创建一个只含 `AssetRecord` 的测试库，或提交一个最小 v1 sqlite fixture。
+2. 用 v2 app/model 打开它。
+3. 验证旧资源仍能读取，且 `folderIDs == []`、`paletteColors == []`、`thumbnailURLs == nil`。
 
 ## 存储层设计
+
+`Momento/Storage/LibraryStorage.swift` 增加 deterministic thumbnail URL helper：
+
+```swift
+enum AssetThumbnailSize: String, CaseIterable, Sendable {
+    case small
+    case medium
+    case large
+}
+
+func thumbnailURL(
+    forContentHash contentHash: String,
+    size: AssetThumbnailSize,
+    in library: AssetLibrary
+) -> URL
+```
+
+`prepareLibraryDirectories(for:)` 已经创建 `thumbnails/small`、`thumbnails/medium`、`thumbnails/large`，这里只补路径生成能力。
 
 `Momento/Storage/LibraryMetadataStore.swift` 增加以下能力：
 
 ```swift
 func loadFolders() throws -> [AssetFolder]
-func createFolder(name: String, parentID: String?) throws -> AssetFolder
+func createFolder(name: String, parentID: AssetFolder.ID?) throws -> AssetFolder
 func deleteFolder(id: AssetFolder.ID) throws -> [AssetFolder.ID]
-func saveImportedAssets(_ assets: [AssetItem], assigningTo folderID: AssetFolder.ID?) throws -> [AssetItem]
+func saveImportedAssets(_ assets: [AssetItem]) throws -> [AssetItem]
+func assignAssets(ids: Set<AssetItem.ID>, to folderID: AssetFolder.ID) throws -> [AssetItem]
+```
+
+建议新增错误：
+
+```swift
+enum LibraryMetadataError: LocalizedError {
+    case invalidFolderName
+    case duplicateFolderName
+    case missingFolder
+}
 ```
 
 读取资源时：
 
 1. 查询当前库的所有 `AssetFolderMembershipRecord`。
 2. 按 `assetID` 组成 `[String: [String]]`。
-3. 构造 `AssetItem` 时填入 `folderIDs`。
+3. 查询当前库的所有 `AssetColorRecord`。
+4. 按 `assetID` 组成 `[String: [AssetColor]]`。
+5. 构造 `AssetItem` 时填入 `folderIDs` 和 `paletteColors`。
+6. `folderIDs` 排序稳定，优先按 folder `sortIndex`，再按 folder `name`。
+7. `paletteColors` 按 `sortIndex` 排序，实际含义是 coverage 从高到低的顺序。
+8. `thumbnailURLs` 不需要写入 Core Data；按 `contentHash` 的确定性路径检查 small/medium/large PNG 是否存在，存在则填入 `AssetThumbnailSet`，否则为 `nil`。
 
 保存导入资源时：
 
 1. 先按 `contentHash` 查已有 `AssetRecord`。
-2. 已存在则复用已有资源值。
+2. 已存在则复用已有资源值，不新增文件夹关联，不覆盖已有 palette。
 3. 不存在则创建新的 `AssetRecord`。
-4. 如果传入 `folderID`，为每个保存后的资源创建 membership。
-5. 保存后返回带最新 `folderIDs` 的 `AssetItem`。
+4. 为新资源写入 import service 生成的 `AssetColorRecord`。
+5. 新资源的 `folderIDs` 固定为空。
+6. 新资源的 `thumbnailURLs` 来自 import service 生成的确定性缩略图路径。
+7. 保存后返回带 `folderIDs`、`paletteColors` 和 `thumbnailURLs` 的 `AssetItem`。
+
+关联已有资源时：
+
+1. `assignAssets(ids:to:)` 只接受当前库中真实存在的 asset id。
+2. 如果 folder 不存在，抛 `missingFolder`。
+3. 如果部分 asset id 不存在，忽略不存在的 id，不创建脏 membership。
+4. membership 已存在时保持幂等。
+5. 返回被更新的资源，供 `LibraryStore` 替换内存状态。
 
 删除文件夹时：
 
-1. 找到目标文件夹以及所有后代文件夹 ID。
-2. 删除这些 `FolderRecord`。
-3. 删除这些 folderID 对应的 `AssetFolderMembershipRecord`。
-4. 返回实际删除的 folderID 列表，供 `LibraryStore` 更新内存状态。
+1. 验证目标文件夹存在。
+2. 找到目标文件夹以及所有后代文件夹 ID。
+3. 删除这些 `FolderRecord`。
+4. 删除这些 folderID 对应的 `AssetFolderMembershipRecord`。
+5. 返回实际删除的 folderID 列表，供 `LibraryStore` 更新内存状态。
+
+## 导入、缩略图和色彩分析设计
+
+### AssetImportService
+
+`AssetImportService` 继续负责：
+
+- security-scoped source access 生命周期。
+- 文件夹递归收集。
+- 支持格式过滤。
+- SHA-256 hash。
+- 复制物理文件到 `.momento/assets`。
+- 图片尺寸读取。
+- 缩略图生成。
+- 主色板分析。
+
+保留现有库内去重：
+
+```swift
+excludingContentHashes: metadataStore.existingContentHashes()
+```
+
+如果 hash 已存在，这个文件不返回新 `AssetItem`，也不修改已有资源的 folder、palette 或 thumbnail。
+
+### AssetThumbnailService
+
+新增独立服务生成缩略图：
+
+```swift
+struct AssetThumbnailService: Sendable {
+    nonisolated func generateThumbnails(
+        for sourceURL: URL,
+        contentHash: String,
+        in library: AssetLibrary
+    ) throws -> AssetThumbnailSet?
+}
+```
+
+实现原则：
+
+- 使用 `CGImageSourceCreateThumbnailAtIndex`。
+- 设置 `kCGImageSourceCreateThumbnailFromImageAlways = true`。
+- 设置 `kCGImageSourceCreateThumbnailWithTransform = true`，保留 EXIF orientation。
+- 设置 `kCGImageSourceThumbnailMaxPixelSize` 控制尺寸。
+- 输出 PNG 到 `LibraryStorage` 提供的 deterministic thumbnail URL。
+- 使用 atomic write，避免导入中断时留下半文件。
+
+建议尺寸：
+
+```text
+small: 160 px
+medium: 512 px
+large: 1024 px
+```
+
+使用方式：
+
+- 资源网格和列表优先用 `small` 或 `medium`。
+- Inspector 预览优先用 `large`。
+- QuickLook 和双击预览仍打开原始资源文件。
+
+如果缩略图生成失败，导入继续成功并返回 `thumbnailURLs == nil`。UI 不能因此去列表里加载原图，只能显示占位或文件类型图标。
+
+### AssetColorAnalysisService
+
+新增一个独立服务，避免把颜色算法塞进 `AssetImportService`：
+
+```swift
+struct AssetColorAnalysisService: Sendable {
+    nonisolated func paletteColors(
+        for url: URL,
+        libraryID: String,
+        assetID: String,
+        maxColorCount: Int
+    ) -> [AssetColor]
+}
+```
+
+实现原则：
+
+- 使用 `CGImageSource` 解码图片，或复用缩略图生成阶段得到的小尺寸图像输入。
+- 使用最长边 96 或 128 像素的小图做采样，避免对大图全量采样。
+- 转换到稳定的 sRGB/RGBA8 像素格式。
+- 忽略透明像素，例如 alpha 低于 5% 的像素。
+- 用确定性的 dominant-color 算法生成最多 8 个颜色。
+- 推荐实现：以 quantized histogram 选初始颜色，再做少量 k-means 迭代；这比随机 k-means 更适合测试，也避免结果每次抖动。
+- 对相近颜色做一次合并，避免同一主色被拆成多个非常接近的 swatch。
+- `coverage = clusterPixelCount / consideredPixelCount`。
+- 输出 hex 使用大写 `#RRGGBB`。
+
+如果图片无法解码、没有有效像素或算法失败，返回空数组。导入仍然成功，因为资源持久化是主流程，颜色只是可缺省的导入元数据。
 
 ## Store 设计
 
@@ -210,22 +467,48 @@ folders = try metadataStore.loadFolders()
 assets = try metadataStore.loadAssets()
 ```
 
+关闭资源库时必须清空：
+
+```swift
+folders = []
+```
+
 新增方法：
 
 ```swift
 func createFolder(named name: String, parentID: AssetFolder.ID?) throws
 func deleteFolder(id: AssetFolder.ID) throws
-func importItems(from urls: [URL], assigningTo folderID: AssetFolder.ID?) async throws
+func assignAssets(ids: Set<AssetItem.ID>, to folderID: AssetFolder.ID) throws
 ```
 
-现有 `importItems(from:)` 保留，内部根据当前选择推导默认目标文件夹：
+`importItems(from:)` 保持“不接收 folderID”的语义。导入永远创建未分类资源：
 
 ```swift
-let selectedFolderID: String? = {
-    if case .folder(let id) = sidebarSelection { id } else { nil }
-}()
-try await importItems(from: urls, assigningTo: selectedFolderID)
+func importItems(from urls: [URL]) async throws
 ```
+
+`LibraryStore` 需要一个小 helper 来同步资源数组：
+
+```swift
+private func mergeAssets(_ updatedAssets: [AssetItem]) {
+    for asset in updatedAssets {
+        if let index = assets.firstIndex(where: { $0.id == asset.id }) {
+            assets[index] = asset
+        } else {
+            assets.append(asset)
+        }
+    }
+}
+```
+
+这个 helper 是必要的，因为 `assignAssets(ids:to:)` 会返回已有资源的新 `folderIDs`。只 append 新 ID 会导致 UI 不刷新。
+
+删除文件夹后的 Store 同步规则：
+
+1. 从 `folders` 删除被删 folderID。
+2. 从每个 `AssetItem.folderIDs` 删除这些 folderID。
+3. 如果 `sidebarSelection` 是被删 folderID 或后代 folderID，切回 `.library(currentLibrary.id)`。
+4. 如果当前 `selectedAssetID` 不在新的 `visibleAssets` 里，选中第一项或清空。
 
 `visibleAssets` 规则：
 
@@ -250,9 +533,10 @@ try await importItems(from: urls, assigningTo: selectedFolderID)
 
 ```swift
 var folders: [AssetFolder]
+var selectedAssetIDs: Set<AssetItem.ID>
 var onCreateFolder: (AssetFolder.ID?) -> Void
 var onDeleteFolder: (AssetFolder.ID) -> Void
-var onImportIntoFolder: (AssetFolder.ID, [URL]) -> Void
+var onAssignAssetsToFolder: (Set<AssetItem.ID>, AssetFolder.ID) -> Void
 ```
 
 文件夹标题区保持当前视觉规则：
@@ -263,16 +547,30 @@ var onImportIntoFolder: (AssetFolder.ID, [URL]) -> Void
 
 文件夹列表：
 
+- 第一版只渲染 `parentID == nil` 的顶层文件夹。
 - 有文件夹时渲染真实文件夹行。
 - 没有文件夹时保持当前的“暂无文件夹”空状态。
 - 文件夹行 hover 使用和侧边栏其他项一致的 `MomentoTheme.sidebarIconHoverBackground`。
 - 选中时文字更亮，并使用同样的背景逻辑。
 - 每行右侧 hover 时显示删除按钮或更多按钮；本次只需要删除文件夹。
 
-拖入文件：
+### 资源拖到文件夹行
 
-- 文件夹行支持 `dropDestination(for: URL.self)`。
-- 用户从 Finder 拖文件或文件夹到某个文件夹行时，调用 `onImportIntoFolder(folderID, urls)`。
+资源网格需要支持 App 内资源拖拽 payload。推荐定义 app 内部 UTType：
+
+```swift
+extension UTType {
+    static let momentoAssetIDs = UTType(exportedAs: "com.momento.asset-ids")
+}
+```
+
+拖拽规则：
+
+- `AssetCollectionGridView` 拖出当前选中的 asset IDs。
+- 文件夹行只接收 `.momentoAssetIDs`。
+- 文件夹行不接收 Finder URL。外部文件导入仍走全局 importer/drop，进入 `未分类`。
+- drop 成功后调用 `onAssignAssetsToFolder(assetIDs, folderID)`。
+- 关联完成后可以选中目标文件夹，让用户看到结果。
 
 ### 新建文件夹弹窗
 
@@ -289,6 +587,12 @@ var onImportIntoFolder: (AssetFolder.ID, [URL]) -> Void
 - 关闭弹窗。
 - 选中新文件夹。
 - 如果新文件夹为空，主区域显示空状态。
+
+如果名称非法或同级重名：
+
+- 不关闭弹窗。
+- 在弹窗内显示错误文案。
+- 不静默 fallback 成其它名称。
 
 ### 删除文件夹确认
 
@@ -308,34 +612,49 @@ var onImportIntoFolder: (AssetFolder.ID, [URL]) -> Void
 - `取消`
 - `删除文件夹`，红色 Liquid Glass 按钮
 
-## 导入行为
+### Inspector 颜色展示
 
-### 在文件夹视图导入
+`MomentoInspectorAsset` 应该从 `asset.paletteColors` 构建颜色条，而不是继续用 `asset.tags.compactMap(\.colorHex)`。
 
-当当前侧边栏选中 `.folder(id)`：
+展示规则：
+
+- 显示最多 8 个 swatch。
+- swatch 顺序按 `coverage` 从高到低。
+- hover 或辅助文本展示 `#RRGGBB (85.0%)`。
+- 没有 palette 时不显示颜色条，不用 fake 颜色。
+
+## 导入和关联行为
+
+### 导入
+
+所有导入入口都保持一致：
 
 - 点击主区域空状态的导入按钮。
 - 从命令面板执行导入。
 - 从 toolbar/search 外的全局 `fileImporter` 选择文件。
-- 拖文件到主内容区域。
+- 拖 Finder 文件到主内容区域。
 
-这些入口都应把资源关联到当前文件夹。
+这些入口都调用 `store.importItems(from:)`。导入结果进入 `未分类`，不因为当前选中的文件夹而自动关联。
 
-### 拖到文件夹行导入
+### 关联到文件夹
 
-当用户把 Finder 文件拖到某个文件夹行：
+用户把 App 内已选资源拖到侧边栏文件夹行时：
 
-- 不改变当前选区也可以导入。
-- 导入完成后可以选中目标文件夹，让用户立刻看到结果。
+- 调用 `store.assignAssets(ids: selectedAssetIDs, to: folderID)`。
+- Store 用返回的资源替换内存中的旧资源。
+- 关联完成后，目标文件夹视图立即能看到这些资源。
 
-### 重复资源
+### 重复导入
 
 如果导入的文件已经存在：
 
 - 不复制物理文件。
 - 不新增 `AssetRecord`。
-- 只补齐该资源到目标文件夹的 membership。
-- 如果 membership 已存在，保持幂等。
+- 不新增 membership。
+- 不覆盖 palette。
+- 不覆盖 thumbnail。
+
+如果用户想把已有资源放入文件夹，必须通过显式关联动作。
 
 ## 本地化
 
@@ -345,6 +664,9 @@ var onImportIntoFolder: (AssetFolder.ID, [URL]) -> Void
 - `Folder Name`
 - `Create`
 - `Delete Folder`
+- `Folder name is required.`
+- `A folder with this name already exists.`
+- `This folder no longer exists.`
 - `Delete “%@” folder?`
 - `This only removes the folder and its asset associations. Assets remain in the library.`
 
@@ -352,15 +674,21 @@ var onImportIntoFolder: (AssetFolder.ID, [URL]) -> Void
 
 ## 验证计划
 
-这次不是纯 UI 微调，涉及持久化和迁移，所以需要保留少量高价值测试。
+这次不是纯 UI 微调，涉及持久化、迁移和导入元数据，所以需要保留少量高价值测试。
 
 建议新增或调整 `MomentoTests/ImportServiceSmokeTests.swift`：
 
 1. 创建文件夹后重开资源库，文件夹仍存在。
-2. 在文件夹上下文导入图片后，资源的 `folderIDs` 包含该文件夹。
-3. 重复导入同一图片到另一个文件夹，不复制资源文件，但新增 folder membership。
-4. 删除文件夹后，资源仍存在，`folderIDs` 移除该文件夹；无其它文件夹的资源出现在 `未分类`。
-5. 老资源库轻量迁移后仍能打开，旧资源默认 `folderIDs == []`。
+2. 空文件夹名会失败，同级重名会失败。
+3. 导入图片后，资源的 `folderIDs` 为空，资源出现在 `未分类`。
+4. 在文件夹视图导入图片后，资源仍然不自动关联当前文件夹。
+5. 对已有资源调用 `assignAssets(ids:to:)` 后，内存和重开库后的 `folderIDs` 都更新。
+6. 删除文件夹后，资源仍存在，`folderIDs` 移除该文件夹；无其它文件夹的资源出现在 `未分类`。
+7. 删除当前正在查看的文件夹后，选择切回 `全部`，且 selected asset 不残留到不可见资源。
+8. 导入一张已知单色 PNG 后，`paletteColors` 至少包含该颜色，coverage 接近 1。
+9. 导入一张已知 PNG 后，small/medium/large 缩略图文件存在，且最长边不超过对应尺寸。
+10. 重复导入同一张图片不新增资源、不新增 membership、不覆盖 palette 或 thumbnail。
+11. 用 v1 store fixture 验证轻量迁移：旧资源库能打开，旧资源默认 `folderIDs == []`、`paletteColors == []`、`thumbnailURLs == nil`。
 
 验证命令：
 
@@ -373,21 +701,43 @@ git diff --check
 
 ## 实施顺序
 
-1. 扩展模型：`AssetFolder`、`AssetItem.folderIDs`、`SidebarSelection.folder`。
-2. 扩展 Core Data model：新增 `FolderRecord` 和 `AssetFolderMembershipRecord`。
-3. 打开 Core Data 轻量迁移。
-4. 扩展 `LibraryMetadataStore` 的 folder/membership 读写。
-5. 调整 `AssetImportService`，允许已有 hash 返回给持久化层补 membership。
-6. 扩展 `LibraryStore`：`folders` 状态、创建/删除文件夹、文件夹过滤、按上下文导入。
-7. 调整 `ContentView`：新建/删除文件夹弹窗状态和导入目标传递。
-8. 调整 `MomentoShellView` 和 `MomentoSidebarView`：传入 folders 和文件夹操作回调。
-9. 增加文件夹列表 UI、文件夹行 drop import、空状态。
-10. 增加针对存储和导入的最小可信测试。
-11. 运行验证并提交。
+1. 为 Core Data 创建 v2 model version，保留 v1，并设置 v2 current。
+2. 扩展模型：`AssetFolder`、`AssetColor`、`AssetThumbnailSet`、`AssetItem.folderIDs`、`AssetItem.paletteColors`、`AssetItem.thumbnailURLs`、`SidebarSelection.folder`。
+3. 扩展 Core Data v2 model：新增 `FolderRecord`、`AssetFolderMembershipRecord`、`AssetColorRecord`。
+4. 打开 Core Data 轻量迁移。
+5. 扩展 `LibraryStorage` 的 thumbnail URL helper。
+6. 新增 `AssetThumbnailService`，并接入 `AssetImportService`。
+7. 新增 `AssetColorAnalysisService`，并接入 `AssetImportService`。
+8. 扩展 `LibraryMetadataStore` 的 folder/membership/color 读写、名称校验、已有资源关联。
+9. 扩展 `LibraryStore`：`folders` 状态、创建/删除文件夹、文件夹过滤、显式资源关联、`mergeAssets(_:)`。
+10. 调整 `ContentView`：新建/删除文件夹弹窗状态、文件夹操作传递、导入保持未分类。
+11. 调整 `MomentoShellView` 和 `MomentoSidebarView`：传入 folders、selected asset IDs 和文件夹操作回调。
+12. 调整 `AssetCollectionGridView`：支持 App 内资源 ID 拖拽，并优先使用 `thumbnailURLs`。
+13. 增加文件夹列表 UI、文件夹行接收资源 drop、空状态。
+14. 调整 Inspector，用 `thumbnailURLs.largeURL` 展示预览，用 `paletteColors` 展示颜色条和百分比。
+15. 增加针对存储、导入、缩略图、颜色分析、迁移和 Store 内存同步的最小可信测试。
+16. 运行验证并提交。
+
+## 边界风险
+
+- Core Data model 如果不做版本化，旧资源库迁移测试没有意义，用户已有库可能打不开。
+- 如果导入自动关联当前文件夹，会和“导入默认未分类”的产品语义冲突。
+- 如果 Finder URL drop 和 App 内资源 drag 使用同一入口，容易把“导入”和“归类”混在一起。
+- 如果 `LibraryStore` 只 append 新资源，不替换已有资源，显式关联已有资源后 UI 不会立即更新。
+- 如果删除文件夹只删数据库，不同步内存 `folderIDs`，`未分类` 和文件夹视图会短时间显示错误数据。
+- 同级重名如果不阻止，侧边栏和后续拖拽目标会变得难以区分。
+- 色彩分析如果全量处理大图，导入性能会变差；必须先 downsample。
+- 色彩分析如果使用随机 k-means，测试和 UI 结果会抖动；需要确定性初始化。
+- 如果列表页缩略图缺失时直接加载原图，大图资源会造成滚动和内存问题；缺失时必须显示占位。
+- 如果缩略图路径不确定，需要额外 metadata 才能恢复。第一版用固定 PNG 路径规避这个问题。
 
 ## 需要你 review 的点
 
 1. 删除文件夹是否确认采用“只删文件夹和关联，不删资源”的语义？
-2. 本次是否先只做新建顶层文件夹和删除文件夹？数据模型会预留 `parentID`，但不做创建子文件夹和拖拽嵌套。
-3. 重复导入同一张图片到不同文件夹时，是否按“补关联，不复制文件”的方式处理？
-4. 文件夹删除后，如果当前正在查看它，是否切回 `全部`？
+2. 本次是否确认先只做顶层文件夹？数据模型会预留 `parentID`，但 UI 不做创建子文件夹和拖拽嵌套。
+3. 顶层文件夹是否确认禁止大小写不敏感重名？
+4. 导入是否确认永远默认进入 `未分类`，不因为当前文件夹选区自动关联？
+5. 文件夹删除后，如果当前正在查看它，是否确认切回 `全部`？
+6. 第一版手动关联文件夹的交互是否确认采用“从资源网格拖选中资源到侧边栏文件夹行”？
+7. 色彩分析第一版是否接受只处理 raster 图片和 GIF 首帧，SVG、PDF、视频先不做？
+8. 缩略图第一版是否接受固定生成 PNG，并使用 small 160 / medium 512 / large 1024 三档？
