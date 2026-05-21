@@ -35,6 +35,14 @@ struct ContentView: View {
         }
     }
 
+    private var viewModeSelection: Binding<AssetViewMode> {
+        Binding {
+            store.viewMode
+        } set: { mode in
+            store.setViewMode(mode)
+        }
+    }
+
     private var inspectorNotes: Binding<String> {
         Binding {
             guard let selectedAssetID = store.selectedAssetID else {
@@ -126,6 +134,45 @@ struct ContentView: View {
             }
             .background(Color(nsColor: .windowBackgroundColor))
         }
+        .toolbar {
+            ToolbarItemGroup(placement: .navigation) {
+                Button {
+                    isImporterPresented = true
+                } label: {
+                    Label(localization.string("Import Assets"), systemImage: "square.and.arrow.down")
+                }
+                .help(localization.string("Import Assets"))
+            }
+
+            ToolbarItem(placement: .principal) {
+                MomentoToolbarTitle(
+                    title: title,
+                    subtitle: localization.itemCount(store.visibleAssets.count)
+                )
+            }
+
+            ToolbarItemGroup(placement: .primaryAction) {
+                Picker(localization.string("View"), selection: viewModeSelection) {
+                    ForEach(AssetViewMode.allCases) { viewMode in
+                        Text(localization.title(for: viewMode))
+                            .tag(viewMode)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+
+                Button {
+                    withAnimation(.smooth(duration: 0.18)) {
+                        isCommandPalettePresented = true
+                    }
+                } label: {
+                    Label(localization.string("Open command palette"), systemImage: "command")
+                }
+                .help(localization.string("Open command palette"))
+            }
+        }
+        .searchable(text: $store.searchQuery, placement: .toolbar, prompt: Text(localization.string("Search assets, tags, colors...")))
+        .navigationTitle(title)
     }
 
     private var defaultViewMode: AssetViewMode {
@@ -377,6 +424,25 @@ struct ContentView: View {
         withAnimation(.smooth(duration: 0.16)) {
             importError = localization.errorMessage(error)
         }
+    }
+}
+
+private struct MomentoToolbarTitle: View {
+    var title: String
+    var subtitle: String
+
+    var body: some View {
+        VStack(spacing: 1) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .lineLimit(1)
+
+            Text(subtitle)
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(minWidth: 130)
     }
 }
 

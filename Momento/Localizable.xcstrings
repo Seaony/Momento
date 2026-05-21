@@ -1390,6 +1390,23 @@
         }
       }
     },
+    "View" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "视图"
+          }
+        }
+      }
+    },
     "Video" : {
       "extractionState" : "stale",
       "localizations" : {

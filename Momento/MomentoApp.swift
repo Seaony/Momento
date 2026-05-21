@@ -27,8 +27,7 @@ struct MomentoApp: App {
                     appOpenHandler.flushPendingLibraryURLs()
                 }
         }
-        .windowStyle(.hiddenTitleBar)
-        .windowToolbarStyle(.unifiedCompact)
+        .windowToolbarStyle(.unified)
 
         Settings {
             MomentoSettingsView(

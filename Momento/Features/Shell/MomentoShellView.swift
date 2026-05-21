@@ -71,17 +71,6 @@ struct MomentoShellView<Content: View>: View {
             )
 
             VStack(spacing: 0) {
-                MomentoTopBar(
-                    title: title,
-                    subtitle: subtitle,
-                    query: $searchQuery,
-                    onCommandPalette: {
-                        withAnimation(.smooth(duration: 0.18)) {
-                            isCommandPalettePresented = true
-                        }
-                    }
-                )
-
                 content()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(Color(nsColor: .windowBackgroundColor))
