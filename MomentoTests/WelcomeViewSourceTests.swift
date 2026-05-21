@@ -82,6 +82,7 @@ final class WelcomeViewSourceTests: XCTestCase {
 
         XCTAssertTrue(source.contains(".foregroundStyle(Color.white)"))
         XCTAssertTrue(source.contains(".glassEffect(.regular.interactive(), in: Capsule(style: .continuous))"))
+        XCTAssertTrue(source.contains(".environment(\\.appearsActive, true)"))
         XCTAssertFalse(source.contains("isOpenHovered ? Color.primary : MomentoTheme.secondaryText"))
     }
 

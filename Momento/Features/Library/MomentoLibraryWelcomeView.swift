@@ -63,6 +63,7 @@ struct MomentoLibraryWelcomeView: View {
                     .foregroundStyle(Color.white)
                     .contentShape(Capsule(style: .continuous))
                     .glassEffect(.regular.interactive(), in: Capsule(style: .continuous))
+                    .environment(\.appearsActive, true)
                     .scaleEffect(isOpenHovered ? 1.025 : 1)
                     .shadow(
                         color: .black.opacity(isOpenHovered ? 0.18 : 0.10),
