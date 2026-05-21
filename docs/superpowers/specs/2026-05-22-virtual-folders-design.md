@@ -43,6 +43,10 @@ Momento 目前已经有资源库包、资源导入、最近资源库列表、侧
 9. 导入可解码的图片时，分析主色板，保存颜色 hex 和占比，用于 Inspector 展示类似 Eagle 的颜色条。
 10. 导入可解码的图片时，生成小/中/大缩略图，列表页和检查器优先使用缩略图，不直接加载原图。
 11. 已有资源库可以通过明确的 Core Data 轻量迁移继续打开。
+12. 资源库 manifest schema 和 Core Data model migration 必须协同处理，不能让旧库在 manifest 检查阶段提前失败。
+13. `thumbnails/` 和 `previews/` 仍然是可删除缓存；清除缓存后必须有可控的缩略图重建路径。
+14. 用户可以把已关联到文件夹的资源从该文件夹移除，避免错误归类只能靠删除整个文件夹修正。
+15. 搜索需要覆盖资源名称、扩展名、标签、文件夹名称和图片主色 hex。
 
 ## 非目标
 
@@ -53,8 +57,10 @@ Momento 目前已经有资源库包、资源导入、最近资源库列表、侧
 - 不实现跨资源库复制文件夹结构。
 - 不实现外部 Finder 文件拖到文件夹后自动归类。外部导入始终进入 `未分类`。
 - 不对旧资源做后台颜色回填。
-- 不对旧资源做后台缩略图回填。
+- 不在普通打开旧库时自动全量回填缩略图；清除缓存触发的缩略图重建属于显式修复路径。
 - 不对 SVG、PDF、视频做第一版颜色分析或缩略图生成。
+- 不新增持久化 SearchIndex 实体，不实现模糊搜索、语义搜索或颜色相似度搜索。
+- 不实现缩略图生成状态表。第一版用确定性路径和文件存在性判断缩略图是否可用。
 
 这些能力可以在虚拟文件夹和颜色元数据基础上继续扩展，但不放进这次实现。
 
@@ -119,6 +125,18 @@ Momento 目前已经有资源库包、资源导入、最近资源库列表、侧
 
 如果当前正在查看被删除的文件夹，删除完成后切回 `全部`。
 
+### 资源可以从文件夹移除
+
+文件夹关联必须是可逆操作。第一版需要支持把库内资源从某个文件夹移除：
+
+- 移除 folder membership，不删除资源记录。
+- 不删除 `.momento/assets` 中的物理文件。
+- 如果资源不再属于任何文件夹，它会显示在 `未分类`。
+- 对不存在的 asset id 保持和关联操作一致：忽略不存在项，不创建或删除脏数据。
+- 如果目标 folder 不存在，抛 `missingFolder`。
+
+这个能力可以先通过当前文件夹视图里的资源操作入口暴露，不要求本次做完整右键菜单体系；但数据层和 Store API 必须存在，避免错误归类没有恢复路径。
+
 ### 文件夹名称规则
 
 第一版采用保守规则：
@@ -163,6 +181,45 @@ Momento 目前已经有资源库包、资源导入、最近资源库列表、侧
 ```
 
 第一版统一输出 PNG，保留透明图的 alpha。虽然照片类 PNG 可能比 JPEG 大，但缩略图尺寸受控，且不需要额外持久化“这个缩略图到底是 jpg 还是 png”的路径状态。后续如果要优化磁盘占用，可以再引入格式选择和 thumbnail metadata。
+
+### 缩略图缓存必须可重建
+
+`thumbnails/` 和 `previews/` 是派生缓存，不是权威数据。清除缓存后不能让资源永久停留在无缩略图状态。
+
+第一版采用显式修复路径：
+
+- `clearCachesAndReloadCurrentLibrary()` 删除缓存后，触发一次当前库缩略图重建。
+- 重建只处理可解码的 raster 图片和 GIF 首帧。
+- 重建过程中 UI 可以先显示占位或通用图标。
+- 重建失败不影响资源库打开，但失败资源继续保持无缩略图，不回退到列表页加载原图。
+- 重建逻辑复用 `AssetThumbnailService`，不能复制一份独立缩放实现。
+
+暂时不新增 `ThumbnailRecord` 或生成队列表。第一版通过确定性路径判断 small/medium/large PNG 是否存在，足够支撑清除缓存后的修复。
+
+### Manifest schema 和数据库迁移必须协同
+
+资源库包打开时不能只看 `LibraryManifest.currentSchemaVersion` 的等值判断。否则 v1 manifest 会在 Core Data 轻量迁移之前被拒绝，导致“迁移测试通过但真实旧资源库打不开”。
+
+第一版规则：
+
+- `LibraryManifest.currentSchemaVersion` 可以升级到 `2`，表示包内数据库模型新增了文件夹、颜色和缩略图派生能力。
+- `LibraryStorage.openLibraryPackage` 接受当前 app 支持的 schema version，例如 `1...2`。
+- 只有未来版本或未知版本才抛 `unsupportedSchemaVersion`。
+- 对 v1 manifest，先允许进入 Core Data 打开流程，由 model version 执行 lightweight migration。
+- 迁移和首次成功打开后，可以把 manifest 写回当前 schema version；写回必须发生在数据库能成功打开之后。
+
+这个规则把“包格式兼容性”和“数据库模型迁移”分开处理，避免 manifest gate 抢在数据库迁移前失败。
+
+### 第一版搜索使用现有内存数据
+
+本次不新增持久化 `SearchIndex`。搜索先基于 `LibraryStore` 当前内存中的 `AssetItem` 和 `folders` 做确定性匹配：
+
+- 文件名和扩展名。
+- 标签名称。
+- 资源关联的文件夹名称。
+- 图片主色 hex，支持带 `#` 和不带 `#` 的查询。
+
+这样可以先兑现用户可见能力，同时避免为第一版引入额外索引一致性问题。后续资源规模变大后，再把 `FEATURE.md` 里的 SearchIndex 设计单独落地。
 
 ## 数据模型
 
@@ -312,6 +369,7 @@ func createFolder(name: String, parentID: AssetFolder.ID?) throws -> AssetFolder
 func deleteFolder(id: AssetFolder.ID) throws -> [AssetFolder.ID]
 func saveImportedAssets(_ assets: [AssetItem]) throws -> [AssetItem]
 func assignAssets(ids: Set<AssetItem.ID>, to folderID: AssetFolder.ID) throws -> [AssetItem]
+func unassignAssets(ids: Set<AssetItem.ID>, from folderID: AssetFolder.ID) throws -> [AssetItem]
 ```
 
 建议新增错误：
@@ -353,6 +411,14 @@ enum LibraryMetadataError: LocalizedError {
 4. membership 已存在时保持幂等。
 5. 返回被更新的资源，供 `LibraryStore` 替换内存状态。
 
+移除资源关联时：
+
+1. `unassignAssets(ids:from:)` 只删除当前库中真实存在的 membership。
+2. 如果 folder 不存在，抛 `missingFolder`。
+3. 如果部分 asset id 不存在，忽略不存在的 id。
+4. membership 不存在时保持幂等。
+5. 返回被更新的资源，供 `LibraryStore` 替换内存状态。
+
 删除文件夹时：
 
 1. 验证目标文件夹存在。
@@ -360,6 +426,28 @@ enum LibraryMetadataError: LocalizedError {
 3. 删除这些 `FolderRecord`。
 4. 删除这些 folderID 对应的 `AssetFolderMembershipRecord`。
 5. 返回实际删除的 folderID 列表，供 `LibraryStore` 更新内存状态。
+
+### 缩略图缓存修复
+
+`LibraryMetadataStore` 不负责生成缩略图，但需要提供当前库资源列表和 content hash，让上层服务可以重建缺失缓存。
+
+建议新增一个小型协调服务，而不是把修复逻辑塞进 UI：
+
+```swift
+struct AssetDerivativeRepairService: Sendable {
+    nonisolated func regenerateMissingThumbnails(
+        for assets: [AssetItem],
+        in library: AssetLibrary
+    ) async
+}
+```
+
+规则：
+
+- 只检查 `AssetItem.thumbnailURLs == nil` 或对应文件不存在的资源。
+- 只对 `AssetKind.image` 和 `AssetKind.gif` 调用 `AssetThumbnailService`。
+- 生成完成后重新读取资源或返回更新后的 `AssetItem`，让 Store 刷新 `thumbnailURLs`。
+- 单个文件失败不终止整个修复过程。
 
 ## 导入、缩略图和色彩分析设计
 
@@ -479,6 +567,8 @@ folders = []
 func createFolder(named name: String, parentID: AssetFolder.ID?) throws
 func deleteFolder(id: AssetFolder.ID) throws
 func assignAssets(ids: Set<AssetItem.ID>, to folderID: AssetFolder.ID) throws
+func unassignAssets(ids: Set<AssetItem.ID>, from folderID: AssetFolder.ID) throws
+func rebuildMissingThumbnails() async
 ```
 
 `importItems(from:)` 保持“不接收 folderID”的语义。导入永远创建未分类资源：
@@ -503,6 +593,18 @@ private func mergeAssets(_ updatedAssets: [AssetItem]) {
 
 这个 helper 是必要的，因为 `assignAssets(ids:to:)` 会返回已有资源的新 `folderIDs`。只 append 新 ID 会导致 UI 不刷新。
 
+`unassignAssets(ids:from:)` 复用同一个 `mergeAssets(_:)`，保证移除文件夹关联后当前视图立即更新。
+
+`clearCachesAndReloadCurrentLibrary()` 的顺序：
+
+1. 删除 `thumbnails/` 和 `previews/`。
+2. 重新创建缓存目录。
+3. 重新读取资源，此时 `thumbnailURLs` 为空或缺失。
+4. 调用 `rebuildMissingThumbnails()`。
+5. 缩略图生成后重新合并或重载资源。
+
+UI 在第 3 步到第 5 步之间只能显示占位或文件类型图标，不能直接加载原图。
+
 删除文件夹后的 Store 同步规则：
 
 1. 从 `folders` 删除被删 folderID。
@@ -519,6 +621,14 @@ private func mergeAssets(_ updatedAssets: [AssetItem]) {
 - `.folder(id)`: `folderIDs.contains(id)`。
 - `.tag(id)`: 保持现有 tag 过滤。
 - `.tagManagement`、`.folderManagement`、`.trash`: 暂时为空。
+
+搜索规则叠加在侧边栏过滤之后：
+
+- 空搜索词返回当前侧边栏过滤结果。
+- 搜索词 trim 并做大小写不敏感匹配。
+- 文件名、扩展名、标签名称、关联文件夹名称命中任一项即可显示。
+- `paletteColors.hex` 支持 `#1B1D1D` 和 `1B1D1D` 两种输入。
+- 第一版不做模糊匹配和颜色距离计算。
 
 `selectSidebarItem(id:)` 规则：
 
@@ -644,6 +754,16 @@ extension UTType {
 - Store 用返回的资源替换内存中的旧资源。
 - 关联完成后，目标文件夹视图立即能看到这些资源。
 
+### 从文件夹移除
+
+用户在某个文件夹视图中发现资源归类错误时，需要有一个最小可用的移除路径：
+
+- 只在当前侧边栏选中真实文件夹时显示“从当前文件夹移除”动作。
+- 调用 `store.unassignAssets(ids: selectedAssetIDs, from: folderID)`。
+- Store 用返回的资源替换内存中的旧资源。
+- 如果资源被移除后不再属于任何文件夹，它会出现在 `未分类`。
+- 移除动作不删除资源、不移动物理文件、不修改标签。
+
 ### 重复导入
 
 如果导入的文件已经存在：
@@ -655,6 +775,15 @@ extension UTType {
 - 不覆盖 thumbnail。
 
 如果用户想把已有资源放入文件夹，必须通过显式关联动作。
+
+### 搜索
+
+搜索框的第一版行为保持轻量：
+
+- 搜索当前侧边栏范围内的资源，而不是强制全库搜索。
+- 搜索命中文件名、扩展名、标签名、文件夹名、主色 hex。
+- 主色 hex 查询允许用户输入 `#1B1D1D` 或 `1B1D1D`。
+- 搜索不改变资源的文件夹关联。
 
 ## 本地化
 
@@ -689,6 +818,10 @@ extension UTType {
 9. 导入一张已知 PNG 后，small/medium/large 缩略图文件存在，且最长边不超过对应尺寸。
 10. 重复导入同一张图片不新增资源、不新增 membership、不覆盖 palette 或 thumbnail。
 11. 用 v1 store fixture 验证轻量迁移：旧资源库能打开，旧资源默认 `folderIDs == []`、`paletteColors == []`、`thumbnailURLs == nil`。
+12. v1 manifest + v1 database 能打开并迁移；未来版本 manifest 仍然被拒绝。
+13. 清除缓存并重新加载后，缺失缩略图会被重建或进入可恢复的占位状态，列表页不会加载原图。
+14. 对已有资源调用 `unassignAssets(ids:from:)` 后，内存和重开库后的 `folderIDs` 都移除对应文件夹。
+15. 搜索文件夹名称和主色 hex 时，能命中对应资源；无关资源不被误匹配。
 
 验证命令：
 
@@ -709,14 +842,17 @@ git diff --check
 6. 新增 `AssetThumbnailService`，并接入 `AssetImportService`。
 7. 新增 `AssetColorAnalysisService`，并接入 `AssetImportService`。
 8. 扩展 `LibraryMetadataStore` 的 folder/membership/color 读写、名称校验、已有资源关联。
-9. 扩展 `LibraryStore`：`folders` 状态、创建/删除文件夹、文件夹过滤、显式资源关联、`mergeAssets(_:)`。
-10. 调整 `ContentView`：新建/删除文件夹弹窗状态、文件夹操作传递、导入保持未分类。
-11. 调整 `MomentoShellView` 和 `MomentoSidebarView`：传入 folders、selected asset IDs 和文件夹操作回调。
-12. 调整 `AssetCollectionGridView`：支持 App 内资源 ID 拖拽，并优先使用 `thumbnailURLs`。
-13. 增加文件夹列表 UI、文件夹行接收资源 drop、空状态。
-14. 调整 Inspector，用 `thumbnailURLs.largeURL` 展示预览，用 `paletteColors` 展示颜色条和百分比。
-15. 增加针对存储、导入、缩略图、颜色分析、迁移和 Store 内存同步的最小可信测试。
-16. 运行验证并提交。
+9. 扩展 `LibraryMetadataStore` 的 `unassignAssets(ids:from:)`。
+10. 调整 manifest schema 兼容检查，让 v1 manifest 可以进入 Core Data 迁移流程。
+11. 新增缩略图缓存修复协调逻辑，接入清除缓存并重新加载流程。
+12. 扩展 `LibraryStore`：`folders` 状态、创建/删除文件夹、文件夹过滤、显式资源关联、移除关联、搜索匹配、`mergeAssets(_:)`。
+13. 调整 `ContentView`：新建/删除文件夹弹窗状态、文件夹操作传递、导入保持未分类。
+14. 调整 `MomentoShellView` 和 `MomentoSidebarView`：传入 folders、selected asset IDs 和文件夹操作回调。
+15. 调整 `AssetCollectionGridView`：支持 App 内资源 ID 拖拽，并优先使用 `thumbnailURLs`。
+16. 增加文件夹列表 UI、文件夹行接收资源 drop、空状态、从当前文件夹移除入口。
+17. 调整 Inspector，用 `thumbnailURLs.largeURL` 展示预览，用 `paletteColors` 展示颜色条和百分比。
+18. 增加针对存储、导入、缩略图、颜色分析、迁移、搜索和 Store 内存同步的最小可信测试。
+19. 运行验证并提交。
 
 ## 边界风险
 
@@ -730,6 +866,10 @@ git diff --check
 - 色彩分析如果使用随机 k-means，测试和 UI 结果会抖动；需要确定性初始化。
 - 如果列表页缩略图缺失时直接加载原图，大图资源会造成滚动和内存问题；缺失时必须显示占位。
 - 如果缩略图路径不确定，需要额外 metadata 才能恢复。第一版用固定 PNG 路径规避这个问题。
+- 如果 manifest schema 等值检查先于 Core Data 迁移拒绝 v1 资源库，真实旧库会打不开。
+- 如果清除缓存后没有重建缩略图路径，用户会误以为资源预览坏掉。
+- 如果没有 `unassignAssets(ids:from:)`，错误归类只能通过删除文件夹修正，数据操作不完整。
+- 如果搜索不包含文件夹和主色，用户导入后看到的分类和颜色元数据无法被检索。
 
 ## 需要你 review 的点
 
@@ -741,3 +881,6 @@ git diff --check
 6. 第一版手动关联文件夹的交互是否确认采用“从资源网格拖选中资源到侧边栏文件夹行”？
 7. 色彩分析第一版是否接受只处理 raster 图片和 GIF 首帧，SVG、PDF、视频先不做？
 8. 缩略图第一版是否接受固定生成 PNG，并使用 small 160 / medium 512 / large 1024 三档？
+9. 清除缓存后是否确认立即尝试重建缺失缩略图，而不是只显示占位等待下一次导入？
+10. 从文件夹移除资源是否确认只移除关联，不删除资源、不改标签？
+11. 搜索第一版是否确认先做内存匹配，不新增持久化 SearchIndex？
