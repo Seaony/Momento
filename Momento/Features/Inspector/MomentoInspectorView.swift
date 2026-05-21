@@ -39,6 +39,8 @@ struct MomentoInspectorAsset: Identifiable, Hashable {
 }
 
 struct MomentoInspectorView: View {
+    @Environment(\.appLocalization) private var localization
+
     var asset: MomentoInspectorAsset?
     @Binding var tags: [String]
     @Binding var notes: String
@@ -61,7 +63,7 @@ struct MomentoInspectorView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text("Inspector")
+                Text(localization.string("Inspector"))
                     .font(.system(size: 14, weight: .semibold))
                 Spacer()
                 Image(systemName: "sidebar.right")
@@ -137,26 +139,26 @@ struct MomentoInspectorView: View {
     }
 
     private func metadata(_ asset: MomentoInspectorAsset) -> some View {
-        inspectorSection("Details") {
+        inspectorSection(localization.string("Details")) {
             if let kind = asset.kind {
-                infoRow("Kind", kind)
+                infoRow(localization.string("Kind"), kind)
             }
             if let dimensions = asset.dimensions {
-                infoRow("Dimensions", dimensions)
+                infoRow(localization.string("Dimensions"), dimensions)
             }
             if let fileSize = asset.fileSize {
-                infoRow("Size", fileSize)
+                infoRow(localization.string("Size"), fileSize)
             }
             if let addedDate = asset.addedDate {
-                infoRow("Added", addedDate.formatted(date: .abbreviated, time: .shortened))
+                infoRow(localization.string("Added"), localization.dateTime(addedDate))
             }
         }
     }
 
     private var tagEditor: some View {
-        inspectorSection("Tags") {
+        inspectorSection(localization.string("Tags")) {
             if tags.isEmpty {
-                Text("No tags")
+                Text(localization.string("No tags"))
                     .font(.system(size: 12))
                     .foregroundStyle(MomentoTheme.secondaryText)
             } else {
@@ -171,7 +173,7 @@ struct MomentoInspectorView: View {
                                     .font(.system(size: 9, weight: .bold))
                             }
                             .buttonStyle(.plain)
-                            .accessibilityLabel("Remove \(tag)")
+                            .accessibilityLabel(localization.format("Remove %@", tag))
                         }
                         .font(.system(size: 12, weight: .medium))
                         .padding(.horizontal, 8)
@@ -182,7 +184,7 @@ struct MomentoInspectorView: View {
             }
 
             HStack(spacing: 8) {
-                TextField("Add tag", text: $pendingTag)
+                TextField(localization.string("Add tag"), text: $pendingTag)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
                     .onSubmit(addPendingTag)
@@ -207,9 +209,9 @@ struct MomentoInspectorView: View {
     }
 
     private func colorSection(_ colors: [String]) -> some View {
-        inspectorSection("Colors") {
+        inspectorSection(localization.string("Colors")) {
             if colors.isEmpty {
-                Text("No colors extracted")
+                Text(localization.string("No colors extracted"))
                     .font(.system(size: 12))
                     .foregroundStyle(MomentoTheme.secondaryText)
             } else {
@@ -231,7 +233,7 @@ struct MomentoInspectorView: View {
     }
 
     private var notesEditor: some View {
-        inspectorSection("Notes") {
+        inspectorSection(localization.string("Notes")) {
             TextEditor(text: $notes)
                 .font(.system(size: 12))
                 .scrollContentBackground(.hidden)
@@ -249,15 +251,15 @@ struct MomentoInspectorView: View {
     }
 
     private func fileSection(_ asset: MomentoInspectorAsset) -> some View {
-        inspectorSection("File") {
-            infoRow("Name", asset.fileName)
+        inspectorSection(localization.string("File")) {
+            infoRow(localization.string("Name"), asset.fileName)
             if let filePath = asset.filePath {
-                infoRow("Path", filePath)
+                infoRow(localization.string("Path"), filePath)
             }
 
             if onRevealInFinder != nil {
                 Button(action: { onRevealInFinder?() }) {
-                    Label("Reveal in Finder", systemImage: "finder")
+                    Label(localization.string("Reveal in Finder"), systemImage: "finder")
                         .frame(maxWidth: .infinity)
                         .frame(height: 30)
                 }
@@ -271,9 +273,9 @@ struct MomentoInspectorView: View {
             Image(systemName: "sidebar.right")
                 .font(.system(size: 30))
                 .foregroundStyle(MomentoTheme.tertiaryText)
-            Text("No asset selected")
+            Text(localization.string("No asset selected"))
                 .font(.system(size: 13, weight: .medium))
-            Text("Select an item to inspect metadata, tags, colors, and file details.")
+            Text(localization.string("Select an item to inspect metadata, tags, colors, and file details."))
                 .font(.system(size: 12))
                 .foregroundStyle(MomentoTheme.secondaryText)
                 .multilineTextAlignment(.center)

@@ -42,6 +42,8 @@ struct MomentoSidebarSection: Identifiable, Hashable {
 }
 
 struct MomentoSidebarView: View {
+    @Environment(\.appLocalization) private var localization
+
     var sections: [MomentoSidebarSection]
     @Binding var selection: MomentoSidebarItem.ID?
     var onItemContextMenu: ((MomentoSidebarItem) -> AnyView)?
@@ -70,7 +72,7 @@ struct MomentoSidebarView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Momento")
                         .font(.system(size: 14, weight: .semibold))
-                    Text("Local library")
+                    Text(localization.string("Local library"))
                         .font(.system(size: 11))
                         .foregroundStyle(MomentoTheme.secondaryText)
                 }
@@ -96,7 +98,7 @@ struct MomentoSidebarView: View {
 
             HStack(spacing: 8) {
                 Image(systemName: "externaldrive")
-                Text("No library selected")
+                Text(localization.string("No library selected"))
                 Spacer()
             }
             .font(.system(size: 12))
@@ -164,6 +166,8 @@ struct MomentoSidebarView: View {
 }
 
 private struct MomentoSidebarRow: View {
+    @Environment(\.appLocalization) private var localization
+
     var item: MomentoSidebarItem
     var isSelected: Bool
     var action: () -> Void
@@ -185,7 +189,7 @@ private struct MomentoSidebarRow: View {
                 Spacer(minLength: 8)
 
                 if let count = item.count {
-                    Text(count.formatted())
+                    Text(count.formatted(.number.locale(localization.locale)))
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(MomentoTheme.tertiaryText)
                 }
@@ -218,28 +222,28 @@ private struct MomentoSidebarRow: View {
 }
 
 extension Array where Element == MomentoSidebarSection {
-    static var momentoDefaultSections: [MomentoSidebarSection] {
+    static func momentoDefaultSections(localization: AppLocalization) -> [MomentoSidebarSection] {
         [
             MomentoSidebarSection(
                 id: "library",
-                title: "Library",
+                title: localization.string("Library"),
                 items: [
-                    MomentoSidebarItem(id: "all-assets", title: "All Assets", systemImage: "photo.on.rectangle.angled", count: 0),
-                    MomentoSidebarItem(id: "recent", title: "Recent", systemImage: "clock", count: 0)
+                    MomentoSidebarItem(id: "all-assets", title: localization.string("All Assets"), systemImage: "photo.on.rectangle.angled", count: 0),
+                    MomentoSidebarItem(id: "recent", title: localization.string("Recent"), systemImage: "clock", count: 0)
                 ],
                 isCollapsible: false
             ),
             MomentoSidebarSection(
                 id: "folders",
-                title: "Folders",
+                title: localization.string("Folders"),
                 items: [
-                    MomentoSidebarItem(id: "folder-inspiration", title: "Inspiration", systemImage: "folder", count: 0),
-                    MomentoSidebarItem(id: "folder-screenshots", title: "Screenshots", systemImage: "folder", count: 0)
+                    MomentoSidebarItem(id: "folder-inspiration", title: localization.string("Inspiration"), systemImage: "folder", count: 0),
+                    MomentoSidebarItem(id: "folder-screenshots", title: localization.string("Screenshots"), systemImage: "folder", count: 0)
                 ]
             ),
             MomentoSidebarSection(
                 id: "tags",
-                title: "Tags",
+                title: localization.string("Tags"),
                 items: [
                     MomentoSidebarItem(id: "tag-ui", title: "UI", systemImage: "tag", count: 0, tint: .blue),
                     MomentoSidebarItem(id: "tag-brand", title: "Brand", systemImage: "tag", count: 0, tint: .purple)
@@ -247,21 +251,25 @@ extension Array where Element == MomentoSidebarSection {
             ),
             MomentoSidebarSection(
                 id: "favorites",
-                title: "Favorites",
+                title: localization.string("Favorites"),
                 items: [
-                    MomentoSidebarItem(id: "favorites", title: "Starred Assets", systemImage: "star", count: 0, tint: .yellow)
+                    MomentoSidebarItem(id: "favorites", title: localization.string("Starred Assets"), systemImage: "star", count: 0, tint: .yellow)
                 ],
                 isCollapsible: false
             ),
             MomentoSidebarSection(
                 id: "trash",
-                title: "Trash",
+                title: localization.string("Trash"),
                 items: [
-                    MomentoSidebarItem(id: "trash", title: "Trash", systemImage: "trash", count: 0)
+                    MomentoSidebarItem(id: "trash", title: localization.string("Trash"), systemImage: "trash", count: 0)
                 ],
                 isCollapsible: false
             )
         ]
+    }
+
+    static var momentoDefaultSections: [MomentoSidebarSection] {
+        momentoDefaultSections(localization: AppLocalization(language: .system))
     }
 }
 

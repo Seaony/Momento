@@ -23,6 +23,8 @@ struct MomentoCommand: Identifiable, Hashable {
 }
 
 struct MomentoCommandPalette: View {
+    @Environment(\.appLocalization) private var localization
+
     @Binding var isPresented: Bool
     var commands: [MomentoCommand]
     var onSelect: (MomentoCommand) -> Void
@@ -54,7 +56,7 @@ struct MomentoCommandPalette: View {
                     Image(systemName: "command")
                         .foregroundStyle(MomentoTheme.secondaryText)
 
-                    TextField("Type a command or search...", text: $query)
+                    TextField(localization.string("Type a command or search..."), text: $query)
                         .textFieldStyle(.plain)
                         .font(.system(size: 16))
                         .focused($isSearchFocused)
@@ -81,9 +83,9 @@ struct MomentoCommandPalette: View {
                                 Image(systemName: "magnifyingglass")
                                     .font(.system(size: 24))
                                     .foregroundStyle(MomentoTheme.tertiaryText)
-                                Text("No commands found")
+                                Text(localization.string("No commands found"))
                                     .font(.system(size: 13, weight: .medium))
-                                Text("Try a different action or keyword.")
+                                Text(localization.string("Try a different action or keyword."))
                                     .font(.system(size: 12))
                                     .foregroundStyle(MomentoTheme.secondaryText)
                             }
@@ -215,14 +217,18 @@ extension View {
 }
 
 extension Array where Element == MomentoCommand {
-    static var momentoDefaultCommands: [MomentoCommand] {
+    static func momentoDefaultCommands(localization: AppLocalization) -> [MomentoCommand] {
         [
-            MomentoCommand(id: "import", title: "Import Assets", subtitle: "Choose files or folders", systemImage: "square.and.arrow.down", shortcut: "I"),
-            MomentoCommand(id: "new-folder", title: "New Folder", subtitle: "Create a folder in the current library", systemImage: "folder.badge.plus", shortcut: "N"),
-            MomentoCommand(id: "toggle-inspector", title: "Toggle Inspector", subtitle: "Show or hide asset details", systemImage: "sidebar.right", shortcut: "⌥⌘I"),
-            MomentoCommand(id: "quick-preview", title: "Quick Preview", subtitle: "Preview the selected asset", systemImage: "eye", shortcut: "Space"),
-            MomentoCommand(id: "trash", title: "Move to Trash", subtitle: "Remove selected assets from the library", systemImage: "trash", shortcut: "⌫")
+            MomentoCommand(id: "import", title: localization.string("Import Assets"), subtitle: localization.string("Choose files or folders"), systemImage: "square.and.arrow.down", shortcut: "I"),
+            MomentoCommand(id: "new-folder", title: localization.string("New Folder"), subtitle: localization.string("Create a folder in the current library"), systemImage: "folder.badge.plus", shortcut: "N"),
+            MomentoCommand(id: "toggle-inspector", title: localization.string("Toggle Inspector"), subtitle: localization.string("Show or hide asset details"), systemImage: "sidebar.right", shortcut: "⌥⌘I"),
+            MomentoCommand(id: "quick-preview", title: localization.string("Quick Preview"), subtitle: localization.string("Preview the selected asset"), systemImage: "eye", shortcut: "Space"),
+            MomentoCommand(id: "trash", title: localization.string("Move to Trash"), subtitle: localization.string("Remove selected assets from the library"), systemImage: "trash", shortcut: "⌫")
         ]
+    }
+
+    static var momentoDefaultCommands: [MomentoCommand] {
+        momentoDefaultCommands(localization: AppLocalization(language: .system))
     }
 }
 

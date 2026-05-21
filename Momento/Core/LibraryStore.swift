@@ -17,6 +17,7 @@ final class LibraryStore {
     init(
         libraries: [AssetLibrary] = [.defaultLibrary],
         assets: [AssetItem]? = nil,
+        defaultViewMode: AssetViewMode = .masonry,
         importService: AssetImportService = AssetImportService()
     ) {
         let currentLibrary = libraries.first ?? .defaultLibrary
@@ -25,6 +26,7 @@ final class LibraryStore {
         self.currentLibrary = currentLibrary
         self.assets = initialAssets
         self.selectedAssetID = initialAssets.first?.id
+        self.viewMode = defaultViewMode
         self.sidebarSelection = .library(currentLibrary.id)
         self.importService = importService
     }

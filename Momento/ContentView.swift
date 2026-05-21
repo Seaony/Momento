@@ -3,7 +3,10 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
-    @State private var store = LibraryStore()
+    @Environment(\.appLocalization) private var localization
+    @AppStorage(AppSettingsKeys.defaultViewMode) private var defaultViewModeRawValue = AssetViewMode.masonry.rawValue
+    @State private var store = LibraryStore(defaultViewMode: AppSettings.defaultViewMode())
+
     @State private var isImporterPresented = false
     @State private var isCommandPalettePresented = false
     @State private var inspectorNotesByAssetID: [AssetItem.ID: String] = [:]
@@ -53,8 +56,8 @@ struct ContentView: View {
             isCommandPalettePresented: $isCommandPalettePresented,
             sidebarSections: sidebarSections,
             title: title,
-            subtitle: "\(store.visibleAssets.count) items",
-            inspectorAsset: store.selectedAsset.map(MomentoInspectorAsset.init(asset:)),
+            subtitle: localization.itemCount(store.visibleAssets.count),
+            inspectorAsset: store.selectedAsset.map { MomentoInspectorAsset(asset: $0, localization: localization) },
             inspectorTags: selectedTags,
             inspectorNotes: inspectorNotes,
             commands: commands,
@@ -101,19 +104,26 @@ struct ContentView: View {
             .frame(width: 0, height: 0)
             .opacity(0)
         }
+        .onChange(of: defaultViewMode) { _, newValue in
+            store.setViewMode(newValue)
+        }
         .frame(minWidth: 1080, minHeight: 680)
+    }
+
+    private var defaultViewMode: AssetViewMode {
+        AssetViewMode(rawValue: defaultViewModeRawValue) ?? .masonry
     }
 
     private var title: String {
         switch store.sidebarSelection {
         case .library:
-            "All Assets"
+            localization.string("All Assets")
         case .favorites:
-            "Favorites"
+            localization.string("Favorites")
         case .tag(let tagID):
-            store.tags.first { $0.id == tagID }?.name ?? "Tag"
+            store.tags.first { $0.id == tagID }?.name ?? localization.string("Tag")
         case .trash:
-            "Trash"
+            localization.string("Trash")
         }
     }
 
@@ -121,7 +131,7 @@ struct ContentView: View {
         [
             MomentoSidebarSection(
                 id: "library",
-                title: "Library",
+                title: localization.string("Library"),
                 items: [
                     MomentoSidebarItem(
                         id: "all-assets",
@@ -131,13 +141,13 @@ struct ContentView: View {
                     ),
                     MomentoSidebarItem(
                         id: "recent",
-                        title: "Recent",
+                        title: localization.string("Recent"),
                         systemImage: "clock",
                         count: store.assets.count
                     ),
                     MomentoSidebarItem(
                         id: "favorites",
-                        title: "Favorites",
+                        title: localization.string("Favorites"),
                         systemImage: "star",
                         count: store.assets.filter(\.isFavorite).count,
                         tint: .yellow
@@ -147,15 +157,15 @@ struct ContentView: View {
             ),
             MomentoSidebarSection(
                 id: "folders",
-                title: "Folders",
+                title: localization.string("Folders"),
                 items: [
-                    MomentoSidebarItem(id: "folder-inspiration", title: "Inspiration", systemImage: "folder", count: 0),
-                    MomentoSidebarItem(id: "folder-screenshots", title: "Screenshots", systemImage: "folder", count: 0)
+                    MomentoSidebarItem(id: "folder-inspiration", title: localization.string("Inspiration"), systemImage: "folder", count: 0),
+                    MomentoSidebarItem(id: "folder-screenshots", title: localization.string("Screenshots"), systemImage: "folder", count: 0)
                 ]
             ),
             MomentoSidebarSection(
                 id: "tags",
-                title: "Tags",
+                title: localization.string("Tags"),
                 items: store.tags.map { tag in
                     MomentoSidebarItem(
                         id: "tag-\(tag.id)",
@@ -168,9 +178,9 @@ struct ContentView: View {
             ),
             MomentoSidebarSection(
                 id: "trash",
-                title: "Trash",
+                title: localization.string("Trash"),
                 items: [
-                    MomentoSidebarItem(id: "trash", title: "Trash", systemImage: "trash", count: 0)
+                    MomentoSidebarItem(id: "trash", title: localization.string("Trash"), systemImage: "trash", count: 0)
                 ],
                 isCollapsible: false
             )
@@ -179,11 +189,11 @@ struct ContentView: View {
 
     private var commands: [MomentoCommand] {
         [
-            MomentoCommand(id: "import", title: "Import Assets", subtitle: "Choose files or folders", systemImage: "square.and.arrow.down", shortcut: "I"),
-            MomentoCommand(id: "view-masonry", title: "Masonry View", subtitle: "Show adaptive visual grid", systemImage: "rectangle.grid.2x2", shortcut: "1"),
-            MomentoCommand(id: "view-grid", title: "Grid View", subtitle: "Show uniform thumbnails", systemImage: "square.grid.3x3", shortcut: "2"),
-            MomentoCommand(id: "view-list", title: "List View", subtitle: "Show compact rows", systemImage: "list.bullet", shortcut: "3"),
-            MomentoCommand(id: "quick-preview", title: "Quick Preview", subtitle: "Preview the selected asset", systemImage: "eye", shortcut: "Space")
+            MomentoCommand(id: "import", title: localization.string("Import Assets"), subtitle: localization.string("Choose files or folders"), systemImage: "square.and.arrow.down", shortcut: "I"),
+            MomentoCommand(id: "view-masonry", title: localization.string("Masonry View"), subtitle: localization.string("Show adaptive visual grid"), systemImage: "rectangle.grid.2x2", shortcut: "1"),
+            MomentoCommand(id: "view-grid", title: localization.string("Grid View"), subtitle: localization.string("Show uniform thumbnails"), systemImage: "square.grid.3x3", shortcut: "2"),
+            MomentoCommand(id: "view-list", title: localization.string("List View"), subtitle: localization.string("Show compact rows"), systemImage: "list.bullet", shortcut: "3"),
+            MomentoCommand(id: "quick-preview", title: localization.string("Quick Preview"), subtitle: localization.string("Preview the selected asset"), systemImage: "eye", shortcut: "Space")
         ]
     }
 
@@ -193,10 +203,10 @@ struct ContentView: View {
                 .font(.system(size: 34, weight: .regular))
                 .foregroundStyle(MomentoTheme.tertiaryText)
 
-            Text("Drop assets here")
+            Text(localization.string("Drop assets here"))
                 .font(.system(size: 15, weight: .semibold))
 
-            Text("Import images, GIFs, SVG, videos, PDF files, or folders to start building this library.")
+            Text(localization.string("Import images, GIFs, SVG, videos, PDF files, or folders to start building this library."))
                 .font(.system(size: 12))
                 .foregroundStyle(MomentoTheme.secondaryText)
                 .multilineTextAlignment(.center)
@@ -205,7 +215,7 @@ struct ContentView: View {
             Button {
                 isImporterPresented = true
             } label: {
-                Label("Import Assets", systemImage: "square.and.arrow.down")
+                Label(localization.string("Import Assets"), systemImage: "square.and.arrow.down")
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
@@ -221,7 +231,7 @@ struct ContentView: View {
             Image(systemName: "exclamationmark.triangle")
             Text(message)
                 .lineLimit(2)
-            Button("Dismiss") {
+            Button(localization.string("Dismiss")) {
                 withAnimation(.smooth(duration: 0.16)) {
                     importError = nil
                 }
@@ -297,7 +307,7 @@ struct ContentView: View {
 }
 
 private extension MomentoInspectorAsset {
-    init(asset: AssetItem) {
+    init(asset: AssetItem, localization: AppLocalization) {
         let previewURL = FileManager.default.fileExists(atPath: asset.storageURL.path)
             ? asset.storageURL
             : asset.originalURL
@@ -310,9 +320,9 @@ private extension MomentoInspectorAsset {
             dimensions: asset.dimensions.map { "\($0.width) × \($0.height)" },
             colorHexes: asset.tags.compactMap(\.colorHex),
             filePath: previewURL.path,
-            fileSize: ByteCountFormatter.string(fromByteCount: asset.byteSize, countStyle: .file),
+            fileSize: localization.fileSize(asset.byteSize),
             addedDate: asset.importedAt,
-            kind: asset.kind.rawValue.uppercased()
+            kind: localization.kindTitle(for: asset.kind)
         )
     }
 }
@@ -341,4 +351,5 @@ private extension Color {
 
 #Preview {
     ContentView()
+        .environment(\.appLocalization, AppLocalization(language: .system))
 }

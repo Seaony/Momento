@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct MomentoSearchBar: View {
+    @Environment(\.appLocalization) private var localization
+
     @Binding var query: String
     var placeholder: String
     var onSubmit: () -> Void
@@ -39,7 +41,7 @@ struct MomentoSearchBar: View {
                             .foregroundStyle(MomentoTheme.tertiaryText)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Clear search")
+                    .accessibilityLabel(localization.string("Clear search"))
                 }
             }
             .font(.system(size: 14))
@@ -73,13 +75,15 @@ struct MomentoSearchBar: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .help("Open command palette")
+                .help(localization.string("Open command palette"))
             }
         }
     }
 }
 
 struct MomentoTopBar: View {
+    @Environment(\.appLocalization) private var localization
+
     @Binding var query: String
     var title: String
     var subtitle: String?
@@ -116,6 +120,7 @@ struct MomentoTopBar: View {
 
             MomentoSearchBar(
                 query: $query,
+                placeholder: localization.string("Search assets, tags, colors..."),
                 onSubmit: onSubmitSearch,
                 onCommandPalette: onCommandPalette
             )
