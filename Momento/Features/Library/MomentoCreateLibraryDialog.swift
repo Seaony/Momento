@@ -1,8 +1,8 @@
 import SwiftUI
 
-private let createLibraryDialogWidth: CGFloat = 760
-private let createLibraryDialogIconSize: CGFloat = 72
-private let createLibraryDialogFieldHeight: CGFloat = 64
+private let createLibraryDialogWidth: CGFloat = 520
+private let createLibraryDialogIconSize: CGFloat = 52
+private let createLibraryDialogFieldHeight: CGFloat = 44
 
 struct MomentoCreateLibraryDialog: View {
     @Environment(\.appLocalization) private var localization
@@ -38,26 +38,26 @@ struct MomentoCreateLibraryDialog: View {
                     dismiss()
                 }
 
-            HStack(alignment: .top, spacing: 32) {
+            HStack(alignment: .top, spacing: 18) {
                 dialogIcon
 
-                VStack(alignment: .leading, spacing: 26) {
-                    VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 8) {
                         Text(localization.string("Create Library"))
-                            .font(.system(size: 30, weight: .semibold))
+                            .font(.system(size: 20, weight: .semibold))
 
                         Text(localization.string("Enter a name for this library, then choose where to save it."))
-                            .font(.system(size: 22, weight: .regular))
-                            .lineSpacing(8)
+                            .font(.system(size: 14, weight: .regular))
+                            .lineSpacing(4)
                             .foregroundStyle(MomentoTheme.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
                     TextField(localization.string("Library Name"), text: $libraryName)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 22, weight: .regular))
+                        .font(.system(size: 15, weight: .regular))
                         .foregroundStyle(MomentoTheme.secondaryText)
-                        .padding(.horizontal, 22)
+                        .padding(.horizontal, 14)
                         .frame(height: createLibraryDialogFieldHeight)
                         .background {
                             createLibraryNameFieldBackground
@@ -65,13 +65,13 @@ struct MomentoCreateLibraryDialog: View {
                         .focused($isNameFocused)
                         .onSubmit(continueToDestination)
 
-                    HStack(spacing: 20) {
+                    HStack(spacing: 12) {
                         Button {
                             dismiss()
                         } label: {
                             Text(localization.string("Cancel"))
-                                .font(.system(size: 22, weight: .semibold))
-                                .frame(width: 214, height: 64)
+                                .font(.system(size: 15, weight: .semibold))
+                                .frame(width: 132, height: 44)
                         }
                         .buttonStyle(.glass)
 
@@ -79,16 +79,16 @@ struct MomentoCreateLibraryDialog: View {
                             continueToDestination()
                         } label: {
                             Text(localization.string("Choose Save Location"))
-                                .font(.system(size: 22, weight: .semibold))
-                                .frame(width: 360, height: 64)
+                                .font(.system(size: 15, weight: .semibold))
+                                .frame(width: 220, height: 44)
                         }
                         .buttonStyle(.glassProminent)
                         .disabled(trimmedLibraryName.isEmpty)
                     }
                 }
             }
-            .padding(.horizontal, 48)
-            .padding(.vertical, 46)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 24)
             .frame(width: createLibraryDialogWidth)
             .background {
                 MomentoGlassBackground(cornerRadius: 14)
@@ -105,11 +105,11 @@ struct MomentoCreateLibraryDialog: View {
 
     private var dialogIcon: some View {
         Image(systemName: "archivebox.fill")
-            .font(.system(size: 32, weight: .semibold))
+            .font(.system(size: 23, weight: .semibold))
             .foregroundStyle(.white)
             .frame(width: createLibraryDialogIconSize, height: createLibraryDialogIconSize)
             .background {
-                MomentoGlassBackground(glass: .regular.tint(Color.accentColor), cornerRadius: 18)
+                MomentoGlassBackground(glass: .regular.tint(Color.accentColor), cornerRadius: 14)
             }
     }
 
