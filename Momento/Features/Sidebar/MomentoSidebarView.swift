@@ -146,8 +146,9 @@ struct MomentoSidebarView: View {
                 },
                 onReloadLibrary: performLibrarySwitcherAction(onReloadLibrary)
             )
+            .frame(width: MomentoTheme.librarySwitcherWidth, alignment: .topLeading)
             .padding(.top, MomentoTheme.floatingSidebarTitlebarContentInset + 42)
-            .padding(.horizontal, 14)
+            .padding(.leading, 14)
             .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .topLeading)))
             .zIndex(30)
         }
@@ -379,9 +380,9 @@ private struct MomentoLibrarySwitcherMenu: View {
     @State private var hoveredActionID: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             if !recentLibraries.isEmpty {
-                VStack(spacing: 4) {
+                VStack(spacing: 2) {
                     ForEach(recentLibraries) { library in
                         libraryRow(library)
                     }
@@ -389,10 +390,10 @@ private struct MomentoLibrarySwitcherMenu: View {
 
                 Divider()
                     .overlay(MomentoTheme.subtleStroke.opacity(0.65))
-                    .padding(.vertical, 2)
+                    .padding(.vertical, 1)
             }
 
-            VStack(spacing: 4) {
+            VStack(spacing: 2) {
                 actionRow(
                     id: "create-library",
                     title: localization.string("Create Library"),
@@ -438,7 +439,7 @@ private struct MomentoLibrarySwitcherMenu: View {
                 HStack(spacing: 8) {
                     Image(systemName: "circle.grid.2x3.fill")
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(MomentoTheme.tertiaryText)
+                        .foregroundStyle(isSelected || isHovered ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
                         .frame(width: 16)
 
                     Image(systemName: "square.grid.2x2")
@@ -525,7 +526,7 @@ private struct MomentoLibrarySwitcherMenu: View {
                 Spacer()
             }
             .padding(.horizontal, 9)
-            .frame(height: 36)
+            .frame(height: 32)
             .background {
                 menuRowBackground(isHovered: isHovered, isSelected: false)
             }
@@ -542,10 +543,7 @@ private struct MomentoLibrarySwitcherMenu: View {
     private func menuRowBackground(isHovered: Bool, isSelected: Bool) -> some View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
 
-        if isSelected {
-            Color.clear
-                .glassEffect(.regular.tint(Color.accentColor), in: shape)
-        } else if isHovered {
+        if isSelected || isHovered {
             shape.fill(MomentoTheme.sidebarIconHoverBackground)
         } else {
             Color.clear

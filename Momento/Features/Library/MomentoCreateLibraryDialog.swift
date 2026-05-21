@@ -36,7 +36,7 @@ struct MomentoCreateLibraryDialog: View {
         ZStack {
             Rectangle()
                 .fill(.ultraThinMaterial)
-                .overlay(Color.black.opacity(0.32))
+                .overlay(Color.black.opacity(0.18))
                 .ignoresSafeArea()
                 .contentShape(Rectangle())
                 .onTapGesture {
