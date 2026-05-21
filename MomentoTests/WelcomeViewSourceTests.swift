@@ -157,7 +157,15 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertTrue(source.contains("private let createLibraryDialogWidth: CGFloat = 460"))
         XCTAssertTrue(source.contains("private let createLibraryDialogIconSize: CGFloat = 48"))
         XCTAssertTrue(source.contains("private let createLibraryDialogFieldHeight: CGFloat = 36"))
-        XCTAssertTrue(source.contains("HStack(alignment: .top, spacing: 14)"))
+        XCTAssertTrue(source.contains("@Environment(\\.accessibilityReduceMotion) private var reduceMotion"))
+        XCTAssertTrue(source.contains("@State private var isCancelButtonHovered = false"))
+        XCTAssertTrue(source.contains("@State private var isChooseLocationButtonHovered = false"))
+        XCTAssertTrue(source.contains("HStack(alignment: .top, spacing: 16)"))
+        XCTAssertTrue(source.contains("VStack(alignment: .leading, spacing: 18)"))
+        XCTAssertTrue(source.contains("VStack(alignment: .leading, spacing: 8)"))
+        XCTAssertTrue(source.contains("HStack(spacing: 14)"))
+        XCTAssertTrue(source.contains(".padding(.horizontal, 34)"))
+        XCTAssertTrue(source.contains(".padding(.vertical, 30)"))
         XCTAssertTrue(source.contains(".fill(.ultraThinMaterial)"))
         XCTAssertTrue(source.contains(".overlay(Color.black.opacity(0.32))"))
         XCTAssertTrue(source.contains("Color.black.opacity(0.32)"))
@@ -170,8 +178,11 @@ final class WelcomeViewSourceTests: XCTestCase {
         let subtitleSource = String(source[subtitleStart.lowerBound..<subtitleEnd.upperBound])
         XCTAssertTrue(subtitleSource.contains(".font(.system(size: 13, weight: .regular))"))
         XCTAssertFalse(subtitleSource.contains(".font(.system(size: 12, weight: .regular))"))
-        XCTAssertTrue(source.contains("TextField(localization.string(\"Library Name\"), text: $libraryName)"))
+        XCTAssertTrue(source.contains("TextField(text: $libraryName, prompt: Text(localization.string(\"Library Name\")).foregroundStyle(MomentoTheme.secondaryText))"))
+        XCTAssertTrue(source.contains("Text(localization.string(\"Library Name\"))"))
         XCTAssertTrue(source.contains(".textFieldStyle(.plain)"))
+        XCTAssertTrue(source.contains(".font(.system(size: 13, weight: .medium))"))
+        XCTAssertTrue(source.contains(".foregroundStyle(libraryName.isEmpty ? MomentoTheme.secondaryText : MomentoTheme.primaryText)"))
         XCTAssertTrue(source.contains("createLibraryNameFieldBackground"))
         XCTAssertTrue(source.contains("isNameFocused ? Color.accentColor : MomentoTheme.subtleStroke"))
         XCTAssertTrue(source.contains("Text(localization.string(\"Choose Save Location\"))"))
@@ -179,8 +190,6 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertTrue(source.contains(".font(.system(size: 13, weight: .regular))"))
         XCTAssertTrue(source.contains(".font(.system(size: 14, weight: .semibold))"))
         XCTAssertTrue(source.contains(".font(.system(size: 22, weight: .semibold))"))
-        XCTAssertTrue(source.contains(".padding(.horizontal, 28)"))
-        XCTAssertTrue(source.contains(".padding(.vertical, 24)"))
         XCTAssertTrue(source.contains(".contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))"))
         XCTAssertTrue(source.contains(".onTapGesture {}"))
 
@@ -209,6 +218,16 @@ final class WelcomeViewSourceTests: XCTestCase {
             .count - 1
         XCTAssertGreaterThanOrEqual(pointerStyleCount, 2)
 
+        let hoverCount = source
+            .components(separatedBy: ".onHover { isHovered in")
+            .count - 1
+        XCTAssertGreaterThanOrEqual(hoverCount, 2)
+        XCTAssertTrue(source.contains(".createLibraryDialogButtonHoverFeedback(isHovered: isCancelButtonHovered, reduceMotion: reduceMotion)"))
+        XCTAssertTrue(source.contains(".createLibraryDialogButtonHoverFeedback(isHovered: isChooseLocationButtonHovered, reduceMotion: reduceMotion)"))
+        XCTAssertTrue(source.contains("scaleEffect(isHovered && !reduceMotion ? 1.035 : 1)"))
+        XCTAssertTrue(source.contains(".brightness(isHovered ? 0.08 : 0)"))
+        XCTAssertTrue(source.contains(".animation(reduceMotion ? nil : .smooth(duration: 0.16), value: isHovered)"))
+
         XCTAssertFalse(source.contains(".frame(width: 104, height: 34)"))
         XCTAssertFalse(source.contains(".frame(width: 160, height: 34)"))
         XCTAssertFalse(source.contains("height: 44"))
@@ -218,6 +237,9 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertFalse(source.contains(".controlSize(.small)"))
         XCTAssertFalse(source.contains(".controlSize(.regular)"))
         XCTAssertFalse(source.contains(".textFieldStyle(.roundedBorder)"))
+        XCTAssertFalse(source.contains(".padding(.horizontal, 28)"))
+        XCTAssertFalse(source.contains(".padding(.vertical, 24)"))
+        XCTAssertFalse(source.contains("TextField(localization.string(\"Library Name\"), text: $libraryName)"))
         XCTAssertFalse(source.contains("Text(localization.string(\"Continue\"))"))
     }
 

@@ -6,12 +6,15 @@ private let createLibraryDialogFieldHeight: CGFloat = 36
 
 struct MomentoCreateLibraryDialog: View {
     @Environment(\.appLocalization) private var localization
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var isPresented: Bool
 
     var initialName: String
     var onContinue: (String) -> Void
 
     @State private var libraryName: String
+    @State private var isCancelButtonHovered = false
+    @State private var isChooseLocationButtonHovered = false
     @FocusState private var isNameFocused: Bool
 
     private var trimmedLibraryName: String {
@@ -40,11 +43,11 @@ struct MomentoCreateLibraryDialog: View {
                     dismiss()
                 }
 
-            HStack(alignment: .top, spacing: 14) {
+            HStack(alignment: .top, spacing: 16) {
                 dialogIcon
 
-                VStack(alignment: .leading, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 8) {
                         Text(localization.string("Create Library"))
                             .font(.system(size: 18, weight: .semibold))
 
@@ -55,10 +58,12 @@ struct MomentoCreateLibraryDialog: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
-                    TextField(localization.string("Library Name"), text: $libraryName)
+                    TextField(text: $libraryName, prompt: Text(localization.string("Library Name")).foregroundStyle(MomentoTheme.secondaryText)) {
+                        Text(localization.string("Library Name"))
+                    }
                         .textFieldStyle(.plain)
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(MomentoTheme.secondaryText)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(libraryName.isEmpty ? MomentoTheme.secondaryText : MomentoTheme.primaryText)
                         .padding(.horizontal, 12)
                         .frame(height: createLibraryDialogFieldHeight)
                         .background {
@@ -67,7 +72,7 @@ struct MomentoCreateLibraryDialog: View {
                         .focused($isNameFocused)
                         .onSubmit(continueToDestination)
 
-                    HStack(spacing: 12) {
+                    HStack(spacing: 14) {
                         Button {
                             dismiss()
                         } label: {
@@ -81,6 +86,10 @@ struct MomentoCreateLibraryDialog: View {
                         .controlSize(.large)
                         .contentShape(Capsule(style: .continuous))
                         .pointerStyle(.link)
+                        .createLibraryDialogButtonHoverFeedback(isHovered: isCancelButtonHovered, reduceMotion: reduceMotion)
+                        .onHover { isHovered in
+                            isCancelButtonHovered = isHovered
+                        }
 
                         Button {
                             continueToDestination()
@@ -95,12 +104,16 @@ struct MomentoCreateLibraryDialog: View {
                         .controlSize(.large)
                         .contentShape(Capsule(style: .continuous))
                         .pointerStyle(.link)
+                        .createLibraryDialogButtonHoverFeedback(isHovered: isChooseLocationButtonHovered, reduceMotion: reduceMotion)
+                        .onHover { isHovered in
+                            isChooseLocationButtonHovered = isHovered
+                        }
                         .disabled(trimmedLibraryName.isEmpty)
                     }
                 }
             }
-            .padding(.horizontal, 28)
-            .padding(.vertical, 24)
+            .padding(.horizontal, 34)
+            .padding(.vertical, 30)
             .frame(width: createLibraryDialogWidth)
             .background {
                 MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.18)), cornerRadius: 14)
@@ -151,6 +164,14 @@ struct MomentoCreateLibraryDialog: View {
         withAnimation(.smooth(duration: 0.16)) {
             isPresented = false
         }
+    }
+}
+
+private extension View {
+    func createLibraryDialogButtonHoverFeedback(isHovered: Bool, reduceMotion: Bool) -> some View {
+        scaleEffect(isHovered && !reduceMotion ? 1.035 : 1)
+            .brightness(isHovered ? 0.08 : 0)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.16), value: isHovered)
     }
 }
 
