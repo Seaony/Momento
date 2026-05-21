@@ -38,6 +38,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
         collectionView.backgroundColors = [.clear]
         collectionView.isSelectable = true
         collectionView.allowsMultipleSelection = true
+        collectionView.allowsEmptySelection = false
         collectionView.dataSource = context.coordinator
         collectionView.delegate = context.coordinator
         collectionView.register(
@@ -157,8 +158,14 @@ extension AssetCollectionGridView {
             case .grid:
                 return NSSize(width: 148, height: 178)
             case .masonry:
-                let extraHeight = CGFloat(abs(parent.assets[indexPath.item].displayName.hashValue) % 48)
-                return NSSize(width: 164, height: 196 + extraHeight)
+                let asset = parent.assets[indexPath.item]
+                let width: CGFloat = 164
+                guard let dimensions = asset.dimensions, dimensions.width > 0 else {
+                    return NSSize(width: width, height: 214)
+                }
+
+                let ratio = CGFloat(dimensions.height) / CGFloat(dimensions.width)
+                return NSSize(width: width, height: (width * ratio).clamped(to: 132...278))
             case .list:
                 let width = max(collectionView.enclosingScrollView?.contentSize.width ?? 320, 240)
                 return NSSize(width: width, height: 54)
@@ -275,7 +282,9 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     private let previewImageView = NSImageView()
     private let fileNameLabel = NSTextField(labelWithString: "")
     private let subtitleLabel = NSTextField(labelWithString: "")
+    private let dimensionBadgeLabel = NSTextField(labelWithString: "")
     private var gridConstraints: [NSLayoutConstraint] = []
+    private var masonryConstraints: [NSLayoutConstraint] = []
     private var listConstraints: [NSLayoutConstraint] = []
     private var mode: AssetViewMode = .grid
     private let gridTitleHeight: CGFloat = 16
@@ -322,9 +331,22 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
         subtitleLabel.setContentCompressionResistancePriority(.required, for: .vertical)
 
+        dimensionBadgeLabel.lineBreakMode = .byTruncatingTail
+        dimensionBadgeLabel.maximumNumberOfLines = 1
+        dimensionBadgeLabel.alignment = .center
+        dimensionBadgeLabel.font = .systemFont(ofSize: 10, weight: .medium)
+        dimensionBadgeLabel.textColor = .white.withAlphaComponent(0.82)
+        dimensionBadgeLabel.translatesAutoresizingMaskIntoConstraints = false
+        dimensionBadgeLabel.wantsLayer = true
+        dimensionBadgeLabel.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.34).cgColor
+        dimensionBadgeLabel.layer?.cornerRadius = 7
+        dimensionBadgeLabel.layer?.cornerCurve = .continuous
+        dimensionBadgeLabel.isHidden = true
+
         containerView.addSubview(previewImageView)
         containerView.addSubview(fileNameLabel)
         containerView.addSubview(subtitleLabel)
+        containerView.addSubview(dimensionBadgeLabel)
         view = containerView
 
         gridConstraints = [
@@ -343,6 +365,18 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
             subtitleLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -8),
             subtitleLabel.heightAnchor.constraint(equalToConstant: gridSubtitleHeight),
             subtitleLabel.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -8)
+        ]
+
+        masonryConstraints = [
+            previewImageView.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 6),
+            previewImageView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 6),
+            previewImageView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -6),
+            previewImageView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -6),
+
+            dimensionBadgeLabel.topAnchor.constraint(equalTo: previewImageView.topAnchor, constant: 8),
+            dimensionBadgeLabel.trailingAnchor.constraint(equalTo: previewImageView.trailingAnchor, constant: -8),
+            dimensionBadgeLabel.heightAnchor.constraint(equalToConstant: 20),
+            dimensionBadgeLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 62)
         ]
 
         listConstraints = [
@@ -367,6 +401,8 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         previewImageView.image = nil
         fileNameLabel.stringValue = ""
         subtitleLabel.stringValue = ""
+        dimensionBadgeLabel.stringValue = ""
+        dimensionBadgeLabel.isHidden = true
         onHoverFocus = nil
         containerView.isHovered = false
         mode = .grid
@@ -376,20 +412,32 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         mode = viewMode
         fileNameLabel.stringValue = asset.displayName
         subtitleLabel.stringValue = subtitle(for: asset)
+        dimensionBadgeLabel.stringValue = subtitle(for: asset)
         previewImageView.image = previewImage(for: asset)
         applyModeLayout()
     }
 
     private func applyModeLayout() {
-        NSLayoutConstraint.deactivate(gridConstraints + listConstraints)
+        NSLayoutConstraint.deactivate(gridConstraints + masonryConstraints + listConstraints)
 
         switch mode {
-        case .grid, .masonry:
+        case .grid:
+            fileNameLabel.isHidden = false
+            subtitleLabel.isHidden = false
+            dimensionBadgeLabel.isHidden = true
             fileNameLabel.alignment = .center
             fileNameLabel.maximumNumberOfLines = 1
             subtitleLabel.alignment = .center
             NSLayoutConstraint.activate(gridConstraints)
+        case .masonry:
+            fileNameLabel.isHidden = true
+            subtitleLabel.isHidden = true
+            dimensionBadgeLabel.isHidden = dimensionBadgeLabel.stringValue.isEmpty
+            NSLayoutConstraint.activate(masonryConstraints)
         case .list:
+            fileNameLabel.isHidden = false
+            subtitleLabel.isHidden = false
+            dimensionBadgeLabel.isHidden = true
             fileNameLabel.alignment = .left
             fileNameLabel.maximumNumberOfLines = 1
             subtitleLabel.alignment = .left
@@ -508,5 +556,11 @@ private final class HoverSelectionView: NSView {
         } else {
             layer?.backgroundColor = NSColor.clear.cgColor
         }
+    }
+}
+
+private extension CGFloat {
+    func clamped(to range: ClosedRange<CGFloat>) -> CGFloat {
+        Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
     }
 }

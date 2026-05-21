@@ -116,7 +116,7 @@ struct MomentoShellView<Content: View>: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .animation(.smooth(duration: 0.18), value: isInspectorPresented)
+        .animation(.spring(response: 0.28, dampingFraction: 0.88), value: isInspectorPresented)
         .animation(.smooth(duration: 0.18), value: isSidebarCollapsed)
         .momentoCommandPalette(
             isPresented: $isCommandPalettePresented,
@@ -175,7 +175,16 @@ struct MomentoShellView<Content: View>: View {
             notes: $inspectorNotes
         )
         .frame(width: MomentoTheme.inspectorWidth)
-        .transition(.move(edge: .trailing).combined(with: .opacity))
+        .fixedSize(horizontal: true, vertical: false)
+        .layoutPriority(1)
+        .ignoresSafeArea(.container, edges: .top)
+        .transition(
+            .asymmetric(
+                insertion: .move(edge: .trailing).combined(with: .opacity),
+                removal: .move(edge: .trailing).combined(with: .opacity)
+            )
+        )
+        .zIndex(1)
     }
 
     private func sidebarResizeHandle() -> some View {

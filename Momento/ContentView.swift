@@ -169,7 +169,8 @@ struct ContentView: View {
                 ToolbarItemGroup(placement: .primaryAction) {
                     Picker(localization.string("View"), selection: viewModeSelection) {
                         ForEach(AssetViewMode.allCases) { viewMode in
-                            Text(localization.title(for: viewMode))
+                            Label(localization.title(for: viewMode), systemImage: systemImage(for: viewMode))
+                                .labelStyle(.iconOnly)
                                 .tag(viewMode)
                         }
                     }
@@ -370,7 +371,28 @@ struct ContentView: View {
     }
 
     private func selectAssets(_ ids: Set<AssetItem.ID>) {
-        store.selectAsset(id: ids.first)
+        guard let id = ids.first else {
+            return
+        }
+
+        store.selectAsset(id: id)
+
+        if !isInspectorPresented {
+            withAnimation(.smooth(duration: 0.22)) {
+                isInspectorPresented = true
+            }
+        }
+    }
+
+    private func systemImage(for viewMode: AssetViewMode) -> String {
+        switch viewMode {
+        case .masonry:
+            "rectangle.grid.1x2"
+        case .grid:
+            "square.grid.3x3"
+        case .list:
+            "list.bullet"
+        }
     }
 
     private func preview(_ asset: AssetItem) {
