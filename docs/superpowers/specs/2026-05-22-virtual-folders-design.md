@@ -18,7 +18,6 @@ Momento 目前已经有资源库包、资源导入、最近资源库列表、侧
 - Eagle Plugin API 的 folder 数据有 `id`、`name`、`parent`、`children`，说明文件夹本身是独立元数据，和磁盘目录不是一回事。
 - SwiftUI 官方文档中 `fileImporter` 用于系统文件选择，并要求处理 security-scoped resource；Momento 当前导入服务已经遵循这个方向。
 - Core Data 官方文档要求通过自动迁移选项处理版本化 store 的 lightweight migration。本次不能直接原地改唯一模型文件后假设旧库能打开。
-- Apple Accelerate 示例使用 k-means 提取图片 dominant colors。本次不引入第三方库，优先用系统框架完成导入时主色分析。
 - Image I/O 的 `CGImageSourceCreateThumbnailAtIndex` 支持按最大像素尺寸创建缩略图。本次缩略图生成优先使用 Image I/O，而不是手写全图缩放。
 
 参考链接：
@@ -27,7 +26,6 @@ Momento 目前已经有资源库包、资源导入、最近资源库列表、侧
 - [Eagle folder API](https://developer.eagle.cool/plugin-api/api/folder)
 - [SwiftUI fileImporter](https://developer.apple.com/documentation/swiftui/view/fileimporter%28ispresented%3Aallowedcontenttypes%3Aallowsmultipleselection%3Aoncompletion%3Aoncancellation%3A%29)
 - [Core Data automatic migration](https://developer.apple.com/documentation/coredata/migrating-your-data-model-automatically)
-- [Apple Accelerate dominant colors sample](https://developer.apple.com/documentation/accelerate/vimage/calculating_the_dominant_colors_in_an_image)
 - [CGImageSourceCreateThumbnailAtIndex](https://developer.apple.com/documentation/imageio/cgimagesourcecreatethumbnailatindex%28_%3A_%3A_%3A%29)
 
 ## 目标
@@ -43,9 +41,9 @@ Momento 目前已经有资源库包、资源导入、最近资源库列表、侧
 9. 导入可解码的图片时，分析主色板，保存颜色 hex 和占比，用于 Inspector 展示类似 Eagle 的颜色条。
 10. 导入可解码的图片时，生成一档缩略图，列表页和检查器优先使用缩略图，不直接加载原图。
 11. 已有资源库可以通过明确的 Core Data 轻量迁移继续打开。
-12. 资源库 manifest schema 和 Core Data model migration 必须协同处理，不能让旧库在 manifest 检查阶段提前失败。
+12. 本轮不升级 manifest schemaVersion；包格式保持 v1，数据库结构变化只走 Core Data model migration。
 13. `thumbnails/` 和 `previews/` 仍然是可删除缓存；清除缓存后必须有可控的缩略图重建路径。
-14. 用户可以把已关联到文件夹的资源从该文件夹移除，避免错误归类只能靠删除整个文件夹修正。
+14. 数据层支持把已关联到文件夹的资源从该文件夹移除，避免错误归类只能靠删除整个文件夹修正。
 15. 搜索需要覆盖资源名称、扩展名、标签、文件夹名称和图片主色 hex。
 
 ## 非目标
@@ -133,7 +131,7 @@ Momento 目前已经有资源库包、资源导入、最近资源库列表、侧
 
 ### 资源可以从文件夹移除
 
-文件夹关联必须是可逆操作。第一版需要支持把库内资源从某个文件夹移除：
+文件夹关联必须是可逆操作。第一版需要支持把库内资源从某个文件夹移除，但只做到数据层和 Store API：
 
 - 移除 folder membership，不删除资源记录。
 - 不删除 `.momento/assets` 中的物理文件。
@@ -141,7 +139,7 @@ Momento 目前已经有资源库包、资源导入、最近资源库列表、侧
 - 对不存在的 asset id 保持和关联操作一致：忽略不存在项，不创建或删除脏数据。
 - 如果目标 folder 不存在，抛 `missingFolder`。
 
-这个能力可以先通过当前文件夹视图里的资源操作入口暴露，不要求本次做完整右键菜单体系；但数据层和 Store API 必须存在，避免错误归类没有恢复路径。
+本轮不实现“从当前文件夹移除”的 UI 入口。添加和移除文件夹关联的交互后续一起设计，避免先做半套不可用入口。
 
 ### 文件夹名称规则
 
@@ -198,19 +196,20 @@ Momento 目前已经有资源库包、资源导入、最近资源库列表、侧
 
 暂时不新增 `ThumbnailRecord` 或生成队列表。第一版通过确定性路径判断单张 PNG 缩略图是否存在，足够支撑清除缓存后的修复。
 
-### Manifest schema 和数据库迁移必须协同
+### Manifest schema 本轮不升级
 
-资源库包打开时不能只看 `LibraryManifest.currentSchemaVersion` 的等值判断。否则 v1 manifest 会在 Core Data 轻量迁移之前被拒绝，导致“迁移测试通过但真实旧资源库打不开”。
+本轮变化是数据库模型新增实体，不是资源库包结构变化。manifest schema 不需要升级。
 
 第一版规则：
 
-- `LibraryManifest.currentSchemaVersion` 可以升级到 `2`，表示包内数据库模型新增了文件夹、颜色和缩略图派生能力。
-- `LibraryStorage.openLibraryPackage` 接受当前 app 支持的 schema version，例如 `1...2`。
-- 只有未来版本或未知版本才抛 `unsupportedSchemaVersion`。
-- 对 v1 manifest，先允许进入 Core Data 打开流程，由 model version 执行 lightweight migration。
-- 迁移和首次成功打开后，可以把 manifest 写回当前 schema version；写回必须发生在数据库能成功打开之后。
+- `LibraryManifest.currentSchemaVersion` 保持 `1`。
+- `manifest.json` 仍只描述库级信息，不承担数据库模型版本。
+- Core Data model 从 v1 迁移到 v2，由 `.xcdatamodeld` current version 和 lightweight migration 处理。
+- `LibraryStorage.openLibraryPackage` 继续拒绝未来或未知 manifest schema。
+- 打开 v1 manifest + v1 database 时，manifest 检查通过，随后 Core Data 执行数据库迁移。
+- 成功迁移数据库后不写回 manifest schemaVersion。
 
-这个规则把“包格式兼容性”和“数据库模型迁移”分开处理，避免 manifest gate 抢在数据库迁移前失败。
+后续只有当资源库包目录结构或 manifest 权威字段发生不兼容变化时，才单独升级 manifest schema。
 
 ### 第一版搜索使用现有内存数据
 
@@ -356,6 +355,8 @@ func thumbnailURL(
 ```
 
 `prepareLibraryDirectories(for:)` 已经创建 `thumbnails` 目录，这里只补路径生成能力。
+
+当前代码如果仍创建 `thumbnails/small`、`thumbnails/medium`、`thumbnails/large`，本轮需要改成只保证 `thumbnails` 根目录存在。旧的三档目录属于缓存内容，`clearTransientCaches(for:)` 删除整个 `thumbnails/` 后会自然清掉，不需要迁移。
 
 `Momento/Storage/LibraryMetadataStore.swift` 增加以下能力：
 
@@ -522,7 +523,8 @@ struct AssetColorAnalysisService: Sendable {
 - 忽略透明像素，例如 alpha 低于 5% 的像素。
 - 用确定性的颜色量化直方图生成最多 8 个颜色。
 - 对相近颜色做一次合并，避免同一主色被拆成多个非常接近的 swatch。
-- `coverage = clusterPixelCount / consideredPixelCount`。
+- 合并颜色时 coverage 相加，hex 使用合并后像素数量加权平均得到的颜色。
+- `coverage = mergedPixelCount / consideredPixelCount`。
 - 输出 hex 使用大写 `#RRGGBB`。
 
 如果图片无法解码、没有有效像素或算法失败，返回空数组。导入仍然成功，因为资源持久化是主流程，颜色只是可缺省的导入元数据。
@@ -729,13 +731,13 @@ var onDeleteFolder: (AssetFolder.ID) -> Void
 
 ### 从文件夹移除
 
-用户在某个文件夹视图中发现资源归类错误时，需要有一个最小可用的移除路径：
+本轮只实现数据能力，不实现具体 UI 入口：
 
-- 只在当前侧边栏选中真实文件夹时显示“从当前文件夹移除”动作。
-- 调用 `store.unassignAssets(ids: selectedAssetIDs, from: folderID)`。
+- 调用 `store.unassignAssets(ids: assetIDs, from: folderID)`。
 - Store 用返回的资源替换内存中的旧资源。
 - 如果资源被移除后不再属于任何文件夹，它会出现在 `未分类`。
 - 移除动作不删除资源、不移动物理文件、不修改标签。
+- 具体入口后续和“关联到文件夹”的交互一起设计。
 
 ### 重复导入
 
@@ -791,7 +793,7 @@ var onDeleteFolder: (AssetFolder.ID) -> Void
 10. 导入一张已知 PNG 后，单张缩略图文件存在，且最长边不超过 512 px。
 11. 重复导入同一张图片不新增资源、不新增 membership、不覆盖 palette 或 thumbnail。
 12. 用 v1 store fixture 验证轻量迁移：旧资源库能打开，旧资源默认 `folderIDs == []`、`paletteColors == []`、`thumbnailURL == nil`。
-13. v1 manifest + v1 database 能打开并迁移；未来版本 manifest 仍然被拒绝。
+13. v1 manifest + v1 database 能打开并迁移；manifest schemaVersion 保持 1，未来版本 manifest 仍然被拒绝。
 14. 清除缓存并重新加载后，缺失缩略图会被重建或进入可恢复的占位状态，列表页不会加载原图。
 15. 对已有资源调用 `unassignAssets(ids:from:)` 后，内存和重开库后的 `folderIDs` 都移除对应文件夹。
 16. 搜索文件夹名称和主色 hex 时，能命中对应资源；无关资源不被误匹配。
@@ -816,7 +818,7 @@ git diff --check
 7. 新增 `AssetColorAnalysisService`，并接入 `AssetImportService`。
 8. 扩展 `LibraryMetadataStore` 的 folder/membership/color 读写、空名称校验、已有资源关联。
 9. 扩展 `LibraryMetadataStore` 的 `unassignAssets(ids:from:)`。
-10. 调整 manifest schema 兼容检查，让 v1 manifest 可以进入 Core Data 迁移流程。
+10. 确认 manifest schemaVersion 不升级；Core Data v2 迁移不改 manifest。
 11. 新增缩略图缓存修复协调逻辑，接入清除缓存并重新加载流程。
 12. 扩展 `LibraryStore`：`folders` 状态、创建/删除文件夹、文件夹过滤、显式资源关联、移除关联、搜索匹配、`mergeAssets(_:)`。
 13. 调整 `ContentView`：新建/删除文件夹弹窗状态、文件夹操作传递、导入保持无文件夹关联。
@@ -830,7 +832,7 @@ git diff --check
 ## 边界风险
 
 - Core Data model 如果不做版本化，旧资源库迁移测试没有意义，用户已有库可能打不开。
-- 如果 manifest schema 等值检查先于 Core Data 迁移拒绝 v1 资源库，真实旧库会打不开。
+- 如果把 Core Data model 升级错误地绑定到 manifest schema 升级，真实旧库会被包格式检查提前拒绝。
 - 如果导入自动关联当前文件夹，会和“导入默认未分类”的产品语义冲突。
 - 如果 `LibraryStore` 只 append 新资源，不替换已有资源，显式关联已有资源后 UI 不会立即更新。
 - 如果删除文件夹只删数据库，不同步内存 `folderIDs`，`未分类` 和文件夹视图会短时间显示错误数据。
@@ -855,3 +857,4 @@ git diff --check
 10. 清除缓存后立即尝试重建缺失缩略图。
 11. 从文件夹移除资源只删除关联，不删除资源、不改标签。
 12. 第一版搜索使用现有内存数据，不新增持久化 SearchIndex；后续规模或搜索能力需要时再单独设计持久化索引。
+13. 本轮不升级 manifest schemaVersion，数据库结构变化只通过 Core Data model version 迁移。
