@@ -3,8 +3,8 @@ import SwiftUI
 
 private let inactiveBackdropOpacity = 1.0
 private let focusedBackdropOpacity = 0.56
-private let welcomeButtonWidth: CGFloat = 152
-private let welcomeButtonHeight: CGFloat = 36
+private let welcomeButtonWidth: CGFloat = 144
+private let welcomeButtonHeight: CGFloat = 42
 
 struct MomentoLibraryWelcomeView: View {
     @Environment(\.appLocalization) private var localization
@@ -40,7 +40,7 @@ struct MomentoLibraryWelcomeView: View {
                     Button {
                         onCreateLibrary()
                     } label: {
-                        Label(localization.string("Create Library"), systemImage: "plus")
+                        Label(localization.string("Create Library"), systemImage: "plus.circle.fill")
                             .labelStyle(.titleAndIcon)
                             .font(.system(size: 14, weight: .semibold))
                             .frame(width: welcomeButtonWidth, height: welcomeButtonHeight)
@@ -54,7 +54,7 @@ struct MomentoLibraryWelcomeView: View {
                     Button {
                         onOpenLibrary()
                     } label: {
-                        Label(localization.string("Open Library"), systemImage: "folder")
+                        Label(localization.string("Open Library"), systemImage: "folder.fill.badge.plus")
                             .labelStyle(.titleAndIcon)
                             .font(.system(size: 14, weight: .semibold))
                             .frame(width: welcomeButtonWidth, height: welcomeButtonHeight)

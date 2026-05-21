@@ -51,12 +51,19 @@ final class WelcomeViewSourceTests: XCTestCase {
     func testWelcomeButtonsUseSharedFixedMetrics() throws {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 
-        XCTAssertTrue(source.contains("welcomeButtonWidth: CGFloat = 152"))
-        XCTAssertTrue(source.contains("welcomeButtonHeight: CGFloat = 36"))
+        XCTAssertTrue(source.contains("welcomeButtonWidth: CGFloat = 144"))
+        XCTAssertTrue(source.contains("welcomeButtonHeight: CGFloat = 42"))
         let fixedSizeFrameCount = source
             .components(separatedBy: ".frame(width: welcomeButtonWidth, height: welcomeButtonHeight)")
             .count - 1
         XCTAssertGreaterThanOrEqual(fixedSizeFrameCount, 2)
+    }
+
+    func testWelcomeButtonsUseRequestedSymbols() throws {
+        let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
+
+        XCTAssertTrue(source.contains("systemImage: \"plus.circle.fill\""))
+        XCTAssertTrue(source.contains("systemImage: \"folder.fill.badge.plus\""))
     }
 
     func testWelcomeButtonsUsePointingHandCursorOnHover() throws {
