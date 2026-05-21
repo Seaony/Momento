@@ -27,6 +27,7 @@ struct MomentoShellView<Content: View>: View {
     @State private var sidebarWidth = MomentoTheme.sidebarWidth
     @State private var sidebarResizeStartWidth: CGFloat?
     @State private var isSidebarCollapsed = false
+    @State private var isSidebarToggleHovered = false
 
     init(
         sidebarSelection: Binding<MomentoSidebarItem.ID?>,
@@ -169,16 +170,30 @@ struct MomentoShellView<Content: View>: View {
 
     private var sidebarToggleButton: some View {
         let label = localization.string(isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar")
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
 
         return Button(action: toggleSidebarCollapsed) {
             Image(systemName: "sidebar.left")
                 .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(MomentoTheme.primaryText)
+                .foregroundStyle(isSidebarToggleHovered ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
                 .frame(width: MomentoTheme.sidebarTitlebarButtonSize, height: MomentoTheme.sidebarTitlebarButtonSize)
-                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .background {
+                    if isSidebarToggleHovered {
+                        shape.fill(MomentoTheme.sidebarIconHoverBackground)
+                    } else {
+                        Color.clear
+                    }
+                }
         }
         .buttonStyle(.plain)
+        .frame(width: MomentoTheme.sidebarTitlebarButtonSize, height: MomentoTheme.sidebarTitlebarButtonSize)
+        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .pointerStyle(.link)
+        .onHover { hovering in
+            withAnimation(.smooth(duration: 0.14)) {
+                isSidebarToggleHovered = hovering
+            }
+        }
         .help(label)
         .accessibilityLabel(label)
     }
