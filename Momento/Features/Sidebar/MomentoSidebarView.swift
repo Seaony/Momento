@@ -281,27 +281,6 @@ struct MomentoSidebarView: View {
     private var libraryMenu: some View {
         Menu {
             Button(localization.string("Create Library"), action: onCreateLibrary)
-            Button(localization.string("Open Library"), action: onOpenLibrary)
-
-            if libraryName != nil {
-                Divider()
-
-                Button {
-                    onCloseLibrary()
-                } label: {
-                    Label(localization.string("Close Library"), systemImage: "xmark.circle")
-                }
-            }
-
-            if !recentLibraries.isEmpty {
-                Divider()
-
-                ForEach(recentLibraries) { library in
-                    Button(library.name) {
-                        onSwitchLibrary(library.id)
-                    }
-                }
-            }
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "square.grid.2x2")

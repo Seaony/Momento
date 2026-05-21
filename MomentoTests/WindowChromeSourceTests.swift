@@ -84,16 +84,24 @@ final class WindowChromeSourceTests: XCTestCase {
         XCTAssertFalse(appSource.contains(".windowStyle(.hiddenTitleBar)"))
     }
 
-    func testLibraryMenuExposesCloseLibraryAction() throws {
+    func testSidebarLibraryMenuUsesNativeCreateOnlyMenu() throws {
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
         let shellSource = try String(contentsOf: shellViewURL(), encoding: .utf8)
         let sidebarSource = try String(contentsOf: sidebarViewURL(), encoding: .utf8)
+        let menuStart = try XCTUnwrap(sidebarSource.range(of: "    private var libraryMenu: some View {"))
+        let menuEnd = try XCTUnwrap(sidebarSource[menuStart.lowerBound...].range(of: "private struct MomentoSidebarRow"))
+        let menuSource = String(sidebarSource[menuStart.lowerBound..<menuEnd.lowerBound])
 
-        XCTAssertTrue(contentSource.contains("onCloseLibrary: closeLibrary"))
+        XCTAssertTrue(menuSource.contains("Menu {"))
+        XCTAssertTrue(menuSource.contains("Button(localization.string(\"Create Library\"), action: onCreateLibrary)"))
+        XCTAssertFalse(menuSource.contains("Open Library"))
+        XCTAssertFalse(menuSource.contains("Close Library"))
+        XCTAssertFalse(menuSource.contains("recentLibraries"))
+        XCTAssertFalse(menuSource.contains("onSwitchLibrary"))
+        XCTAssertFalse(menuSource.contains("onCloseLibrary"))
+        XCTAssertTrue(contentSource.contains("onCreateLibrary: createLibrary"))
+        XCTAssertTrue(shellSource.contains("onCreateLibrary"))
         XCTAssertTrue(contentSource.contains("store.closeCurrentLibrary()"))
-        XCTAssertTrue(shellSource.contains("onCloseLibrary"))
-        XCTAssertTrue(sidebarSource.contains("onCloseLibrary"))
-        XCTAssertTrue(sidebarSource.contains("Close Library"))
     }
 
     func testContentViewValidatesCurrentLibraryWhenWindowAppears() throws {
