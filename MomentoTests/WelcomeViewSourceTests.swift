@@ -51,7 +51,7 @@ final class WelcomeViewSourceTests: XCTestCase {
     func testWelcomeButtonsUseSharedFixedMetrics() throws {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 
-        XCTAssertTrue(source.contains("welcomeButtonWidth: CGFloat = 144"))
+        XCTAssertTrue(source.contains("welcomeButtonWidth: CGFloat = 136"))
         XCTAssertTrue(source.contains("welcomeButtonHeight: CGFloat = 42"))
         let fixedSizeFrameCount = source
             .components(separatedBy: ".frame(width: welcomeButtonWidth, height: welcomeButtonHeight)")

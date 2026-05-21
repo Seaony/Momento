@@ -3,7 +3,7 @@ import SwiftUI
 
 private let inactiveBackdropOpacity = 1.0
 private let focusedBackdropOpacity = 0.56
-private let welcomeButtonWidth: CGFloat = 144
+private let welcomeButtonWidth: CGFloat = 136
 private let welcomeButtonHeight: CGFloat = 42
 
 struct MomentoLibraryWelcomeView: View {
