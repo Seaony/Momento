@@ -39,14 +39,13 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertTrue(source.contains("restoreWindowConfiguration()"))
     }
 
-    func testWelcomeConfiguresLargerRoundedWindowCorners() throws {
+    func testWelcomeDoesNotOwnWindowCornerRadius() throws {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 
-        XCTAssertTrue(source.contains("welcomeWindowCornerRadius: CGFloat = 28"))
-        XCTAssertTrue(source.contains("contentView.layer?.cornerRadius = welcomeWindowCornerRadius"))
-        XCTAssertTrue(source.contains("contentView.layer?.cornerCurve = .continuous"))
-        XCTAssertTrue(source.contains("contentView.layer?.masksToBounds = true"))
-        XCTAssertTrue(source.contains("originalContentCornerRadius"))
+        XCTAssertFalse(source.contains("welcomeWindowCornerRadius"))
+        XCTAssertFalse(source.contains("contentView.layer?.cornerRadius"))
+        XCTAssertFalse(source.contains("contentView.layer?.cornerCurve"))
+        XCTAssertFalse(source.contains("contentView.layer?.masksToBounds"))
     }
 
     func testWelcomeButtonsUseSharedFixedMetrics() throws {

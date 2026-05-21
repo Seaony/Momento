@@ -1,6 +1,9 @@
 import AppKit
+import QuartzCore
 import SwiftUI
 import UniformTypeIdentifiers
+
+private let momentoWindowCornerRadius: CGFloat = 28
 
 struct ContentView: View {
     @Environment(\.appLocalization) private var localization
@@ -59,6 +62,11 @@ struct ContentView: View {
             } else {
                 libraryBody
             }
+        }
+        .overlay {
+            MomentoWindowCornerRadiusConfigurator()
+                .frame(width: 0, height: 0)
+                .allowsHitTesting(false)
         }
         .overlay(alignment: .bottom) {
             if let errorMessage {
@@ -401,6 +409,96 @@ private extension MomentoInspectorAsset {
             addedDate: asset.importedAt,
             kind: localization.kindTitle(for: asset.kind)
         )
+    }
+}
+
+private struct MomentoWindowCornerRadiusConfigurator: NSViewRepresentable {
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> MomentoWindowCornerObserverView {
+        let view = MomentoWindowCornerObserverView()
+        view.onWindowChanged = { [weak coordinator = context.coordinator] window in
+            coordinator?.configureWindow(window)
+        }
+        return view
+    }
+
+    func updateNSView(_ view: MomentoWindowCornerObserverView, context: Context) {
+        context.coordinator.configureWindow(view.window)
+    }
+
+    static func dismantleNSView(_ view: MomentoWindowCornerObserverView, coordinator: Coordinator) {
+        coordinator.restoreContentViewConfiguration()
+    }
+
+    final class Coordinator {
+        private weak var configuredContentView: NSView?
+        private var originalContentWantsLayer: Bool?
+        private var originalContentCornerRadius: CGFloat?
+        private var originalContentCornerCurve: CALayerCornerCurve?
+        private var originalContentMasksToBounds: Bool?
+
+        func configureWindow(_ window: NSWindow?) {
+            guard let contentView = window?.contentView else {
+                return
+            }
+
+            if configuredContentView !== contentView {
+                restoreContentViewConfiguration()
+                captureContentViewConfiguration(contentView)
+            }
+
+            contentView.wantsLayer = true
+            contentView.layer?.cornerRadius = momentoWindowCornerRadius
+            contentView.layer?.cornerCurve = .continuous
+            contentView.layer?.masksToBounds = true
+        }
+
+        func restoreContentViewConfiguration() {
+            guard let configuredContentView else {
+                return
+            }
+
+            if originalContentWantsLayer == true {
+                if let originalContentCornerRadius {
+                    configuredContentView.layer?.cornerRadius = originalContentCornerRadius
+                }
+                if let originalContentCornerCurve {
+                    configuredContentView.layer?.cornerCurve = originalContentCornerCurve
+                }
+                if let originalContentMasksToBounds {
+                    configuredContentView.layer?.masksToBounds = originalContentMasksToBounds
+                }
+            }
+            if let originalContentWantsLayer {
+                configuredContentView.wantsLayer = originalContentWantsLayer
+            }
+
+            self.configuredContentView = nil
+            originalContentWantsLayer = nil
+            originalContentCornerRadius = nil
+            originalContentCornerCurve = nil
+            originalContentMasksToBounds = nil
+        }
+
+        private func captureContentViewConfiguration(_ contentView: NSView) {
+            configuredContentView = contentView
+            originalContentWantsLayer = contentView.wantsLayer
+            originalContentCornerRadius = contentView.layer?.cornerRadius
+            originalContentCornerCurve = contentView.layer?.cornerCurve
+            originalContentMasksToBounds = contentView.layer?.masksToBounds
+        }
+    }
+}
+
+private final class MomentoWindowCornerObserverView: NSView {
+    var onWindowChanged: ((NSWindow?) -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        onWindowChanged?(window)
     }
 }
 
