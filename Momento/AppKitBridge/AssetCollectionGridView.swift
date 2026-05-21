@@ -12,6 +12,7 @@ private enum AssetCollectionMetrics {
     static let masonryItemWidth: CGFloat = 164
     static let masonryImageInset: CGFloat = 3
     static let selectionCornerRadius: CGFloat = 12
+    static let masonryHoverBackgroundAlpha: CGFloat = 0.08
     static let imageCornerRadius: CGFloat = 10
     static let dimensionBadgeCornerRadius: CGFloat = 5
     static let dimensionBadgeHeight: CGFloat = 16
@@ -590,11 +591,13 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         onHoverPreviewChange = nil
         contentView.isHovered = false
         contentView.isSelected = false
+        contentView.viewMode = .grid
         mode = .grid
     }
 
     func configure(with asset: AssetItem, viewMode: AssetViewMode) {
         mode = viewMode
+        contentView.viewMode = viewMode
         fileNameLabel.stringValue = asset.displayName
         subtitleLabel.stringValue = subtitle(for: asset)
         dimensionBadgeView.stringValue = subtitle(for: asset)
@@ -760,6 +763,11 @@ private final class HoverSelectionView: NSView {
             updateAppearance()
         }
     }
+    var viewMode: AssetViewMode = .grid {
+        didSet {
+            updateAppearance()
+        }
+    }
 
     private let glassBackgroundView = NSGlassEffectView()
 
@@ -817,12 +825,24 @@ private final class HoverSelectionView: NSView {
         layer?.borderColor = NSColor.clear.cgColor
         layer?.borderWidth = 0
 
-        let targetColor = if isHovered || isSelected {
-            NSColor.controlAccentColor.cgColor
-        } else {
-            NSColor.clear.cgColor
-        }
+        let targetColor = backgroundColor
         updateBackgroundColor(targetColor)
+    }
+
+    private var backgroundColor: CGColor {
+        if isSelected {
+            return NSColor.controlAccentColor.cgColor
+        }
+
+        if isHovered, viewMode == .masonry {
+            return NSColor.white.withAlphaComponent(AssetCollectionMetrics.masonryHoverBackgroundAlpha).cgColor
+        }
+
+        if isHovered {
+            return NSColor.controlAccentColor.cgColor
+        }
+
+        return NSColor.clear.cgColor
     }
 
     private func updateBackgroundColor(_ targetColor: CGColor) {
