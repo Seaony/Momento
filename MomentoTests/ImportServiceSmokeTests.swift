@@ -151,6 +151,37 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testTrashedRecentLibraryIsPrunedOnLaunchAndReportsError() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        try FileManager.default.createDirectory(at: environment.trashURL, withIntermediateDirectories: true)
+        let trashedPackageURL = environment.trashURL.appendingPathComponent("Test.momentolibrary", isDirectory: true)
+        let storage = LibraryStorage(applicationSupportRoot: environment.rootURL, trashURLs: [environment.trashURL])
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            storage: storage,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: trashedPackageURL)
+        let recentID = try XCTUnwrap(store.recentLibraries.first?.id)
+        store.closeCurrentLibrary()
+
+        let relaunched = LibraryStore(
+            defaultViewMode: .grid,
+            storage: storage,
+            recentStore: RecentLibraryStore(defaults: environment.defaults)
+        )
+
+        XCTAssertNil(relaunched.currentLibrary)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: trashedPackageURL.path))
+        XCTAssertTrue(relaunched.recentLibraries.isEmpty)
+        XCTAssertFalse(relaunched.recentLibraries.contains { $0.id == recentID })
+        XCTAssertEqual(relaunched.libraryErrorMessage, LibraryStoreError.missingRecentLibrary.errorDescription)
+    }
+
+    @MainActor
     func testOpeningMissingRecentLibraryPrunesReferenceAndThrowsUnavailableError() throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }
@@ -204,6 +235,7 @@ private struct TestEnvironment {
     let rootURL: URL
     let packageURL: URL
     let inputURL: URL
+    let trashURL: URL
     let defaults: UserDefaults
     let defaultsSuiteName: String
 
@@ -212,6 +244,7 @@ private struct TestEnvironment {
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         inputURL = rootURL.appendingPathComponent("input", isDirectory: true)
         packageURL = rootURL.appendingPathComponent("Test.momentolibrary", isDirectory: true)
+        trashURL = rootURL.appendingPathComponent(".Trash", isDirectory: true)
         defaultsSuiteName = "MomentoTests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: defaultsSuiteName)!
 

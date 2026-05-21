@@ -4,9 +4,11 @@ nonisolated struct LibraryStorage: Sendable {
     static let packageExtension = "momentolibrary"
 
     var applicationSupportRoot: URL
+    var trashURLs: [URL]
 
-    init(applicationSupportRoot: URL? = nil) {
+    init(applicationSupportRoot: URL? = nil, trashURLs: [URL]? = nil) {
         self.applicationSupportRoot = applicationSupportRoot ?? Self.defaultApplicationSupportRoot()
+        self.trashURLs = trashURLs ?? FileManager.default.urls(for: .trashDirectory, in: .userDomainMask)
     }
 
     nonisolated func rootURL(for library: AssetLibrary) -> URL {
@@ -73,6 +75,10 @@ nonisolated struct LibraryStorage: Sendable {
     }
 
     nonisolated func openLibraryPackage(at packageURL: URL) throws -> AssetLibrary {
+        guard !isInTrash(packageURL) else {
+            throw LibraryStorageError.missingLibraryPackage
+        }
+
         var isDirectory = ObjCBool(false)
         guard FileManager.default.fileExists(atPath: packageURL.path, isDirectory: &isDirectory),
               isDirectory.boolValue else {
@@ -117,6 +123,18 @@ nonisolated struct LibraryStorage: Sendable {
     nonisolated private func writeManifest(_ manifest: LibraryManifest, in library: AssetLibrary) throws {
         let data = try JSONEncoder.momento.encode(manifest)
         try data.write(to: rootURL(for: library).appendingPathComponent(LibraryManifest.fileName), options: .atomic)
+    }
+
+    nonisolated private func isInTrash(_ url: URL) -> Bool {
+        let itemPath = pathWithTrailingSlash(url)
+        return trashURLs.contains { trashURL in
+            itemPath.hasPrefix(pathWithTrailingSlash(trashURL))
+        }
+    }
+
+    nonisolated private func pathWithTrailingSlash(_ url: URL) -> String {
+        let path = url.standardizedFileURL.resolvingSymlinksInPath().path
+        return path.hasSuffix("/") ? path : path + "/"
     }
 
     nonisolated private static func defaultApplicationSupportRoot() -> URL {
