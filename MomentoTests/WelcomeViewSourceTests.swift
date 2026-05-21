@@ -34,13 +34,13 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertFalse(source.contains("@Environment(\\.controlActiveState)"))
     }
 
-    func testWelcomeDoesNotOwnWindowTransparency() throws {
+    func testWelcomeConfiguresTransparentWindowForBehindWindowGlass() throws {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 
-        XCTAssertFalse(source.contains("WelcomeWindowTransparencyConfigurator"))
-        XCTAssertFalse(source.contains("window.isOpaque = false"))
-        XCTAssertFalse(source.contains("window.backgroundColor = .clear"))
-        XCTAssertFalse(source.contains("restoreWindowConfiguration()"))
+        XCTAssertTrue(source.contains("WelcomeWindowTransparencyConfigurator"))
+        XCTAssertTrue(source.contains("window.isOpaque = false"))
+        XCTAssertTrue(source.contains("window.backgroundColor = .clear"))
+        XCTAssertTrue(source.contains("restoreWindowConfiguration()"))
     }
 
     func testWelcomeDoesNotOwnWindowCornerRadius() throws {

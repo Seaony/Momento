@@ -1,9 +1,6 @@
 import AppKit
-import QuartzCore
 import SwiftUI
 import UniformTypeIdentifiers
-
-private let momentoWindowCornerRadius: CGFloat = 36
 
 struct ContentView: View {
     @Environment(\.appLocalization) private var localization
@@ -62,11 +59,6 @@ struct ContentView: View {
             } else {
                 libraryBody
             }
-        }
-        .overlay {
-            MomentoWindowChromeConfigurator()
-                .frame(width: 0, height: 0)
-                .allowsHitTesting(false)
         }
         .overlay(alignment: .bottom) {
             if let errorMessage {
@@ -409,116 +401,6 @@ private extension MomentoInspectorAsset {
             addedDate: asset.importedAt,
             kind: localization.kindTitle(for: asset.kind)
         )
-    }
-}
-
-private struct MomentoWindowChromeConfigurator: NSViewRepresentable {
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    func makeNSView(context: Context) -> MomentoWindowChromeObserverView {
-        let view = MomentoWindowChromeObserverView()
-        view.onWindowChanged = { [weak coordinator = context.coordinator] window in
-            coordinator?.configureWindow(window)
-        }
-        return view
-    }
-
-    func updateNSView(_ view: MomentoWindowChromeObserverView, context: Context) {
-        context.coordinator.configureWindow(view.window)
-    }
-
-    static func dismantleNSView(_ view: MomentoWindowChromeObserverView, coordinator: Coordinator) {
-        coordinator.restoreWindowConfiguration()
-    }
-
-    final class Coordinator {
-        private weak var configuredWindow: NSWindow?
-        private weak var configuredContentView: NSView?
-        private var originalWindowIsOpaque: Bool?
-        private var originalWindowBackgroundColor: NSColor?
-        private var originalContentWantsLayer: Bool?
-        private var originalContentCornerRadius: CGFloat?
-        private var originalContentCornerCurve: CALayerCornerCurve?
-        private var originalContentMasksToBounds: Bool?
-
-        func configureWindow(_ window: NSWindow?) {
-            guard let window, let contentView = window.contentView else {
-                return
-            }
-
-            if configuredWindow !== window || configuredContentView !== contentView {
-                restoreWindowConfiguration()
-                captureWindowConfiguration(window, contentView: contentView)
-            }
-
-            window.isOpaque = false
-            window.backgroundColor = .clear
-            contentView.wantsLayer = true
-            contentView.layer?.cornerRadius = momentoWindowCornerRadius
-            contentView.layer?.cornerCurve = .continuous
-            contentView.layer?.masksToBounds = true
-            window.invalidateShadow()
-        }
-
-        func restoreWindowConfiguration() {
-            if let configuredContentView {
-                if originalContentWantsLayer == true {
-                    if let originalContentCornerRadius {
-                        configuredContentView.layer?.cornerRadius = originalContentCornerRadius
-                    }
-                    if let originalContentCornerCurve {
-                        configuredContentView.layer?.cornerCurve = originalContentCornerCurve
-                    }
-                    if let originalContentMasksToBounds {
-                        configuredContentView.layer?.masksToBounds = originalContentMasksToBounds
-                    }
-                }
-                if let originalContentWantsLayer {
-                    configuredContentView.wantsLayer = originalContentWantsLayer
-                }
-            }
-
-            if let configuredWindow {
-                if let originalWindowIsOpaque {
-                    configuredWindow.isOpaque = originalWindowIsOpaque
-                }
-                if let originalWindowBackgroundColor {
-                    configuredWindow.backgroundColor = originalWindowBackgroundColor
-                }
-                configuredWindow.invalidateShadow()
-            }
-
-            configuredWindow = nil
-            configuredContentView = nil
-            originalWindowIsOpaque = nil
-            originalWindowBackgroundColor = nil
-            originalContentWantsLayer = nil
-            originalContentCornerRadius = nil
-            originalContentCornerCurve = nil
-            originalContentMasksToBounds = nil
-        }
-
-        private func captureWindowConfiguration(_ window: NSWindow, contentView: NSView) {
-            configuredWindow = window
-            configuredContentView = contentView
-            originalWindowIsOpaque = window.isOpaque
-            originalWindowBackgroundColor = window.backgroundColor
-            originalContentWantsLayer = contentView.wantsLayer
-            originalContentCornerRadius = contentView.layer?.cornerRadius
-            originalContentCornerCurve = contentView.layer?.cornerCurve
-            originalContentMasksToBounds = contentView.layer?.masksToBounds
-        }
-    }
-}
-
-private final class MomentoWindowChromeObserverView: NSView {
-    var onWindowChanged: ((NSWindow?) -> Void)?
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        onWindowChanged?(window)
     }
 }
 
