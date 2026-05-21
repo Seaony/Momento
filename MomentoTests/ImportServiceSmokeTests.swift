@@ -292,6 +292,53 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: environment.packageURL.appendingPathComponent("thumbnails/small").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: environment.packageURL.appendingPathComponent("previews").path))
     }
+
+    @MainActor
+    func testRenamingRecentLibraryUpdatesManifestCurrentLibraryAndRecentReference() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+        let libraryID = try XCTUnwrap(store.currentLibrary?.id)
+
+        try store.renameRecentLibrary(id: libraryID, to: "Renamed")
+
+        XCTAssertEqual(store.currentLibrary?.name, "Renamed")
+        XCTAssertEqual(store.recentLibraries.first?.name, "Renamed")
+
+        let manifestURL = environment.packageURL.appendingPathComponent("manifest.json")
+        let manifest = try JSONDecoder.momento.decode(LibraryManifest.self, from: Data(contentsOf: manifestURL))
+        XCTAssertEqual(manifest.libraryID, libraryID)
+        XCTAssertEqual(manifest.displayName, "Renamed")
+    }
+
+    @MainActor
+    func testDeletingRecentLibraryMovesPackageToTrashAndClosesCurrentLibrary() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let storage = LibraryStorage(applicationSupportRoot: environment.rootURL, trashURLs: [environment.trashURL])
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            storage: storage,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+        let libraryID = try XCTUnwrap(store.currentLibrary?.id)
+
+        try store.deleteRecentLibrary(id: libraryID)
+
+        XCTAssertNil(store.currentLibrary)
+        XCTAssertTrue(store.recentLibraries.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: environment.packageURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: environment.trashURL.appendingPathComponent("Test.momento").path))
+    }
 }
 
 private struct TestEnvironment {

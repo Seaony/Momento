@@ -531,6 +531,22 @@
         }
       }
     },
+    "Enter a library name." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a library name."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请输入资源库名称。"
+          }
+        }
+      }
+    },
     "Favorites" : {
       "extractionState" : "stale",
       "localizations" : {

@@ -146,6 +146,43 @@ final class LibraryStore {
         try openLibrary(at: packageURL)
     }
 
+    func renameRecentLibrary(id: RecentLibraryReference.ID, to name: String) throws {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            throw LibraryStoreError.invalidLibraryName
+        }
+
+        guard let reference = recentLibraries.first(where: { $0.id == id }) else {
+            throw LibraryStoreError.missingRecentLibrary
+        }
+
+        let resolved = try recentStore.resolve(reference)
+        let library = try storage.renameLibraryPackage(at: resolved.url, to: trimmedName)
+        try recentStore.updateName(id: id, name: trimmedName)
+        recentLibraries = recentStore.load()
+
+        if currentLibrary?.id == id {
+            currentLibrary = library
+            libraries = [library]
+        }
+    }
+
+    func deleteRecentLibrary(id: RecentLibraryReference.ID) throws {
+        guard let reference = recentLibraries.first(where: { $0.id == id }) else {
+            throw LibraryStoreError.missingRecentLibrary
+        }
+
+        let resolved = try recentStore.resolve(reference)
+        try storage.trashLibraryPackage(at: resolved.url)
+
+        if currentLibrary?.id == id {
+            closeCurrentLibrary()
+        }
+
+        try recentStore.remove(id: id)
+        recentLibraries = recentStore.load()
+    }
+
     func validateCurrentLibraryAvailability() throws {
         guard let currentLibrary else {
             return
@@ -378,6 +415,7 @@ enum LibraryStoreError: LocalizedError {
     case noCurrentLibrary
     case missingRecentLibrary
     case unsupportedLibraryURL
+    case invalidLibraryName
 
     var errorDescription: String? {
         switch self {
@@ -387,6 +425,8 @@ enum LibraryStoreError: LocalizedError {
             "This recent library is no longer available."
         case .unsupportedLibraryURL:
             "Choose a .momento package."
+        case .invalidLibraryName:
+            "Enter a library name."
         }
     }
 }

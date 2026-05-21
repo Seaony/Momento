@@ -133,6 +133,8 @@ struct ContentView: View {
             onCreateLibrary: createLibrary,
             onOpenLibrary: openLibrary,
             onSwitchLibrary: switchLibrary,
+            onRenameLibrary: renameLibrary,
+            onDeleteLibrary: deleteLibrary,
             onReloadLibrary: reloadLibrary,
             onCloseLibrary: closeLibrary,
             title: title,
@@ -400,6 +402,54 @@ struct ContentView: View {
     private func switchLibrary(_ id: RecentLibraryReference.ID) {
         do {
             try store.openRecentLibrary(id: id)
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func renameLibrary(_ id: RecentLibraryReference.ID) {
+        guard let library = store.recentLibraries.first(where: { $0.id == id }) else {
+            return
+        }
+
+        let alert = NSAlert()
+        let nameField = NSTextField(string: library.name)
+        nameField.placeholderString = localization.string("Library Name")
+        nameField.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
+        alert.messageText = localization.string("Rename Library")
+        alert.accessoryView = nameField
+        alert.addButton(withTitle: localization.string("Rename Library"))
+        alert.addButton(withTitle: localization.string("Cancel"))
+
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            return
+        }
+
+        do {
+            try store.renameRecentLibrary(id: id, to: nameField.stringValue)
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func deleteLibrary(_ id: RecentLibraryReference.ID) {
+        guard let library = store.recentLibraries.first(where: { $0.id == id }) else {
+            return
+        }
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = localization.string("Delete Library")
+        alert.informativeText = library.name
+        alert.addButton(withTitle: localization.string("Move to Trash"))
+        alert.addButton(withTitle: localization.string("Cancel"))
+
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            return
+        }
+
+        do {
+            try store.deleteRecentLibrary(id: id)
         } catch {
             showImportError(error)
         }

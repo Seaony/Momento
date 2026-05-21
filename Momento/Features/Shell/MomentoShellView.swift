@@ -15,6 +15,8 @@ struct MomentoShellView<Content: View>: View {
     var onCreateLibrary: () -> Void
     var onOpenLibrary: () -> Void
     var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
+    var onRenameLibrary: (RecentLibraryReference.ID) -> Void
+    var onDeleteLibrary: (RecentLibraryReference.ID) -> Void
     var onReloadLibrary: () -> Void
     var onCloseLibrary: () -> Void
     var title: String
@@ -42,6 +44,8 @@ struct MomentoShellView<Content: View>: View {
         onCreateLibrary: @escaping () -> Void = {},
         onOpenLibrary: @escaping () -> Void = {},
         onSwitchLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
+        onRenameLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
+        onDeleteLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
         onReloadLibrary: @escaping () -> Void = {},
         onCloseLibrary: @escaping () -> Void = {},
         title: String = "All Assets",
@@ -64,6 +68,8 @@ struct MomentoShellView<Content: View>: View {
         self.onCreateLibrary = onCreateLibrary
         self.onOpenLibrary = onOpenLibrary
         self.onSwitchLibrary = onSwitchLibrary
+        self.onRenameLibrary = onRenameLibrary
+        self.onDeleteLibrary = onDeleteLibrary
         self.onReloadLibrary = onReloadLibrary
         self.onCloseLibrary = onCloseLibrary
         self.title = title
@@ -131,6 +137,8 @@ struct MomentoShellView<Content: View>: View {
             onCreateLibrary: onCreateLibrary,
             onOpenLibrary: onOpenLibrary,
             onSwitchLibrary: onSwitchLibrary,
+            onRenameLibrary: onRenameLibrary,
+            onDeleteLibrary: onDeleteLibrary,
             onReloadLibrary: onReloadLibrary,
             onCloseLibrary: onCloseLibrary
         )

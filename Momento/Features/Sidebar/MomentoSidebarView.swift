@@ -53,6 +53,8 @@ struct MomentoSidebarView: View {
     var onCreateLibrary: () -> Void
     var onOpenLibrary: () -> Void
     var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
+    var onRenameLibrary: (RecentLibraryReference.ID) -> Void
+    var onDeleteLibrary: (RecentLibraryReference.ID) -> Void
     var onReloadLibrary: () -> Void
     var onCloseLibrary: () -> Void
     var onItemContextMenu: ((MomentoSidebarItem) -> AnyView)?
@@ -70,6 +72,8 @@ struct MomentoSidebarView: View {
         onCreateLibrary: @escaping () -> Void = {},
         onOpenLibrary: @escaping () -> Void = {},
         onSwitchLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
+        onRenameLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
+        onDeleteLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
         onReloadLibrary: @escaping () -> Void = {},
         onCloseLibrary: @escaping () -> Void = {},
         onItemContextMenu: ((MomentoSidebarItem) -> AnyView)? = nil
@@ -82,6 +86,8 @@ struct MomentoSidebarView: View {
         self.onCreateLibrary = onCreateLibrary
         self.onOpenLibrary = onOpenLibrary
         self.onSwitchLibrary = onSwitchLibrary
+        self.onRenameLibrary = onRenameLibrary
+        self.onDeleteLibrary = onDeleteLibrary
         self.onReloadLibrary = onReloadLibrary
         self.onCloseLibrary = onCloseLibrary
         self.onItemContextMenu = onItemContextMenu
@@ -143,6 +149,14 @@ struct MomentoSidebarView: View {
                 onSwitchLibrary: { id in
                     dismissLibrarySwitcher()
                     onSwitchLibrary(id)
+                },
+                onRenameLibrary: { id in
+                    dismissLibrarySwitcher()
+                    onRenameLibrary(id)
+                },
+                onDeleteLibrary: { id in
+                    dismissLibrarySwitcher()
+                    onDeleteLibrary(id)
                 },
                 onReloadLibrary: performLibrarySwitcherAction(onReloadLibrary)
             )
@@ -323,7 +337,7 @@ struct MomentoSidebarView: View {
             }
         } label: {
             HStack(spacing: 10) {
-                Image(systemName: "square.grid.2x2")
+                Image(systemName: "archivebox.fill")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 28, height: 28)
@@ -374,13 +388,15 @@ private struct MomentoLibrarySwitcherMenu: View {
     var onCreateLibrary: () -> Void
     var onOpenLibrary: () -> Void
     var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
+    var onRenameLibrary: (RecentLibraryReference.ID) -> Void
+    var onDeleteLibrary: (RecentLibraryReference.ID) -> Void
     var onReloadLibrary: () -> Void
 
     @State private var hoveredLibraryID: RecentLibraryReference.ID?
     @State private var hoveredActionID: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 5) {
             if !recentLibraries.isEmpty {
                 VStack(spacing: 2) {
                     ForEach(recentLibraries) { library in
@@ -393,7 +409,7 @@ private struct MomentoLibrarySwitcherMenu: View {
                     .padding(.vertical, 1)
             }
 
-            VStack(spacing: 2) {
+            VStack(spacing: 1) {
                 actionRow(
                     id: "create-library",
                     title: localization.string("Create Library"),
@@ -442,21 +458,21 @@ private struct MomentoLibrarySwitcherMenu: View {
                         .foregroundStyle(isSelected || isHovered ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
                         .frame(width: 16)
 
-                    Image(systemName: "square.grid.2x2")
-                        .font(.system(size: 14, weight: .semibold))
+                    Image(systemName: "archivebox.fill")
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.white)
-                        .frame(width: 30, height: 30)
-                        .background(.blue.gradient, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .frame(width: 26, height: 26)
+                        .background(.blue.gradient, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
 
                     VStack(alignment: .leading, spacing: 1) {
                         Text(library.name)
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(MomentoTheme.primaryText)
                             .lineLimit(1)
 
                         Text(libraryPath(for: library))
-                            .font(.system(size: 11))
-                            .foregroundStyle(MomentoTheme.secondaryText)
+                            .font(.system(size: 10))
+                            .foregroundStyle(MomentoTheme.tertiaryText)
                             .lineLimit(1)
                     }
 
@@ -475,26 +491,30 @@ private struct MomentoLibrarySwitcherMenu: View {
             .pointerStyle(.link)
 
             Menu {
-                Button(localization.string("Rename Library")) {}
-                    .disabled(true)
-
-                Button(role: .destructive) {} label: {
-                    Text(localization.string("Delete Library"))
+                Button {
+                    onRenameLibrary(library.id)
+                } label: {
+                    Label(localization.string("Rename Library"), systemImage: "pencil")
                 }
-                .disabled(true)
+
+                Button(role: .destructive) {
+                    onDeleteLibrary(library.id)
+                } label: {
+                    Label(localization.string("Delete Library"), systemImage: "trash")
+                }
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(MomentoTheme.secondaryText)
-                    .frame(width: 26, height: 26)
+                    .frame(width: 24, height: 24)
                     .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
             .menuIndicator(.hidden)
             .buttonStyle(.plain)
             .help(localization.string("More Actions"))
         }
-        .padding(.horizontal, 8)
-        .frame(height: 50)
+        .padding(.horizontal, 7)
+        .frame(height: 42)
         .background {
             menuRowBackground(isHovered: isHovered, isSelected: isSelected)
         }
@@ -526,7 +546,7 @@ private struct MomentoLibrarySwitcherMenu: View {
                 Spacer()
             }
             .padding(.horizontal, 9)
-            .frame(height: 32)
+            .frame(height: 30)
             .background {
                 menuRowBackground(isHovered: isHovered, isSelected: false)
             }
@@ -543,7 +563,10 @@ private struct MomentoLibrarySwitcherMenu: View {
     private func menuRowBackground(isHovered: Bool, isSelected: Bool) -> some View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
 
-        if isSelected || isHovered {
+        if isSelected {
+            Color.clear
+                .glassEffect(.regular.tint(Color.accentColor), in: shape)
+        } else if isHovered {
             shape.fill(MomentoTheme.sidebarIconHoverBackground)
         } else {
             Color.clear

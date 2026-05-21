@@ -54,8 +54,17 @@ struct RecentLibraryStore {
         let reference = RecentLibraryReference(id: library.id, name: library.name, bookmarkData: bookmarkData)
         var references = load().filter { $0.id != library.id }
         references.insert(reference, at: 0)
-        let data = try JSONEncoder.momento.encode(Array(references.prefix(10)))
-        defaults.set(data, forKey: key)
+        try saveReferences(Array(references.prefix(10)))
+    }
+
+    func updateName(id: RecentLibraryReference.ID, name: String) throws {
+        var references = load()
+        guard let index = references.firstIndex(where: { $0.id == id }) else {
+            return
+        }
+
+        references[index].name = name
+        try saveReferences(references)
     }
 
     func remove(id: RecentLibraryReference.ID) throws {
@@ -65,6 +74,11 @@ struct RecentLibraryStore {
             return
         }
 
+        let data = try JSONEncoder.momento.encode(references)
+        defaults.set(data, forKey: key)
+    }
+
+    private func saveReferences(_ references: [RecentLibraryReference]) throws {
         let data = try JSONEncoder.momento.encode(references)
         defaults.set(data, forKey: key)
     }

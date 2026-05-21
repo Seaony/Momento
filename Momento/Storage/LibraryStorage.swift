@@ -122,6 +122,28 @@ nonisolated struct LibraryStorage: Sendable {
         )
     }
 
+    nonisolated func renameLibraryPackage(at packageURL: URL, to name: String) throws -> AssetLibrary {
+        let library = try openLibraryPackage(at: packageURL)
+        let renamedLibrary = AssetLibrary(
+            id: library.id,
+            name: name,
+            createdAt: library.createdAt,
+            packageURL: packageURL
+        )
+        try writeManifest(LibraryManifest(library: renamedLibrary), in: renamedLibrary)
+        return renamedLibrary
+    }
+
+    nonisolated func trashLibraryPackage(at packageURL: URL) throws {
+        guard let trashURL = trashURLs.first else {
+            try FileManager.default.trashItem(at: packageURL, resultingItemURL: nil)
+            return
+        }
+
+        try FileManager.default.createDirectory(at: trashURL, withIntermediateDirectories: true)
+        try FileManager.default.moveItem(at: packageURL, to: availableTrashURL(for: packageURL, in: trashURL))
+    }
+
     nonisolated func relativePath(for url: URL, in library: AssetLibrary) throws -> String {
         let packageURL = rootURL(for: library).standardizedFileURL
         let assetURL = url.standardizedFileURL
@@ -141,6 +163,22 @@ nonisolated struct LibraryStorage: Sendable {
     nonisolated private func writeManifest(_ manifest: LibraryManifest, in library: AssetLibrary) throws {
         let data = try JSONEncoder.momento.encode(manifest)
         try data.write(to: rootURL(for: library).appendingPathComponent(LibraryManifest.fileName), options: .atomic)
+    }
+
+    nonisolated private func availableTrashURL(for packageURL: URL, in trashURL: URL) -> URL {
+        let baseName = packageURL.deletingPathExtension().lastPathComponent
+        let pathExtension = packageURL.pathExtension
+        var candidate = trashURL.appendingPathComponent(packageURL.lastPathComponent, isDirectory: true)
+        var index = 2
+
+        while FileManager.default.fileExists(atPath: candidate.path) {
+            candidate = trashURL
+                .appendingPathComponent("\(baseName) \(index)", isDirectory: true)
+                .appendingPathExtension(pathExtension)
+            index += 1
+        }
+
+        return candidate
     }
 
     nonisolated private func isInTrash(_ url: URL) -> Bool {
