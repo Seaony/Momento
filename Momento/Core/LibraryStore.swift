@@ -144,6 +144,18 @@ final class LibraryStore {
         viewMode = mode
     }
 
+    func closeCurrentLibrary() {
+        libraryAccessScope = nil
+        metadataStore = nil
+        currentLibrary = nil
+        libraries = []
+        assets = []
+        selectedAssetID = nil
+        searchQuery = ""
+        sidebarSelection = .library("")
+        libraryErrorMessage = nil
+    }
+
     func selectSidebarItem(id: String?) {
         switch id {
         case "favorites":

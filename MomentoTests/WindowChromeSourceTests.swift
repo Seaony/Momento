@@ -29,6 +29,18 @@ final class WindowChromeSourceTests: XCTestCase {
         XCTAssertFalse(shellSource.contains("MomentoTopBar("))
     }
 
+    func testLibraryMenuExposesCloseLibraryAction() throws {
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+        let shellSource = try String(contentsOf: shellViewURL(), encoding: .utf8)
+        let sidebarSource = try String(contentsOf: sidebarViewURL(), encoding: .utf8)
+
+        XCTAssertTrue(contentSource.contains("onCloseLibrary: closeLibrary"))
+        XCTAssertTrue(contentSource.contains("store.closeCurrentLibrary()"))
+        XCTAssertTrue(shellSource.contains("onCloseLibrary"))
+        XCTAssertTrue(sidebarSource.contains("onCloseLibrary"))
+        XCTAssertTrue(sidebarSource.contains("Close Library"))
+    }
+
     private func contentViewURL() -> URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -48,5 +60,12 @@ final class WindowChromeSourceTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("Momento/Features/Shell/MomentoShellView.swift")
+    }
+
+    private func sidebarViewURL() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Momento/Features/Sidebar/MomentoSidebarView.swift")
     }
 }

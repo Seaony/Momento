@@ -99,6 +99,32 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         XCTAssertEqual(reopened.assets.first?.dimensions, AssetDimensions(width: 1, height: 1))
         XCTAssertTrue(FileManager.default.fileExists(atPath: reopened.assets[0].storageURL.path))
     }
+
+    @MainActor
+    func testClosingCurrentLibraryReturnsToWelcomeStateWithoutDeletingPackage() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+        store.searchQuery = "asset"
+
+        store.closeCurrentLibrary()
+
+        XCTAssertNil(store.currentLibrary)
+        XCTAssertTrue(store.libraries.isEmpty)
+        XCTAssertTrue(store.assets.isEmpty)
+        XCTAssertNil(store.selectedAssetID)
+        XCTAssertEqual(store.searchQuery, "")
+        XCTAssertEqual(store.sidebarItemID(), "all-assets")
+        XCTAssertNil(store.libraryErrorMessage)
+        XCTAssertEqual(store.recentLibraries.first?.name, "Test")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: environment.packageURL.path))
+    }
 }
 
 private struct TestEnvironment {

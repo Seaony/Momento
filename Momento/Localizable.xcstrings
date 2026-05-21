@@ -208,6 +208,23 @@
         }
       }
     },
+    "Close Library" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close Library"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭资源库"
+          }
+        }
+      }
+    },
     "Colors" : {
       "extractionState" : "stale",
       "localizations" : {

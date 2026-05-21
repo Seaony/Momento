@@ -11,6 +11,7 @@ struct MomentoShellView<Content: View>: View {
     var onCreateLibrary: () -> Void
     var onOpenLibrary: () -> Void
     var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
+    var onCloseLibrary: () -> Void
     var title: String
     var subtitle: String?
     var inspectorAsset: MomentoInspectorAsset?
@@ -30,6 +31,7 @@ struct MomentoShellView<Content: View>: View {
         onCreateLibrary: @escaping () -> Void = {},
         onOpenLibrary: @escaping () -> Void = {},
         onSwitchLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
+        onCloseLibrary: @escaping () -> Void = {},
         title: String = "All Assets",
         subtitle: String? = "0 items",
         inspectorAsset: MomentoInspectorAsset? = nil,
@@ -48,6 +50,7 @@ struct MomentoShellView<Content: View>: View {
         self.onCreateLibrary = onCreateLibrary
         self.onOpenLibrary = onOpenLibrary
         self.onSwitchLibrary = onSwitchLibrary
+        self.onCloseLibrary = onCloseLibrary
         self.title = title
         self.subtitle = subtitle
         self.inspectorAsset = inspectorAsset
@@ -67,7 +70,8 @@ struct MomentoShellView<Content: View>: View {
                 recentLibraries: recentLibraries,
                 onCreateLibrary: onCreateLibrary,
                 onOpenLibrary: onOpenLibrary,
-                onSwitchLibrary: onSwitchLibrary
+                onSwitchLibrary: onSwitchLibrary,
+                onCloseLibrary: onCloseLibrary
             )
 
             VStack(spacing: 0) {

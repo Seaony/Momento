@@ -51,6 +51,7 @@ struct MomentoSidebarView: View {
     var onCreateLibrary: () -> Void
     var onOpenLibrary: () -> Void
     var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
+    var onCloseLibrary: () -> Void
     var onItemContextMenu: ((MomentoSidebarItem) -> AnyView)?
 
     @State private var collapsedSectionIDs: Set<MomentoSidebarSection.ID> = []
@@ -63,6 +64,7 @@ struct MomentoSidebarView: View {
         onCreateLibrary: @escaping () -> Void = {},
         onOpenLibrary: @escaping () -> Void = {},
         onSwitchLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
+        onCloseLibrary: @escaping () -> Void = {},
         onItemContextMenu: ((MomentoSidebarItem) -> AnyView)? = nil
     ) {
         self.sections = sections
@@ -72,6 +74,7 @@ struct MomentoSidebarView: View {
         self.onCreateLibrary = onCreateLibrary
         self.onOpenLibrary = onOpenLibrary
         self.onSwitchLibrary = onSwitchLibrary
+        self.onCloseLibrary = onCloseLibrary
         self.onItemContextMenu = onItemContextMenu
     }
 
@@ -168,6 +171,16 @@ struct MomentoSidebarView: View {
         Menu {
             Button(localization.string("Create Library"), action: onCreateLibrary)
             Button(localization.string("Open Library"), action: onOpenLibrary)
+
+            if libraryName != nil {
+                Divider()
+
+                Button {
+                    onCloseLibrary()
+                } label: {
+                    Label(localization.string("Close Library"), systemImage: "xmark.circle")
+                }
+            }
 
             if !recentLibraries.isEmpty {
                 Divider()

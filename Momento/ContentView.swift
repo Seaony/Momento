@@ -111,6 +111,7 @@ struct ContentView: View {
             onCreateLibrary: createLibrary,
             onOpenLibrary: openLibrary,
             onSwitchLibrary: switchLibrary,
+            onCloseLibrary: closeLibrary,
             title: title,
             subtitle: localization.itemCount(store.visibleAssets.count),
             inspectorAsset: store.selectedAsset.map { MomentoInspectorAsset(asset: $0, localization: localization) },
@@ -394,6 +395,13 @@ struct ContentView: View {
             try store.openRecentLibrary(id: id)
         } catch {
             showImportError(error)
+        }
+    }
+
+    private func closeLibrary() {
+        withAnimation(.smooth(duration: 0.18)) {
+            importError = nil
+            store.closeCurrentLibrary()
         }
     }
 
