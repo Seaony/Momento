@@ -15,6 +15,7 @@ struct ContentView: View {
     @State private var isInspectorPresented = true
     @State private var inspectorNotesByAssetID: [AssetItem.ID: String] = [:]
     @State private var importError: String?
+    @State private var previewedAsset: AssetItem?
 
     private var sidebarSelection: Binding<String?> {
         Binding {
@@ -73,13 +74,16 @@ struct ContentView: View {
                 libraryBody
             }
         }
-        .blur(radius: isLibraryDialogVisible ? 8 : 0, opaque: false)
-        .animation(.smooth(duration: 0.16), value: isLibraryDialogVisible)
+        .blur(radius: isModalOverlayVisible ? 8 : 0, opaque: false)
+        .animation(.smooth(duration: 0.16), value: isModalOverlayVisible)
         .overlay(alignment: .bottom) {
             if let errorMessage {
                 importErrorBanner(errorMessage)
                     .padding(.bottom, 16)
             }
+        }
+        .overlay {
+            assetPreviewOverlay
         }
         .overlay {
             libraryDialogOverlay
@@ -139,7 +143,7 @@ struct ContentView: View {
             onDeleteFolder: deleteFolder,
             title: title,
             subtitle: localization.itemCount(store.visibleAssets.count),
-            showsChromeControls: !isLibraryDialogVisible,
+            showsChromeControls: !isModalOverlayVisible,
             inspectorAsset: store.selectedAsset.map { MomentoInspectorAsset(asset: $0, localization: localization) },
             inspectorTags: selectedTags,
             inspectorNotes: inspectorNotes,
@@ -161,7 +165,7 @@ struct ContentView: View {
             }
         }
         .toolbar {
-            if !isLibraryDialogVisible {
+            if !isModalOverlayVisible {
                 ToolbarItemGroup(placement: .primaryAction) {
                     Picker(localization.string("View"), selection: viewModeSelection) {
                         ForEach(AssetViewMode.allCases) { viewMode in
@@ -189,8 +193,24 @@ struct ContentView: View {
                 }
             }
         }
-        .libraryToolbarSearch(isVisible: !isLibraryDialogVisible, text: $store.searchQuery, prompt: Text(localization.string("Search assets, tags, colors...")))
+        .libraryToolbarSearch(isVisible: !isModalOverlayVisible, text: $store.searchQuery, prompt: Text(localization.string("Search assets, tags, colors...")))
         .navigationTitle("")
+    }
+
+    @ViewBuilder
+    private var assetPreviewOverlay: some View {
+        if let previewedAsset, let previewURL = previewURL(for: previewedAsset) {
+            MomentoAssetPreviewOverlay(
+                asset: previewedAsset,
+                previewURL: previewURL,
+                onDismiss: {
+                    withAnimation(.smooth(duration: 0.16)) {
+                        self.previewedAsset = nil
+                    }
+                }
+            )
+            .zIndex(24)
+        }
     }
 
     @ViewBuilder
@@ -255,6 +275,10 @@ struct ContentView: View {
 
     private var isLibraryDialogVisible: Bool {
         isCreateLibraryDialogPresented || editingLibrary != nil || deletingLibrary != nil
+    }
+
+    private var isModalOverlayVisible: Bool {
+        isLibraryDialogVisible || previewedAsset != nil
     }
 
     private var errorMessage: String? {
@@ -350,18 +374,21 @@ struct ContentView: View {
     }
 
     private func preview(_ asset: AssetItem) {
-        let previewURL: URL?
-        if FileManager.default.fileExists(atPath: asset.storageURL.path) {
-            previewURL = asset.storageURL
-        } else {
-            previewURL = asset.originalURL
-        }
-
-        guard let previewURL else {
+        guard previewURL(for: asset) != nil else {
             return
         }
 
-        QuickLookPreviewController.shared.show(url: previewURL)
+        withAnimation(.smooth(duration: 0.18)) {
+            previewedAsset = asset
+        }
+    }
+
+    private func previewURL(for asset: AssetItem) -> URL? {
+        if FileManager.default.fileExists(atPath: asset.storageURL.path) {
+            return asset.storageURL
+        }
+
+        return asset.originalURL
     }
 
     private func handleCommand(_ command: MomentoCommand) {

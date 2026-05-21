@@ -138,6 +138,13 @@ extension AssetCollectionGridView {
             }
 
             assetItem.configure(with: parent.assets[indexPath.item], viewMode: parent.viewMode)
+            assetItem.onHoverFocus = { [weak self, weak collectionView] in
+                guard let collectionView else {
+                    return
+                }
+
+                self?.focusAsset(at: indexPath, in: collectionView)
+            }
             return assetItem
         }
 
@@ -212,6 +219,22 @@ extension AssetCollectionGridView {
             parent.onDoubleClick(parent.assets[indexPath.item])
         }
 
+        private func focusAsset(at indexPath: IndexPath, in collectionView: NSCollectionView) {
+            guard parent.assets.indices.contains(indexPath.item) else {
+                return
+            }
+
+            collectionView.window?.makeFirstResponder(collectionView)
+
+            let targetSelection: Set<IndexPath> = [indexPath]
+            guard collectionView.selectionIndexPaths != targetSelection else {
+                return
+            }
+
+            collectionView.selectionIndexPaths = targetSelection
+            publishSelection(from: collectionView)
+        }
+
         private func publishSelection(from collectionView: NSCollectionView) {
             guard !isSyncingSelection else {
                 return
@@ -246,6 +269,8 @@ private final class AssetPreviewCollectionView: NSCollectionView {
 private final class AssetCollectionViewItem: NSCollectionViewItem {
     static let reuseIdentifier = NSUserInterfaceItemIdentifier("AssetCollectionViewItem")
 
+    var onHoverFocus: (() -> Void)?
+
     private let containerView = HoverSelectionView()
     private let previewImageView = NSImageView()
     private let fileNameLabel = NSTextField(labelWithString: "")
@@ -269,6 +294,9 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         containerView.translatesAutoresizingMaskIntoConstraints = false
         containerView.hoverChanged = { [weak self] isHovered in
             self?.containerView.isHovered = isHovered
+            if isHovered {
+                self?.onHoverFocus?()
+            }
         }
 
         previewImageView.imageScaling = .scaleProportionallyUpOrDown
@@ -281,8 +309,8 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         fileNameLabel.lineBreakMode = .byTruncatingTail
         fileNameLabel.maximumNumberOfLines = 1
         fileNameLabel.alignment = .center
-        fileNameLabel.font = .systemFont(ofSize: 12, weight: .medium)
-        fileNameLabel.textColor = .secondaryLabelColor
+        fileNameLabel.font = .systemFont(ofSize: 12, weight: .regular)
+        fileNameLabel.textColor = .tertiaryLabelColor
         fileNameLabel.translatesAutoresizingMaskIntoConstraints = false
         fileNameLabel.setContentCompressionResistancePriority(.required, for: .vertical)
 
@@ -290,7 +318,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         subtitleLabel.maximumNumberOfLines = 1
         subtitleLabel.alignment = .center
         subtitleLabel.font = .systemFont(ofSize: 11)
-        subtitleLabel.textColor = .tertiaryLabelColor
+        subtitleLabel.textColor = .quaternaryLabelColor
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
         subtitleLabel.setContentCompressionResistancePriority(.required, for: .vertical)
 
@@ -339,6 +367,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         previewImageView.image = nil
         fileNameLabel.stringValue = ""
         subtitleLabel.stringValue = ""
+        onHoverFocus = nil
         containerView.isHovered = false
         mode = .grid
     }
