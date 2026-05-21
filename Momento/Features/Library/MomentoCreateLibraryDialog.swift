@@ -31,7 +31,7 @@ struct MomentoCreateLibraryDialog: View {
 
     var body: some View {
         ZStack {
-            Color.clear
+            Color.black.opacity(0.32)
                 .ignoresSafeArea()
                 .contentShape(Rectangle())
                 .onTapGesture {
@@ -97,7 +97,7 @@ struct MomentoCreateLibraryDialog: View {
             .padding(.vertical, 16)
             .frame(width: createLibraryDialogWidth)
             .background {
-                MomentoGlassBackground(cornerRadius: 14)
+                MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.18)), cornerRadius: 14)
             }
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .onTapGesture {}
