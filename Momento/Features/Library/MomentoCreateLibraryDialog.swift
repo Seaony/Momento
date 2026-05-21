@@ -308,8 +308,7 @@ struct MomentoDialogBackdrop: View {
 
     var body: some View {
         Rectangle()
-            .fill(Color.black.opacity(0.24))
-            .background(.ultraThinMaterial)
+            .fill(Color.black.opacity(0.10))
             .ignoresSafeArea()
             .contentShape(Rectangle())
             .onTapGesture(perform: dismiss)

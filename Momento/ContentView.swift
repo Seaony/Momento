@@ -73,6 +73,8 @@ struct ContentView: View {
                 libraryBody
             }
         }
+        .blur(radius: isLibraryDialogVisible ? 8 : 0, opaque: false)
+        .animation(.smooth(duration: 0.16), value: isLibraryDialogVisible)
         .overlay(alignment: .bottom) {
             if let errorMessage {
                 importErrorBanner(errorMessage)
@@ -244,6 +246,10 @@ struct ContentView: View {
 
     private var defaultViewMode: AssetViewMode {
         AssetViewMode(rawValue: defaultViewModeRawValue) ?? .masonry
+    }
+
+    private var isLibraryDialogVisible: Bool {
+        isCreateLibraryDialogPresented || editingLibrary != nil || deletingLibrary != nil
     }
 
     private var errorMessage: String? {
