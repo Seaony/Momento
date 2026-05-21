@@ -1,6 +1,6 @@
 import SwiftUI
 
-private let createLibraryDialogWidth: CGFloat = 430
+private let createLibraryDialogWidth: CGFloat = 460
 private let createLibraryDialogIconSize: CGFloat = 48
 private let createLibraryDialogFieldHeight: CGFloat = 36
 
@@ -72,11 +72,13 @@ struct MomentoCreateLibraryDialog: View {
                             dismiss()
                         } label: {
                             Text(localization.string("Cancel"))
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.system(size: 14, weight: .semibold))
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 6)
                         }
                         .buttonStyle(.glass)
                         .buttonBorderShape(.capsule)
-                        .controlSize(.regular)
+                        .controlSize(.large)
                         .contentShape(Capsule(style: .continuous))
                         .pointerStyle(.link)
 
@@ -84,19 +86,21 @@ struct MomentoCreateLibraryDialog: View {
                             continueToDestination()
                         } label: {
                             Text(localization.string("Choose Save Location"))
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.system(size: 14, weight: .semibold))
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 6)
                         }
                         .buttonStyle(.glassProminent)
                         .buttonBorderShape(.capsule)
-                        .controlSize(.regular)
+                        .controlSize(.large)
                         .contentShape(Capsule(style: .continuous))
                         .pointerStyle(.link)
                         .disabled(trimmedLibraryName.isEmpty)
                     }
                 }
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 16)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 24)
             .frame(width: createLibraryDialogWidth)
             .background {
                 MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.18)), cornerRadius: 14)

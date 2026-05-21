@@ -154,7 +154,7 @@ final class WelcomeViewSourceTests: XCTestCase {
     func testCreateLibraryDialogUsesReferenceGlassLayout() throws {
         let source = try String(contentsOf: createLibraryDialogURL(), encoding: .utf8)
 
-        XCTAssertTrue(source.contains("private let createLibraryDialogWidth: CGFloat = 430"))
+        XCTAssertTrue(source.contains("private let createLibraryDialogWidth: CGFloat = 460"))
         XCTAssertTrue(source.contains("private let createLibraryDialogIconSize: CGFloat = 48"))
         XCTAssertTrue(source.contains("private let createLibraryDialogFieldHeight: CGFloat = 36"))
         XCTAssertTrue(source.contains("HStack(alignment: .top, spacing: 14)"))
@@ -177,8 +177,10 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertTrue(source.contains("Text(localization.string(\"Choose Save Location\"))"))
         XCTAssertTrue(source.contains(".font(.system(size: 18, weight: .semibold))"))
         XCTAssertTrue(source.contains(".font(.system(size: 13, weight: .regular))"))
-        XCTAssertTrue(source.contains(".font(.system(size: 13, weight: .semibold))"))
+        XCTAssertTrue(source.contains(".font(.system(size: 14, weight: .semibold))"))
         XCTAssertTrue(source.contains(".font(.system(size: 22, weight: .semibold))"))
+        XCTAssertTrue(source.contains(".padding(.horizontal, 28)"))
+        XCTAssertTrue(source.contains(".padding(.vertical, 24)"))
         XCTAssertTrue(source.contains(".contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))"))
         XCTAssertTrue(source.contains(".onTapGesture {}"))
 
@@ -187,10 +189,20 @@ final class WelcomeViewSourceTests: XCTestCase {
             .count - 1
         XCTAssertGreaterThanOrEqual(capsuleButtonCount, 2)
 
-        let regularButtonCount = source
-            .components(separatedBy: ".controlSize(.regular)")
+        let largeButtonCount = source
+            .components(separatedBy: ".controlSize(.large)")
             .count - 1
-        XCTAssertGreaterThanOrEqual(regularButtonCount, 2)
+        XCTAssertGreaterThanOrEqual(largeButtonCount, 2)
+
+        let buttonHorizontalPaddingCount = source
+            .components(separatedBy: ".padding(.horizontal, 18)")
+            .count - 1
+        XCTAssertGreaterThanOrEqual(buttonHorizontalPaddingCount, 2)
+
+        let buttonVerticalPaddingCount = source
+            .components(separatedBy: ".padding(.vertical, 6)")
+            .count - 1
+        XCTAssertGreaterThanOrEqual(buttonVerticalPaddingCount, 2)
 
         let pointerStyleCount = source
             .components(separatedBy: ".pointerStyle(.link)")
@@ -204,6 +216,7 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertFalse(source.contains(".font(.system(size: 30"))
         XCTAssertFalse(source.contains("height: 64"))
         XCTAssertFalse(source.contains(".controlSize(.small)"))
+        XCTAssertFalse(source.contains(".controlSize(.regular)"))
         XCTAssertFalse(source.contains(".textFieldStyle(.roundedBorder)"))
         XCTAssertFalse(source.contains("Text(localization.string(\"Continue\"))"))
     }
