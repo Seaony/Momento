@@ -67,7 +67,6 @@ enum MomentoTheme {
     static let inspectorMaxWidth: CGFloat = 460
     static let contentMinWidth: CGFloat = 520
     static let toolbarHeight: CGFloat = 56
-    static let rowRadius: CGFloat = 8
     static let panelRadius: CGFloat = 14
     static let subtleStroke = Color(nsColor: .separatorColor)
     static let primaryText = Color(nsColor: .labelColor)

@@ -3,12 +3,11 @@ import SwiftUI
 struct MomentoShellView<Content: View>: View {
     @Environment(\.appLocalization) private var localization
 
-    @Binding var sidebarSelection: MomentoSidebarItem.ID?
+    @Binding var sidebarSelection: String?
     @Binding var searchQuery: String
     @Binding var isCommandPalettePresented: Bool
     @Binding var isInspectorPresented: Bool
 
-    var sidebarSections: [MomentoSidebarSection]
     var libraryName: String?
     var currentLibraryID: RecentLibraryReference.ID?
     var recentLibraries: [RecentLibraryReference]
@@ -35,11 +34,10 @@ struct MomentoShellView<Content: View>: View {
     @State private var isSidebarCollapsed = false
 
     init(
-        sidebarSelection: Binding<MomentoSidebarItem.ID?>,
+        sidebarSelection: Binding<String?>,
         searchQuery: Binding<String>,
         isCommandPalettePresented: Binding<Bool>,
         isInspectorPresented: Binding<Bool> = .constant(true),
-        sidebarSections: [MomentoSidebarSection] = .momentoDefaultSections,
         libraryName: String? = nil,
         currentLibraryID: RecentLibraryReference.ID? = nil,
         recentLibraries: [RecentLibraryReference] = [],
@@ -65,7 +63,6 @@ struct MomentoShellView<Content: View>: View {
         self._searchQuery = searchQuery
         self._isCommandPalettePresented = isCommandPalettePresented
         self._isInspectorPresented = isInspectorPresented
-        self.sidebarSections = sidebarSections
         self.libraryName = libraryName
         self.currentLibraryID = currentLibraryID
         self.recentLibraries = recentLibraries
@@ -136,7 +133,6 @@ struct MomentoShellView<Content: View>: View {
 
     private func floatingSidebar(availableWidth: CGFloat) -> some View {
         MomentoSidebarView(
-            sections: sidebarSections,
             selection: $sidebarSelection,
             libraryName: libraryName,
             currentLibraryID: currentLibraryID,
@@ -248,7 +244,7 @@ private extension CGFloat {
 }
 
 private struct MomentoShellPreview: View {
-    @State private var sidebarSelection: MomentoSidebarItem.ID? = "all-assets"
+    @State private var sidebarSelection: String? = "all-assets"
     @State private var searchQuery = ""
     @State private var isCommandPalettePresented = false
     @State private var isInspectorPresented = true

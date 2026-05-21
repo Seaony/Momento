@@ -19,20 +19,25 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertFalse(source.contains("id: \"recent\""))
     }
 
-    func testMainSidebarDoesNotListTrashEntry() throws {
+    func testMainSidebarDoesNotRenderLegacyNavigationSections() throws {
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+        let shellSource = try String(contentsOf: shellViewURL(), encoding: .utf8)
         let sidebarSource = try String(contentsOf: sidebarViewURL(), encoding: .utf8)
-        let contentSidebarStart = try XCTUnwrap(contentSource.range(of: "    private var sidebarSections: [MomentoSidebarSection] {"))
-        let contentSidebarEnd = try XCTUnwrap(contentSource[contentSidebarStart.lowerBound...].range(of: "    private var commands: [MomentoCommand] {"))
-        let contentSidebarSource = String(contentSource[contentSidebarStart.lowerBound..<contentSidebarEnd.lowerBound])
-        let defaultSidebarStart = try XCTUnwrap(sidebarSource.range(of: "    static func momentoDefaultSections(localization: AppLocalization) -> [MomentoSidebarSection] {"))
-        let defaultSidebarEnd = try XCTUnwrap(sidebarSource[defaultSidebarStart.lowerBound...].range(of: "    static var momentoDefaultSections: [MomentoSidebarSection] {"))
-        let defaultSidebarSource = String(sidebarSource[defaultSidebarStart.lowerBound..<defaultSidebarEnd.lowerBound])
 
-        XCTAssertFalse(contentSidebarSource.contains("id: \"trash\""))
-        XCTAssertFalse(contentSidebarSource.contains("systemImage: \"trash\""))
-        XCTAssertFalse(defaultSidebarSource.contains("id: \"trash\""))
-        XCTAssertFalse(defaultSidebarSource.contains("systemImage: \"trash\""))
+        XCTAssertFalse(contentSource.contains("private var sidebarSections"))
+        XCTAssertFalse(contentSource.contains("MomentoSidebarSection("))
+        XCTAssertFalse(shellSource.contains("var sidebarSections"))
+        XCTAssertFalse(shellSource.contains("sidebarSections: [MomentoSidebarSection]"))
+        XCTAssertFalse(sidebarSource.contains("struct MomentoSidebarItem"))
+        XCTAssertFalse(sidebarSource.contains("struct MomentoSidebarSection"))
+        XCTAssertFalse(sidebarSource.contains("ForEach(sections)"))
+        XCTAssertFalse(sidebarSource.contains("private func sectionView"))
+        XCTAssertFalse(sidebarSource.contains("private struct MomentoSidebarRow"))
+        XCTAssertFalse(sidebarSource.contains("momentoDefaultSections"))
+        XCTAssertFalse(sidebarSource.contains("MomentoSidebarItem(id: \"favorites\""))
+        XCTAssertFalse(sidebarSource.contains("MomentoSidebarItem(id: \"folder-"))
+        XCTAssertFalse(sidebarSource.contains("MomentoSidebarItem(id: \"tag-"))
+        XCTAssertTrue(sidebarSource.contains("Spacer(minLength: 0)"))
     }
 
     func testWelcomeButtonsUseNativeGlassEffects() throws {
@@ -310,6 +315,13 @@ final class WelcomeViewSourceTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("Momento/ContentView.swift")
+    }
+
+    private func shellViewURL() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Momento/Features/Shell/MomentoShellView.swift")
     }
 
     private func createLibraryDialogURL() -> URL {

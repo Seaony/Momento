@@ -16,7 +16,7 @@ struct ContentView: View {
     @State private var inspectorNotesByAssetID: [AssetItem.ID: String] = [:]
     @State private var importError: String?
 
-    private var sidebarSelection: Binding<MomentoSidebarItem.ID?> {
+    private var sidebarSelection: Binding<String?> {
         Binding {
             store.sidebarItemID()
         } set: { id in
@@ -123,7 +123,6 @@ struct ContentView: View {
             searchQuery: $store.searchQuery,
             isCommandPalettePresented: $isCommandPalettePresented,
             isInspectorPresented: $isInspectorPresented,
-            sidebarSections: sidebarSections,
             libraryName: store.currentLibrary?.name,
             currentLibraryID: store.currentLibrary?.id,
             recentLibraries: store.recentLibraries,
@@ -270,46 +269,6 @@ struct ContentView: View {
         case .trash:
             localization.string("Trash")
         }
-    }
-
-    private var sidebarSections: [MomentoSidebarSection] {
-        [
-            MomentoSidebarSection(
-                id: "favorites",
-                title: localization.string("Favorites"),
-                items: [
-                    MomentoSidebarItem(
-                        id: "favorites",
-                        title: localization.string("Favorites"),
-                        systemImage: "star",
-                        count: store.assets.filter(\.isFavorite).count,
-                        tint: .yellow
-                    )
-                ],
-                isCollapsible: false
-            ),
-            MomentoSidebarSection(
-                id: "folders",
-                title: localization.string("Folders"),
-                items: [
-                    MomentoSidebarItem(id: "folder-inspiration", title: localization.string("Inspiration"), systemImage: "folder", count: 0),
-                    MomentoSidebarItem(id: "folder-screenshots", title: localization.string("Screenshots"), systemImage: "folder", count: 0)
-                ]
-            ),
-            MomentoSidebarSection(
-                id: "tags",
-                title: localization.string("Tags"),
-                items: store.tags.map { tag in
-                    MomentoSidebarItem(
-                        id: "tag-\(tag.id)",
-                        title: tag.name,
-                        systemImage: "tag",
-                        count: store.assets.filter { $0.tags.contains(tag) }.count,
-                        tint: Color(hex: tag.colorHex)
-                    )
-                }
-            )
-        ]
     }
 
     private var commands: [MomentoCommand] {
