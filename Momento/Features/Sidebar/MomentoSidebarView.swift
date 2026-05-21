@@ -347,10 +347,10 @@ struct MomentoSidebarView: View {
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "archivebox.fill")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.white)
-                    .frame(width: 24, height: 24)
-                    .background(.blue.gradient, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .frame(width: 20, height: 20)
+                    .background(.blue.gradient, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
 
                 Text(libraryName ?? localization.string("No library selected"))
                     .font(.system(size: 14, weight: .semibold))
