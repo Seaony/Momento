@@ -101,15 +101,20 @@ final class LiquidGlassSourceTests: XCTestCase {
 
     func testSidebarFooterUsesInsetHairlineAndIconOnlyActions() throws {
         let sidebarSource = try String(contentsOf: sidebarViewURL(), encoding: .utf8)
+        let footerStart = try XCTUnwrap(sidebarSource.range(of: "private var bottomActionBar: some View {"))
+        let footerEnd = try XCTUnwrap(sidebarSource[footerStart.lowerBound...].range(of: "    private func sidebarFooterButton("))
+        let footerSource = String(sidebarSource[footerStart.lowerBound..<footerEnd.lowerBound])
 
         XCTAssertTrue(sidebarSource.contains("sidebarBottomSeparator"))
         XCTAssertTrue(sidebarSource.contains("MomentoTheme.subtleStroke.opacity(0.24)"))
         XCTAssertTrue(sidebarSource.contains(".frame(height: 0.5)"))
         XCTAssertTrue(sidebarSource.contains(".padding(.horizontal, 14)"))
         XCTAssertTrue(sidebarSource.contains("bottomActionBar"))
-        XCTAssertTrue(sidebarSource.contains("systemImage: \"trash\""))
-        XCTAssertTrue(sidebarSource.contains("systemImage: \"gearshape\""))
-        XCTAssertTrue(sidebarSource.contains("systemImage: \"questionmark.circle\""))
+        XCTAssertTrue(footerSource.contains(".frame(maxWidth: .infinity, alignment: .leading)"))
+        XCTAssertFalse(footerSource.contains("Spacer()"))
+        XCTAssertTrue(footerSource.contains("systemImage: \"trash\""))
+        XCTAssertTrue(footerSource.contains("systemImage: \"gear\""))
+        XCTAssertTrue(footerSource.contains("systemImage: \"questionmark.circle\""))
         XCTAssertFalse(sidebarSource.contains("systemImage: \"externaldrive\""))
     }
 

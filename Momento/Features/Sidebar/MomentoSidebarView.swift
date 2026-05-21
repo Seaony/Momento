@@ -136,10 +136,8 @@ struct MomentoSidebarView: View {
                 }
             }
 
-            Spacer()
-
             sidebarFooterButton(
-                systemImage: "gearshape",
+                systemImage: "gear",
                 label: localization.string("Settings"),
                 action: openSettings.callAsFunction
             )
@@ -151,6 +149,7 @@ struct MomentoSidebarView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func sidebarFooterButton(
