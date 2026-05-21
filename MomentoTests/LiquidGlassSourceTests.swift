@@ -250,6 +250,14 @@ final class LiquidGlassSourceTests: XCTestCase {
         XCTAssertFalse(titlebarSource.contains(".padding(.leading, leadingInset)"))
     }
 
+    func testSidebarTitlebarToggleUsesAppKitCursorRect() throws {
+        let titlebarSource = try String(contentsOf: titlebarToggleConfiguratorURL(), encoding: .utf8)
+
+        XCTAssertTrue(titlebarSource.contains("override func resetCursorRects()"))
+        XCTAssertTrue(titlebarSource.contains("addCursorRect(bounds, cursor: .pointingHand)"))
+        XCTAssertTrue(titlebarSource.contains("window?.invalidateCursorRects(for: hostingView)"))
+    }
+
     func testFloatingSidebarExtendsIntoWindowTitlebarArea() throws {
         let shellSource = try String(contentsOf: shellViewURL(), encoding: .utf8)
         let sidebarSource = try String(contentsOf: sidebarViewURL(), encoding: .utf8)

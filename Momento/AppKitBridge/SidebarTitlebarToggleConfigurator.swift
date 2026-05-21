@@ -216,12 +216,17 @@ private final class SidebarTitlebarToggleContainerView: NSView {
 
         let titlebarOriginX = convert(.zero, to: nil).x
         let buttonX = max(0, buttonMinX - titlebarOriginX)
-        hostingView.frame = NSRect(
+        let nextFrame = NSRect(
             x: buttonX,
             y: MomentoTheme.sidebarTitlebarButtonTopInset,
             width: MomentoTheme.sidebarTitlebarButtonSize,
             height: MomentoTheme.sidebarTitlebarButtonSize
         )
+
+        if hostingView.frame != nextFrame {
+            hostingView.frame = nextFrame
+            window?.invalidateCursorRects(for: hostingView)
+        }
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -236,5 +241,10 @@ private final class SidebarTitlebarToggleContainerView: NSView {
 private final class SidebarTitlebarToggleHostingView: NSHostingView<SidebarTitlebarToggleAccessoryView> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .pointingHand)
     }
 }
