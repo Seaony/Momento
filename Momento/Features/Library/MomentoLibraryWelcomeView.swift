@@ -1,5 +1,8 @@
 import SwiftUI
 
+private let inactiveBackdropOpacity = 0.88
+private let focusedBackdropOpacity = 0.84
+
 struct MomentoLibraryWelcomeView: View {
     @Environment(\.appLocalization) private var localization
     @State private var isCreateHovered = false
@@ -62,6 +65,12 @@ struct MomentoLibraryWelcomeView: View {
 }
 
 private struct WelcomeGlassBackdrop: View {
+    @Environment(\.controlActiveState) private var controlActiveState
+
+    private var windowBackgroundOpacity: Double {
+        controlActiveState == .inactive ? inactiveBackdropOpacity : focusedBackdropOpacity
+    }
+
     var body: some View {
         ZStack {
             MomentoVisualEffectView(
@@ -72,7 +81,8 @@ private struct WelcomeGlassBackdrop: View {
             )
 
             Color(nsColor: .windowBackgroundColor)
-                .opacity(0.88)
+                .opacity(windowBackgroundOpacity)
+                .animation(.smooth(duration: 0.18), value: controlActiveState)
 
             LinearGradient(
                 colors: [
