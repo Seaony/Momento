@@ -19,6 +19,9 @@ struct AssetImportService: Sendable {
         into library: AssetLibrary,
         excludingContentHashes existingContentHashes: Set<String>
     ) async throws -> [AssetItem] {
+        // 用户从 Finder 选择的文件/文件夹可能来自 sandbox 外部。访问权限必须覆盖
+        // 后面的 detached import task，所以 scope 在 await 之前创建，并在整个导入
+        // 完成后统一释放，而不是只包住收集 URL 的同步阶段。
         let scopes = urls.map(SourceAccessScope.init(url:))
         defer {
             scopes.forEach { $0.stop() }
@@ -37,6 +40,8 @@ struct AssetImportService: Sendable {
                 }
 
                 let hash = try contentHash(for: fileURL)
+                // 导入阶段先用 hash 做一次批内和库内去重，避免重复复制物理文件；
+                // Core Data 层仍有唯一约束，负责处理并发或历史数据带来的最终一致性。
                 guard seenHashes.insert(hash).inserted else {
                     continue
                 }

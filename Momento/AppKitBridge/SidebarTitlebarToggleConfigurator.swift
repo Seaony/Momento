@@ -60,6 +60,11 @@ extension SidebarTitlebarToggleConfigurator {
         private var containerView: SidebarTitlebarToggleContainerView?
         private var configuration: Configuration?
 
+        // 收起/展开按钮必须和系统红黄绿窗口按钮处在同一个 titlebar 坐标系里。
+        // 如果直接用 SwiftUI overlay 盖在内容区上，按钮会被内容布局、safe area、
+        // 窗口缩放和命中测试共同影响，之前出现过 hover/click 不稳定的问题。
+        // 这里用 NSTitlebarAccessoryViewController 让 AppKit 负责 titlebar 命中区域，
+        // SwiftUI 只负责按钮内容和 hover 动画。
         func update(configuration: Configuration) {
             self.configuration = configuration
             updateAccessoryView()
@@ -214,6 +219,9 @@ private final class SidebarTitlebarToggleContainerView: NSView {
     override func layout() {
         super.layout()
 
+        // AppKit 会把 titlebar accessory 放进自己的容器；容器原点不一定等于窗口原点。
+        // 先把当前容器原点转换到窗口坐标，再用外部传入的 buttonMinX 抵消偏移，
+        // 才能保证按钮展开/收起时始终和左侧玻璃侧边栏的右上角对齐。
         let titlebarOriginX = convert(.zero, to: nil).x
         let buttonX = max(0, buttonMinX - titlebarOriginX)
         let nextFrame = NSRect(

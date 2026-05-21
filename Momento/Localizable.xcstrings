@@ -140,6 +140,23 @@
         }
       }
     },
+    "A library already exists at the selected location." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A library already exists at the selected location."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选位置已存在资源库。"
+          }
+        }
+      }
+    },
     "Asset storage must stay inside the selected library package." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -548,9 +565,6 @@
         }
       }
     },
-    "Grid bridge placeholder" : {
-
-    },
     "Grid View" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -564,6 +578,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "网格视图"
+          }
+        }
+      }
+    },
+    "Help Center" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Help Center"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帮助中心"
           }
         }
       }
@@ -771,9 +802,6 @@
           }
         }
       }
-    },
-    "Momento" : {
-
     },
     "Move to Trash" : {
       "extractionState" : "stale",
@@ -1264,6 +1292,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "大小"
+          }
+        }
+      }
+    },
+    "Settings" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置"
           }
         }
       }

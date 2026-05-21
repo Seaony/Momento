@@ -82,6 +82,8 @@ struct AppLocalization: Equatable {
         switch error {
         case .assetOutsideLibrary:
             string("Asset storage must stay inside the selected library package.")
+        case .libraryPackageAlreadyExists:
+            string("A library already exists at the selected location.")
         case .missingLibraryPackage:
             string("The selected library no longer exists.")
         case .unsupportedSchemaVersion(let version):

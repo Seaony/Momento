@@ -69,6 +69,10 @@ nonisolated struct LibraryStorage: Sendable {
             ? packageURL
             : packageURL.appendingPathExtension(Self.packageExtension)
 
+        guard !FileManager.default.fileExists(atPath: normalizedURL.path) else {
+            throw LibraryStorageError.libraryPackageAlreadyExists
+        }
+
         try FileManager.default.createDirectory(at: normalizedURL, withIntermediateDirectories: true)
         let library = AssetLibrary(id: UUID().uuidString, name: name, createdAt: Date(), packageURL: normalizedURL)
         try prepareLibraryDirectories(for: library)
@@ -148,6 +152,7 @@ nonisolated struct LibraryStorage: Sendable {
 
 nonisolated enum LibraryStorageError: LocalizedError {
     case assetOutsideLibrary
+    case libraryPackageAlreadyExists
     case missingLibraryPackage
     case unsupportedSchemaVersion(Int)
 
@@ -155,6 +160,8 @@ nonisolated enum LibraryStorageError: LocalizedError {
         switch self {
         case .assetOutsideLibrary:
             "Asset storage must stay inside the selected library package."
+        case .libraryPackageAlreadyExists:
+            "A library already exists at the selected location."
         case .missingLibraryPackage:
             "The selected library no longer exists."
         case .unsupportedSchemaVersion(let version):

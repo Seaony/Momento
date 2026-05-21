@@ -1,16 +1,14 @@
 import AppKit
 import SwiftUI
 
-/// Makes the hosting window non-opaque so the app's native Liquid Glass
-/// surfaces refract the desktop behind the window instead of a solid window
-/// background.
+/// 在窗口层统一开启透明 backing，让 SwiftUI 的原生 Liquid Glass
+/// 能折射到同一层窗口背景，而不是让每个功能视图各自处理 AppKit 窗口状态。
 ///
-/// Owned at the app shell level — individual feature views stay pure SwiftUI
-/// and never touch the window.
+/// 这个桥接只放在 app shell：业务视图保持纯 SwiftUI，避免不同页面重复改
+/// NSWindow 属性导致标题栏、圆角、透明度互相覆盖。
 struct WindowTransparencyConfigurator: NSViewRepresentable {
-    /// Opacity of the window backing that sits behind every Liquid Glass
-    /// surface. Individual SwiftUI glass backgrounds refract this backing,
-    /// so adjusting this value changes the whole app's visual density.
+    /// 所有 Liquid Glass 面板背后的统一窗口底色透明度。单个面板不再叠自己的
+    /// opaque 背景，因此这个值就是整 App 视觉密度的唯一入口。
     static let backingOpacity: CGFloat = 0.9
 
     func makeNSView(context: Context) -> NSView {

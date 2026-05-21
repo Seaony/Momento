@@ -46,6 +46,24 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: inputURL.path))
     }
 
+    func testLibraryPackageCreationRefusesExistingPackage() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let storage = LibraryStorage()
+        _ = try storage.createLibraryPackage(at: environment.packageURL, name: "Test")
+
+        XCTAssertThrowsError(try storage.createLibraryPackage(at: environment.packageURL, name: "Test")) { error in
+            guard case LibraryStorageError.libraryPackageAlreadyExists = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+
+        let manifestURL = environment.packageURL.appendingPathComponent("manifest.json")
+        let manifest = try JSONDecoder.momento.decode(LibraryManifest.self, from: Data(contentsOf: manifestURL))
+        XCTAssertEqual(manifest.displayName, "Test")
+    }
+
     func testOpeningUnsupportedManifestVersionFails() throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }

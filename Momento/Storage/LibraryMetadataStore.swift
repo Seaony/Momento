@@ -9,6 +9,9 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
     init(library: AssetLibrary, storage: LibraryStorage = LibraryStorage()) throws {
         self.library = library
         self.storage = storage
+        // UI 层只消费 AssetItem 值类型，不直接持有 NSManagedObject。这里固定使用
+        // background context，并通过同步的 performAndWait 把 Core Data 的队列约束
+        // 封装在存储层内部，避免 managed object 泄漏到 SwiftUI 状态树里。
         self.context = try MomentoCoreDataStack(library: library, storage: storage).container.newBackgroundContext()
         self.context.mergePolicy = NSMergePolicy(merge: .mergeByPropertyStoreTrumpMergePolicyType)
     }
@@ -47,6 +50,8 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
                 record.setValue(asset.id, forKey: "id")
                 record.setValue(asset.libraryID, forKey: "libraryID")
                 record.setValue(asset.displayName, forKey: "displayName")
+                // 数据库只保存库包内的相对路径。用户移动整个 .momento 包后，
+                // 只要 manifest 和 database 仍在同一个包里，资源路径仍可重新解析。
                 record.setValue(try storage.relativePath(for: asset.storageURL, in: library), forKey: "storageRelativePath")
                 record.setValue(asset.kind.rawValue, forKey: "kindRaw")
                 record.setValue(asset.fileExtension, forKey: "fileExtension")

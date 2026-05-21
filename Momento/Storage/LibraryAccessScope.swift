@@ -12,6 +12,9 @@ final class LibraryAccessScope {
 
     init(url: URL) {
         self.url = url
+        // 打开的资源库通常来自用户选择的 sandbox 外部目录。把 security-scoped
+        // resource 的生命周期绑定到对象生命周期，可以让 LibraryStore 通过持有
+        // libraryAccessScope 明确表达“当前库仍在被访问”。
         self.didStartAccessing = url.startAccessingSecurityScopedResource()
     }
 
