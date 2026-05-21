@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct MomentoSidebarItem: Identifiable, Hashable {
@@ -164,7 +165,9 @@ struct MomentoSidebarView: View {
                 onMoveLibrary: onMoveLibrary,
                 onReloadLibrary: performLibrarySwitcherAction(onReloadLibrary)
             )
-            .frame(width: MomentoTheme.librarySwitcherWidth, alignment: .topLeading)
+            .background {
+                LibrarySwitcherDismissMonitor(isPresented: $isLibrarySwitcherPresented)
+            }
             .padding(.top, MomentoTheme.floatingSidebarTitlebarContentInset + 42)
             .padding(.leading, 14)
             .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .topLeading)))
@@ -403,6 +406,21 @@ private struct MomentoLibrarySwitcherMenu: View {
     @State private var hoveredMoreActionID: String?
 
     var body: some View {
+        ZStack(alignment: .topLeading) {
+            menuPanel
+
+            if let activeLibrary = activeMoreLibrary,
+               let activeIndex = recentLibraries.firstIndex(where: { $0.id == activeLibrary.id }) {
+                libraryMoreMenu(activeLibrary)
+                    .offset(libraryMoreMenuOffset(for: activeIndex))
+                    .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .topLeading)))
+                    .zIndex(60)
+            }
+        }
+        .frame(width: MomentoTheme.librarySwitcherWidth + 178, alignment: .topLeading)
+    }
+
+    private var menuPanel: some View {
         VStack(alignment: .leading, spacing: 5) {
             if !recentLibraries.isEmpty {
                 VStack(spacing: 2) {
@@ -440,7 +458,7 @@ private struct MomentoLibrarySwitcherMenu: View {
             }
         }
         .padding(8)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(width: MomentoTheme.librarySwitcherWidth, alignment: .topLeading)
         .background {
             MomentoGlassBackground(glass: .regular, cornerRadius: 14)
         }
@@ -449,6 +467,14 @@ private struct MomentoLibrarySwitcherMenu: View {
                 .strokeBorder(MomentoTheme.subtleStroke.opacity(0.5), lineWidth: 0.6)
         }
         .shadow(color: .black.opacity(0.22), radius: 18, y: 10)
+    }
+
+    private var activeMoreLibrary: RecentLibraryReference? {
+        guard let activeMoreLibraryID else {
+            return nil
+        }
+
+        return recentLibraries.first { $0.id == activeMoreLibraryID }
     }
 
     private func libraryRow(_ library: RecentLibraryReference) -> some View {
@@ -478,7 +504,7 @@ private struct MomentoLibrarySwitcherMenu: View {
 
                         Text(libraryPath(for: library))
                             .font(.system(size: 11))
-                            .foregroundStyle(isSelected ? MomentoTheme.secondaryText : MomentoTheme.tertiaryText)
+                            .foregroundStyle(isSelected ? MomentoTheme.primaryText.opacity(0.82) : MomentoTheme.secondaryText)
                             .lineLimit(1)
                     }
 
@@ -511,15 +537,6 @@ private struct MomentoLibrarySwitcherMenu: View {
             .buttonStyle(.plain)
             .pointerStyle(.link)
             .help(localization.string("More Actions"))
-            .overlay(alignment: .topLeading) {
-                if activeMoreLibraryID == library.id {
-                    libraryMoreMenu(library)
-                        .offset(x: 28, y: -2)
-                        .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .topLeading)))
-                        .zIndex(60)
-                }
-            }
-            .zIndex(activeMoreLibraryID == library.id ? 50 : 0)
         }
         .padding(.horizontal, 7)
         .frame(height: 42)
@@ -544,20 +561,24 @@ private struct MomentoLibrarySwitcherMenu: View {
     }
 
     private func libraryDragHandle(isActive: Bool) -> some View {
-        VStack(spacing: 3) {
+        VStack(spacing: 2) {
             ForEach(0..<3, id: \.self) { _ in
-                HStack(spacing: 3) {
+                HStack(spacing: 2) {
                     Circle()
                         .fill(isActive ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
-                        .frame(width: 2.6, height: 2.6)
+                        .frame(width: 2.4, height: 2.4)
 
                     Circle()
                         .fill(isActive ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
-                        .frame(width: 2.6, height: 2.6)
+                        .frame(width: 2.4, height: 2.4)
                 }
             }
         }
         .frame(width: 16)
+    }
+
+    private func libraryMoreMenuOffset(for index: Int) -> CGSize {
+        CGSize(width: MomentoTheme.librarySwitcherWidth - 11, height: 15 + CGFloat(index) * 44)
     }
 
     private func libraryMoreMenu(_ library: RecentLibraryReference) -> some View {
@@ -722,6 +743,84 @@ private struct MomentoLibrarySwitcherMenu: View {
         }
 
         return resolved.url.deletingLastPathComponent().path
+    }
+}
+
+private struct LibrarySwitcherDismissMonitor: NSViewRepresentable {
+    @Binding var isPresented: Bool
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(isPresented: $isPresented)
+    }
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        context.coordinator.view = view
+        context.coordinator.update(isPresented: isPresented)
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        context.coordinator.isPresented = $isPresented
+        context.coordinator.view = nsView
+        context.coordinator.update(isPresented: isPresented)
+    }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+        coordinator.remove()
+    }
+
+    final class Coordinator {
+        var isPresented: Binding<Bool>
+        weak var view: NSView?
+        private var monitor: Any?
+
+        init(isPresented: Binding<Bool>) {
+            self.isPresented = isPresented
+        }
+
+        func update(isPresented: Bool) {
+            if isPresented {
+                install()
+            } else {
+                remove()
+            }
+        }
+
+        func remove() {
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+                self.monitor = nil
+            }
+        }
+
+        private func install() {
+            guard monitor == nil else {
+                return
+            }
+
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+                self?.handle(event) ?? event
+            }
+        }
+
+        private func handle(_ event: NSEvent) -> NSEvent {
+            guard isPresented.wrappedValue else {
+                return event
+            }
+
+            if let view, event.window === view.window {
+                let location = view.convert(event.locationInWindow, from: nil)
+                if view.bounds.contains(location) {
+                    return event
+                }
+            }
+
+            DispatchQueue.main.async { [weak self] in
+                self?.isPresented.wrappedValue = false
+            }
+            return event
+        }
     }
 }
 
