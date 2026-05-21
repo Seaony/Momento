@@ -271,8 +271,8 @@ struct MomentoSidebarView: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 8) {
                 Text(localization.string("Folders"))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(isFolderSectionHovered ? MomentoTheme.primaryText : MomentoTheme.primaryText.opacity(0.72))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(MomentoTheme.primaryText)
 
                 Spacer(minLength: 8)
 
