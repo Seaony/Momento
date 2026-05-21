@@ -154,10 +154,12 @@ final class WelcomeViewSourceTests: XCTestCase {
     func testCreateLibraryDialogUsesReferenceGlassLayout() throws {
         let source = try String(contentsOf: createLibraryDialogURL(), encoding: .utf8)
 
-        XCTAssertTrue(source.contains("private let createLibraryDialogWidth: CGFloat = 400"))
-        XCTAssertTrue(source.contains("private let createLibraryDialogIconSize: CGFloat = 40"))
-        XCTAssertTrue(source.contains("private let createLibraryDialogFieldHeight: CGFloat = 30"))
-        XCTAssertTrue(source.contains("HStack(alignment: .top, spacing: 12)"))
+        XCTAssertTrue(source.contains("private let createLibraryDialogWidth: CGFloat = 430"))
+        XCTAssertTrue(source.contains("private let createLibraryDialogIconSize: CGFloat = 48"))
+        XCTAssertTrue(source.contains("private let createLibraryDialogFieldHeight: CGFloat = 36"))
+        XCTAssertTrue(source.contains("HStack(alignment: .top, spacing: 14)"))
+        XCTAssertTrue(source.contains(".fill(.ultraThinMaterial)"))
+        XCTAssertTrue(source.contains(".overlay(Color.black.opacity(0.32))"))
         XCTAssertTrue(source.contains("Color.black.opacity(0.32)"))
         XCTAssertTrue(source.contains("Image(systemName: \"archivebox.fill\")"))
         XCTAssertTrue(source.contains("MomentoGlassBackground(glass: .regular.tint(Color.accentColor), cornerRadius: 14)"))
@@ -166,16 +168,17 @@ final class WelcomeViewSourceTests: XCTestCase {
         let subtitleStart = try XCTUnwrap(source.range(of: "Text(localization.string(\"Enter a name for this library, then choose where to save it.\"))"))
         let subtitleEnd = try XCTUnwrap(source[subtitleStart.lowerBound...].range(of: ".fixedSize(horizontal: false, vertical: true)"))
         let subtitleSource = String(source[subtitleStart.lowerBound..<subtitleEnd.upperBound])
-        XCTAssertTrue(subtitleSource.contains(".font(.system(size: 12, weight: .regular))"))
-        XCTAssertFalse(subtitleSource.contains(".font(.system(size: 11, weight: .regular))"))
+        XCTAssertTrue(subtitleSource.contains(".font(.system(size: 13, weight: .regular))"))
+        XCTAssertFalse(subtitleSource.contains(".font(.system(size: 12, weight: .regular))"))
         XCTAssertTrue(source.contains("TextField(localization.string(\"Library Name\"), text: $libraryName)"))
         XCTAssertTrue(source.contains(".textFieldStyle(.plain)"))
         XCTAssertTrue(source.contains("createLibraryNameFieldBackground"))
         XCTAssertTrue(source.contains("isNameFocused ? Color.accentColor : MomentoTheme.subtleStroke"))
         XCTAssertTrue(source.contains("Text(localization.string(\"Choose Save Location\"))"))
-        XCTAssertTrue(source.contains(".font(.system(size: 16, weight: .semibold))"))
-        XCTAssertTrue(source.contains(".font(.system(size: 12, weight: .regular))"))
-        XCTAssertTrue(source.contains(".font(.system(size: 12, weight: .semibold))"))
+        XCTAssertTrue(source.contains(".font(.system(size: 18, weight: .semibold))"))
+        XCTAssertTrue(source.contains(".font(.system(size: 13, weight: .regular))"))
+        XCTAssertTrue(source.contains(".font(.system(size: 13, weight: .semibold))"))
+        XCTAssertTrue(source.contains(".font(.system(size: 22, weight: .semibold))"))
         XCTAssertTrue(source.contains(".contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))"))
         XCTAssertTrue(source.contains(".onTapGesture {}"))
 
@@ -184,10 +187,10 @@ final class WelcomeViewSourceTests: XCTestCase {
             .count - 1
         XCTAssertGreaterThanOrEqual(capsuleButtonCount, 2)
 
-        let smallButtonCount = source
-            .components(separatedBy: ".controlSize(.small)")
+        let regularButtonCount = source
+            .components(separatedBy: ".controlSize(.regular)")
             .count - 1
-        XCTAssertGreaterThanOrEqual(smallButtonCount, 2)
+        XCTAssertGreaterThanOrEqual(regularButtonCount, 2)
 
         let pointerStyleCount = source
             .components(separatedBy: ".pointerStyle(.link)")
@@ -199,8 +202,8 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertFalse(source.contains("height: 44"))
         XCTAssertFalse(source.contains("height: 34"))
         XCTAssertFalse(source.contains(".font(.system(size: 30"))
-        XCTAssertFalse(source.contains(".font(.system(size: 22"))
         XCTAssertFalse(source.contains("height: 64"))
+        XCTAssertFalse(source.contains(".controlSize(.small)"))
         XCTAssertFalse(source.contains(".textFieldStyle(.roundedBorder)"))
         XCTAssertFalse(source.contains("Text(localization.string(\"Continue\"))"))
     }
