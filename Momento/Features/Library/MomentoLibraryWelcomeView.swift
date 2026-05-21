@@ -2,8 +2,9 @@ import AppKit
 import SwiftUI
 
 private let inactiveBackdropOpacity = 1.0
-private let focusedBackdropOpacity = 0.56
-private let welcomeButtonWidth: CGFloat = 136
+private let focusedBackdropOpacity = 0.64
+private let welcomeGlassTintOpacity = 0.28
+private let welcomeButtonWidth: CGFloat = 124
 private let welcomeButtonHeight: CGFloat = 42
 
 struct MomentoLibraryWelcomeView: View {
@@ -44,6 +45,7 @@ struct MomentoLibraryWelcomeView: View {
                             .frame(width: welcomeButtonWidth, height: welcomeButtonHeight)
                     }
                     .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.capsule)
                     .tint(Color.accentColor)
                     .foregroundStyle(Color.white)
                     .contentShape(Capsule(style: .continuous))
@@ -59,6 +61,7 @@ struct MomentoLibraryWelcomeView: View {
                             .frame(width: welcomeButtonWidth, height: welcomeButtonHeight)
                     }
                     .buttonStyle(.glass)
+                    .buttonBorderShape(.capsule)
                     .foregroundStyle(Color.white)
                     .contentShape(Capsule(style: .continuous))
                     .environment(\.appearsActive, true)
@@ -150,7 +153,7 @@ private struct WelcomeGlassBackdrop: View {
     var body: some View {
         ZStack {
             Color.clear
-                .glassEffect(.regular, in: Rectangle())
+                .glassEffect(.regular.tint(Color(nsColor: .windowBackgroundColor).opacity(welcomeGlassTintOpacity)), in: Rectangle())
 
             Color(nsColor: .windowBackgroundColor)
                 .opacity(windowBackgroundOpacity)

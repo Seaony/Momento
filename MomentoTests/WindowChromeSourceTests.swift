@@ -2,15 +2,15 @@ import Foundation
 import XCTest
 
 final class WindowChromeSourceTests: XCTestCase {
-    func testContentViewInstallsGlobalWindowCornerRadiusConfigurator() throws {
+    func testContentViewDoesNotOverrideSystemWindowCornerRadius() throws {
         let source = try String(contentsOf: contentViewURL(), encoding: .utf8)
 
-        XCTAssertTrue(source.contains("MomentoWindowCornerRadiusConfigurator()"))
-        XCTAssertTrue(source.contains("momentoWindowCornerRadius: CGFloat = 28"))
-        XCTAssertTrue(source.contains("contentView.layer?.cornerRadius = momentoWindowCornerRadius"))
-        XCTAssertTrue(source.contains("contentView.layer?.cornerCurve = .continuous"))
-        XCTAssertTrue(source.contains("contentView.layer?.masksToBounds = true"))
-        XCTAssertTrue(source.contains("restoreContentViewConfiguration()"))
+        XCTAssertFalse(source.contains("MomentoWindowCornerRadiusConfigurator"))
+        XCTAssertFalse(source.contains("momentoWindowCornerRadius"))
+        XCTAssertFalse(source.contains("contentView.layer?.cornerRadius"))
+        XCTAssertFalse(source.contains("contentView.layer?.cornerCurve"))
+        XCTAssertFalse(source.contains("contentView.layer?.masksToBounds"))
+        XCTAssertFalse(source.contains("import QuartzCore"))
     }
 
     private func contentViewURL() -> URL {

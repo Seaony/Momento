@@ -29,7 +29,7 @@ final class WelcomeViewSourceTests: XCTestCase {
 
         XCTAssertTrue(source.contains("@Environment(\\.appearsActive)"))
         XCTAssertTrue(source.contains("inactiveBackdropOpacity = 1.0"))
-        XCTAssertTrue(source.contains("focusedBackdropOpacity = 0.56"))
+        XCTAssertTrue(source.contains("focusedBackdropOpacity = 0.64"))
         XCTAssertTrue(source.contains("appearsActive ? focusedBackdropOpacity : inactiveBackdropOpacity"))
         XCTAssertFalse(source.contains("@Environment(\\.controlActiveState)"))
     }
@@ -55,7 +55,7 @@ final class WelcomeViewSourceTests: XCTestCase {
     func testWelcomeButtonsUseSharedFixedMetrics() throws {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 
-        XCTAssertTrue(source.contains("welcomeButtonWidth: CGFloat = 136"))
+        XCTAssertTrue(source.contains("welcomeButtonWidth: CGFloat = 124"))
         XCTAssertTrue(source.contains("welcomeButtonHeight: CGFloat = 42"))
         let fixedSizeFrameCount = source
             .components(separatedBy: ".frame(width: welcomeButtonWidth, height: welcomeButtonHeight)")
@@ -85,6 +85,17 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertFalse(source.contains("updatePointingHandCursor(isHovered: hovering)"))
     }
 
+    func testWelcomeButtonsUseNativeCapsuleBorderShape() throws {
+        let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
+
+        let capsuleShapeCount = source
+            .components(separatedBy: ".buttonBorderShape(.capsule)")
+            .count - 1
+        XCTAssertGreaterThanOrEqual(capsuleShapeCount, 2)
+        XCTAssertFalse(source.contains("ClipShape(Capsule"))
+        XCTAssertFalse(source.contains(".clipShape(Capsule"))
+    }
+
     func testOpenLibraryButtonKeepsWhiteGlassAppearance() throws {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 
@@ -97,7 +108,8 @@ final class WelcomeViewSourceTests: XCTestCase {
     func testWelcomeBackdropUsesNativeGlassEffect() throws {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 
-        XCTAssertTrue(source.contains(".glassEffect(.regular, in: Rectangle())"))
+        XCTAssertTrue(source.contains("welcomeGlassTintOpacity = 0.28"))
+        XCTAssertTrue(source.contains(".glassEffect(.regular.tint(Color(nsColor: .windowBackgroundColor).opacity(welcomeGlassTintOpacity)), in: Rectangle())"))
         XCTAssertFalse(source.contains("MomentoVisualEffectView("))
         XCTAssertFalse(source.contains("NSVisualEffectView"))
     }
