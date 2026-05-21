@@ -5,7 +5,7 @@ private enum MomentoAssetPreviewMetrics {
     static let imagePanelCornerRadius: CGFloat = 30
     static let imageCornerRadius: CGFloat = 24
     static let imagePanelPadding: CGFloat = 14
-    static let imagePanelTintOpacity = 0.16
+    static let imagePanelTintOpacity = 0.9
 }
 
 struct MomentoAssetPreviewOverlay: View {
