@@ -47,7 +47,7 @@ struct MomentoCreateLibraryDialog: View {
                             .font(.system(size: 16, weight: .semibold))
 
                         Text(localization.string("Enter a name for this library, then choose where to save it."))
-                            .font(.system(size: 11, weight: .regular))
+                            .font(.system(size: 12, weight: .regular))
                             .lineSpacing(2)
                             .foregroundStyle(MomentoTheme.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
