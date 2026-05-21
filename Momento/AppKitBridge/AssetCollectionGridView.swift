@@ -222,6 +222,8 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     private var gridConstraints: [NSLayoutConstraint] = []
     private var listConstraints: [NSLayoutConstraint] = []
     private var mode: AssetViewMode = .grid
+    private let gridTitleHeight: CGFloat = 30
+    private let gridSubtitleHeight: CGFloat = 14
 
     override var isSelected: Bool {
         didSet {
@@ -248,16 +250,18 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         fileNameLabel.lineBreakMode = .byTruncatingMiddle
         fileNameLabel.maximumNumberOfLines = 2
         fileNameLabel.alignment = .center
-        fileNameLabel.font = .systemFont(ofSize: 12)
-        fileNameLabel.textColor = .secondaryLabelColor
+        fileNameLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        fileNameLabel.textColor = .labelColor
         fileNameLabel.translatesAutoresizingMaskIntoConstraints = false
+        fileNameLabel.setContentCompressionResistancePriority(.required, for: .vertical)
 
         subtitleLabel.lineBreakMode = .byTruncatingTail
         subtitleLabel.maximumNumberOfLines = 1
         subtitleLabel.alignment = .center
         subtitleLabel.font = .systemFont(ofSize: 11)
-        subtitleLabel.textColor = .tertiaryLabelColor
+        subtitleLabel.textColor = .secondaryLabelColor
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
+        subtitleLabel.setContentCompressionResistancePriority(.required, for: .vertical)
 
         containerView.addSubview(previewImageView)
         containerView.addSubview(fileNameLabel)
@@ -273,10 +277,12 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
             fileNameLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 8),
             fileNameLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -8),
+            fileNameLabel.heightAnchor.constraint(equalToConstant: gridTitleHeight),
             fileNameLabel.bottomAnchor.constraint(equalTo: subtitleLabel.topAnchor, constant: -2),
 
             subtitleLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 8),
             subtitleLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -8),
+            subtitleLabel.heightAnchor.constraint(equalToConstant: gridSubtitleHeight),
             subtitleLabel.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -8)
         ]
 
