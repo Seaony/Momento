@@ -6,6 +6,7 @@ struct MomentoAssetPreviewOverlay: View {
 
     var asset: AssetItem
     var previewURL: URL
+    var closesOnSpaceKeyUp = false
     var onDismiss: () -> Void
 
     @State private var previewImage: NSImage?
@@ -31,7 +32,10 @@ struct MomentoAssetPreviewOverlay: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .background {
-            MomentoPreviewKeyboardCapture(onDismiss: dismiss)
+            MomentoPreviewKeyboardCapture(
+                closesOnSpaceKeyUp: closesOnSpaceKeyUp,
+                onDismiss: dismiss
+            )
                 .frame(width: 0, height: 0)
         }
         .onAppear {
@@ -63,35 +67,41 @@ struct MomentoAssetPreviewOverlay: View {
     }
 
     private var previewMetadata: some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 3) {
+        ZStack {
+            VStack(alignment: .center, spacing: 3) {
                 Text(asset.displayName)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(MomentoTheme.primaryText)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    .multilineTextAlignment(.center)
 
                 Text(subtitle)
                     .font(.system(size: 11))
                     .foregroundStyle(MomentoTheme.secondaryText)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    .multilineTextAlignment(.center)
             }
+            .padding(.horizontal, 48)
+            .frame(maxWidth: .infinity)
 
-            Spacer(minLength: 18)
+            HStack {
+                Spacer()
 
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 12, weight: .semibold))
-                    .frame(width: 28, height: 28)
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .help(localization.string("Dismiss"))
+                .contentShape(Circle())
+                .pointerStyle(.link)
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            .help(localization.string("Dismiss"))
-            .contentShape(Circle())
-            .pointerStyle(.link)
         }
         .frame(maxWidth: 560)
         .padding(.horizontal, 14)
@@ -126,15 +136,18 @@ struct MomentoAssetPreviewOverlay: View {
 }
 
 private struct MomentoPreviewKeyboardCapture: NSViewRepresentable {
+    var closesOnSpaceKeyUp: Bool
     var onDismiss: () -> Void
 
     func makeNSView(context: Context) -> KeyboardCaptureView {
         let view = KeyboardCaptureView()
+        view.closesOnSpaceKeyUp = closesOnSpaceKeyUp
         view.onDismiss = onDismiss
         return view
     }
 
     func updateNSView(_ nsView: KeyboardCaptureView, context: Context) {
+        nsView.closesOnSpaceKeyUp = closesOnSpaceKeyUp
         nsView.onDismiss = onDismiss
         DispatchQueue.main.async {
             nsView.window?.makeFirstResponder(nsView)
@@ -143,6 +156,7 @@ private struct MomentoPreviewKeyboardCapture: NSViewRepresentable {
 
     final class KeyboardCaptureView: NSView {
         var onDismiss: (() -> Void)?
+        var closesOnSpaceKeyUp = false
 
         override var acceptsFirstResponder: Bool {
             true
@@ -154,12 +168,26 @@ private struct MomentoPreviewKeyboardCapture: NSViewRepresentable {
         }
 
         override func keyDown(with event: NSEvent) {
-            if event.charactersIgnoringModifiers == " " || event.charactersIgnoringModifiers == "\u{1b}" {
+            if event.charactersIgnoringModifiers == "\u{1b}" {
+                onDismiss?()
+                return
+            }
+
+            if event.charactersIgnoringModifiers == " ", !closesOnSpaceKeyUp {
                 onDismiss?()
                 return
             }
 
             super.keyDown(with: event)
+        }
+
+        override func keyUp(with event: NSEvent) {
+            if event.charactersIgnoringModifiers == " ", closesOnSpaceKeyUp {
+                onDismiss?()
+                return
+            }
+
+            super.keyUp(with: event)
         }
     }
 }

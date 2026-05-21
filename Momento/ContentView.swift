@@ -15,7 +15,6 @@ struct ContentView: View {
     @State private var isInspectorPresented = true
     @State private var inspectorNotesByAssetID: [AssetItem.ID: String] = [:]
     @State private var importError: String?
-    @State private var previewedAsset: AssetItem?
 
     private var sidebarSelection: Binding<String?> {
         Binding {
@@ -81,9 +80,6 @@ struct ContentView: View {
                 importErrorBanner(errorMessage)
                     .padding(.bottom, 16)
             }
-        }
-        .overlay {
-            assetPreviewOverlay
         }
         .overlay {
             libraryDialogOverlay
@@ -156,7 +152,9 @@ struct ContentView: View {
                     selectedAssetIDs: selectedAssetIDs,
                     viewMode: store.viewMode,
                     onSelectionChange: selectAssets,
-                    onDoubleClick: preview
+                    onDoubleClick: preview,
+                    onSpacePreviewStart: previewWhileSpaceIsPressed,
+                    onSpacePreviewEnd: endSpacePreview
                 )
 
                 if store.visibleAssets.isEmpty {
@@ -196,22 +194,6 @@ struct ContentView: View {
         }
         .libraryToolbarSearch(isVisible: !isModalOverlayVisible, text: $store.searchQuery, prompt: Text(localization.string("Search assets, tags, colors...")))
         .navigationTitle("")
-    }
-
-    @ViewBuilder
-    private var assetPreviewOverlay: some View {
-        if let previewedAsset, let previewURL = previewURL(for: previewedAsset) {
-            MomentoAssetPreviewOverlay(
-                asset: previewedAsset,
-                previewURL: previewURL,
-                onDismiss: {
-                    withAnimation(.smooth(duration: 0.16)) {
-                        self.previewedAsset = nil
-                    }
-                }
-            )
-            .zIndex(24)
-        }
     }
 
     @ViewBuilder
@@ -279,7 +261,7 @@ struct ContentView: View {
     }
 
     private var isModalOverlayVisible: Bool {
-        isLibraryDialogVisible || previewedAsset != nil
+        isLibraryDialogVisible
     }
 
     private var errorMessage: String? {
@@ -396,13 +378,28 @@ struct ContentView: View {
     }
 
     private func preview(_ asset: AssetItem) {
-        guard previewURL(for: asset) != nil else {
+        showPreview(asset, closesOnSpaceKeyUp: false)
+    }
+
+    private func previewWhileSpaceIsPressed(_ asset: AssetItem) {
+        showPreview(asset, closesOnSpaceKeyUp: true)
+    }
+
+    private func endSpacePreview() {
+        MomentoAssetPreviewPanelController.shared.close()
+    }
+
+    private func showPreview(_ asset: AssetItem, closesOnSpaceKeyUp: Bool) {
+        guard let previewURL = previewURL(for: asset) else {
             return
         }
 
-        withAnimation(.smooth(duration: 0.18)) {
-            previewedAsset = asset
-        }
+        MomentoAssetPreviewPanelController.shared.show(
+            asset: asset,
+            previewURL: previewURL,
+            localization: localization,
+            closesOnSpaceKeyUp: closesOnSpaceKeyUp
+        )
     }
 
     private func previewURL(for asset: AssetItem) -> URL? {

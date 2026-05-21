@@ -13,19 +13,25 @@ struct AssetCollectionGridView: NSViewRepresentable {
     var viewMode: AssetViewMode
     var onSelectionChange: (Set<AssetItem.ID>) -> Void
     var onDoubleClick: (AssetItem) -> Void
+    var onSpacePreviewStart: (AssetItem) -> Void
+    var onSpacePreviewEnd: () -> Void
 
     init(
         assets: [AssetItem],
         selectedAssetIDs: Set<AssetItem.ID> = [],
         viewMode: AssetViewMode = .grid,
         onSelectionChange: @escaping (Set<AssetItem.ID>) -> Void = { _ in },
-        onDoubleClick: @escaping (AssetItem) -> Void = { _ in }
+        onDoubleClick: @escaping (AssetItem) -> Void = { _ in },
+        onSpacePreviewStart: @escaping (AssetItem) -> Void = { _ in },
+        onSpacePreviewEnd: @escaping () -> Void = {}
     ) {
         self.assets = assets
         self.selectedAssetIDs = selectedAssetIDs
         self.viewMode = viewMode
         self.onSelectionChange = onSelectionChange
         self.onDoubleClick = onDoubleClick
+        self.onSpacePreviewStart = onSpacePreviewStart
+        self.onSpacePreviewEnd = onSpacePreviewEnd
     }
 
     func makeCoordinator() -> Coordinator {
@@ -45,8 +51,11 @@ struct AssetCollectionGridView: NSViewRepresentable {
             AssetCollectionViewItem.self,
             forItemWithIdentifier: AssetCollectionViewItem.reuseIdentifier
         )
-        collectionView.onSpacePreview = { [weak coordinator = context.coordinator] in
-            coordinator?.previewSelectedAsset()
+        collectionView.onSpacePreviewStart = { [weak coordinator = context.coordinator] in
+            coordinator?.startSpacePreview()
+        }
+        collectionView.onSpacePreviewEnd = { [weak coordinator = context.coordinator] in
+            coordinator?.endSpacePreview()
         }
 
         let doubleClickRecognizer = NSClickGestureRecognizer(
@@ -216,14 +225,18 @@ extension AssetCollectionGridView {
             parent.onDoubleClick(parent.assets[indexPath.item])
         }
 
-        func previewSelectedAsset() {
+        func startSpacePreview() {
             guard let collectionView,
                   let indexPath = collectionView.selectionIndexPaths.sorted(by: { $0.item < $1.item }).first,
                   parent.assets.indices.contains(indexPath.item) else {
                 return
             }
 
-            parent.onDoubleClick(parent.assets[indexPath.item])
+            parent.onSpacePreviewStart(parent.assets[indexPath.item])
+        }
+
+        func endSpacePreview() {
+            parent.onSpacePreviewEnd()
         }
 
         private func focusAsset(at indexPath: IndexPath, in collectionView: NSCollectionView) {
@@ -257,7 +270,9 @@ extension AssetCollectionGridView {
 }
 
 private final class AssetPreviewCollectionView: NSCollectionView {
-    var onSpacePreview: (() -> Void)?
+    var onSpacePreviewStart: (() -> Void)?
+    var onSpacePreviewEnd: (() -> Void)?
+    private var isSpacePreviewActive = false
 
     override var acceptsFirstResponder: Bool {
         true
@@ -265,11 +280,24 @@ private final class AssetPreviewCollectionView: NSCollectionView {
 
     override func keyDown(with event: NSEvent) {
         if event.charactersIgnoringModifiers == " " {
-            onSpacePreview?()
+            if !isSpacePreviewActive {
+                isSpacePreviewActive = true
+                onSpacePreviewStart?()
+            }
             return
         }
 
         super.keyDown(with: event)
+    }
+
+    override func keyUp(with event: NSEvent) {
+        if event.charactersIgnoringModifiers == " " {
+            isSpacePreviewActive = false
+            onSpacePreviewEnd?()
+            return
+        }
+
+        super.keyUp(with: event)
     }
 }
 
