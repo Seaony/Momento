@@ -78,6 +78,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
             action: #selector(Coordinator.handleDoubleClick(_:))
         )
         doubleClickRecognizer.numberOfClicksRequired = 2
+        doubleClickRecognizer.delaysPrimaryMouseButtonEvents = false
         collectionView.addGestureRecognizer(doubleClickRecognizer)
 
         let scrollView = NSScrollView()
