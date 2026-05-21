@@ -381,15 +381,15 @@ struct ContentView: View {
         showPreview(asset, closesOnSpaceKeyUp: false)
     }
 
-    private func previewWhileSpaceIsPressed(_ asset: AssetItem) {
-        showPreview(asset, closesOnSpaceKeyUp: true)
+    private func previewWhileSpaceIsPressed(_ asset: AssetItem, sourceFrame: NSRect?) {
+        showPreview(asset, closesOnSpaceKeyUp: true, sourceFrame: sourceFrame)
     }
 
     private func endSpacePreview() {
         MomentoAssetPreviewPanelController.shared.close()
     }
 
-    private func showPreview(_ asset: AssetItem, closesOnSpaceKeyUp: Bool) {
+    private func showPreview(_ asset: AssetItem, closesOnSpaceKeyUp: Bool, sourceFrame: NSRect? = nil) {
         guard let previewURL = previewURL(for: asset) else {
             return
         }
@@ -398,7 +398,8 @@ struct ContentView: View {
             asset: asset,
             previewURL: previewURL,
             localization: localization,
-            closesOnSpaceKeyUp: closesOnSpaceKeyUp
+            closesOnSpaceKeyUp: closesOnSpaceKeyUp,
+            sourceFrame: sourceFrame
         )
     }
 

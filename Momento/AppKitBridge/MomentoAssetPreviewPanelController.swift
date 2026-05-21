@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import SwiftUI
 
 @MainActor
@@ -7,18 +8,24 @@ final class MomentoAssetPreviewPanelController: NSObject, NSWindowDelegate {
 
     private var panel: MomentoAssetPreviewPanel?
     private var hostingController: NSHostingController<AnyView>?
+    private var returnFrame: NSRect?
+    private var isClosing = false
 
     func show(
         asset: AssetItem,
         previewURL: URL,
         localization: AppLocalization,
-        closesOnSpaceKeyUp: Bool
+        closesOnSpaceKeyUp: Bool,
+        sourceFrame: NSRect? = nil
     ) {
         let panel = panel ?? makePanel()
+        let targetFrame = previewFrame()
+        let transitionFrame = sanitizedTransitionFrame(sourceFrame)
         let rootView = MomentoAssetPreviewOverlay(
             asset: asset,
             previewURL: previewURL,
             closesOnSpaceKeyUp: closesOnSpaceKeyUp,
+            usesWindowTransition: transitionFrame != nil,
             onDismiss: { [weak self] in
                 self?.close()
             }
@@ -36,17 +43,47 @@ final class MomentoAssetPreviewPanelController: NSObject, NSWindowDelegate {
             self.hostingController = hostingController
         }
 
-        panel.setFrame(previewFrame(), display: true)
+        isClosing = false
+        returnFrame = transitionFrame
+        panel.alphaValue = 1
+        panel.setFrame(transitionFrame ?? targetFrame, display: false)
         panel.makeKeyAndOrderFront(nil)
         self.panel = panel
+
+        guard transitionFrame != nil else {
+            panel.setFrame(targetFrame, display: true)
+            return
+        }
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.22
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().setFrame(targetFrame, display: true)
+        }
     }
 
     func close() {
-        panel?.orderOut(nil)
-        panel?.contentViewController = nil
-        panel?.delegate = nil
-        panel = nil
-        hostingController = nil
+        guard let panel, !isClosing else {
+            return
+        }
+
+        isClosing = true
+
+        guard let returnFrame else {
+            finishClose(panel)
+            return
+        }
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.18
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            panel.animator().setFrame(returnFrame, display: true)
+            panel.animator().alphaValue = 0
+        } completionHandler: {
+            Task { @MainActor in
+                self.finishClose(panel)
+            }
+        }
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -77,6 +114,27 @@ final class MomentoAssetPreviewPanelController: NSObject, NSWindowDelegate {
         let verticalInset = min(32, visibleFrame.height * 0.025)
 
         return visibleFrame.insetBy(dx: horizontalInset, dy: verticalInset)
+    }
+
+    private func sanitizedTransitionFrame(_ sourceFrame: NSRect?) -> NSRect? {
+        guard let sourceFrame,
+              sourceFrame.width > 1,
+              sourceFrame.height > 1 else {
+            return nil
+        }
+
+        return sourceFrame
+    }
+
+    private func finishClose(_ panel: MomentoAssetPreviewPanel) {
+        panel.orderOut(nil)
+        panel.alphaValue = 1
+        panel.contentViewController = nil
+        panel.delegate = nil
+        self.panel = nil
+        hostingController = nil
+        returnFrame = nil
+        isClosing = false
     }
 }
 

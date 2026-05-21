@@ -4,15 +4,18 @@
 //
 
 import AppKit
+import QuartzCore
 import SwiftUI
 import UniformTypeIdentifiers
 
 private enum AssetCollectionMetrics {
     static let masonryItemWidth: CGFloat = 164
-    static let masonryImageInset: CGFloat = 6
+    static let masonryImageInset: CGFloat = 3
+    static let hoverScale: CGFloat = 1.025
     static let selectionCornerRadius: CGFloat = 12
     static let imageCornerRadius: CGFloat = 10
-    static let dimensionBadgeHeight: CGFloat = 18
+    static let dimensionBadgeHeight: CGFloat = 16
+    static let dimensionBadgeHorizontalPadding: CGFloat = 3
 }
 
 struct AssetCollectionGridView: NSViewRepresentable {
@@ -21,7 +24,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
     var viewMode: AssetViewMode
     var onSelectionChange: (Set<AssetItem.ID>) -> Void
     var onDoubleClick: (AssetItem) -> Void
-    var onSpacePreviewStart: (AssetItem) -> Void
+    var onSpacePreviewStart: (AssetItem, NSRect?) -> Void
     var onSpacePreviewEnd: () -> Void
 
     init(
@@ -30,7 +33,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
         viewMode: AssetViewMode = .grid,
         onSelectionChange: @escaping (Set<AssetItem.ID>) -> Void = { _ in },
         onDoubleClick: @escaping (AssetItem) -> Void = { _ in },
-        onSpacePreviewStart: @escaping (AssetItem) -> Void = { _ in },
+        onSpacePreviewStart: @escaping (AssetItem, NSRect?) -> Void = { _, _ in },
         onSpacePreviewEnd: @escaping () -> Void = {}
     ) {
         self.assets = assets
@@ -248,7 +251,8 @@ extension AssetCollectionGridView {
                 return
             }
 
-            parent.onSpacePreviewStart(parent.assets[indexPath.item])
+            let sourceFrame = sourceFrameForPreview(at: indexPath, in: collectionView)
+            parent.onSpacePreviewStart(parent.assets[indexPath.item], sourceFrame)
         }
 
         func endSpacePreview() {
@@ -284,6 +288,14 @@ extension AssetCollectionGridView {
             })
 
             parent.onSelectionChange(selectedIDs)
+        }
+
+        private func sourceFrameForPreview(at indexPath: IndexPath, in collectionView: NSCollectionView) -> NSRect? {
+            guard let item = collectionView.item(at: indexPath) as? AssetCollectionViewItem else {
+                return nil
+            }
+
+            return item.previewSourceFrameInScreen()
         }
     }
 }
@@ -326,10 +338,11 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
 
     private var cachedAttributes: [IndexPath: NSCollectionViewLayoutAttributes] = [:]
     private var contentSize: NSSize = .zero
+    private var preparedBoundsSize: NSSize = .zero
 
     private let itemWidth = AssetCollectionMetrics.masonryItemWidth
-    private let interitemSpacing: CGFloat = 14
-    private let lineSpacing: CGFloat = 16
+    private let interitemSpacing: CGFloat = 4
+    private let lineSpacing: CGFloat = 4
     private let sectionInset = NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
 
     init(assets: [AssetItem]) {
@@ -352,6 +365,7 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
         }
 
         let itemCount = collectionView.numberOfItems(inSection: 0)
+        preparedBoundsSize = collectionView.bounds.size
         let contentWidth = max(collectionView.bounds.width, itemWidth + sectionInset.left + sectionInset.right)
         let availableWidth = max(contentWidth - sectionInset.left - sectionInset.right, itemWidth)
         let columnCount = max(Int((availableWidth + interitemSpacing) / (itemWidth + interitemSpacing)), 1)
@@ -400,11 +414,7 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
     }
 
     override func shouldInvalidateLayout(forBoundsChange newBounds: NSRect) -> Bool {
-        guard let collectionView else {
-            return false
-        }
-
-        return newBounds.size != collectionView.bounds.size
+        newBounds.size != preparedBoundsSize
     }
 
     private func masonryItemHeight(forItemAt item: Int, width: CGFloat) -> CGFloat {
@@ -442,12 +452,14 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     private var masonryConstraints: [NSLayoutConstraint] = []
     private var listConstraints: [NSLayoutConstraint] = []
     private var mode: AssetViewMode = .grid
+    private var isHovering = false
     private let gridTitleHeight: CGFloat = 16
     private let gridSubtitleHeight: CGFloat = 14
 
     override var isSelected: Bool {
         didSet {
             containerView.isSelected = isSelected
+            updateContainerScale(animated: true)
         }
     }
 
@@ -455,9 +467,13 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         containerView.wantsLayer = true
         containerView.layer?.cornerRadius = AssetCollectionMetrics.selectionCornerRadius
         containerView.layer?.cornerCurve = .continuous
+        containerView.layer?.masksToBounds = false
+        containerView.layer?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
         containerView.translatesAutoresizingMaskIntoConstraints = false
         containerView.hoverChanged = { [weak self] isHovered in
+            self?.isHovering = isHovered
             self?.containerView.isHovered = isHovered
+            self?.updateContainerScale(animated: true)
             if isHovered {
                 self?.onHoverFocus?()
             }
@@ -518,7 +534,6 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
             previewImageView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: AssetCollectionMetrics.masonryImageInset),
             previewImageView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -AssetCollectionMetrics.masonryImageInset),
             previewImageView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -AssetCollectionMetrics.masonryImageInset),
-
             dimensionBadgeView.topAnchor.constraint(equalTo: previewImageView.topAnchor, constant: 8),
             dimensionBadgeView.trailingAnchor.constraint(equalTo: previewImageView.trailingAnchor, constant: -8),
             dimensionBadgeView.heightAnchor.constraint(equalToConstant: AssetCollectionMetrics.dimensionBadgeHeight)
@@ -549,7 +564,10 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         dimensionBadgeView.stringValue = ""
         dimensionBadgeView.isHidden = true
         onHoverFocus = nil
+        isHovering = false
         containerView.isHovered = false
+        containerView.isSelected = false
+        updateContainerScale(animated: false)
         mode = .grid
     }
 
@@ -560,6 +578,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         dimensionBadgeView.stringValue = subtitle(for: asset)
         previewImageView.image = previewImage(for: asset)
         applyModeLayout()
+        updateContainerScale(animated: false)
     }
 
     private func applyModeLayout() {
@@ -620,6 +639,41 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
         return NSWorkspace.shared.icon(for: .data)
     }
+
+    func previewSourceFrameInScreen() -> NSRect? {
+        guard let window = containerView.window else {
+            return nil
+        }
+
+        let rectInWindow = containerView.convert(containerView.bounds, to: nil)
+        return window.convertToScreen(rectInWindow)
+    }
+
+    private func updateContainerScale(animated: Bool) {
+        guard let layer = containerView.layer else {
+            return
+        }
+
+        let scale = mode == .masonry && (isHovering || isSelected) ? AssetCollectionMetrics.hoverScale : 1
+        let targetTransform = CATransform3DMakeScale(scale, scale, 1)
+        let currentTransform = layer.presentation()?.transform ?? layer.transform
+        layer.zPosition = scale > 1 ? 8 : 0
+
+        guard animated else {
+            layer.removeAnimation(forKey: "hoverScale")
+            layer.transform = targetTransform
+            return
+        }
+
+        layer.transform = targetTransform
+
+        let animation = CABasicAnimation(keyPath: "transform")
+        animation.fromValue = currentTransform
+        animation.toValue = targetTransform
+        animation.duration = 0.16
+        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer.add(animation, forKey: "hoverScale")
+    }
 }
 
 private final class DimensionBadgeView: NSView {
@@ -660,8 +714,8 @@ private final class DimensionBadgeView: NSView {
         addSubview(label)
 
         NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: AssetCollectionMetrics.dimensionBadgeHorizontalPadding),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -AssetCollectionMetrics.dimensionBadgeHorizontalPadding),
             label.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
     }
@@ -723,6 +777,11 @@ private final class HoverSelectionView: NSView {
         let newTrackingArea = NSTrackingArea(rect: bounds, options: options, owner: self)
         addTrackingArea(newTrackingArea)
         trackingArea = newTrackingArea
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .pointingHand)
     }
 
     override func mouseEntered(with event: NSEvent) {

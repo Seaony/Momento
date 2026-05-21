@@ -5,6 +5,7 @@ private enum MomentoAssetPreviewMetrics {
     static let imagePanelCornerRadius: CGFloat = 30
     static let imageCornerRadius: CGFloat = 24
     static let imagePanelPadding: CGFloat = 14
+    static let imagePanelTintOpacity = 0.16
 }
 
 struct MomentoAssetPreviewOverlay: View {
@@ -13,6 +14,7 @@ struct MomentoAssetPreviewOverlay: View {
     var asset: AssetItem
     var previewURL: URL
     var closesOnSpaceKeyUp = false
+    var usesWindowTransition = false
     var onDismiss: () -> Void
 
     @State private var previewImage: NSImage?
@@ -22,9 +24,8 @@ struct MomentoAssetPreviewOverlay: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                Color.black.opacity(0.28)
+                Color.clear
                     .ignoresSafeArea()
-                    .background(.ultraThinMaterial)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         dismiss()
@@ -72,7 +73,7 @@ struct MomentoAssetPreviewOverlay: View {
                     .padding(MomentoAssetPreviewMetrics.imagePanelPadding)
                     .background {
                         MomentoGlassBackground(
-                            glass: .regular.tint(Color.black.opacity(0.10)),
+                            glass: .regular.tint(Color.black.opacity(MomentoAssetPreviewMetrics.imagePanelTintOpacity)),
                             cornerRadius: MomentoAssetPreviewMetrics.imagePanelCornerRadius
                         )
                     }
@@ -143,6 +144,11 @@ struct MomentoAssetPreviewOverlay: View {
         }
 
         isClosing = true
+        guard !usesWindowTransition else {
+            onDismiss()
+            return
+        }
+
         withAnimation(.smooth(duration: 0.16)) {
             isPresented = false
         }
