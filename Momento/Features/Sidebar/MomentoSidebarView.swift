@@ -64,6 +64,7 @@ struct MomentoSidebarView: View {
 
     @State private var collapsedSectionIDs: Set<MomentoSidebarSection.ID> = []
     @State private var hoveredFooterActionID: String?
+    @State private var isLibraryMenuHovered = false
     @State private var isLibrarySwitcherPresented = false
 
     init(
@@ -344,34 +345,53 @@ struct MomentoSidebarView: View {
                 isLibrarySwitcherPresented.toggle()
             }
         } label: {
-            HStack(spacing: 10) {
+            HStack(spacing: 7) {
                 Image(systemName: "archivebox.fill")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 28, height: 28)
                     .background(.blue.gradient, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(verbatim: "Momento")
-                        .font(.system(size: 14, weight: .semibold))
-                    Text(libraryName ?? localization.string("No library selected"))
-                        .font(.system(size: 11))
-                        .foregroundStyle(MomentoTheme.secondaryText)
-                        .lineLimit(1)
-                }
-
-                Spacer()
+                Text(libraryName ?? localization.string("No library selected"))
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(MomentoTheme.primaryText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(MomentoTheme.tertiaryText)
+                    .foregroundStyle(isLibraryMenuHovered || isLibrarySwitcherPresented ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
             }
-            .contentShape(Rectangle())
+            .padding(.leading, 6)
+            .padding(.trailing, 8)
+            .padding(.vertical, 5)
+            .background { libraryMenuBackground }
+            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
         .buttonStyle(.plain)
         .pointerStyle(.link)
+        .onHover { hovering in
+            updateLibraryMenuHover(hovering)
+        }
         .accessibilityLabel(localization.string("Library"))
         .help(localization.string("Library"))
+    }
+
+    @ViewBuilder
+    private var libraryMenuBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
+
+        if isLibraryMenuHovered || isLibrarySwitcherPresented {
+            shape.fill(MomentoTheme.sidebarIconHoverBackground)
+        } else {
+            Color.clear
+        }
+    }
+
+    private func updateLibraryMenuHover(_ hovering: Bool) {
+        withAnimation(.smooth(duration: 0.14)) {
+            isLibraryMenuHovered = hovering
+        }
     }
 
     private func performLibrarySwitcherAction(_ action: @escaping () -> Void) -> () -> Void {
