@@ -17,6 +17,7 @@ private enum AssetCollectionMetrics {
     static let hoverShadowOffset = CGSize(width: 0, height: 10)
     static let selectionCornerRadius: CGFloat = 12
     static let imageCornerRadius: CGFloat = 10
+    static let dimensionBadgeCornerRadius: CGFloat = 5
     static let dimensionBadgeHeight: CGFloat = 16
     static let dimensionBadgeHorizontalPadding: CGFloat = 3
     static let sectionHorizontalInset: CGFloat = 8
@@ -492,7 +493,6 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
         contentView.translatesAutoresizingMaskIntoConstraints = false
         contentView.layer?.masksToBounds = false
-        contentView.layer?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
 
         previewImageView.imageScaling = .scaleProportionallyUpOrDown
         previewImageView.translatesAutoresizingMaskIntoConstraints = false
@@ -787,7 +787,7 @@ private final class DimensionBadgeView: NSView {
     private func setUpView() {
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.withAlphaComponent(0.34).cgColor
-        layer?.cornerRadius = 7
+        layer?.cornerRadius = AssetCollectionMetrics.dimensionBadgeCornerRadius
         layer?.cornerCurve = .continuous
 
         label.lineBreakMode = .byTruncatingTail
@@ -838,6 +838,32 @@ private final class HoverTrackingView: NSView {
     }
 }
 
+private final class CenterAnchoredLayer: CALayer {
+    nonisolated override init() {
+        super.init()
+        super.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+    }
+
+    nonisolated override init(layer: Any) {
+        super.init(layer: layer)
+        super.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+    }
+
+    nonisolated required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        super.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+    }
+
+    nonisolated override var anchorPoint: CGPoint {
+        get {
+            CGPoint(x: 0.5, y: 0.5)
+        }
+        set {
+            super.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+        }
+    }
+}
+
 private final class HoverSelectionView: NSView {
     var isHovered = false {
         didSet {
@@ -851,6 +877,10 @@ private final class HoverSelectionView: NSView {
     }
 
     private let glassBackgroundView = NSGlassEffectView()
+
+    override func makeBackingLayer() -> CALayer {
+        CenterAnchoredLayer()
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
