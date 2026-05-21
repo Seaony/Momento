@@ -1268,6 +1268,23 @@
         }
       }
     },
+    "The selected library no longer exists." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The selected library no longer exists."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选资源库不存在或已被移动。"
+          }
+        }
+      }
+    },
     "This recent library is no longer available." : {
       "extractionState" : "stale",
       "localizations" : {

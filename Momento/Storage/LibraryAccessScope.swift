@@ -55,6 +55,17 @@ struct RecentLibraryStore {
         defaults.set(data, forKey: key)
     }
 
+    func remove(id: RecentLibraryReference.ID) throws {
+        let references = load().filter { $0.id != id }
+        guard !references.isEmpty else {
+            defaults.removeObject(forKey: key)
+            return
+        }
+
+        let data = try JSONEncoder.momento.encode(references)
+        defaults.set(data, forKey: key)
+    }
+
     func resolve(_ reference: RecentLibraryReference) throws -> (url: URL, isStale: Bool) {
         var isStale = false
         let url = try URL(

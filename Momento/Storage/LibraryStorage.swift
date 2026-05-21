@@ -73,7 +73,17 @@ nonisolated struct LibraryStorage: Sendable {
     }
 
     nonisolated func openLibraryPackage(at packageURL: URL) throws -> AssetLibrary {
+        var isDirectory = ObjCBool(false)
+        guard FileManager.default.fileExists(atPath: packageURL.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            throw LibraryStorageError.missingLibraryPackage
+        }
+
         let manifestURL = packageURL.appendingPathComponent(LibraryManifest.fileName, isDirectory: false)
+        guard FileManager.default.fileExists(atPath: manifestURL.path) else {
+            throw LibraryStorageError.missingLibraryPackage
+        }
+
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder.momento.decode(LibraryManifest.self, from: data)
         guard manifest.schemaVersion == LibraryManifest.currentSchemaVersion else {
@@ -118,12 +128,15 @@ nonisolated struct LibraryStorage: Sendable {
 
 nonisolated enum LibraryStorageError: LocalizedError {
     case assetOutsideLibrary
+    case missingLibraryPackage
     case unsupportedSchemaVersion(Int)
 
     var errorDescription: String? {
         switch self {
         case .assetOutsideLibrary:
             "Asset storage must stay inside the selected library package."
+        case .missingLibraryPackage:
+            "The selected library no longer exists."
         case .unsupportedSchemaVersion(let version):
             "Unsupported library schema version: \(version)."
         }

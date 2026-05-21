@@ -49,7 +49,11 @@ final class LibraryStore {
             self.selectedAssetID = initialAssets.first?.id
             self.sidebarSelection = .library(currentLibrary.id)
         } else if loadRecentLibrary, let reference = recentLibraries.first {
-            try? openRecentLibrary(reference)
+            do {
+                try openRecentLibrary(reference)
+            } catch {
+                libraryErrorMessage = libraryErrorMessage(for: error)
+            }
         }
     }
 
@@ -228,14 +232,33 @@ final class LibraryStore {
     }
 
     private func openRecentLibrary(_ reference: RecentLibraryReference) throws {
-        let resolved = try recentStore.resolve(reference)
+        let resolved: (url: URL, isStale: Bool)
+        do {
+            resolved = try recentStore.resolve(reference)
+        } catch {
+            try removeRecentLibrary(reference)
+            throw LibraryStoreError.missingRecentLibrary
+        }
+
         let accessScope = LibraryAccessScope(url: resolved.url)
-        let library = try storage.openLibraryPackage(at: resolved.url)
+        let library: AssetLibrary
+        do {
+            library = try storage.openLibraryPackage(at: resolved.url)
+        } catch LibraryStorageError.missingLibraryPackage {
+            try removeRecentLibrary(reference)
+            throw LibraryStoreError.missingRecentLibrary
+        }
+
         try activateLibrary(library, accessScope: accessScope)
 
         if resolved.isStale {
             try saveRecentLibrary(library)
         }
+    }
+
+    private func removeRecentLibrary(_ reference: RecentLibraryReference) throws {
+        try recentStore.remove(id: reference.id)
+        recentLibraries = recentStore.load()
     }
 
     private func activateLibrary(_ library: AssetLibrary, accessScope: LibraryAccessScope) throws {
@@ -256,6 +279,18 @@ final class LibraryStore {
     private func saveRecentLibrary(_ library: AssetLibrary) throws {
         try recentStore.save(library)
         recentLibraries = recentStore.load()
+    }
+
+    private func libraryErrorMessage(for error: Error) -> String {
+        if let storeError = error as? LibraryStoreError {
+            return storeError.errorDescription ?? error.localizedDescription
+        }
+
+        if let storageError = error as? LibraryStorageError {
+            return storageError.errorDescription ?? error.localizedDescription
+        }
+
+        return error.localizedDescription
     }
 
     private static func sampleAssets(for library: AssetLibrary) -> [AssetItem] {

@@ -125,6 +125,54 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         XCTAssertEqual(store.recentLibraries.first?.name, "Test")
         XCTAssertTrue(FileManager.default.fileExists(atPath: environment.packageURL.path))
     }
+
+    @MainActor
+    func testMissingRecentLibraryIsPrunedOnLaunchAndReportsError() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+        store.closeCurrentLibrary()
+        try FileManager.default.removeItem(at: environment.packageURL)
+
+        let relaunched = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults)
+        )
+
+        XCTAssertNil(relaunched.currentLibrary)
+        XCTAssertTrue(relaunched.recentLibraries.isEmpty)
+        XCTAssertEqual(relaunched.libraryErrorMessage, LibraryStoreError.missingRecentLibrary.errorDescription)
+    }
+
+    @MainActor
+    func testOpeningMissingRecentLibraryPrunesReferenceAndThrowsUnavailableError() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+        let recentID = try XCTUnwrap(store.recentLibraries.first?.id)
+        store.closeCurrentLibrary()
+        try FileManager.default.removeItem(at: environment.packageURL)
+
+        XCTAssertThrowsError(try store.openRecentLibrary(id: recentID)) { error in
+            guard let storeError = error as? LibraryStoreError,
+                  case .missingRecentLibrary = storeError else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+        XCTAssertTrue(store.recentLibraries.isEmpty)
+    }
 }
 
 private struct TestEnvironment {

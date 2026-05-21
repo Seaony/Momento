@@ -177,7 +177,7 @@ struct ContentView: View {
     }
 
     private var errorMessage: String? {
-        importError ?? store.libraryErrorMessage
+        importError ?? store.libraryErrorMessage.map(localization.string)
     }
 
     private var title: String {
