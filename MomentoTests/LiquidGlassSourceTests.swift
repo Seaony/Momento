@@ -157,7 +157,7 @@ final class LiquidGlassSourceTests: XCTestCase {
 
         XCTAssertFalse(designSource.contains("collapsedSidebarWidth"))
         XCTAssertTrue(designSource.contains("static let sidebarTitlebarButtonSize: CGFloat = 28"))
-        XCTAssertTrue(designSource.contains("static let sidebarTitlebarButtonTopInset: CGFloat = 14"))
+        XCTAssertTrue(designSource.contains("static let sidebarTitlebarButtonTopInset: CGFloat = -18"))
         XCTAssertTrue(designSource.contains("static let sidebarTitlebarButtonTrailingInset: CGFloat = 14"))
         XCTAssertTrue(designSource.contains("static let collapsedSidebarToggleLeadingInset: CGFloat = 92"))
         XCTAssertTrue(shellSource.contains("@State private var isSidebarCollapsed = false"))
