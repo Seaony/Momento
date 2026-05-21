@@ -60,7 +60,7 @@ struct MomentoLibraryWelcomeView: View {
                     .onHover { hovering in
                         isCreateHovered = hovering
                     }
-                    .pointingHandCursor()
+                    .pointerStyle(.link)
                     .animation(.smooth(duration: 0.16), value: isCreateHovered)
 
                     Button {
@@ -86,48 +86,12 @@ struct MomentoLibraryWelcomeView: View {
                     .onHover { hovering in
                         isOpenHovered = hovering
                     }
-                    .pointingHandCursor()
+                    .pointerStyle(.link)
                     .animation(.smooth(duration: 0.16), value: isOpenHovered)
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-private extension View {
-    func pointingHandCursor() -> some View {
-        modifier(PointingHandCursorModifier())
-    }
-}
-
-private struct PointingHandCursorModifier: ViewModifier {
-    @State private var isHovering = false
-
-    func body(content: Content) -> some View {
-        content
-            .onHover { hovering in
-                if hovering {
-                    guard !isHovering else {
-                        return
-                    }
-                    NSCursor.pointingHand.push()
-                    isHovering = true
-                } else {
-                    guard isHovering else {
-                        return
-                    }
-                    NSCursor.pop()
-                    isHovering = false
-                }
-            }
-            .onDisappear {
-                guard isHovering else {
-                    return
-                }
-                NSCursor.pop()
-                isHovering = false
-            }
     }
 }
 

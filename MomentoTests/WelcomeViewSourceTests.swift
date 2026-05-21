@@ -71,15 +71,15 @@ final class WelcomeViewSourceTests: XCTestCase {
     func testWelcomeButtonsUsePointingHandCursorOnHover() throws {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 
-        XCTAssertTrue(source.contains("pointingHandCursor()"))
-        XCTAssertTrue(source.contains("NSCursor.pointingHand.push()"))
-        XCTAssertTrue(source.contains("NSCursor.pop()"))
-        let pointingHandUpdateCount = source
-            .components(separatedBy: ".pointingHandCursor()")
+        let pointerStyleCount = source
+            .components(separatedBy: ".pointerStyle(.link)")
             .count - 1
-        XCTAssertGreaterThanOrEqual(pointingHandUpdateCount, 2)
+        XCTAssertGreaterThanOrEqual(pointerStyleCount, 2)
+        XCTAssertFalse(source.contains("pointingHandCursor()"))
         XCTAssertFalse(source.contains("PointingHandCursorView"))
         XCTAssertFalse(source.contains("addCursorRect(bounds, cursor: .pointingHand)"))
+        XCTAssertFalse(source.contains("NSCursor.pointingHand.push()"))
+        XCTAssertFalse(source.contains("NSCursor.pop()"))
         XCTAssertFalse(source.contains("updatePointingHandCursor(isHovered: hovering)"))
     }
 
