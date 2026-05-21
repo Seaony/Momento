@@ -19,6 +19,22 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertFalse(source.contains("id: \"recent\""))
     }
 
+    func testMainSidebarDoesNotListTrashEntry() throws {
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+        let sidebarSource = try String(contentsOf: sidebarViewURL(), encoding: .utf8)
+        let contentSidebarStart = try XCTUnwrap(contentSource.range(of: "    private var sidebarSections: [MomentoSidebarSection] {"))
+        let contentSidebarEnd = try XCTUnwrap(contentSource[contentSidebarStart.lowerBound...].range(of: "    private var commands: [MomentoCommand] {"))
+        let contentSidebarSource = String(contentSource[contentSidebarStart.lowerBound..<contentSidebarEnd.lowerBound])
+        let defaultSidebarStart = try XCTUnwrap(sidebarSource.range(of: "    static func momentoDefaultSections(localization: AppLocalization) -> [MomentoSidebarSection] {"))
+        let defaultSidebarEnd = try XCTUnwrap(sidebarSource[defaultSidebarStart.lowerBound...].range(of: "    static var momentoDefaultSections: [MomentoSidebarSection] {"))
+        let defaultSidebarSource = String(sidebarSource[defaultSidebarStart.lowerBound..<defaultSidebarEnd.lowerBound])
+
+        XCTAssertFalse(contentSidebarSource.contains("id: \"trash\""))
+        XCTAssertFalse(contentSidebarSource.contains("systemImage: \"trash\""))
+        XCTAssertFalse(defaultSidebarSource.contains("id: \"trash\""))
+        XCTAssertFalse(defaultSidebarSource.contains("systemImage: \"trash\""))
+    }
+
     func testWelcomeButtonsUseNativeGlassEffects() throws {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 
@@ -136,5 +152,12 @@ final class WelcomeViewSourceTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("Momento/ContentView.swift")
+    }
+
+    private func sidebarViewURL() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Momento/Features/Sidebar/MomentoSidebarView.swift")
     }
 }

@@ -229,14 +229,6 @@ struct ContentView: View {
                         tint: Color(hex: tag.colorHex)
                     )
                 }
-            ),
-            MomentoSidebarSection(
-                id: "trash",
-                title: localization.string("Trash"),
-                items: [
-                    MomentoSidebarItem(id: "trash", title: localization.string("Trash"), systemImage: "trash", count: 0)
-                ],
-                isCollapsible: false
             )
         ]
     }

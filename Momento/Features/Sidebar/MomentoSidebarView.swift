@@ -454,14 +454,6 @@ extension Array where Element == MomentoSidebarSection {
                     MomentoSidebarItem(id: "tag-ui", title: "UI", systemImage: "tag", count: 0, tint: .blue),
                     MomentoSidebarItem(id: "tag-brand", title: "Brand", systemImage: "tag", count: 0, tint: .purple)
                 ]
-            ),
-            MomentoSidebarSection(
-                id: "trash",
-                title: localization.string("Trash"),
-                items: [
-                    MomentoSidebarItem(id: "trash", title: localization.string("Trash"), systemImage: "trash", count: 0)
-                ],
-                isCollapsible: false
             )
         ]
     }
