@@ -11,11 +11,16 @@ import UniformTypeIdentifiers
 private enum AssetCollectionMetrics {
     static let masonryItemWidth: CGFloat = 164
     static let masonryImageInset: CGFloat = 3
-    static let hoverScale: CGFloat = 1.025
+    static let hoverScale: CGFloat = 1.08
+    static let hoverShadowOpacity: Float = 0.34
+    static let hoverShadowRadius: CGFloat = 20
+    static let hoverShadowOffset = CGSize(width: 0, height: 10)
     static let selectionCornerRadius: CGFloat = 12
     static let imageCornerRadius: CGFloat = 10
     static let dimensionBadgeHeight: CGFloat = 16
     static let dimensionBadgeHorizontalPadding: CGFloat = 3
+    static let sectionHorizontalInset: CGFloat = 8
+    static let sectionVerticalInset: CGFloat = 14
 }
 
 struct AssetCollectionGridView: NSViewRepresentable {
@@ -120,7 +125,12 @@ struct AssetCollectionGridView: NSViewRepresentable {
         }
 
         let layout = NSCollectionViewFlowLayout()
-        layout.sectionInset = NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
+        layout.sectionInset = NSEdgeInsets(
+            top: AssetCollectionMetrics.sectionVerticalInset,
+            left: AssetCollectionMetrics.sectionHorizontalInset,
+            bottom: AssetCollectionMetrics.sectionVerticalInset,
+            right: AssetCollectionMetrics.sectionHorizontalInset
+        )
 
         switch viewMode {
         case .grid:
@@ -343,7 +353,12 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
     private let itemWidth = AssetCollectionMetrics.masonryItemWidth
     private let interitemSpacing: CGFloat = 4
     private let lineSpacing: CGFloat = 4
-    private let sectionInset = NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
+    private let sectionInset = NSEdgeInsets(
+        top: AssetCollectionMetrics.sectionVerticalInset,
+        left: AssetCollectionMetrics.sectionHorizontalInset,
+        bottom: AssetCollectionMetrics.sectionVerticalInset,
+        right: AssetCollectionMetrics.sectionHorizontalInset
+    )
 
     init(assets: [AssetItem]) {
         self.assets = assets
@@ -654,25 +669,88 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
             return
         }
 
-        let scale = mode == .masonry && (isHovering || isSelected) ? AssetCollectionMetrics.hoverScale : 1
+        let isElevated = mode == .masonry && isHovering
+        let scale = isElevated ? AssetCollectionMetrics.hoverScale : 1
         let targetTransform = CATransform3DMakeScale(scale, scale, 1)
         let currentTransform = layer.presentation()?.transform ?? layer.transform
-        layer.zPosition = scale > 1 ? 8 : 0
+        let targetShadowOpacity = isElevated ? AssetCollectionMetrics.hoverShadowOpacity : 0
+        let targetShadowRadius = isElevated ? AssetCollectionMetrics.hoverShadowRadius : 0
+        let targetShadowOffset = isElevated ? AssetCollectionMetrics.hoverShadowOffset : .zero
+        let currentShadowOpacity = layer.presentation()?.shadowOpacity ?? layer.shadowOpacity
+        let currentShadowRadius = layer.presentation()?.shadowRadius ?? layer.shadowRadius
+        let currentShadowOffset = layer.presentation()?.shadowOffset ?? layer.shadowOffset
+        let shouldAnimate = animated && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
 
-        guard animated else {
+        containerView.updateShadowPath()
+        layer.shadowColor = NSColor.black.withAlphaComponent(0.52).cgColor
+        layer.zPosition = isElevated ? 12 : 0
+
+        guard shouldAnimate else {
             layer.removeAnimation(forKey: "hoverScale")
+            layer.removeAnimation(forKey: "hoverShadowOpacity")
+            layer.removeAnimation(forKey: "hoverShadowRadius")
+            layer.removeAnimation(forKey: "hoverShadowOffset")
             layer.transform = targetTransform
+            layer.shadowOpacity = targetShadowOpacity
+            layer.shadowRadius = targetShadowRadius
+            layer.shadowOffset = targetShadowOffset
             return
         }
 
         layer.transform = targetTransform
+        layer.shadowOpacity = targetShadowOpacity
+        layer.shadowRadius = targetShadowRadius
+        layer.shadowOffset = targetShadowOffset
 
-        let animation = CABasicAnimation(keyPath: "transform")
-        animation.fromValue = currentTransform
-        animation.toValue = targetTransform
+        let timingFunction = CAMediaTimingFunction(name: .easeOut)
+        addAnimation(
+            to: layer,
+            keyPath: "transform",
+            fromValue: currentTransform,
+            toValue: targetTransform,
+            timingFunction: timingFunction,
+            animationKey: "hoverScale"
+        )
+        addAnimation(
+            to: layer,
+            keyPath: "shadowOpacity",
+            fromValue: currentShadowOpacity,
+            toValue: targetShadowOpacity,
+            timingFunction: timingFunction,
+            animationKey: "hoverShadowOpacity"
+        )
+        addAnimation(
+            to: layer,
+            keyPath: "shadowRadius",
+            fromValue: currentShadowRadius,
+            toValue: targetShadowRadius,
+            timingFunction: timingFunction,
+            animationKey: "hoverShadowRadius"
+        )
+        addAnimation(
+            to: layer,
+            keyPath: "shadowOffset",
+            fromValue: NSValue(size: currentShadowOffset),
+            toValue: NSValue(size: targetShadowOffset),
+            timingFunction: timingFunction,
+            animationKey: "hoverShadowOffset"
+        )
+    }
+
+    private func addAnimation(
+        to layer: CALayer,
+        keyPath: String,
+        fromValue: Any?,
+        toValue: Any?,
+        timingFunction: CAMediaTimingFunction,
+        animationKey: String
+    ) {
+        let animation = CABasicAnimation(keyPath: keyPath)
+        animation.fromValue = fromValue
+        animation.toValue = toValue
         animation.duration = 0.16
-        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        layer.add(animation, forKey: "hoverScale")
+        animation.timingFunction = timingFunction
+        layer.add(animation, forKey: animationKey)
     }
 }
 
@@ -766,6 +844,20 @@ private final class HoverSelectionView: NSView {
         ])
     }
 
+    override func layout() {
+        super.layout()
+        updateShadowPath()
+    }
+
+    func updateShadowPath() {
+        layer?.shadowPath = CGPath(
+            roundedRect: bounds,
+            cornerWidth: AssetCollectionMetrics.selectionCornerRadius,
+            cornerHeight: AssetCollectionMetrics.selectionCornerRadius,
+            transform: nil
+        )
+    }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
 
@@ -798,10 +890,10 @@ private final class HoverSelectionView: NSView {
         layer?.borderColor = NSColor.clear.cgColor
         layer?.borderWidth = 0
 
-        if isSelected {
-            layer?.backgroundColor = NSColor.white.withAlphaComponent(0.14).cgColor
-        } else if isHovered {
-            layer?.backgroundColor = NSColor.white.withAlphaComponent(0.08).cgColor
+        if isHovered {
+            layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.18).cgColor
+        } else if isSelected {
+            layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.12).cgColor
         } else {
             layer?.backgroundColor = NSColor.clear.cgColor
         }
