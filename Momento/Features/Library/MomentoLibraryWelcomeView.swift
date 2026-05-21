@@ -46,7 +46,10 @@ struct MomentoLibraryWelcomeView: View {
                             .frame(width: welcomeButtonWidth, height: welcomeButtonHeight)
                     }
                     .buttonStyle(WelcomePrimaryButtonStyle(isHovered: isCreateHovered))
-                    .onHover { isCreateHovered = $0 }
+                    .onHover { hovering in
+                        isCreateHovered = hovering
+                        updatePointingHandCursor(isHovered: hovering)
+                    }
 
                     Button {
                         onOpenLibrary()
@@ -57,7 +60,7 @@ struct MomentoLibraryWelcomeView: View {
                             .frame(width: welcomeButtonWidth, height: welcomeButtonHeight)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(isOpenHovered ? Color.primary : MomentoTheme.secondaryText)
+                    .foregroundStyle(Color.white)
                     .contentShape(Capsule(style: .continuous))
                     .glassEffect(.regular.interactive(), in: Capsule(style: .continuous))
                     .scaleEffect(isOpenHovered ? 1.025 : 1)
@@ -67,12 +70,23 @@ struct MomentoLibraryWelcomeView: View {
                         x: 0,
                         y: isOpenHovered ? 8 : 4
                     )
-                    .onHover { isOpenHovered = $0 }
+                    .onHover { hovering in
+                        isOpenHovered = hovering
+                        updatePointingHandCursor(isHovered: hovering)
+                    }
                     .animation(.smooth(duration: 0.16), value: isOpenHovered)
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+private func updatePointingHandCursor(isHovered: Bool) {
+    if isHovered {
+        NSCursor.pointingHand.set()
+    } else {
+        NSCursor.arrow.set()
     }
 }
 

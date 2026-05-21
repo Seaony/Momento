@@ -59,6 +59,25 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(fixedSizeFrameCount, 2)
     }
 
+    func testWelcomeButtonsUsePointingHandCursorOnHover() throws {
+        let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
+
+        XCTAssertTrue(source.contains("updatePointingHandCursor(isHovered: hovering)"))
+        XCTAssertTrue(source.contains("NSCursor.pointingHand.set()"))
+        let pointingHandUpdateCount = source
+            .components(separatedBy: "updatePointingHandCursor(isHovered: hovering)")
+            .count - 1
+        XCTAssertGreaterThanOrEqual(pointingHandUpdateCount, 2)
+    }
+
+    func testOpenLibraryButtonKeepsWhiteGlassAppearance() throws {
+        let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
+
+        XCTAssertTrue(source.contains(".foregroundStyle(Color.white)"))
+        XCTAssertTrue(source.contains(".glassEffect(.regular.interactive(), in: Capsule(style: .continuous))"))
+        XCTAssertFalse(source.contains("isOpenHovered ? Color.primary : MomentoTheme.secondaryText"))
+    }
+
     private func welcomeViewURL() -> URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
