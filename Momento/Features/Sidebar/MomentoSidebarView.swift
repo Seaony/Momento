@@ -345,28 +345,29 @@ struct MomentoSidebarView: View {
                 isLibrarySwitcherPresented.toggle()
             }
         } label: {
-            HStack(spacing: 7) {
+            HStack(spacing: 6) {
                 Image(systemName: "archivebox.fill")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white)
-                    .frame(width: 28, height: 28)
-                    .background(.blue.gradient, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .frame(width: 24, height: 24)
+                    .background(.blue.gradient, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
 
                 Text(libraryName ?? localization.string("No library selected"))
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(MomentoTheme.primaryText)
                     .lineLimit(1)
                     .truncationMode(.tail)
 
                 Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(isLibraryMenuHovered || isLibrarySwitcherPresented ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
             }
-            .padding(.leading, 6)
-            .padding(.trailing, 8)
-            .padding(.vertical, 5)
+            .padding(.leading, 5)
+            .padding(.trailing, 7)
+            .padding(.vertical, 4)
             .background { libraryMenuBackground }
             .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.plain)
         .pointerStyle(.link)
