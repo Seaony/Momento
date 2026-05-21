@@ -64,6 +64,18 @@ nonisolated struct LibraryStorage: Sendable {
         }
     }
 
+    nonisolated func clearTransientCaches(for library: AssetLibrary) throws {
+        let root = rootURL(for: library)
+        for folder in ["thumbnails", "previews"] {
+            let url = root.appendingPathComponent(folder, isDirectory: true)
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
+        }
+
+        try prepareLibraryDirectories(for: library)
+    }
+
     nonisolated func createLibraryPackage(at packageURL: URL, name: String) throws -> AssetLibrary {
         let normalizedURL = packageURL.pathExtension == Self.packageExtension
             ? packageURL

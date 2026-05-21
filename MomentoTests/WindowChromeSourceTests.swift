@@ -84,23 +84,26 @@ final class WindowChromeSourceTests: XCTestCase {
         XCTAssertFalse(appSource.contains(".windowStyle(.hiddenTitleBar)"))
     }
 
-    func testSidebarLibraryMenuUsesNativeCreateOnlyMenu() throws {
+    func testSidebarLibraryMenuUsesCustomGlassLibrarySwitcher() throws {
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
         let shellSource = try String(contentsOf: shellViewURL(), encoding: .utf8)
         let sidebarSource = try String(contentsOf: sidebarViewURL(), encoding: .utf8)
-        let menuStart = try XCTUnwrap(sidebarSource.range(of: "    private var libraryMenu: some View {"))
-        let menuEnd = try XCTUnwrap(sidebarSource[menuStart.lowerBound...].range(of: "private struct MomentoSidebarRow"))
-        let menuSource = String(sidebarSource[menuStart.lowerBound..<menuEnd.lowerBound])
 
-        XCTAssertTrue(menuSource.contains("Menu {"))
-        XCTAssertTrue(menuSource.contains("Button(localization.string(\"Create Library\"), action: onCreateLibrary)"))
-        XCTAssertFalse(menuSource.contains("Open Library"))
-        XCTAssertFalse(menuSource.contains("Close Library"))
-        XCTAssertFalse(menuSource.contains("recentLibraries"))
-        XCTAssertFalse(menuSource.contains("onSwitchLibrary"))
-        XCTAssertFalse(menuSource.contains("onCloseLibrary"))
+        XCTAssertTrue(sidebarSource.contains("@State private var isLibrarySwitcherPresented = false"))
+        XCTAssertTrue(sidebarSource.contains("MomentoLibrarySwitcherMenu("))
+        XCTAssertTrue(sidebarSource.contains("MomentoGlassBackground(glass: .regular, cornerRadius: 14)"))
+        XCTAssertTrue(sidebarSource.contains("ForEach(recentLibraries) { library in"))
+        XCTAssertTrue(sidebarSource.contains("systemName: \"circle.grid.2x3.fill\""))
+        XCTAssertTrue(sidebarSource.contains("systemName: \"checkmark\""))
+        XCTAssertTrue(sidebarSource.contains("systemName: \"ellipsis\""))
+        XCTAssertTrue(sidebarSource.contains("localization.string(\"Create Library\")"))
+        XCTAssertTrue(sidebarSource.contains("localization.string(\"Open Other Library\")"))
+        XCTAssertTrue(sidebarSource.contains("localization.string(\"Clear Cache and Reload\")"))
+        XCTAssertFalse(sidebarSource.contains("private var libraryMenu: some View {\n        Menu {"))
         XCTAssertTrue(contentSource.contains("onCreateLibrary: createLibrary"))
+        XCTAssertTrue(contentSource.contains("onReloadLibrary: reloadLibrary"))
         XCTAssertTrue(shellSource.contains("onCreateLibrary"))
+        XCTAssertTrue(shellSource.contains("onReloadLibrary"))
         XCTAssertTrue(contentSource.contains("store.closeCurrentLibrary()"))
     }
 

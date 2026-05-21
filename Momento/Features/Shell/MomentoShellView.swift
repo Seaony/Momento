@@ -10,10 +10,12 @@ struct MomentoShellView<Content: View>: View {
 
     var sidebarSections: [MomentoSidebarSection]
     var libraryName: String?
+    var currentLibraryID: RecentLibraryReference.ID?
     var recentLibraries: [RecentLibraryReference]
     var onCreateLibrary: () -> Void
     var onOpenLibrary: () -> Void
     var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
+    var onReloadLibrary: () -> Void
     var onCloseLibrary: () -> Void
     var title: String
     var subtitle: String?
@@ -35,10 +37,12 @@ struct MomentoShellView<Content: View>: View {
         isInspectorPresented: Binding<Bool> = .constant(true),
         sidebarSections: [MomentoSidebarSection] = .momentoDefaultSections,
         libraryName: String? = nil,
+        currentLibraryID: RecentLibraryReference.ID? = nil,
         recentLibraries: [RecentLibraryReference] = [],
         onCreateLibrary: @escaping () -> Void = {},
         onOpenLibrary: @escaping () -> Void = {},
         onSwitchLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
+        onReloadLibrary: @escaping () -> Void = {},
         onCloseLibrary: @escaping () -> Void = {},
         title: String = "All Assets",
         subtitle: String? = "0 items",
@@ -55,10 +59,12 @@ struct MomentoShellView<Content: View>: View {
         self._isInspectorPresented = isInspectorPresented
         self.sidebarSections = sidebarSections
         self.libraryName = libraryName
+        self.currentLibraryID = currentLibraryID
         self.recentLibraries = recentLibraries
         self.onCreateLibrary = onCreateLibrary
         self.onOpenLibrary = onOpenLibrary
         self.onSwitchLibrary = onSwitchLibrary
+        self.onReloadLibrary = onReloadLibrary
         self.onCloseLibrary = onCloseLibrary
         self.title = title
         self.subtitle = subtitle
@@ -120,10 +126,12 @@ struct MomentoShellView<Content: View>: View {
             sections: sidebarSections,
             selection: $sidebarSelection,
             libraryName: libraryName,
+            currentLibraryID: currentLibraryID,
             recentLibraries: recentLibraries,
             onCreateLibrary: onCreateLibrary,
             onOpenLibrary: onOpenLibrary,
             onSwitchLibrary: onSwitchLibrary,
+            onReloadLibrary: onReloadLibrary,
             onCloseLibrary: onCloseLibrary
         )
         .frame(width: effectiveSidebarWidth(availableWidth: availableWidth))
@@ -253,7 +261,7 @@ private struct MomentoShellPreview: View {
         ) {
             ZStack {
                 MomentoGlassBackground(cornerRadius: 0)
-                Text("Grid bridge placeholder")
+                Text(verbatim: "Grid bridge placeholder")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(MomentoTheme.secondaryText)
             }

@@ -48,39 +48,60 @@ struct MomentoSidebarView: View {
     var sections: [MomentoSidebarSection]
     @Binding var selection: MomentoSidebarItem.ID?
     var libraryName: String?
+    var currentLibraryID: RecentLibraryReference.ID?
     var recentLibraries: [RecentLibraryReference]
     var onCreateLibrary: () -> Void
     var onOpenLibrary: () -> Void
     var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
+    var onReloadLibrary: () -> Void
     var onCloseLibrary: () -> Void
     var onItemContextMenu: ((MomentoSidebarItem) -> AnyView)?
 
     @State private var collapsedSectionIDs: Set<MomentoSidebarSection.ID> = []
     @State private var hoveredFooterActionID: String?
+    @State private var isLibrarySwitcherPresented = false
 
     init(
         sections: [MomentoSidebarSection] = .momentoDefaultSections,
         selection: Binding<MomentoSidebarItem.ID?>,
         libraryName: String? = nil,
+        currentLibraryID: RecentLibraryReference.ID? = nil,
         recentLibraries: [RecentLibraryReference] = [],
         onCreateLibrary: @escaping () -> Void = {},
         onOpenLibrary: @escaping () -> Void = {},
         onSwitchLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
+        onReloadLibrary: @escaping () -> Void = {},
         onCloseLibrary: @escaping () -> Void = {},
         onItemContextMenu: ((MomentoSidebarItem) -> AnyView)? = nil
     ) {
         self.sections = sections
         self._selection = selection
         self.libraryName = libraryName
+        self.currentLibraryID = currentLibraryID
         self.recentLibraries = recentLibraries
         self.onCreateLibrary = onCreateLibrary
         self.onOpenLibrary = onOpenLibrary
         self.onSwitchLibrary = onSwitchLibrary
+        self.onReloadLibrary = onReloadLibrary
         self.onCloseLibrary = onCloseLibrary
         self.onItemContextMenu = onItemContextMenu
     }
 
     var body: some View {
+        ZStack(alignment: .topLeading) {
+            sidebarPanel
+            librarySwitcherOverlay
+        }
+        .frame(
+            minWidth: MomentoTheme.sidebarMinWidth,
+            idealWidth: MomentoTheme.sidebarWidth,
+            maxWidth: MomentoTheme.sidebarMaxWidth
+        )
+        .frame(maxHeight: .infinity)
+        .zIndex(isLibrarySwitcherPresented ? 20 : 0)
+    }
+
+    private var sidebarPanel: some View {
         VStack(spacing: 0) {
             libraryMenu
                 .padding(.horizontal, 14)
@@ -101,11 +122,6 @@ struct MomentoSidebarView: View {
             sidebarBottomSeparator
             bottomActionBar
         }
-        .frame(
-            minWidth: MomentoTheme.sidebarMinWidth,
-            idealWidth: MomentoTheme.sidebarWidth,
-            maxWidth: MomentoTheme.sidebarMaxWidth
-        )
         .frame(maxHeight: .infinity)
         .background {
             MomentoGlassBackground(cornerRadius: MomentoTheme.floatingSidebarRadius)
@@ -113,6 +129,28 @@ struct MomentoSidebarView: View {
         .clipShape(sidebarShape)
         .overlay {
             sidebarShape.strokeBorder(MomentoTheme.subtleStroke.opacity(0.42), lineWidth: 1)
+        }
+    }
+
+    @ViewBuilder
+    private var librarySwitcherOverlay: some View {
+        if isLibrarySwitcherPresented {
+            MomentoLibrarySwitcherMenu(
+                recentLibraries: recentLibraries,
+                currentLibraryID: currentLibraryID,
+                onCreateLibrary: performLibrarySwitcherAction(onCreateLibrary),
+                onOpenLibrary: performLibrarySwitcherAction(onOpenLibrary),
+                onSwitchLibrary: { id in
+                    dismissLibrarySwitcher()
+                    onSwitchLibrary(id)
+                },
+                onReloadLibrary: performLibrarySwitcherAction(onReloadLibrary)
+            )
+            .frame(width: 380)
+            .padding(.top, MomentoTheme.floatingSidebarTitlebarContentInset + 42)
+            .padding(.leading, 14)
+            .transition(.opacity.combined(with: .move(edge: .top)))
+            .zIndex(30)
         }
     }
 
@@ -279,8 +317,10 @@ struct MomentoSidebarView: View {
     }
 
     private var libraryMenu: some View {
-        Menu {
-            Button(localization.string("Create Library"), action: onCreateLibrary)
+        Button {
+            withAnimation(.smooth(duration: 0.16)) {
+                isLibrarySwitcherPresented.toggle()
+            }
         } label: {
             HStack(spacing: 10) {
                 Image(systemName: "square.grid.2x2")
@@ -290,7 +330,7 @@ struct MomentoSidebarView: View {
                     .background(.blue.gradient, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Momento")
+                    Text(verbatim: "Momento")
                         .font(.system(size: 14, weight: .semibold))
                     Text(libraryName ?? localization.string("No library selected"))
                         .font(.system(size: 11))
@@ -307,6 +347,237 @@ struct MomentoSidebarView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .accessibilityLabel(localization.string("Library"))
+        .help(localization.string("Library"))
+    }
+
+    private func performLibrarySwitcherAction(_ action: @escaping () -> Void) -> () -> Void {
+        {
+            dismissLibrarySwitcher()
+            action()
+        }
+    }
+
+    private func dismissLibrarySwitcher() {
+        withAnimation(.smooth(duration: 0.16)) {
+            isLibrarySwitcherPresented = false
+        }
+    }
+}
+
+private struct MomentoLibrarySwitcherMenu: View {
+    @Environment(\.appLocalization) private var localization
+
+    var recentLibraries: [RecentLibraryReference]
+    var currentLibraryID: RecentLibraryReference.ID?
+    var onCreateLibrary: () -> Void
+    var onOpenLibrary: () -> Void
+    var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
+    var onReloadLibrary: () -> Void
+
+    @State private var hoveredLibraryID: RecentLibraryReference.ID?
+    @State private var hoveredActionID: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !recentLibraries.isEmpty {
+                VStack(spacing: 4) {
+                    ForEach(recentLibraries) { library in
+                        libraryRow(library)
+                    }
+                }
+
+                Divider()
+                    .overlay(MomentoTheme.subtleStroke.opacity(0.65))
+                    .padding(.vertical, 2)
+            }
+
+            VStack(spacing: 4) {
+                actionRow(
+                    id: "create-library",
+                    title: localization.string("Create Library"),
+                    systemImage: "archivebox",
+                    action: onCreateLibrary
+                )
+
+                actionRow(
+                    id: "open-library",
+                    title: localization.string("Open Other Library"),
+                    systemImage: "folder",
+                    action: onOpenLibrary
+                )
+
+                actionRow(
+                    id: "reload-library",
+                    title: localization.string("Clear Cache and Reload"),
+                    systemImage: "arrow.clockwise",
+                    action: onReloadLibrary
+                )
+            }
+        }
+        .padding(8)
+        .background {
+            MomentoGlassBackground(glass: .regular, cornerRadius: 14)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(MomentoTheme.subtleStroke.opacity(0.5), lineWidth: 0.6)
+        }
+        .shadow(color: .black.opacity(0.22), radius: 18, y: 10)
+    }
+
+    private func libraryRow(_ library: RecentLibraryReference) -> some View {
+        let isSelected = library.id == currentLibraryID
+        let isHovered = hoveredLibraryID == library.id
+
+        return HStack(spacing: 8) {
+            Button {
+                onSwitchLibrary(library.id)
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "circle.grid.2x3.fill")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(MomentoTheme.tertiaryText)
+                        .frame(width: 16)
+
+                    Image(systemName: "square.grid.2x2")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                        .background(.blue.gradient, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(library.name)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(MomentoTheme.primaryText)
+                            .lineLimit(1)
+
+                        Text(libraryPath(for: library))
+                            .font(.system(size: 11))
+                            .foregroundStyle(MomentoTheme.secondaryText)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    if isSelected {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(MomentoTheme.primaryText)
+                            .frame(width: 18)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .pointerStyle(.link)
+
+            Menu {
+                Button(localization.string("Rename Library")) {}
+                    .disabled(true)
+
+                Button(role: .destructive) {} label: {
+                    Text(localization.string("Delete Library"))
+                }
+                .disabled(true)
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(MomentoTheme.secondaryText)
+                    .frame(width: 26, height: 26)
+                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+            .menuIndicator(.hidden)
+            .buttonStyle(.plain)
+            .help(localization.string("More Actions"))
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 50)
+        .background {
+            menuRowBackground(isHovered: isHovered, isSelected: isSelected)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .onHover { hovering in
+            updateLibraryHover(library.id, hovering: hovering)
+        }
+    }
+
+    private func actionRow(
+        id: String,
+        title: String,
+        systemImage: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        let isHovered = hoveredActionID == id
+
+        return Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(MomentoTheme.secondaryText)
+                    .frame(width: 18)
+
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(MomentoTheme.primaryText)
+
+                Spacer()
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 36)
+            .background {
+                menuRowBackground(isHovered: isHovered, isSelected: false)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .onHover { hovering in
+            updateActionHover(id, hovering: hovering)
+        }
+    }
+
+    @ViewBuilder
+    private func menuRowBackground(isHovered: Bool, isSelected: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+
+        if isSelected {
+            Color.clear
+                .glassEffect(.regular.tint(Color.accentColor), in: shape)
+        } else if isHovered {
+            shape.fill(MomentoTheme.sidebarIconHoverBackground)
+        } else {
+            Color.clear
+        }
+    }
+
+    private func updateLibraryHover(_ id: RecentLibraryReference.ID, hovering: Bool) {
+        withAnimation(.smooth(duration: 0.14)) {
+            if hovering {
+                hoveredLibraryID = id
+            } else if hoveredLibraryID == id {
+                hoveredLibraryID = nil
+            }
+        }
+    }
+
+    private func updateActionHover(_ id: String, hovering: Bool) {
+        withAnimation(.smooth(duration: 0.14)) {
+            if hovering {
+                hoveredActionID = id
+            } else if hoveredActionID == id {
+                hoveredActionID = nil
+            }
+        }
+    }
+
+    private func libraryPath(for library: RecentLibraryReference) -> String {
+        guard let resolved = try? RecentLibraryStore().resolve(library) else {
+            return ""
+        }
+
+        return resolved.url.deletingLastPathComponent().path
     }
 }
 

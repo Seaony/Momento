@@ -262,6 +262,36 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         XCTAssertTrue(store.recentLibraries.isEmpty)
         XCTAssertEqual(store.libraryErrorMessage, LibraryStorageError.missingLibraryPackage.errorDescription)
     }
+
+    @MainActor
+    func testClearingCurrentLibraryCachesRemovesGeneratedCacheFilesAndReloadsLibrary() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        let thumbnailURL = environment.packageURL
+            .appendingPathComponent("thumbnails/small", isDirectory: true)
+            .appendingPathComponent("cached-thumb.dat")
+        let previewURL = environment.packageURL
+            .appendingPathComponent("previews", isDirectory: true)
+            .appendingPathComponent("cached-preview.dat")
+        try Data("thumbnail".utf8).write(to: thumbnailURL)
+        try Data("preview".utf8).write(to: previewURL)
+
+        try store.clearCachesAndReloadCurrentLibrary()
+
+        XCTAssertEqual(store.currentLibrary?.name, "Test")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: thumbnailURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: previewURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: environment.packageURL.appendingPathComponent("thumbnails/small").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: environment.packageURL.appendingPathComponent("previews").path))
+    }
 }
 
 private struct TestEnvironment {

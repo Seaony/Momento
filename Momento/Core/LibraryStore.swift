@@ -136,6 +136,16 @@ final class LibraryStore {
         try openRecentLibrary(reference)
     }
 
+    func clearCachesAndReloadCurrentLibrary() throws {
+        guard let currentLibrary else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        let packageURL = storage.rootURL(for: currentLibrary)
+        try storage.clearTransientCaches(for: currentLibrary)
+        try openLibrary(at: packageURL)
+    }
+
     func validateCurrentLibraryAvailability() throws {
         guard let currentLibrary else {
             return

@@ -128,10 +128,12 @@ struct ContentView: View {
             isInspectorPresented: $isInspectorPresented,
             sidebarSections: sidebarSections,
             libraryName: store.currentLibrary?.name,
+            currentLibraryID: store.currentLibrary?.id,
             recentLibraries: store.recentLibraries,
             onCreateLibrary: createLibrary,
             onOpenLibrary: openLibrary,
             onSwitchLibrary: switchLibrary,
+            onReloadLibrary: reloadLibrary,
             onCloseLibrary: closeLibrary,
             title: title,
             subtitle: localization.itemCount(store.visibleAssets.count),
@@ -398,6 +400,14 @@ struct ContentView: View {
     private func switchLibrary(_ id: RecentLibraryReference.ID) {
         do {
             try store.openRecentLibrary(id: id)
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func reloadLibrary() {
+        do {
+            try store.clearCachesAndReloadCurrentLibrary()
         } catch {
             showImportError(error)
         }
