@@ -156,9 +156,18 @@ struct MomentoShellView<Content: View>: View {
                 DragGesture(minimumDistance: 0, coordinateSpace: .global)
                     .onChanged { value in
                         let startWidth = sidebarResizeStartWidth ?? effectiveSidebarWidth(availableWidth: availableWidth)
+                        let widthRange = sidebarWidthRange(availableWidth: availableWidth)
+                        let proposedWidth = startWidth + value.translation.width
+
                         sidebarResizeStartWidth = startWidth
-                        sidebarWidth = (startWidth + value.translation.width)
-                            .clamped(to: sidebarWidthRange(availableWidth: availableWidth))
+
+                        if proposedWidth < widthRange.lowerBound - MomentoTheme.sidebarCollapseDragOvershoot {
+                            sidebarWidth = widthRange.lowerBound
+                            collapseSidebarFromResize()
+                            return
+                        }
+
+                        sidebarWidth = proposedWidth.clamped(to: widthRange)
                     }
                     .onEnded { _ in
                         sidebarResizeStartWidth = nil
@@ -188,6 +197,18 @@ struct MomentoShellView<Content: View>: View {
         }
 
         return MomentoTheme.floatingSidebarInset + effectiveSidebarWidth(availableWidth: availableWidth) - MomentoTheme.sidebarTitlebarButtonTrailingInset - MomentoTheme.sidebarTitlebarButtonSize
+    }
+
+    private func collapseSidebarFromResize() {
+        guard !isSidebarCollapsed else {
+            return
+        }
+
+        sidebarResizeStartWidth = nil
+
+        withAnimation(.smooth(duration: 0.18)) {
+            isSidebarCollapsed = true
+        }
     }
 }
 
