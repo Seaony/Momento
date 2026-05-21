@@ -73,8 +73,8 @@ final class MomentoAssetPreviewPanelController: NSObject, NSWindowDelegate {
     private func previewFrame() -> NSRect {
         let screen = NSApp.keyWindow?.screen ?? NSScreen.main
         let visibleFrame = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 800)
-        let horizontalInset = min(72, visibleFrame.width * 0.04)
-        let verticalInset = min(54, visibleFrame.height * 0.04)
+        let horizontalInset = min(36, visibleFrame.width * 0.02)
+        let verticalInset = min(32, visibleFrame.height * 0.025)
 
         return visibleFrame.insetBy(dx: horizontalInset, dy: verticalInset)
     }

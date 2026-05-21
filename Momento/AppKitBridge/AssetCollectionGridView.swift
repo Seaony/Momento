@@ -7,6 +7,14 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+private enum AssetCollectionMetrics {
+    static let masonryItemWidth: CGFloat = 164
+    static let masonryImageInset: CGFloat = 6
+    static let selectionCornerRadius: CGFloat = 12
+    static let imageCornerRadius: CGFloat = 10
+    static let dimensionBadgeHeight: CGFloat = 18
+}
+
 struct AssetCollectionGridView: NSViewRepresentable {
     var assets: [AssetItem]
     var selectedAssetIDs: Set<AssetItem.ID>
@@ -40,7 +48,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSScrollView {
         let collectionView = AssetPreviewCollectionView()
-        collectionView.collectionViewLayout = makeLayout(for: viewMode)
+        collectionView.collectionViewLayout = makeLayout(for: viewMode, assets: assets)
         collectionView.backgroundColors = [.clear]
         collectionView.isSelectable = true
         collectionView.allowsMultipleSelection = true
@@ -84,15 +92,30 @@ struct AssetCollectionGridView: NSViewRepresentable {
         }
 
         if context.coordinator.currentViewMode != viewMode {
-            collectionView.collectionViewLayout = makeLayout(for: viewMode)
+            collectionView.collectionViewLayout = makeLayout(for: viewMode, assets: assets)
             context.coordinator.currentViewMode = viewMode
+            context.coordinator.currentAssets = assets
+            collectionView.reloadData()
+            context.coordinator.syncSelection()
+            return
         }
 
-        collectionView.reloadData()
+        if context.coordinator.currentAssets != assets {
+            context.coordinator.currentAssets = assets
+            if let masonryLayout = collectionView.collectionViewLayout as? AssetMasonryCollectionViewLayout {
+                masonryLayout.assets = assets
+            }
+            collectionView.reloadData()
+        }
+
         context.coordinator.syncSelection()
     }
 
-    private func makeLayout(for viewMode: AssetViewMode) -> NSCollectionViewFlowLayout {
+    private func makeLayout(for viewMode: AssetViewMode, assets: [AssetItem]) -> NSCollectionViewLayout {
+        if viewMode == .masonry {
+            return AssetMasonryCollectionViewLayout(assets: assets)
+        }
+
         let layout = NSCollectionViewFlowLayout()
         layout.sectionInset = NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
 
@@ -102,9 +125,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
             layout.minimumInteritemSpacing = 14
             layout.minimumLineSpacing = 18
         case .masonry:
-            layout.itemSize = NSSize(width: 164, height: 220)
-            layout.minimumInteritemSpacing = 14
-            layout.minimumLineSpacing = 16
+            break
         case .list:
             layout.itemSize = NSSize(width: 320, height: 54)
             layout.minimumInteritemSpacing = 0
@@ -120,11 +141,13 @@ extension AssetCollectionGridView {
         var parent: AssetCollectionGridView
         weak var collectionView: NSCollectionView?
         var currentViewMode: AssetViewMode
+        var currentAssets: [AssetItem]
         private var isSyncingSelection = false
 
         init(_ parent: AssetCollectionGridView) {
             self.parent = parent
             self.currentViewMode = parent.viewMode
+            self.currentAssets = parent.assets
         }
 
         func collectionView(
@@ -167,14 +190,7 @@ extension AssetCollectionGridView {
             case .grid:
                 return NSSize(width: 148, height: 178)
             case .masonry:
-                let asset = parent.assets[indexPath.item]
-                let width: CGFloat = 164
-                guard let dimensions = asset.dimensions, dimensions.width > 0 else {
-                    return NSSize(width: width, height: 214)
-                }
-
-                let ratio = CGFloat(dimensions.height) / CGFloat(dimensions.width)
-                return NSSize(width: width, height: (width * ratio).clamped(to: 132...278))
+                return .zero
             case .list:
                 let width = max(collectionView.enclosingScrollView?.contentSize.width ?? 320, 240)
                 return NSSize(width: width, height: 54)
@@ -245,14 +261,17 @@ extension AssetCollectionGridView {
             }
 
             collectionView.window?.makeFirstResponder(collectionView)
+            let assetID = parent.assets[indexPath.item].id
 
             let targetSelection: Set<IndexPath> = [indexPath]
             guard collectionView.selectionIndexPaths != targetSelection else {
                 return
             }
 
+            isSyncingSelection = true
             collectionView.selectionIndexPaths = targetSelection
-            publishSelection(from: collectionView)
+            isSyncingSelection = false
+            parent.onSelectionChange([assetID])
         }
 
         private func publishSelection(from collectionView: NSCollectionView) {
@@ -272,7 +291,6 @@ extension AssetCollectionGridView {
 private final class AssetPreviewCollectionView: NSCollectionView {
     var onSpacePreviewStart: (() -> Void)?
     var onSpacePreviewEnd: (() -> Void)?
-    private var isSpacePreviewActive = false
 
     override var acceptsFirstResponder: Bool {
         true
@@ -280,8 +298,7 @@ private final class AssetPreviewCollectionView: NSCollectionView {
 
     override func keyDown(with event: NSEvent) {
         if event.charactersIgnoringModifiers == " " {
-            if !isSpacePreviewActive {
-                isSpacePreviewActive = true
+            if !event.isARepeat {
                 onSpacePreviewStart?()
             }
             return
@@ -292,12 +309,122 @@ private final class AssetPreviewCollectionView: NSCollectionView {
 
     override func keyUp(with event: NSEvent) {
         if event.charactersIgnoringModifiers == " " {
-            isSpacePreviewActive = false
             onSpacePreviewEnd?()
             return
         }
 
         super.keyUp(with: event)
+    }
+}
+
+private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
+    var assets: [AssetItem] {
+        didSet {
+            invalidateLayout()
+        }
+    }
+
+    private var cachedAttributes: [IndexPath: NSCollectionViewLayoutAttributes] = [:]
+    private var contentSize: NSSize = .zero
+
+    private let itemWidth = AssetCollectionMetrics.masonryItemWidth
+    private let interitemSpacing: CGFloat = 14
+    private let lineSpacing: CGFloat = 16
+    private let sectionInset = NSEdgeInsets(top: 14, left: 14, bottom: 14, right: 14)
+
+    init(assets: [AssetItem]) {
+        self.assets = assets
+        super.init()
+    }
+
+    required init?(coder: NSCoder) {
+        self.assets = []
+        super.init(coder: coder)
+    }
+
+    override func prepare() {
+        super.prepare()
+
+        guard let collectionView else {
+            cachedAttributes = [:]
+            contentSize = .zero
+            return
+        }
+
+        let itemCount = collectionView.numberOfItems(inSection: 0)
+        let contentWidth = max(collectionView.bounds.width, itemWidth + sectionInset.left + sectionInset.right)
+        let availableWidth = max(contentWidth - sectionInset.left - sectionInset.right, itemWidth)
+        let columnCount = max(Int((availableWidth + interitemSpacing) / (itemWidth + interitemSpacing)), 1)
+        let columnsWidth = CGFloat(columnCount) * itemWidth + CGFloat(columnCount - 1) * interitemSpacing
+        let startX = sectionInset.left + max((availableWidth - columnsWidth) / 2, 0)
+        var columnHeights = Array(repeating: sectionInset.top, count: columnCount)
+        var attributesByIndexPath: [IndexPath: NSCollectionViewLayoutAttributes] = [:]
+
+        for item in 0..<itemCount {
+            let indexPath = IndexPath(item: item, section: 0)
+            let columnIndex = shortestColumnIndex(in: columnHeights)
+            let itemHeight = masonryItemHeight(forItemAt: item, width: itemWidth)
+            let frame = NSRect(
+                x: startX + CGFloat(columnIndex) * (itemWidth + interitemSpacing),
+                y: columnHeights[columnIndex],
+                width: itemWidth,
+                height: itemHeight
+            )
+
+            let attributes = NSCollectionViewLayoutAttributes(forItemWith: indexPath)
+            attributes.frame = frame
+            attributesByIndexPath[indexPath] = attributes
+            columnHeights[columnIndex] = frame.maxY + lineSpacing
+        }
+
+        cachedAttributes = attributesByIndexPath
+
+        let tallestColumn = columnHeights.max() ?? sectionInset.top
+        let contentHeight = max(
+            tallestColumn - lineSpacing + sectionInset.bottom,
+            collectionView.enclosingScrollView?.contentSize.height ?? collectionView.bounds.height
+        )
+        contentSize = NSSize(width: contentWidth, height: contentHeight)
+    }
+
+    override var collectionViewContentSize: NSSize {
+        contentSize
+    }
+
+    override func layoutAttributesForElements(in rect: NSRect) -> [NSCollectionViewLayoutAttributes] {
+        cachedAttributes.values.filter { $0.frame.intersects(rect) }
+    }
+
+    override func layoutAttributesForItem(at indexPath: IndexPath) -> NSCollectionViewLayoutAttributes? {
+        cachedAttributes[indexPath]
+    }
+
+    override func shouldInvalidateLayout(forBoundsChange newBounds: NSRect) -> Bool {
+        guard let collectionView else {
+            return false
+        }
+
+        return newBounds.size != collectionView.bounds.size
+    }
+
+    private func masonryItemHeight(forItemAt item: Int, width: CGFloat) -> CGFloat {
+        guard assets.indices.contains(item),
+              let dimensions = assets[item].dimensions,
+              dimensions.width > 0 else {
+            return 214
+        }
+
+        let imageHorizontalInset = AssetCollectionMetrics.masonryImageInset * 2
+        let imageVerticalInset = AssetCollectionMetrics.masonryImageInset * 2
+        let imageWidth = max(width - imageHorizontalInset, 1)
+        let ratio = CGFloat(dimensions.height) / CGFloat(dimensions.width)
+        return (imageWidth * ratio + imageVerticalInset).clamped(to: 132...278)
+    }
+
+    private func shortestColumnIndex(in columnHeights: [CGFloat]) -> Int {
+        columnHeights.enumerated().min { left, right in
+            left.element < right.element
+        }?.offset ?? 0
     }
 }
 
@@ -310,7 +437,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     private let previewImageView = NSImageView()
     private let fileNameLabel = NSTextField(labelWithString: "")
     private let subtitleLabel = NSTextField(labelWithString: "")
-    private let dimensionBadgeLabel = NSTextField(labelWithString: "")
+    private let dimensionBadgeView = DimensionBadgeView()
     private var gridConstraints: [NSLayoutConstraint] = []
     private var masonryConstraints: [NSLayoutConstraint] = []
     private var listConstraints: [NSLayoutConstraint] = []
@@ -326,7 +453,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
     override func loadView() {
         containerView.wantsLayer = true
-        containerView.layer?.cornerRadius = 8
+        containerView.layer?.cornerRadius = AssetCollectionMetrics.selectionCornerRadius
         containerView.layer?.cornerCurve = .continuous
         containerView.translatesAutoresizingMaskIntoConstraints = false
         containerView.hoverChanged = { [weak self] isHovered in
@@ -339,7 +466,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         previewImageView.imageScaling = .scaleProportionallyUpOrDown
         previewImageView.translatesAutoresizingMaskIntoConstraints = false
         previewImageView.wantsLayer = true
-        previewImageView.layer?.cornerRadius = 6
+        previewImageView.layer?.cornerRadius = AssetCollectionMetrics.imageCornerRadius
         previewImageView.layer?.cornerCurve = .continuous
         previewImageView.layer?.masksToBounds = true
 
@@ -359,22 +486,13 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
         subtitleLabel.setContentCompressionResistancePriority(.required, for: .vertical)
 
-        dimensionBadgeLabel.lineBreakMode = .byTruncatingTail
-        dimensionBadgeLabel.maximumNumberOfLines = 1
-        dimensionBadgeLabel.alignment = .center
-        dimensionBadgeLabel.font = .systemFont(ofSize: 10, weight: .medium)
-        dimensionBadgeLabel.textColor = .white.withAlphaComponent(0.82)
-        dimensionBadgeLabel.translatesAutoresizingMaskIntoConstraints = false
-        dimensionBadgeLabel.wantsLayer = true
-        dimensionBadgeLabel.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.34).cgColor
-        dimensionBadgeLabel.layer?.cornerRadius = 7
-        dimensionBadgeLabel.layer?.cornerCurve = .continuous
-        dimensionBadgeLabel.isHidden = true
+        dimensionBadgeView.translatesAutoresizingMaskIntoConstraints = false
+        dimensionBadgeView.isHidden = true
 
         containerView.addSubview(previewImageView)
         containerView.addSubview(fileNameLabel)
         containerView.addSubview(subtitleLabel)
-        containerView.addSubview(dimensionBadgeLabel)
+        containerView.addSubview(dimensionBadgeView)
         view = containerView
 
         gridConstraints = [
@@ -396,15 +514,14 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         ]
 
         masonryConstraints = [
-            previewImageView.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 6),
-            previewImageView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 6),
-            previewImageView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -6),
-            previewImageView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -6),
+            previewImageView.topAnchor.constraint(equalTo: containerView.topAnchor, constant: AssetCollectionMetrics.masonryImageInset),
+            previewImageView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: AssetCollectionMetrics.masonryImageInset),
+            previewImageView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -AssetCollectionMetrics.masonryImageInset),
+            previewImageView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -AssetCollectionMetrics.masonryImageInset),
 
-            dimensionBadgeLabel.topAnchor.constraint(equalTo: previewImageView.topAnchor, constant: 8),
-            dimensionBadgeLabel.trailingAnchor.constraint(equalTo: previewImageView.trailingAnchor, constant: -8),
-            dimensionBadgeLabel.heightAnchor.constraint(equalToConstant: 20),
-            dimensionBadgeLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 62)
+            dimensionBadgeView.topAnchor.constraint(equalTo: previewImageView.topAnchor, constant: 8),
+            dimensionBadgeView.trailingAnchor.constraint(equalTo: previewImageView.trailingAnchor, constant: -8),
+            dimensionBadgeView.heightAnchor.constraint(equalToConstant: AssetCollectionMetrics.dimensionBadgeHeight)
         ]
 
         listConstraints = [
@@ -429,8 +546,8 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         previewImageView.image = nil
         fileNameLabel.stringValue = ""
         subtitleLabel.stringValue = ""
-        dimensionBadgeLabel.stringValue = ""
-        dimensionBadgeLabel.isHidden = true
+        dimensionBadgeView.stringValue = ""
+        dimensionBadgeView.isHidden = true
         onHoverFocus = nil
         containerView.isHovered = false
         mode = .grid
@@ -440,7 +557,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         mode = viewMode
         fileNameLabel.stringValue = asset.displayName
         subtitleLabel.stringValue = subtitle(for: asset)
-        dimensionBadgeLabel.stringValue = subtitle(for: asset)
+        dimensionBadgeView.stringValue = subtitle(for: asset)
         previewImageView.image = previewImage(for: asset)
         applyModeLayout()
     }
@@ -452,7 +569,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         case .grid:
             fileNameLabel.isHidden = false
             subtitleLabel.isHidden = false
-            dimensionBadgeLabel.isHidden = true
+            dimensionBadgeView.isHidden = true
             fileNameLabel.alignment = .center
             fileNameLabel.maximumNumberOfLines = 1
             subtitleLabel.alignment = .center
@@ -460,12 +577,12 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         case .masonry:
             fileNameLabel.isHidden = true
             subtitleLabel.isHidden = true
-            dimensionBadgeLabel.isHidden = dimensionBadgeLabel.stringValue.isEmpty
+            dimensionBadgeView.isHidden = dimensionBadgeView.stringValue.isEmpty
             NSLayoutConstraint.activate(masonryConstraints)
         case .list:
             fileNameLabel.isHidden = false
             subtitleLabel.isHidden = false
-            dimensionBadgeLabel.isHidden = true
+            dimensionBadgeView.isHidden = true
             fileNameLabel.alignment = .left
             fileNameLabel.maximumNumberOfLines = 1
             subtitleLabel.alignment = .left
@@ -505,6 +622,51 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     }
 }
 
+private final class DimensionBadgeView: NSView {
+    var stringValue: String {
+        get {
+            label.stringValue
+        }
+        set {
+            label.stringValue = newValue
+        }
+    }
+
+    private let label = NSTextField(labelWithString: "")
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setUpView()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setUpView()
+    }
+
+    private func setUpView() {
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.34).cgColor
+        layer?.cornerRadius = 7
+        layer?.cornerCurve = .continuous
+
+        label.lineBreakMode = .byTruncatingTail
+        label.maximumNumberOfLines = 1
+        label.alignment = .center
+        label.font = .systemFont(ofSize: 10, weight: .medium)
+        label.textColor = .white.withAlphaComponent(0.82)
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        addSubview(label)
+
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+    }
+}
+
 private final class HoverSelectionView: NSView {
     var hoverChanged: ((Bool) -> Void)?
     var isHovered = false {
@@ -533,11 +695,11 @@ private final class HoverSelectionView: NSView {
 
     private func setUpGlassBackground() {
         wantsLayer = true
-        layer?.cornerRadius = 8
+        layer?.cornerRadius = AssetCollectionMetrics.selectionCornerRadius
         layer?.cornerCurve = .continuous
 
         glassBackgroundView.translatesAutoresizingMaskIntoConstraints = false
-        glassBackgroundView.cornerRadius = 8
+        glassBackgroundView.cornerRadius = AssetCollectionMetrics.selectionCornerRadius
         glassBackgroundView.style = .regular
         glassBackgroundView.isHidden = true
         addSubview(glassBackgroundView)

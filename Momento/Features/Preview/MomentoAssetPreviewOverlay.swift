@@ -1,6 +1,12 @@
 import AppKit
 import SwiftUI
 
+private enum MomentoAssetPreviewMetrics {
+    static let imagePanelCornerRadius: CGFloat = 30
+    static let imageCornerRadius: CGFloat = 24
+    static let imagePanelPadding: CGFloat = 14
+}
+
 struct MomentoAssetPreviewOverlay: View {
     @Environment(\.appLocalization) private var localization
 
@@ -54,10 +60,22 @@ struct MomentoAssetPreviewOverlay: View {
                     .interpolation(.high)
                     .scaledToFit()
                     .frame(
-                        maxWidth: max(size.width * 0.76, 320),
-                        maxHeight: max(size.height * 0.72, 260)
+                        maxWidth: max(size.width * 0.86, 360),
+                        maxHeight: max(size.height * 0.82, 320)
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: MomentoAssetPreviewMetrics.imageCornerRadius,
+                            style: .continuous
+                        )
+                    )
+                    .padding(MomentoAssetPreviewMetrics.imagePanelPadding)
+                    .background {
+                        MomentoGlassBackground(
+                            glass: .regular.tint(Color.black.opacity(0.10)),
+                            cornerRadius: MomentoAssetPreviewMetrics.imagePanelCornerRadius
+                        )
+                    }
                     .shadow(color: .black.opacity(0.36), radius: 32, y: 18)
             }
 
