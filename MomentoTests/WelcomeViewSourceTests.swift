@@ -25,7 +25,7 @@ final class WelcomeViewSourceTests: XCTestCase {
 
         XCTAssertTrue(source.contains("@Environment(\\.appearsActive)"))
         XCTAssertTrue(source.contains("inactiveBackdropOpacity = 1.0"))
-        XCTAssertTrue(source.contains("focusedBackdropOpacity = 0.38"))
+        XCTAssertTrue(source.contains("focusedBackdropOpacity = 0.56"))
         XCTAssertTrue(source.contains("appearsActive ? focusedBackdropOpacity : inactiveBackdropOpacity"))
         XCTAssertFalse(source.contains("@Environment(\\.controlActiveState)"))
     }
@@ -37,6 +37,16 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertTrue(source.contains("window.isOpaque = false"))
         XCTAssertTrue(source.contains("window.backgroundColor = .clear"))
         XCTAssertTrue(source.contains("restoreWindowConfiguration()"))
+    }
+
+    func testWelcomeConfiguresLargerRoundedWindowCorners() throws {
+        let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
+
+        XCTAssertTrue(source.contains("welcomeWindowCornerRadius: CGFloat = 28"))
+        XCTAssertTrue(source.contains("contentView.layer?.cornerRadius = welcomeWindowCornerRadius"))
+        XCTAssertTrue(source.contains("contentView.layer?.cornerCurve = .continuous"))
+        XCTAssertTrue(source.contains("contentView.layer?.masksToBounds = true"))
+        XCTAssertTrue(source.contains("originalContentCornerRadius"))
     }
 
     func testWelcomeButtonsUseSharedFixedMetrics() throws {

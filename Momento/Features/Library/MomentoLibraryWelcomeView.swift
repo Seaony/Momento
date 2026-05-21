@@ -1,8 +1,10 @@
 import AppKit
+import QuartzCore
 import SwiftUI
 
 private let inactiveBackdropOpacity = 1.0
-private let focusedBackdropOpacity = 0.38
+private let focusedBackdropOpacity = 0.56
+private let welcomeWindowCornerRadius: CGFloat = 28
 private let welcomeButtonWidth: CGFloat = 152
 private let welcomeButtonHeight: CGFloat = 36
 
@@ -99,8 +101,13 @@ private struct WelcomeWindowTransparencyConfigurator: NSViewRepresentable {
 
     final class Coordinator {
         private weak var configuredWindow: NSWindow?
+        private weak var configuredContentView: NSView?
         private var originalIsOpaque: Bool?
         private var originalBackgroundColor: NSColor?
+        private var originalContentWantsLayer: Bool?
+        private var originalContentCornerRadius: CGFloat?
+        private var originalContentCornerCurve: CALayerCornerCurve?
+        private var originalContentMasksToBounds: Bool?
 
         func configureWindow(_ window: NSWindow?) {
             guard let window else {
@@ -112,16 +119,20 @@ private struct WelcomeWindowTransparencyConfigurator: NSViewRepresentable {
                 configuredWindow = window
                 originalIsOpaque = window.isOpaque
                 originalBackgroundColor = window.backgroundColor
+                captureContentViewConfiguration(window.contentView)
             }
 
             window.isOpaque = false
             window.backgroundColor = .clear
+            configureWindowContent(window.contentView)
         }
 
         func restoreWindowConfiguration() {
             guard let configuredWindow else {
                 return
             }
+
+            restoreContentViewConfiguration()
 
             if let originalIsOpaque {
                 configuredWindow.isOpaque = originalIsOpaque
@@ -133,6 +144,52 @@ private struct WelcomeWindowTransparencyConfigurator: NSViewRepresentable {
             self.configuredWindow = nil
             originalIsOpaque = nil
             originalBackgroundColor = nil
+        }
+
+        private func captureContentViewConfiguration(_ contentView: NSView?) {
+            configuredContentView = contentView
+            originalContentWantsLayer = contentView?.wantsLayer
+            originalContentCornerRadius = contentView?.layer?.cornerRadius
+            originalContentCornerCurve = contentView?.layer?.cornerCurve
+            originalContentMasksToBounds = contentView?.layer?.masksToBounds
+        }
+
+        private func configureWindowContent(_ contentView: NSView?) {
+            guard let contentView else {
+                return
+            }
+
+            contentView.wantsLayer = true
+            contentView.layer?.cornerRadius = welcomeWindowCornerRadius
+            contentView.layer?.cornerCurve = .continuous
+            contentView.layer?.masksToBounds = true
+        }
+
+        private func restoreContentViewConfiguration() {
+            guard let configuredContentView else {
+                return
+            }
+
+            if originalContentWantsLayer == true {
+                if let originalContentCornerRadius {
+                    configuredContentView.layer?.cornerRadius = originalContentCornerRadius
+                }
+                if let originalContentCornerCurve {
+                    configuredContentView.layer?.cornerCurve = originalContentCornerCurve
+                }
+                if let originalContentMasksToBounds {
+                    configuredContentView.layer?.masksToBounds = originalContentMasksToBounds
+                }
+            }
+            if let originalContentWantsLayer {
+                configuredContentView.wantsLayer = originalContentWantsLayer
+            }
+
+            self.configuredContentView = nil
+            originalContentWantsLayer = nil
+            originalContentCornerRadius = nil
+            originalContentCornerCurve = nil
+            originalContentMasksToBounds = nil
         }
     }
 }
