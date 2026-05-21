@@ -88,16 +88,16 @@ struct MomentoSidebarView: View {
     }
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            sidebarPanel
-            librarySwitcherOverlay
-        }
+        sidebarPanel
         .frame(
             minWidth: MomentoTheme.sidebarMinWidth,
             idealWidth: MomentoTheme.sidebarWidth,
             maxWidth: MomentoTheme.sidebarMaxWidth
         )
         .frame(maxHeight: .infinity)
+        .overlay(alignment: .topLeading) {
+            librarySwitcherOverlay
+        }
         .zIndex(isLibrarySwitcherPresented ? 20 : 0)
     }
 
@@ -146,10 +146,9 @@ struct MomentoSidebarView: View {
                 },
                 onReloadLibrary: performLibrarySwitcherAction(onReloadLibrary)
             )
-            .frame(width: 380)
             .padding(.top, MomentoTheme.floatingSidebarTitlebarContentInset + 42)
-            .padding(.leading, 14)
-            .transition(.opacity.combined(with: .move(edge: .top)))
+            .padding(.horizontal, 14)
+            .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .topLeading)))
             .zIndex(30)
         }
     }
@@ -417,6 +416,7 @@ private struct MomentoLibrarySwitcherMenu: View {
             }
         }
         .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             MomentoGlassBackground(glass: .regular, cornerRadius: 14)
         }

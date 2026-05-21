@@ -1059,6 +1059,7 @@
       }
     },
     "Open Other Library" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
