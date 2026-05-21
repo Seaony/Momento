@@ -115,6 +115,24 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertFalse(source.contains("updatePointingHandCursor(isHovered: hovering)"))
     }
 
+    func testWelcomeButtonsProvideVisibleHoverFeedback() throws {
+        let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
+
+        XCTAssertTrue(source.contains("@Environment(\\.accessibilityReduceMotion) private var reduceMotion"))
+        XCTAssertTrue(source.contains("@State private var isCreateButtonHovered = false"))
+        XCTAssertTrue(source.contains("@State private var isOpenButtonHovered = false"))
+
+        let hoverCount = source
+            .components(separatedBy: ".onHover { isHovered in")
+            .count - 1
+        XCTAssertGreaterThanOrEqual(hoverCount, 2)
+        XCTAssertTrue(source.contains(".welcomeButtonHoverFeedback(isHovered: isCreateButtonHovered, reduceMotion: reduceMotion)"))
+        XCTAssertTrue(source.contains(".welcomeButtonHoverFeedback(isHovered: isOpenButtonHovered, reduceMotion: reduceMotion)"))
+        XCTAssertTrue(source.contains("scaleEffect(isHovered && !reduceMotion ? 1.035 : 1)"))
+        XCTAssertTrue(source.contains(".brightness(isHovered ? 0.08 : 0)"))
+        XCTAssertTrue(source.contains(".animation(reduceMotion ? nil : .smooth(duration: 0.16), value: isHovered)"))
+    }
+
     func testWelcomeButtonsUseNativeCapsuleBorderShape() throws {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 

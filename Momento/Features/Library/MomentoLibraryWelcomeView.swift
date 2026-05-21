@@ -6,6 +6,9 @@ private let welcomeButtonFontSize: CGFloat = 13
 
 struct MomentoLibraryWelcomeView: View {
     @Environment(\.appLocalization) private var localization
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isCreateButtonHovered = false
+    @State private var isOpenButtonHovered = false
 
     var onCreateLibrary: () -> Void
     var onOpenLibrary: () -> Void
@@ -45,6 +48,10 @@ struct MomentoLibraryWelcomeView: View {
                     .contentShape(Capsule(style: .continuous))
                     .environment(\.appearsActive, true)
                     .pointerStyle(.link)
+                    .welcomeButtonHoverFeedback(isHovered: isCreateButtonHovered, reduceMotion: reduceMotion)
+                    .onHover { isHovered in
+                        isCreateButtonHovered = isHovered
+                    }
 
                     Button {
                         onOpenLibrary()
@@ -60,6 +67,10 @@ struct MomentoLibraryWelcomeView: View {
                     .contentShape(Capsule(style: .continuous))
                     .environment(\.appearsActive, true)
                     .pointerStyle(.link)
+                    .welcomeButtonHoverFeedback(isHovered: isOpenButtonHovered, reduceMotion: reduceMotion)
+                    .onHover { isHovered in
+                        isOpenButtonHovered = isHovered
+                    }
                 }
             }
         }
@@ -71,6 +82,14 @@ private struct WelcomeGlassBackdrop: View {
     var body: some View {
         MomentoGlassBackground(cornerRadius: 0)
             .ignoresSafeArea()
+    }
+}
+
+private extension View {
+    func welcomeButtonHoverFeedback(isHovered: Bool, reduceMotion: Bool) -> some View {
+        scaleEffect(isHovered && !reduceMotion ? 1.035 : 1)
+            .brightness(isHovered ? 0.08 : 0)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.16), value: isHovered)
     }
 }
 
