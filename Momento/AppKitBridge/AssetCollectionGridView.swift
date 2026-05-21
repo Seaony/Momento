@@ -217,6 +217,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     private let containerView = HoverSelectionView()
     private let previewImageView = NSImageView()
     private let fileNameLabel = NSTextField(labelWithString: "")
+    private let subtitleLabel = NSTextField(labelWithString: "")
     private var gridConstraints: [NSLayoutConstraint] = []
     private var listConstraints: [NSLayoutConstraint] = []
     private var mode: AssetViewMode = .grid
@@ -250,8 +251,16 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         fileNameLabel.textColor = .secondaryLabelColor
         fileNameLabel.translatesAutoresizingMaskIntoConstraints = false
 
+        subtitleLabel.lineBreakMode = .byTruncatingTail
+        subtitleLabel.maximumNumberOfLines = 1
+        subtitleLabel.alignment = .center
+        subtitleLabel.font = .systemFont(ofSize: 11)
+        subtitleLabel.textColor = .tertiaryLabelColor
+        subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
+
         containerView.addSubview(previewImageView)
         containerView.addSubview(fileNameLabel)
+        containerView.addSubview(subtitleLabel)
         view = containerView
 
         gridConstraints = [
@@ -263,7 +272,11 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
             fileNameLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 8),
             fileNameLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -8),
-            fileNameLabel.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -8)
+            fileNameLabel.bottomAnchor.constraint(equalTo: subtitleLabel.topAnchor, constant: -2),
+
+            subtitleLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 8),
+            subtitleLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -8),
+            subtitleLabel.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -8)
         ]
 
         listConstraints = [
@@ -274,7 +287,12 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
             fileNameLabel.leadingAnchor.constraint(equalTo: previewImageView.trailingAnchor, constant: 10),
             fileNameLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -12),
-            fileNameLabel.centerYAnchor.constraint(equalTo: containerView.centerYAnchor)
+            fileNameLabel.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 9),
+
+            subtitleLabel.leadingAnchor.constraint(equalTo: fileNameLabel.leadingAnchor),
+            subtitleLabel.trailingAnchor.constraint(equalTo: fileNameLabel.trailingAnchor),
+            subtitleLabel.topAnchor.constraint(equalTo: fileNameLabel.bottomAnchor, constant: 2),
+            subtitleLabel.bottomAnchor.constraint(lessThanOrEqualTo: containerView.bottomAnchor, constant: -8)
         ]
     }
 
@@ -282,12 +300,15 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         super.prepareForReuse()
         previewImageView.image = nil
         fileNameLabel.stringValue = ""
+        subtitleLabel.stringValue = ""
         containerView.isHovered = false
+        mode = .grid
     }
 
     func configure(with asset: AssetItem, viewMode: AssetViewMode) {
         mode = viewMode
         fileNameLabel.stringValue = asset.displayName
+        subtitleLabel.stringValue = subtitle(for: asset)
         previewImageView.image = previewImage(for: asset)
         applyModeLayout()
     }
@@ -299,12 +320,22 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         case .grid, .masonry:
             fileNameLabel.alignment = .center
             fileNameLabel.maximumNumberOfLines = 2
+            subtitleLabel.alignment = .center
             NSLayoutConstraint.activate(gridConstraints)
         case .list:
             fileNameLabel.alignment = .left
             fileNameLabel.maximumNumberOfLines = 1
+            subtitleLabel.alignment = .left
             NSLayoutConstraint.activate(listConstraints)
         }
+    }
+
+    private func subtitle(for asset: AssetItem) -> String {
+        if let dimensions = asset.dimensions {
+            return "\(dimensions.width) x \(dimensions.height)"
+        }
+
+        return ""
     }
 
     private func previewImage(for asset: AssetItem) -> NSImage {
