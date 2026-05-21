@@ -70,6 +70,12 @@ final class LibraryStore {
             scopedAssets = libraryAssets
         case .favorites:
             scopedAssets = libraryAssets.filter(\.isFavorite)
+        case .uncategorized:
+            scopedAssets = libraryAssets
+        case .untagged:
+            scopedAssets = libraryAssets.filter(\.tags.isEmpty)
+        case .tagManagement, .folderManagement:
+            scopedAssets = []
         case .tag(let tagID):
             scopedAssets = libraryAssets.filter { asset in
                 asset.tags.contains { $0.id == tagID }
@@ -236,6 +242,14 @@ final class LibraryStore {
         switch id {
         case "favorites":
             sidebarSelection = .favorites
+        case "uncategorized":
+            sidebarSelection = .uncategorized
+        case "untagged":
+            sidebarSelection = .untagged
+        case "tag-management":
+            sidebarSelection = .tagManagement
+        case "folder-management":
+            sidebarSelection = .folderManagement
         case "trash":
             sidebarSelection = .trash
         case let id? where id.hasPrefix("tag-"):
@@ -255,6 +269,14 @@ final class LibraryStore {
             "all-assets"
         case .favorites:
             "favorites"
+        case .uncategorized:
+            "uncategorized"
+        case .untagged:
+            "untagged"
+        case .tagManagement:
+            "tag-management"
+        case .folderManagement:
+            "folder-management"
         case .tag(let tagID):
             "tag-\(tagID)"
         case .trash:

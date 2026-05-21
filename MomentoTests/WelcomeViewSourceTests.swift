@@ -19,7 +19,7 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertFalse(source.contains("id: \"recent\""))
     }
 
-    func testMainSidebarDoesNotRenderLegacyNavigationSections() throws {
+    func testMainSidebarRendersLibraryNavigationGroups() throws {
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
         let shellSource = try String(contentsOf: shellViewURL(), encoding: .utf8)
         let sidebarSource = try String(contentsOf: sidebarViewURL(), encoding: .utf8)
@@ -34,9 +34,26 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertFalse(sidebarSource.contains("private func sectionView"))
         XCTAssertFalse(sidebarSource.contains("private struct MomentoSidebarRow"))
         XCTAssertFalse(sidebarSource.contains("momentoDefaultSections"))
-        XCTAssertFalse(sidebarSource.contains("MomentoSidebarItem(id: \"favorites\""))
         XCTAssertFalse(sidebarSource.contains("MomentoSidebarItem(id: \"folder-"))
         XCTAssertFalse(sidebarSource.contains("MomentoSidebarItem(id: \"tag-"))
+        XCTAssertTrue(sidebarSource.contains("@State private var hoveredNavigationItemID: String?"))
+        XCTAssertTrue(sidebarSource.contains("sidebarNavigation"))
+        XCTAssertTrue(sidebarSource.contains("sidebarNavigationDivider"))
+        XCTAssertTrue(sidebarSource.contains("sidebarNavigationItem("))
+        XCTAssertTrue(sidebarSource.contains("id: \"all-assets\""))
+        XCTAssertTrue(sidebarSource.contains("title: localization.string(\"All\")"))
+        XCTAssertTrue(sidebarSource.contains("id: \"favorites\""))
+        XCTAssertTrue(sidebarSource.contains("title: localization.string(\"Favorited\")"))
+        XCTAssertTrue(sidebarSource.contains("id: \"uncategorized\""))
+        XCTAssertTrue(sidebarSource.contains("title: localization.string(\"Uncategorized\")"))
+        XCTAssertTrue(sidebarSource.contains("id: \"untagged\""))
+        XCTAssertTrue(sidebarSource.contains("title: localization.string(\"Untagged\")"))
+        XCTAssertTrue(sidebarSource.contains("id: \"tag-management\""))
+        XCTAssertTrue(sidebarSource.contains("title: localization.string(\"Tag Management\")"))
+        XCTAssertTrue(sidebarSource.contains("id: \"folder-management\""))
+        XCTAssertTrue(sidebarSource.contains("title: localization.string(\"Folder Management\")"))
+        XCTAssertTrue(sidebarSource.contains("MomentoTheme.sidebarIconHoverBackground"))
+        XCTAssertTrue(sidebarSource.contains("selection = id"))
         XCTAssertTrue(sidebarSource.contains("Spacer(minLength: 0)"))
     }
 

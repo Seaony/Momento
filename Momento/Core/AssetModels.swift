@@ -73,6 +73,10 @@ nonisolated enum AssetViewMode: String, CaseIterable, Identifiable, Hashable, Co
 nonisolated enum SidebarSelection: Hashable, Codable, Sendable {
     case library(String)
     case favorites
+    case uncategorized
+    case untagged
+    case tagManagement
+    case folderManagement
     case tag(String)
     case trash
 }

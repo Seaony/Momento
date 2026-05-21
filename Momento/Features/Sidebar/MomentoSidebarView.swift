@@ -20,6 +20,7 @@ struct MomentoSidebarView: View {
     var onCloseLibrary: () -> Void
 
     @State private var hoveredFooterActionID: String?
+    @State private var hoveredNavigationItemID: String?
     @State private var isLibraryMenuHovered = false
     @State private var isLibrarySwitcherPresented = false
 
@@ -70,7 +71,10 @@ struct MomentoSidebarView: View {
             libraryMenu
                 .padding(.horizontal, 14)
                 .padding(.top, MomentoTheme.floatingSidebarTitlebarContentInset)
-                .padding(.bottom, 10)
+                .padding(.bottom, 12)
+
+            sidebarNavigation
+                .padding(.horizontal, 14)
 
             Spacer(minLength: 0)
 
@@ -129,6 +133,123 @@ struct MomentoSidebarView: View {
             .fill(MomentoTheme.subtleStroke.opacity(1))
             .frame(height: 0.5)
             .padding(.horizontal, 14)
+    }
+
+    private var sidebarNavigation: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            VStack(spacing: 2) {
+                sidebarNavigationItem(
+                    id: "all-assets",
+                    title: localization.string("All"),
+                    systemImage: "square.grid.2x2"
+                )
+
+                sidebarNavigationItem(
+                    id: "favorites",
+                    title: localization.string("Favorited"),
+                    systemImage: "star"
+                )
+
+                sidebarNavigationItem(
+                    id: "uncategorized",
+                    title: localization.string("Uncategorized"),
+                    systemImage: "tray"
+                )
+
+                sidebarNavigationItem(
+                    id: "untagged",
+                    title: localization.string("Untagged"),
+                    systemImage: "tag.slash"
+                )
+
+                sidebarNavigationItem(
+                    id: "tag-management",
+                    title: localization.string("Tag Management"),
+                    systemImage: "tag"
+                )
+            }
+
+            sidebarNavigationDivider
+
+            sidebarNavigationItem(
+                id: "folder-management",
+                title: localization.string("Folder Management"),
+                systemImage: "folder"
+            )
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var sidebarNavigationDivider: some View {
+        Rectangle()
+            .fill(MomentoTheme.subtleStroke.opacity(0.72))
+            .frame(height: 0.5)
+            .padding(.vertical, 6)
+    }
+
+    private func sidebarNavigationItem(
+        id: String,
+        title: String,
+        systemImage: String
+    ) -> some View {
+        let isSelected = selection == id
+        let isHovered = hoveredNavigationItemID == id
+
+        return Button {
+            withAnimation(.smooth(duration: 0.16)) {
+                selection = id
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(isSelected || isHovered ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
+                    .frame(width: 18)
+
+                Text(title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(isSelected || isHovered ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 30)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                sidebarNavigationItemBackground(id: id, isSelected: isSelected)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .onHover { hovering in
+            updateNavigationHover(id: id, isHovering: hovering)
+        }
+        .help(title)
+        .accessibilityLabel(title)
+    }
+
+    @ViewBuilder
+    private func sidebarNavigationItemBackground(id: String, isSelected: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
+
+        if isSelected || hoveredNavigationItemID == id {
+            shape.fill(MomentoTheme.sidebarIconHoverBackground)
+        } else {
+            Color.clear
+        }
+    }
+
+    private func updateNavigationHover(id: String, isHovering: Bool) {
+        withAnimation(.smooth(duration: 0.14)) {
+            if isHovering {
+                hoveredNavigationItemID = id
+            } else if hoveredNavigationItemID == id {
+                hoveredNavigationItemID = nil
+            }
+        }
     }
 
     private var bottomActionBar: some View {

@@ -160,6 +160,62 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testSidebarNavigationSelectionsAreStable() throws {
+        let library = AssetLibrary(id: "library", name: "Library", createdAt: Date(timeIntervalSince1970: 0))
+        let taggedAsset = AssetItem(
+            id: "tagged",
+            libraryID: library.id,
+            displayName: "Tagged",
+            originalURL: nil,
+            storageURL: URL(fileURLWithPath: "/Samples/tagged.png"),
+            kind: .image,
+            fileExtension: "png",
+            byteSize: 1,
+            contentHash: "tagged",
+            dimensions: nil,
+            tags: [TagItem(name: "Reference")],
+            isFavorite: true,
+            importedAt: Date(timeIntervalSince1970: 0)
+        )
+        let untaggedAsset = AssetItem(
+            id: "untagged",
+            libraryID: library.id,
+            displayName: "Untagged",
+            originalURL: nil,
+            storageURL: URL(fileURLWithPath: "/Samples/untagged.png"),
+            kind: .image,
+            fileExtension: "png",
+            byteSize: 1,
+            contentHash: "untagged",
+            dimensions: nil,
+            tags: [],
+            isFavorite: false,
+            importedAt: Date(timeIntervalSince1970: 0)
+        )
+        let store = LibraryStore(
+            libraries: [library],
+            assets: [taggedAsset, untaggedAsset],
+            loadRecentLibrary: false
+        )
+
+        store.selectSidebarItem(id: "untagged")
+        XCTAssertEqual(store.sidebarItemID(), "untagged")
+        XCTAssertEqual(store.visibleAssets.map(\.id), ["untagged"])
+
+        store.selectSidebarItem(id: "uncategorized")
+        XCTAssertEqual(store.sidebarItemID(), "uncategorized")
+        XCTAssertEqual(store.visibleAssets.map(\.id), ["tagged", "untagged"])
+
+        store.selectSidebarItem(id: "tag-management")
+        XCTAssertEqual(store.sidebarItemID(), "tag-management")
+        XCTAssertTrue(store.visibleAssets.isEmpty)
+
+        store.selectSidebarItem(id: "folder-management")
+        XCTAssertEqual(store.sidebarItemID(), "folder-management")
+        XCTAssertTrue(store.visibleAssets.isEmpty)
+    }
+
+    @MainActor
     func testMissingRecentLibraryIsPrunedOnLaunchAndReportsError() throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }

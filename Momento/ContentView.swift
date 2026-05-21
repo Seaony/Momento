@@ -264,6 +264,14 @@ struct ContentView: View {
             store.currentLibrary?.name ?? localization.string("Library")
         case .favorites:
             localization.string("Favorites")
+        case .uncategorized:
+            localization.string("Uncategorized")
+        case .untagged:
+            localization.string("Untagged")
+        case .tagManagement:
+            localization.string("Tag Management")
+        case .folderManagement:
+            localization.string("Folder Management")
         case .tag(let tagID):
             store.tags.first { $0.id == tagID }?.name ?? localization.string("Tag")
         case .trash:
