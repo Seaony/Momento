@@ -89,7 +89,7 @@ struct ContentView: View {
         .onChange(of: defaultViewMode) { _, newValue in
             store.setViewMode(newValue)
         }
-        .frame(minWidth: 1080, minHeight: 680)
+        .frame(minWidth: 540, minHeight: 340)
     }
 
     private var libraryBody: some View {
