@@ -11,12 +11,25 @@ struct AssetImportService: Sendable {
     }
 
     nonisolated func importItems(from urls: [URL], into library: AssetLibrary) async throws -> [AssetItem] {
-        try await Task.detached(priority: .userInitiated) {
+        try await importItems(from: urls, into: library, excludingContentHashes: [])
+    }
+
+    nonisolated func importItems(
+        from urls: [URL],
+        into library: AssetLibrary,
+        excludingContentHashes existingContentHashes: Set<String>
+    ) async throws -> [AssetItem] {
+        let scopes = urls.map(SourceAccessScope.init(url:))
+        defer {
+            scopes.forEach { $0.stop() }
+        }
+
+        return try await Task.detached(priority: .userInitiated) {
             try storage.prepareLibraryDirectories(for: library)
 
             let files = try collectSupportedFiles(from: urls)
             var imported: [AssetItem] = []
-            var seenHashes = Set<String>()
+            var seenHashes = existingContentHashes
 
             for fileURL in files {
                 guard let kind = assetKind(for: fileURL) else {
@@ -29,11 +42,17 @@ struct AssetImportService: Sendable {
                 }
 
                 let fileExtension = fileURL.pathExtension.lowercased()
-                let destination = storage.assetsURL(for: library)
-                    .appendingPathComponent(hash)
-                    .appendingPathExtension(fileExtension)
+                let destination = storage.assetStorageURL(
+                    forContentHash: hash,
+                    fileExtension: fileExtension,
+                    in: library
+                )
 
                 if !FileManager.default.fileExists(atPath: destination.path) {
+                    try FileManager.default.createDirectory(
+                        at: destination.deletingLastPathComponent(),
+                        withIntermediateDirectories: true
+                    )
                     try FileManager.default.copyItem(at: fileURL, to: destination)
                 }
 
@@ -59,6 +78,22 @@ struct AssetImportService: Sendable {
 
             return imported
         }.value
+    }
+}
+
+nonisolated private final class SourceAccessScope: @unchecked Sendable {
+    private let url: URL
+    private let didStartAccessing: Bool
+
+    init(url: URL) {
+        self.url = url
+        self.didStartAccessing = url.startAccessingSecurityScopedResource()
+    }
+
+    func stop() {
+        if didStartAccessing {
+            url.stopAccessingSecurityScopedResource()
+        }
     }
 }
 

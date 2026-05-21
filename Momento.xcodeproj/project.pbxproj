@@ -8,18 +8,44 @@
 
 /* Begin PBXFileReference section */
 		759F43712FBE919C00E3B15F /* Momento.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Momento.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		759F43802FBEA00000E3B15F /* MomentoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MomentoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		759F438B2FBEA00000E3B15F /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 759F43702FBE919C00E3B15F /* Momento */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		759F43732FBE919C00E3B15F /* Momento */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				759F438B2FBEA00000E3B15F /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+			);
 			path = Momento;
+			sourceTree = "<group>";
+		};
+		759F43812FBEA00000E3B15F /* MomentoTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MomentoTests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		759F436E2FBE919C00E3B15F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		759F43842FBEA00000E3B15F /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -33,6 +59,7 @@
 			isa = PBXGroup;
 			children = (
 				759F43732FBE919C00E3B15F /* Momento */,
+				759F43812FBEA00000E3B15F /* MomentoTests */,
 				759F43722FBE919C00E3B15F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -41,6 +68,7 @@
 			isa = PBXGroup;
 			children = (
 				759F43712FBE919C00E3B15F /* Momento.app */,
+				759F43802FBEA00000E3B15F /* MomentoTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,7 +98,40 @@
 			productReference = 759F43712FBE919C00E3B15F /* Momento.app */;
 			productType = "com.apple.product-type.application";
 		};
+		759F43822FBEA00000E3B15F /* MomentoTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 759F438A2FBEA00000E3B15F /* Build configuration list for PBXNativeTarget "MomentoTests" */;
+			buildPhases = (
+				759F43832FBEA00000E3B15F /* Sources */,
+				759F43842FBEA00000E3B15F /* Frameworks */,
+				759F43852FBEA00000E3B15F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				759F43862FBEA00000E3B15F /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				759F43812FBEA00000E3B15F /* MomentoTests */,
+			);
+			name = MomentoTests;
+			packageProductDependencies = (
+			);
+			productName = MomentoTests;
+			productReference = 759F43802FBEA00000E3B15F /* MomentoTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXContainerItemProxy section */
+		759F43872FBEA00000E3B15F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 759F43692FBE919C00E3B15F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 759F43702FBE919C00E3B15F;
+			remoteInfo = Momento;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXProject section */
 		759F43692FBE919C00E3B15F /* Project object */ = {
@@ -82,6 +143,10 @@
 				TargetAttributes = {
 					759F43702FBE919C00E3B15F = {
 						CreatedOnToolsVersion = 26.5;
+					};
+					759F43822FBEA00000E3B15F = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = 759F43702FBE919C00E3B15F;
 					};
 				};
 			};
@@ -101,12 +166,20 @@
 			projectRoot = "";
 			targets = (
 				759F43702FBE919C00E3B15F /* Momento */,
+				759F43822FBEA00000E3B15F /* MomentoTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		759F436F2FBE919C00E3B15F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		759F43852FBEA00000E3B15F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -123,7 +196,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		759F43832FBEA00000E3B15F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		759F43862FBEA00000E3B15F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 759F43702FBE919C00E3B15F /* Momento */;
+			targetProxy = 759F43872FBEA00000E3B15F /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		759F437A2FBE919D00E3B15F /* Debug */ = {
@@ -258,8 +346,9 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
+				ENABLE_USER_SELECTED_FILES = readwrite;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Momento/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -290,8 +379,9 @@
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
+				ENABLE_USER_SELECTED_FILES = readwrite;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Momento/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -307,6 +397,58 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		759F43882FBEA00000E3B15F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = G34NXJXW94;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.seaony.MomentoTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Momento.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Momento";
+			};
+			name = Debug;
+		};
+		759F43892FBEA00000E3B15F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = G34NXJXW94;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.seaony.MomentoTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Momento.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Momento";
 			};
 			name = Release;
 		};
@@ -327,6 +469,15 @@
 			buildConfigurations = (
 				759F437D2FBE919D00E3B15F /* Debug */,
 				759F437E2FBE919D00E3B15F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		759F438A2FBEA00000E3B15F /* Build configuration list for PBXNativeTarget "MomentoTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				759F43882FBEA00000E3B15F /* Debug */,
+				759F43892FBEA00000E3B15F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

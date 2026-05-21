@@ -1,18 +1,27 @@
 import Foundation
 
-struct AssetLibrary: Identifiable, Hashable, Codable, Sendable {
+nonisolated struct AssetLibrary: Identifiable, Hashable, Codable, Sendable {
     var id: String
     var name: String
     var createdAt: Date
+    var packageURL: URL?
+
+    init(id: String, name: String, createdAt: Date, packageURL: URL? = nil) {
+        self.id = id
+        self.name = name
+        self.createdAt = createdAt
+        self.packageURL = packageURL
+    }
 
     static let defaultLibrary = AssetLibrary(
         id: "default",
         name: "Momento Library",
-        createdAt: Date(timeIntervalSince1970: 0)
+        createdAt: Date(timeIntervalSince1970: 0),
+        packageURL: nil
     )
 }
 
-struct TagItem: Identifiable, Hashable, Codable, Sendable {
+nonisolated struct TagItem: Identifiable, Hashable, Codable, Sendable {
     var id: String
     var name: String
     var colorHex: String?
@@ -24,12 +33,12 @@ struct TagItem: Identifiable, Hashable, Codable, Sendable {
     }
 }
 
-struct AssetDimensions: Hashable, Codable, Sendable {
+nonisolated struct AssetDimensions: Hashable, Codable, Sendable {
     var width: Int
     var height: Int
 }
 
-enum AssetKind: String, CaseIterable, Hashable, Codable, Sendable {
+nonisolated enum AssetKind: String, CaseIterable, Hashable, Codable, Sendable {
     case image
     case gif
     case svg
@@ -37,11 +46,11 @@ enum AssetKind: String, CaseIterable, Hashable, Codable, Sendable {
     case pdf
 }
 
-struct AssetItem: Identifiable, Hashable, Codable, Sendable {
+nonisolated struct AssetItem: Identifiable, Hashable, Codable, Sendable {
     var id: String
     var libraryID: String
     var displayName: String
-    var originalURL: URL
+    var originalURL: URL?
     var storageURL: URL
     var kind: AssetKind
     var fileExtension: String
@@ -53,7 +62,7 @@ struct AssetItem: Identifiable, Hashable, Codable, Sendable {
     var importedAt: Date
 }
 
-enum AssetViewMode: String, CaseIterable, Identifiable, Hashable, Codable, Sendable {
+nonisolated enum AssetViewMode: String, CaseIterable, Identifiable, Hashable, Codable, Sendable {
     case masonry
     case grid
     case list
@@ -61,7 +70,7 @@ enum AssetViewMode: String, CaseIterable, Identifiable, Hashable, Codable, Senda
     var id: String { rawValue }
 }
 
-enum SidebarSelection: Hashable, Codable, Sendable {
+nonisolated enum SidebarSelection: Hashable, Codable, Sendable {
     case library(String)
     case favorites
     case tag(String)

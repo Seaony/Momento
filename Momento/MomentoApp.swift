@@ -9,6 +9,8 @@ import SwiftUI
 
 @main
 struct MomentoApp: App {
+    @NSApplicationDelegateAdaptor(AppOpenHandler.self) private var appOpenHandler
+    @State private var store = LibraryStore(defaultViewMode: AppSettings.defaultViewMode())
     @AppStorage(AppSettingsKeys.appLanguage) private var appLanguageRawValue = AppLanguage.system.rawValue
     @AppStorage(AppSettingsKeys.defaultViewMode) private var defaultViewModeRawValue = AssetViewMode.masonry.rawValue
 
@@ -17,9 +19,13 @@ struct MomentoApp: App {
         let localization = AppLocalization(language: language)
 
         WindowGroup {
-            ContentView()
+            ContentView(store: store)
                 .environment(\.locale, language.locale)
                 .environment(\.appLocalization, localization)
+                .onAppear {
+                    appOpenHandler.onOpenLibraryURLs = openLibraryURLs
+                    appOpenHandler.flushPendingLibraryURLs()
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .windowToolbarStyle(.unifiedCompact)
@@ -55,6 +61,22 @@ struct MomentoApp: App {
             defaultViewMode
         } set: { newValue in
             defaultViewModeRawValue = newValue.rawValue
+            store.setViewMode(newValue)
         }
+    }
+
+    private func openLibraryURLs(_ urls: [URL]) -> Bool {
+        var didOpenLibrary = false
+
+        for url in urls {
+            do {
+                try store.openLibrary(at: url)
+                didOpenLibrary = true
+            } catch {
+                store.libraryErrorMessage = AppLocalization(language: appLanguage).errorMessage(error)
+            }
+        }
+
+        return didOpenLibrary
     }
 }

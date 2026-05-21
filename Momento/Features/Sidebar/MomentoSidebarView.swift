@@ -46,6 +46,11 @@ struct MomentoSidebarView: View {
 
     var sections: [MomentoSidebarSection]
     @Binding var selection: MomentoSidebarItem.ID?
+    var libraryName: String?
+    var recentLibraries: [RecentLibraryReference]
+    var onCreateLibrary: () -> Void
+    var onOpenLibrary: () -> Void
+    var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
     var onItemContextMenu: ((MomentoSidebarItem) -> AnyView)?
 
     @State private var collapsedSectionIDs: Set<MomentoSidebarSection.ID> = []
@@ -53,32 +58,26 @@ struct MomentoSidebarView: View {
     init(
         sections: [MomentoSidebarSection] = .momentoDefaultSections,
         selection: Binding<MomentoSidebarItem.ID?>,
+        libraryName: String? = nil,
+        recentLibraries: [RecentLibraryReference] = [],
+        onCreateLibrary: @escaping () -> Void = {},
+        onOpenLibrary: @escaping () -> Void = {},
+        onSwitchLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
         onItemContextMenu: ((MomentoSidebarItem) -> AnyView)? = nil
     ) {
         self.sections = sections
         self._selection = selection
+        self.libraryName = libraryName
+        self.recentLibraries = recentLibraries
+        self.onCreateLibrary = onCreateLibrary
+        self.onOpenLibrary = onOpenLibrary
+        self.onSwitchLibrary = onSwitchLibrary
         self.onItemContextMenu = onItemContextMenu
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Image(systemName: "square.grid.2x2")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 28, height: 28)
-                    .background(.blue.gradient, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Momento")
-                        .font(.system(size: 14, weight: .semibold))
-                    Text(localization.string("Local library"))
-                        .font(.system(size: 11))
-                        .foregroundStyle(MomentoTheme.secondaryText)
-                }
-
-                Spacer()
-            }
+            libraryMenu
             .padding(.horizontal, 14)
             .padding(.top, 14)
             .padding(.bottom, 10)
@@ -98,7 +97,8 @@ struct MomentoSidebarView: View {
 
             HStack(spacing: 8) {
                 Image(systemName: "externaldrive")
-                Text(localization.string("No library selected"))
+                Text(libraryName ?? localization.string("No library selected"))
+                    .lineLimit(1)
                 Spacer()
             }
             .font(.system(size: 12))
@@ -162,6 +162,48 @@ struct MomentoSidebarView: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+    }
+
+    private var libraryMenu: some View {
+        Menu {
+            Button(localization.string("Create Library"), action: onCreateLibrary)
+            Button(localization.string("Open Library"), action: onOpenLibrary)
+
+            if !recentLibraries.isEmpty {
+                Divider()
+
+                ForEach(recentLibraries) { library in
+                    Button(library.name) {
+                        onSwitchLibrary(library.id)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "square.grid.2x2")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                    .background(.blue.gradient, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Momento")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(libraryName ?? localization.string("No library selected"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(MomentoTheme.secondaryText)
+                        .lineLimit(1)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(MomentoTheme.tertiaryText)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

@@ -60,6 +60,33 @@ struct AppLocalization: Equatable {
         }
     }
 
+    func errorMessage(_ error: Error) -> String {
+        guard let libraryError = error as? LibraryStoreError else {
+            if let storageError = error as? LibraryStorageError {
+                return errorMessage(storageError)
+            }
+            return error.localizedDescription
+        }
+
+        return switch libraryError {
+        case .noCurrentLibrary:
+            string("Create or open a Momento library before importing assets.")
+        case .missingRecentLibrary:
+            string("This recent library is no longer available.")
+        case .unsupportedLibraryURL:
+            string("Choose a .momentolibrary package.")
+        }
+    }
+
+    private func errorMessage(_ error: LibraryStorageError) -> String {
+        switch error {
+        case .assetOutsideLibrary:
+            string("Asset storage must stay inside the selected library package.")
+        case .unsupportedSchemaVersion(let version):
+            format("Unsupported library schema version: %d.", version)
+        }
+    }
+
     func dateTime(_ date: Date) -> String {
         date.formatted(
             Date.FormatStyle(date: .abbreviated, time: .shortened)

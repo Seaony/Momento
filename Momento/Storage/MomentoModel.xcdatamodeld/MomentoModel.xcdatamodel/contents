@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="26500" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
+    <entity name="AssetRecord" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="byteSize" optional="NO" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="contentHash" optional="NO" attributeType="String"/>
+        <attribute name="displayName" optional="NO" attributeType="String"/>
+        <attribute name="fileExtension" optional="NO" attributeType="String"/>
+        <attribute name="id" optional="NO" attributeType="String"/>
+        <attribute name="importedAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="isFavorite" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="kindRaw" optional="NO" attributeType="String"/>
+        <attribute name="libraryID" optional="NO" attributeType="String"/>
+        <attribute name="pixelHeight" optional="YES" attributeType="Integer 64" usesScalarValueType="YES"/>
+        <attribute name="pixelWidth" optional="YES" attributeType="Integer 64" usesScalarValueType="YES"/>
+        <attribute name="storageRelativePath" optional="NO" attributeType="String"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="libraryID"/>
+                <constraint value="contentHash"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+    <elements>
+        <element name="AssetRecord" positionX="-63" positionY="-18" width="128" height="239"/>
+    </elements>
+</model>

@@ -5,6 +5,7 @@
 
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct AssetCollectionGridView: NSViewRepresentable {
     var assets: [AssetItem]
@@ -340,16 +341,24 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
     private func previewImage(for asset: AssetItem) -> NSImage {
         if asset.kind == .image || asset.kind == .gif {
-            if let image = NSImage(contentsOf: asset.storageURL) ?? NSImage(contentsOf: asset.originalURL) {
+            if let image = NSImage(contentsOf: asset.storageURL) ?? asset.originalURL.flatMap(NSImage.init(contentsOf:)) {
                 return image
             }
         }
 
-        let previewURL = FileManager.default.fileExists(atPath: asset.storageURL.path)
-            ? asset.storageURL
-            : asset.originalURL
+        if FileManager.default.fileExists(atPath: asset.storageURL.path) {
+            return NSWorkspace.shared.icon(forFile: asset.storageURL.path)
+        }
 
-        return NSWorkspace.shared.icon(forFile: previewURL.path)
+        if let originalURL = asset.originalURL {
+            return NSWorkspace.shared.icon(forFile: originalURL.path)
+        }
+
+        if let type = UTType(filenameExtension: asset.fileExtension) {
+            return NSWorkspace.shared.icon(for: type)
+        }
+
+        return NSWorkspace.shared.icon(for: .data)
     }
 }
 

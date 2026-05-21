@@ -6,6 +6,11 @@ struct MomentoShellView<Content: View>: View {
     @Binding var isCommandPalettePresented: Bool
 
     var sidebarSections: [MomentoSidebarSection]
+    var libraryName: String?
+    var recentLibraries: [RecentLibraryReference]
+    var onCreateLibrary: () -> Void
+    var onOpenLibrary: () -> Void
+    var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
     var title: String
     var subtitle: String?
     var inspectorAsset: MomentoInspectorAsset?
@@ -20,6 +25,11 @@ struct MomentoShellView<Content: View>: View {
         searchQuery: Binding<String>,
         isCommandPalettePresented: Binding<Bool>,
         sidebarSections: [MomentoSidebarSection] = .momentoDefaultSections,
+        libraryName: String? = nil,
+        recentLibraries: [RecentLibraryReference] = [],
+        onCreateLibrary: @escaping () -> Void = {},
+        onOpenLibrary: @escaping () -> Void = {},
+        onSwitchLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
         title: String = "All Assets",
         subtitle: String? = "0 items",
         inspectorAsset: MomentoInspectorAsset? = nil,
@@ -33,6 +43,11 @@ struct MomentoShellView<Content: View>: View {
         self._searchQuery = searchQuery
         self._isCommandPalettePresented = isCommandPalettePresented
         self.sidebarSections = sidebarSections
+        self.libraryName = libraryName
+        self.recentLibraries = recentLibraries
+        self.onCreateLibrary = onCreateLibrary
+        self.onOpenLibrary = onOpenLibrary
+        self.onSwitchLibrary = onSwitchLibrary
         self.title = title
         self.subtitle = subtitle
         self.inspectorAsset = inspectorAsset
@@ -45,7 +60,15 @@ struct MomentoShellView<Content: View>: View {
 
     var body: some View {
         HSplitView {
-            MomentoSidebarView(sections: sidebarSections, selection: $sidebarSelection)
+            MomentoSidebarView(
+                sections: sidebarSections,
+                selection: $sidebarSelection,
+                libraryName: libraryName,
+                recentLibraries: recentLibraries,
+                onCreateLibrary: onCreateLibrary,
+                onOpenLibrary: onOpenLibrary,
+                onSwitchLibrary: onSwitchLibrary
+            )
 
             VStack(spacing: 0) {
                 MomentoTopBar(

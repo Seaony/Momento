@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @Environment(\.appLocalization) private var localization
     @AppStorage(AppSettingsKeys.defaultViewMode) private var defaultViewModeRawValue = AssetViewMode.masonry.rawValue
-    @State private var store = LibraryStore(defaultViewMode: AppSettings.defaultViewMode())
+    @Bindable var store: LibraryStore
 
     @State private var isImporterPresented = false
     @State private var isCommandPalettePresented = false
@@ -50,37 +50,21 @@ struct ContentView: View {
     }
 
     var body: some View {
-        MomentoShellView(
-            sidebarSelection: sidebarSelection,
-            searchQuery: $store.searchQuery,
-            isCommandPalettePresented: $isCommandPalettePresented,
-            sidebarSections: sidebarSections,
-            title: title,
-            subtitle: localization.itemCount(store.visibleAssets.count),
-            inspectorAsset: store.selectedAsset.map { MomentoInspectorAsset(asset: $0, localization: localization) },
-            inspectorTags: selectedTags,
-            inspectorNotes: inspectorNotes,
-            commands: commands,
-            onCommandSelected: handleCommand
-        ) {
-            ZStack {
-                AssetCollectionGridView(
-                    assets: store.visibleAssets,
-                    selectedAssetIDs: selectedAssetIDs,
-                    viewMode: store.viewMode,
-                    onSelectionChange: selectAssets,
-                    onDoubleClick: preview
+        Group {
+            if store.currentLibrary == nil {
+                MomentoLibraryWelcomeView(
+                    recentLibraries: store.recentLibraries,
+                    onCreateLibrary: createLibrary,
+                    onOpenLibrary: openLibrary,
+                    onSwitchLibrary: switchLibrary
                 )
-
-                if store.visibleAssets.isEmpty {
-                    emptyGridState
-                }
+            } else {
+                libraryBody
             }
-            .background(Color(nsColor: .windowBackgroundColor))
         }
         .overlay(alignment: .bottom) {
-            if let importError {
-                importErrorBanner(importError)
+            if let errorMessage {
+                importErrorBanner(errorMessage)
                     .padding(.bottom, 16)
             }
         }
@@ -110,8 +94,48 @@ struct ContentView: View {
         .frame(minWidth: 1080, minHeight: 680)
     }
 
+    private var libraryBody: some View {
+        MomentoShellView(
+            sidebarSelection: sidebarSelection,
+            searchQuery: $store.searchQuery,
+            isCommandPalettePresented: $isCommandPalettePresented,
+            sidebarSections: sidebarSections,
+            libraryName: store.currentLibrary?.name,
+            recentLibraries: store.recentLibraries,
+            onCreateLibrary: createLibrary,
+            onOpenLibrary: openLibrary,
+            onSwitchLibrary: switchLibrary,
+            title: title,
+            subtitle: localization.itemCount(store.visibleAssets.count),
+            inspectorAsset: store.selectedAsset.map { MomentoInspectorAsset(asset: $0, localization: localization) },
+            inspectorTags: selectedTags,
+            inspectorNotes: inspectorNotes,
+            commands: commands,
+            onCommandSelected: handleCommand
+        ) {
+            ZStack {
+                AssetCollectionGridView(
+                    assets: store.visibleAssets,
+                    selectedAssetIDs: selectedAssetIDs,
+                    viewMode: store.viewMode,
+                    onSelectionChange: selectAssets,
+                    onDoubleClick: preview
+                )
+
+                if store.visibleAssets.isEmpty {
+                    emptyGridState
+                }
+            }
+            .background(Color(nsColor: .windowBackgroundColor))
+        }
+    }
+
     private var defaultViewMode: AssetViewMode {
         AssetViewMode(rawValue: defaultViewModeRawValue) ?? .masonry
+    }
+
+    private var errorMessage: String? {
+        importError ?? store.libraryErrorMessage
     }
 
     private var title: String {
@@ -135,7 +159,7 @@ struct ContentView: View {
                 items: [
                     MomentoSidebarItem(
                         id: "all-assets",
-                        title: store.currentLibrary.name,
+                        title: store.currentLibrary?.name ?? localization.string("Library"),
                         systemImage: "photo.on.rectangle.angled",
                         count: store.assets.count
                     ),
@@ -234,6 +258,7 @@ struct ContentView: View {
             Button(localization.string("Dismiss")) {
                 withAnimation(.smooth(duration: 0.16)) {
                     importError = nil
+                    store.libraryErrorMessage = nil
                 }
             }
             .buttonStyle(.plain)
@@ -251,9 +276,17 @@ struct ContentView: View {
     }
 
     private func preview(_ asset: AssetItem) {
-        let previewURL = FileManager.default.fileExists(atPath: asset.storageURL.path)
-            ? asset.storageURL
-            : asset.originalURL
+        let previewURL: URL?
+        if FileManager.default.fileExists(atPath: asset.storageURL.path) {
+            previewURL = asset.storageURL
+        } else {
+            previewURL = asset.originalURL
+        }
+
+        guard let previewURL else {
+            return
+        }
+
         QuickLookPreviewController.shared.show(url: previewURL)
     }
 
@@ -273,6 +306,49 @@ struct ContentView: View {
             }
         default:
             break
+        }
+    }
+
+    private func createLibrary() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.momentoLibrary]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = localization.string("Untitled Library") + ".\(LibraryStorage.packageExtension)"
+
+        guard panel.runModal() == .OK, let url = panel.url else {
+            return
+        }
+
+        do {
+            try store.createLibrary(at: url)
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func openLibrary() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.momentoLibrary]
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+
+        guard panel.runModal() == .OK, let url = panel.url else {
+            return
+        }
+
+        do {
+            try store.openLibrary(at: url)
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func switchLibrary(_ id: RecentLibraryReference.ID) {
+        do {
+            try store.openRecentLibrary(id: id)
+        } catch {
+            showImportError(error)
         }
     }
 
@@ -301,25 +377,28 @@ struct ContentView: View {
 
     private func showImportError(_ error: Error) {
         withAnimation(.smooth(duration: 0.16)) {
-            importError = error.localizedDescription
+            importError = localization.errorMessage(error)
         }
     }
 }
 
 private extension MomentoInspectorAsset {
     init(asset: AssetItem, localization: AppLocalization) {
-        let previewURL = FileManager.default.fileExists(atPath: asset.storageURL.path)
-            ? asset.storageURL
-            : asset.originalURL
+        let previewURL: URL?
+        if FileManager.default.fileExists(atPath: asset.storageURL.path) {
+            previewURL = asset.storageURL
+        } else {
+            previewURL = asset.originalURL
+        }
 
         self.init(
             id: asset.id,
             title: asset.displayName,
-            fileName: previewURL.lastPathComponent,
-            previewImage: asset.kind == .image || asset.kind == .gif ? NSImage(contentsOf: previewURL) : nil,
+            fileName: previewURL?.lastPathComponent ?? asset.displayName,
+            previewImage: previewURL.flatMap { asset.kind == .image || asset.kind == .gif ? NSImage(contentsOf: $0) : nil },
             dimensions: asset.dimensions.map { "\($0.width) × \($0.height)" },
             colorHexes: asset.tags.compactMap(\.colorHex),
-            filePath: previewURL.path,
+            filePath: previewURL?.path,
             fileSize: localization.fileSize(asset.byteSize),
             addedDate: asset.importedAt,
             kind: localization.kindTitle(for: asset.kind)
@@ -350,6 +429,6 @@ private extension Color {
 }
 
 #Preview {
-    ContentView()
+    ContentView(store: LibraryStore(libraries: [.defaultLibrary]))
         .environment(\.appLocalization, AppLocalization(language: .system))
 }

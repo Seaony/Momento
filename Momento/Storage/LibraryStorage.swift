@@ -1,6 +1,8 @@
 import Foundation
 
-struct LibraryStorage: Sendable {
+nonisolated struct LibraryStorage: Sendable {
+    static let packageExtension = "momentolibrary"
+
     var applicationSupportRoot: URL
 
     init(applicationSupportRoot: URL? = nil) {
@@ -8,7 +10,11 @@ struct LibraryStorage: Sendable {
     }
 
     nonisolated func rootURL(for library: AssetLibrary) -> URL {
-        applicationSupportRoot
+        if let packageURL = library.packageURL {
+            return packageURL
+        }
+
+        return applicationSupportRoot
             .appendingPathComponent("Libraries", isDirectory: true)
             .appendingPathComponent(library.id, isDirectory: true)
             .appendingPathComponent(".library", isDirectory: true)
@@ -18,9 +24,35 @@ struct LibraryStorage: Sendable {
         rootURL(for: library).appendingPathComponent("assets", isDirectory: true)
     }
 
+    nonisolated func databaseURL(for library: AssetLibrary) -> URL {
+        rootURL(for: library)
+            .appendingPathComponent("database", isDirectory: true)
+            .appendingPathComponent("library.sqlite")
+    }
+
+    nonisolated func assetStorageURL(
+        forContentHash contentHash: String,
+        fileExtension: String,
+        in library: AssetLibrary
+    ) -> URL {
+        let prefix = String(contentHash.prefix(2))
+        return assetsURL(for: library)
+            .appendingPathComponent(prefix, isDirectory: true)
+            .appendingPathComponent(contentHash)
+            .appendingPathExtension(fileExtension)
+    }
+
     nonisolated func prepareLibraryDirectories(for library: AssetLibrary) throws {
         let root = rootURL(for: library)
-        for folder in ["database", "assets", "thumbnails", "metadata"] {
+        for folder in [
+            "database",
+            "assets",
+            "thumbnails/small",
+            "thumbnails/medium",
+            "thumbnails/large",
+            "previews",
+            "metadata/import-sessions"
+        ] {
             try FileManager.default.createDirectory(
                 at: root.appendingPathComponent(folder, isDirectory: true),
                 withIntermediateDirectories: true
@@ -28,9 +60,89 @@ struct LibraryStorage: Sendable {
         }
     }
 
+    nonisolated func createLibraryPackage(at packageURL: URL, name: String) throws -> AssetLibrary {
+        let normalizedURL = packageURL.pathExtension == Self.packageExtension
+            ? packageURL
+            : packageURL.appendingPathExtension(Self.packageExtension)
+
+        try FileManager.default.createDirectory(at: normalizedURL, withIntermediateDirectories: true)
+        let library = AssetLibrary(id: UUID().uuidString, name: name, createdAt: Date(), packageURL: normalizedURL)
+        try prepareLibraryDirectories(for: library)
+        try writeManifest(LibraryManifest(library: library), in: library)
+        return library
+    }
+
+    nonisolated func openLibraryPackage(at packageURL: URL) throws -> AssetLibrary {
+        let manifestURL = packageURL.appendingPathComponent(LibraryManifest.fileName, isDirectory: false)
+        let data = try Data(contentsOf: manifestURL)
+        let manifest = try JSONDecoder.momento.decode(LibraryManifest.self, from: data)
+        guard manifest.schemaVersion == LibraryManifest.currentSchemaVersion else {
+            throw LibraryStorageError.unsupportedSchemaVersion(manifest.schemaVersion)
+        }
+
+        return AssetLibrary(
+            id: manifest.libraryID,
+            name: manifest.displayName,
+            createdAt: manifest.createdAt,
+            packageURL: packageURL
+        )
+    }
+
+    nonisolated func relativePath(for url: URL, in library: AssetLibrary) throws -> String {
+        let packageURL = rootURL(for: library).standardizedFileURL
+        let assetURL = url.standardizedFileURL
+        let packagePath = packageURL.path.hasSuffix("/") ? packageURL.path : packageURL.path + "/"
+
+        guard assetURL.path.hasPrefix(packagePath) else {
+            throw LibraryStorageError.assetOutsideLibrary
+        }
+
+        return String(assetURL.path.dropFirst(packagePath.count))
+    }
+
+    nonisolated func resolveAssetURL(relativePath: String, in library: AssetLibrary) -> URL {
+        rootURL(for: library).appendingPathComponent(relativePath, isDirectory: false)
+    }
+
+    nonisolated private func writeManifest(_ manifest: LibraryManifest, in library: AssetLibrary) throws {
+        let data = try JSONEncoder.momento.encode(manifest)
+        try data.write(to: rootURL(for: library).appendingPathComponent(LibraryManifest.fileName), options: .atomic)
+    }
+
     nonisolated private static func defaultApplicationSupportRoot() -> URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support", isDirectory: true)
         return base.appendingPathComponent("Momento", isDirectory: true)
+    }
+}
+
+nonisolated enum LibraryStorageError: LocalizedError {
+    case assetOutsideLibrary
+    case unsupportedSchemaVersion(Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .assetOutsideLibrary:
+            "Asset storage must stay inside the selected library package."
+        case .unsupportedSchemaVersion(let version):
+            "Unsupported library schema version: \(version)."
+        }
+    }
+}
+
+extension JSONEncoder {
+    nonisolated static var momento: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return encoder
+    }
+}
+
+extension JSONDecoder {
+    nonisolated static var momento: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
     }
 }

@@ -5,33 +5,59 @@ import Observation
 @Observable
 final class LibraryStore {
     var libraries: [AssetLibrary]
-    var currentLibrary: AssetLibrary
+    var currentLibrary: AssetLibrary?
     var assets: [AssetItem]
     var selectedAssetID: AssetItem.ID?
     var searchQuery = ""
     var viewMode: AssetViewMode = .masonry
-    var sidebarSelection: SidebarSelection
+    var sidebarSelection: SidebarSelection = .library("")
+    var recentLibraries: [RecentLibraryReference]
+    var libraryErrorMessage: String?
 
     private let importService: AssetImportService
+    private let storage: LibraryStorage
+    private let recentStore: RecentLibraryStore
+    private var metadataStore: LibraryMetadataStore?
+    private var libraryAccessScope: LibraryAccessScope?
 
     init(
-        libraries: [AssetLibrary] = [.defaultLibrary],
+        libraries: [AssetLibrary]? = nil,
         assets: [AssetItem]? = nil,
         defaultViewMode: AssetViewMode = .masonry,
-        importService: AssetImportService = AssetImportService()
+        importService: AssetImportService = AssetImportService(),
+        storage: LibraryStorage = LibraryStorage(),
+        recentStore: RecentLibraryStore = RecentLibraryStore(),
+        loadRecentLibrary: Bool = true
     ) {
-        let currentLibrary = libraries.first ?? .defaultLibrary
-        let initialAssets = assets ?? Self.sampleAssets(for: currentLibrary)
-        self.libraries = libraries.isEmpty ? [.defaultLibrary] : libraries
-        self.currentLibrary = currentLibrary
-        self.assets = initialAssets
-        self.selectedAssetID = initialAssets.first?.id
+        self.libraries = []
+        self.currentLibrary = nil
+        self.assets = []
+        self.selectedAssetID = nil
         self.viewMode = defaultViewMode
-        self.sidebarSelection = .library(currentLibrary.id)
         self.importService = importService
+        self.storage = storage
+        self.recentStore = recentStore
+        self.recentLibraries = recentStore.load()
+        self.libraryErrorMessage = nil
+
+        if let libraries {
+            let currentLibrary = libraries.first ?? .defaultLibrary
+            let initialAssets = assets ?? Self.sampleAssets(for: currentLibrary)
+            self.libraries = libraries.isEmpty ? [currentLibrary] : libraries
+            self.currentLibrary = currentLibrary
+            self.assets = initialAssets
+            self.selectedAssetID = initialAssets.first?.id
+            self.sidebarSelection = .library(currentLibrary.id)
+        } else if loadRecentLibrary, let reference = recentLibraries.first {
+            try? openRecentLibrary(reference)
+        }
     }
 
     var visibleAssets: [AssetItem] {
+        guard let currentLibrary else {
+            return []
+        }
+
         let libraryAssets = assets.filter { $0.libraryID == currentLibrary.id }
         let scopedAssets: [AssetItem]
 
@@ -69,11 +95,41 @@ final class LibraryStore {
     }
 
     var tags: [TagItem] {
+        guard let currentLibrary else {
+            return []
+        }
+
         var seen = Set<String>()
         return assets
+            .filter { $0.libraryID == currentLibrary.id }
             .flatMap(\.tags)
             .filter { seen.insert($0.id).inserted }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    func createLibrary(at packageURL: URL) throws {
+        let name = packageURL.deletingPathExtension().lastPathComponent
+        let library = try storage.createLibraryPackage(at: packageURL, name: name)
+        try activateLibrary(library, accessScope: LibraryAccessScope(url: storage.rootURL(for: library)))
+        try saveRecentLibrary(library)
+    }
+
+    func openLibrary(at packageURL: URL) throws {
+        guard packageURL.pathExtension == LibraryStorage.packageExtension else {
+            throw LibraryStoreError.unsupportedLibraryURL
+        }
+
+        let accessScope = LibraryAccessScope(url: packageURL)
+        let library = try storage.openLibraryPackage(at: packageURL)
+        try activateLibrary(library, accessScope: accessScope)
+        try saveRecentLibrary(library)
+    }
+
+    func openRecentLibrary(id: RecentLibraryReference.ID) throws {
+        guard let reference = recentLibraries.first(where: { $0.id == id }) else {
+            throw LibraryStoreError.missingRecentLibrary
+        }
+        try openRecentLibrary(reference)
     }
 
     func selectAsset(_ asset: AssetItem?) {
@@ -97,7 +153,7 @@ final class LibraryStore {
         case let id? where id.hasPrefix("tag-"):
             sidebarSelection = .tag(String(id.dropFirst(4)))
         default:
-            sidebarSelection = .library(currentLibrary.id)
+            sidebarSelection = .library(currentLibrary?.id ?? "")
         }
 
         if let selectedAssetID, !visibleAssets.contains(where: { $0.id == selectedAssetID }) {
@@ -128,16 +184,66 @@ final class LibraryStore {
     }
 
     func importItems(from urls: [URL]) async throws {
-        let imported = try await importService.importItems(from: urls, into: currentLibrary)
-        var existingHashes = Set(assets.map(\.contentHash))
+        guard let currentLibrary, let metadataStore else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
 
-        for asset in imported where existingHashes.insert(asset.contentHash).inserted {
+        let importingLibraryID = currentLibrary.id
+        let importAccessScope = LibraryAccessScope(url: storage.rootURL(for: currentLibrary))
+        defer {
+            _ = importAccessScope
+        }
+
+        let imported = try await importService.importItems(
+            from: urls,
+            into: currentLibrary,
+            excludingContentHashes: metadataStore.existingContentHashes()
+        )
+        let savedAssets = try metadataStore.saveImportedAssets(imported)
+        guard self.currentLibrary?.id == importingLibraryID else {
+            return
+        }
+
+        var existingIDs = Set(assets.map(\.id))
+
+        for asset in savedAssets where existingIDs.insert(asset.id).inserted {
             assets.append(asset)
         }
 
         if selectedAssetID == nil {
             selectedAssetID = visibleAssets.first?.id
         }
+    }
+
+    private func openRecentLibrary(_ reference: RecentLibraryReference) throws {
+        let resolved = try recentStore.resolve(reference)
+        let accessScope = LibraryAccessScope(url: resolved.url)
+        let library = try storage.openLibraryPackage(at: resolved.url)
+        try activateLibrary(library, accessScope: accessScope)
+
+        if resolved.isStale {
+            try saveRecentLibrary(library)
+        }
+    }
+
+    private func activateLibrary(_ library: AssetLibrary, accessScope: LibraryAccessScope) throws {
+        let metadataStore = try LibraryMetadataStore(library: library, storage: storage)
+        let loadedAssets = try metadataStore.loadAssets()
+
+        libraryAccessScope = accessScope
+        self.metadataStore = metadataStore
+        currentLibrary = library
+        libraries = [library]
+        assets = loadedAssets
+        selectedAssetID = loadedAssets.first?.id
+        searchQuery = ""
+        sidebarSelection = .library(library.id)
+        libraryErrorMessage = nil
+    }
+
+    private func saveRecentLibrary(_ library: AssetLibrary) throws {
+        try recentStore.save(library)
+        recentLibraries = recentStore.load()
     }
 
     private static func sampleAssets(for library: AssetLibrary) -> [AssetItem] {
@@ -192,5 +298,22 @@ final class LibraryStore {
                 importedAt: now
             )
         ]
+    }
+}
+
+enum LibraryStoreError: LocalizedError {
+    case noCurrentLibrary
+    case missingRecentLibrary
+    case unsupportedLibraryURL
+
+    var errorDescription: String? {
+        switch self {
+        case .noCurrentLibrary:
+            "Create or open a Momento library before importing assets."
+        case .missingRecentLibrary:
+            "This recent library is no longer available."
+        case .unsupportedLibraryURL:
+            "Choose a .momentolibrary package."
+        }
     }
 }
