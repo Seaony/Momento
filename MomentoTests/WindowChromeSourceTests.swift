@@ -90,7 +90,8 @@ final class WindowChromeSourceTests: XCTestCase {
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
         let themeSource = try String(contentsOf: themeURL(), encoding: .utf8)
 
-        XCTAssertTrue(themeSource.contains("static let mainWindowMinWidth = sidebarWidth + floatingSidebarInset * 2 + contentMinWidth + inspectorWidth"))
+        XCTAssertTrue(themeSource.contains("static let mainWindowMinWidth = sidebarMaxWidth + floatingSidebarInset * 2 + contentMinWidth + inspectorWidth"))
+        XCTAssertFalse(themeSource.contains("static let mainWindowMinWidth = sidebarWidth + floatingSidebarInset * 2 + contentMinWidth + inspectorWidth"))
         XCTAssertTrue(themeSource.contains("static let mainWindowMinHeight: CGFloat = 640"))
         XCTAssertTrue(themeSource.contains("static let defaultWindowWidth: CGFloat = 1280"))
         XCTAssertTrue(themeSource.contains("static let defaultWindowHeight: CGFloat = 800"))
