@@ -1,7 +1,9 @@
 import SwiftUI
 
 private let inactiveBackdropOpacity = 0.88
-private let focusedBackdropOpacity = 0.84
+private let focusedBackdropOpacity = 0.76
+private let welcomeButtonWidth: CGFloat = 152
+private let welcomeButtonHeight: CGFloat = 36
 
 struct MomentoLibraryWelcomeView: View {
     @Environment(\.appLocalization) private var localization
@@ -35,6 +37,9 @@ struct MomentoLibraryWelcomeView: View {
                         onCreateLibrary()
                     } label: {
                         Label(localization.string("Create Library"), systemImage: "plus")
+                            .labelStyle(.titleAndIcon)
+                            .font(.system(size: 14, weight: .semibold))
+                            .frame(width: welcomeButtonWidth, height: welcomeButtonHeight)
                     }
                     .buttonStyle(WelcomePrimaryButtonStyle(isHovered: isCreateHovered))
                     .onHover { isCreateHovered = $0 }
@@ -43,11 +48,14 @@ struct MomentoLibraryWelcomeView: View {
                         onOpenLibrary()
                     } label: {
                         Label(localization.string("Open Library"), systemImage: "folder")
+                            .labelStyle(.titleAndIcon)
+                            .font(.system(size: 14, weight: .semibold))
+                            .frame(width: welcomeButtonWidth, height: welcomeButtonHeight)
                     }
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.capsule)
-                    .controlSize(.large)
+                    .buttonStyle(.plain)
                     .foregroundStyle(isOpenHovered ? Color.primary : MomentoTheme.secondaryText)
+                    .contentShape(Capsule(style: .continuous))
+                    .glassEffect(.regular.interactive(), in: Capsule(style: .continuous))
                     .scaleEffect(isOpenHovered ? 1.025 : 1)
                     .shadow(
                         color: .black.opacity(isOpenHovered ? 0.18 : 0.10),
@@ -65,10 +73,10 @@ struct MomentoLibraryWelcomeView: View {
 }
 
 private struct WelcomeGlassBackdrop: View {
-    @Environment(\.controlActiveState) private var controlActiveState
+    @Environment(\.appearsActive) private var appearsActive
 
     private var windowBackgroundOpacity: Double {
-        controlActiveState == .inactive ? inactiveBackdropOpacity : focusedBackdropOpacity
+        appearsActive ? focusedBackdropOpacity : inactiveBackdropOpacity
     }
 
     var body: some View {
@@ -82,7 +90,7 @@ private struct WelcomeGlassBackdrop: View {
 
             Color(nsColor: .windowBackgroundColor)
                 .opacity(windowBackgroundOpacity)
-                .animation(.smooth(duration: 0.18), value: controlActiveState)
+                .animation(.smooth(duration: 0.18), value: appearsActive)
 
             LinearGradient(
                 colors: [
@@ -107,11 +115,7 @@ private struct WelcomePrimaryButtonStyle: ButtonStyle {
         let shadowOpacity = isPressed ? 0.12 : (isHovered ? 0.24 : 0.18)
 
         configuration.label
-            .labelStyle(.titleAndIcon)
-            .font(.system(size: 14, weight: .semibold))
             .foregroundStyle(Color.white)
-            .padding(.horizontal, 18)
-            .frame(height: 36)
             .background {
                 Capsule(style: .continuous)
                     .fill(Color.accentColor.opacity(fillOpacity))
