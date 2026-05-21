@@ -345,7 +345,7 @@ struct MomentoSidebarView: View {
                 isLibrarySwitcherPresented.toggle()
             }
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 Image(systemName: "archivebox.fill")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.white)
@@ -353,7 +353,7 @@ struct MomentoSidebarView: View {
                     .background(.blue.gradient, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
 
                 Text(libraryName ?? localization.string("No library selected"))
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(MomentoTheme.primaryText)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -364,7 +364,7 @@ struct MomentoSidebarView: View {
             }
             .padding(.leading, 5)
             .padding(.trailing, 7)
-            .padding(.vertical, 4)
+            .padding(.vertical, 3)
             .background { libraryMenuBackground }
             .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -539,7 +539,7 @@ private struct MomentoLibrarySwitcherMenu: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(library.name)
                             .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(MomentoTheme.primaryText)
+                            .foregroundStyle(isSelected ? .white : MomentoTheme.primaryText)
                             .lineLimit(1)
 
                         Text(libraryPath(for: library))
