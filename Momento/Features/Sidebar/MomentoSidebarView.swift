@@ -113,7 +113,7 @@ struct MomentoSidebarView: View {
             .background {
                 LibrarySwitcherDismissMonitor(isPresented: $isLibrarySwitcherPresented)
             }
-            .padding(.top, MomentoTheme.floatingSidebarTitlebarContentInset + 42)
+            .padding(.top, MomentoTheme.floatingSidebarTitlebarContentInset + MomentoTheme.librarySelectorHeight + MomentoTheme.librarySwitcherVerticalGap)
             .padding(.leading, 14)
             .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .topLeading)))
             .zIndex(30)
@@ -260,6 +260,7 @@ struct MomentoSidebarView: View {
             .padding(.leading, 5)
             .padding(.trailing, 7)
             .padding(.vertical, 3)
+            .frame(height: MomentoTheme.librarySelectorHeight)
             .background { libraryMenuBackground }
             .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -577,7 +578,7 @@ private struct MomentoLibrarySwitcherMenu: View {
         .padding(6)
         .frame(width: 150, alignment: .leading)
         .background {
-            MomentoGlassBackground(glass: .regular.tint(Color.white.opacity(0.08)), cornerRadius: 12)
+            MomentoGlassBackground(glass: .regular, cornerRadius: 12)
         }
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)

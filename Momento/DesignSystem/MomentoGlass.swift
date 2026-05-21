@@ -56,6 +56,8 @@ enum MomentoTheme {
     static let floatingSidebarInset: CGFloat = 8
     static let floatingSidebarRadius: CGFloat = 20
     static let floatingSidebarTitlebarContentInset: CGFloat = 54
+    static let librarySelectorHeight: CGFloat = 26
+    static let librarySwitcherVerticalGap: CGFloat = 8
     static let sidebarTitlebarButtonSize: CGFloat = 28
     static let sidebarTitlebarButtonTopInset: CGFloat = 13
     static let sidebarTitlebarButtonTrailingInset: CGFloat = 14
