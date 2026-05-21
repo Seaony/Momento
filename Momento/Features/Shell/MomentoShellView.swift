@@ -104,7 +104,7 @@ struct MomentoShellView<Content: View>: View {
         .background {
             SidebarTitlebarToggleConfigurator(
                 isCollapsed: $isSidebarCollapsed,
-                leadingInset: sidebarToggleLeadingInset(availableWidth: availableWidth),
+                buttonMinX: sidebarToggleButtonMinX(availableWidth: availableWidth),
                 label: sidebarToggleLabel
             )
             .frame(width: 0, height: 0)
@@ -182,7 +182,7 @@ struct MomentoShellView<Content: View>: View {
         localization.string(isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar")
     }
 
-    private func sidebarToggleLeadingInset(availableWidth: CGFloat) -> CGFloat {
+    private func sidebarToggleButtonMinX(availableWidth: CGFloat) -> CGFloat {
         if isSidebarCollapsed {
             return MomentoTheme.collapsedSidebarToggleLeadingInset
         }

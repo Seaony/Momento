@@ -182,10 +182,10 @@ final class LiquidGlassSourceTests: XCTestCase {
         XCTAssertTrue(shellSource.contains(".transition(.move(edge: .leading).combined(with: .opacity))"))
         XCTAssertTrue(shellSource.contains("SidebarTitlebarToggleConfigurator("))
         XCTAssertTrue(shellSource.contains("isCollapsed: $isSidebarCollapsed"))
-        XCTAssertTrue(shellSource.contains("leadingInset: sidebarToggleLeadingInset(availableWidth: availableWidth)"))
+        XCTAssertTrue(shellSource.contains("buttonMinX: sidebarToggleButtonMinX(availableWidth: availableWidth)"))
         XCTAssertTrue(shellSource.contains("label: sidebarToggleLabel"))
         XCTAssertTrue(shellSource.contains("private var sidebarToggleLabel: String"))
-        XCTAssertTrue(shellSource.contains("private func sidebarToggleLeadingInset(availableWidth: CGFloat) -> CGFloat"))
+        XCTAssertTrue(shellSource.contains("private func sidebarToggleButtonMinX(availableWidth: CGFloat) -> CGFloat"))
         XCTAssertTrue(shellSource.contains("return MomentoTheme.collapsedSidebarToggleLeadingInset"))
         XCTAssertTrue(shellSource.contains("return MomentoTheme.floatingSidebarInset + effectiveSidebarWidth(availableWidth: availableWidth) - MomentoTheme.sidebarTitlebarButtonTrailingInset - MomentoTheme.sidebarTitlebarButtonSize"))
         XCTAssertTrue(shellSource.contains(".animation(.smooth(duration: 0.18), value: isSidebarCollapsed)"))
@@ -199,8 +199,6 @@ final class LiquidGlassSourceTests: XCTestCase {
         XCTAssertTrue(titlebarSource.contains(".onHover { hovering in"))
         XCTAssertTrue(titlebarSource.contains("isHovered = hovering"))
         XCTAssertTrue(titlebarSource.contains(".contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))"))
-        XCTAssertTrue(titlebarSource.contains(".padding(.leading, leadingInset)"))
-        XCTAssertTrue(titlebarSource.contains(".padding(.top, MomentoTheme.sidebarTitlebarButtonTopInset)"))
         XCTAssertTrue(titlebarSource.contains("withAnimation(.smooth(duration: 0.18))"))
         XCTAssertTrue(titlebarSource.contains("isCollapsed.toggle()"))
 
@@ -222,6 +220,17 @@ final class LiquidGlassSourceTests: XCTestCase {
         XCTAssertTrue(titlebarSource.contains("NSHostingView"))
         XCTAssertTrue(titlebarSource.contains("@Binding var isCollapsed: Bool"))
         XCTAssertTrue(titlebarSource.contains("isCollapsed.toggle()"))
+    }
+
+    func testSidebarTitlebarTogglePositionAccountsForAccessoryOrigin() throws {
+        let titlebarSource = try String(contentsOf: titlebarToggleConfiguratorURL(), encoding: .utf8)
+
+        XCTAssertTrue(titlebarSource.contains("var buttonMinX: CGFloat"))
+        XCTAssertTrue(titlebarSource.contains("convert(.zero, to: nil).x"))
+        XCTAssertTrue(titlebarSource.contains("buttonMinX - titlebarOriginX"))
+        XCTAssertTrue(titlebarSource.contains("SidebarTitlebarToggleContainerView"))
+        XCTAssertTrue(titlebarSource.contains("override func hitTest(_ point: NSPoint) -> NSView?"))
+        XCTAssertFalse(titlebarSource.contains(".padding(.leading, leadingInset)"))
     }
 
     func testFloatingSidebarExtendsIntoWindowTitlebarArea() throws {

@@ -3,7 +3,7 @@ import SwiftUI
 
 struct SidebarTitlebarToggleConfigurator: NSViewRepresentable {
     @Binding var isCollapsed: Bool
-    var leadingInset: CGFloat
+    var buttonMinX: CGFloat
     var label: String
 
     func makeCoordinator() -> Coordinator {
@@ -25,7 +25,7 @@ struct SidebarTitlebarToggleConfigurator: NSViewRepresentable {
         context.coordinator.update(
             configuration: Configuration(
                 isCollapsed: $isCollapsed,
-                leadingInset: leadingInset,
+                buttonMinX: buttonMinX,
                 label: label
             )
         )
@@ -39,7 +39,7 @@ struct SidebarTitlebarToggleConfigurator: NSViewRepresentable {
 
     struct Configuration {
         var isCollapsed: Binding<Bool>
-        var leadingInset: CGFloat
+        var buttonMinX: CGFloat
         var label: String
     }
 
@@ -57,7 +57,7 @@ extension SidebarTitlebarToggleConfigurator {
     final class Coordinator {
         private weak var window: NSWindow?
         private var accessoryController: NSTitlebarAccessoryViewController?
-        private var hostingView: SidebarTitlebarToggleHostingView?
+        private var containerView: SidebarTitlebarToggleContainerView?
         private var configuration: Configuration?
 
         func update(configuration: Configuration) {
@@ -86,7 +86,7 @@ extension SidebarTitlebarToggleConfigurator {
             }
 
             accessoryController = nil
-            hostingView = nil
+            containerView = nil
             window = nil
         }
 
@@ -101,13 +101,12 @@ extension SidebarTitlebarToggleConfigurator {
 
             let rootView = SidebarTitlebarToggleAccessoryView(
                 isCollapsed: configuration.isCollapsed,
-                leadingInset: configuration.leadingInset,
                 label: configuration.label
             )
-            let size = accessorySize(leadingInset: configuration.leadingInset)
+            let size = accessorySize(buttonMinX: configuration.buttonMinX)
 
-            hostingView?.rootView = rootView
-            hostingView?.setFrameSize(size)
+            containerView?.update(rootView: rootView, buttonMinX: configuration.buttonMinX)
+            containerView?.setFrameSize(size)
             accessoryController?.view.setFrameSize(size)
         }
 
@@ -118,24 +117,25 @@ extension SidebarTitlebarToggleConfigurator {
 
             let rootView = SidebarTitlebarToggleAccessoryView(
                 isCollapsed: configuration.isCollapsed,
-                leadingInset: configuration.leadingInset,
                 label: configuration.label
             )
             let hostingView = SidebarTitlebarToggleHostingView(rootView: rootView)
-            hostingView.frame = NSRect(origin: .zero, size: accessorySize(leadingInset: configuration.leadingInset))
+            let containerView = SidebarTitlebarToggleContainerView(hostingView: hostingView)
+            containerView.update(rootView: rootView, buttonMinX: configuration.buttonMinX)
+            containerView.frame = NSRect(origin: .zero, size: accessorySize(buttonMinX: configuration.buttonMinX))
 
             let accessoryController = NSTitlebarAccessoryViewController()
             accessoryController.layoutAttribute = .left
-            accessoryController.view = hostingView
+            accessoryController.view = containerView
 
-            self.hostingView = hostingView
+            self.containerView = containerView
             self.accessoryController = accessoryController
             window.addTitlebarAccessoryViewController(accessoryController)
         }
 
-        private func accessorySize(leadingInset: CGFloat) -> NSSize {
+        private func accessorySize(buttonMinX: CGFloat) -> NSSize {
             NSSize(
-                width: leadingInset + MomentoTheme.sidebarTitlebarButtonSize,
+                width: buttonMinX + MomentoTheme.sidebarTitlebarButtonSize,
                 height: MomentoTheme.floatingSidebarTitlebarContentInset
             )
         }
@@ -144,7 +144,6 @@ extension SidebarTitlebarToggleConfigurator {
 
 private struct SidebarTitlebarToggleAccessoryView: View {
     @Binding var isCollapsed: Bool
-    var leadingInset: CGFloat
     var label: String
 
     @State private var isHovered = false
@@ -180,13 +179,57 @@ private struct SidebarTitlebarToggleAccessoryView: View {
         }
         .help(label)
         .accessibilityLabel(label)
-        .padding(.leading, leadingInset)
-        .padding(.top, MomentoTheme.sidebarTitlebarButtonTopInset)
         .frame(
-            width: leadingInset + MomentoTheme.sidebarTitlebarButtonSize,
-            height: MomentoTheme.floatingSidebarTitlebarContentInset,
-            alignment: .topLeading
+            width: MomentoTheme.sidebarTitlebarButtonSize,
+            height: MomentoTheme.sidebarTitlebarButtonSize
         )
+    }
+}
+
+private final class SidebarTitlebarToggleContainerView: NSView {
+    private let hostingView: SidebarTitlebarToggleHostingView
+    private var buttonMinX: CGFloat = 0
+
+    override var isFlipped: Bool {
+        true
+    }
+
+    init(hostingView: SidebarTitlebarToggleHostingView) {
+        self.hostingView = hostingView
+        super.init(frame: .zero)
+        addSubview(hostingView)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func update(rootView: SidebarTitlebarToggleAccessoryView, buttonMinX: CGFloat) {
+        hostingView.rootView = rootView
+        self.buttonMinX = buttonMinX
+        needsLayout = true
+    }
+
+    override func layout() {
+        super.layout()
+
+        let titlebarOriginX = convert(.zero, to: nil).x
+        let buttonX = max(0, buttonMinX - titlebarOriginX)
+        hostingView.frame = NSRect(
+            x: buttonX,
+            y: MomentoTheme.sidebarTitlebarButtonTopInset,
+            width: MomentoTheme.sidebarTitlebarButtonSize,
+            height: MomentoTheme.sidebarTitlebarButtonSize
+        )
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard hostingView.frame.contains(point) else {
+            return nil
+        }
+
+        return super.hitTest(point)
     }
 }
 
