@@ -72,11 +72,14 @@ final class WelcomeViewSourceTests: XCTestCase {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 
         XCTAssertTrue(source.contains("pointingHandCursor()"))
-        XCTAssertTrue(source.contains("addCursorRect(bounds, cursor: .pointingHand)"))
+        XCTAssertTrue(source.contains("NSCursor.pointingHand.push()"))
+        XCTAssertTrue(source.contains("NSCursor.pop()"))
         let pointingHandUpdateCount = source
             .components(separatedBy: ".pointingHandCursor()")
             .count - 1
         XCTAssertGreaterThanOrEqual(pointingHandUpdateCount, 2)
+        XCTAssertFalse(source.contains("PointingHandCursorView"))
+        XCTAssertFalse(source.contains("addCursorRect(bounds, cursor: .pointingHand)"))
         XCTAssertFalse(source.contains("updatePointingHandCursor(isHovered: hovering)"))
     }
 

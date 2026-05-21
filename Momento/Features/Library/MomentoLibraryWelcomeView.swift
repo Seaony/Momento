@@ -97,30 +97,37 @@ struct MomentoLibraryWelcomeView: View {
 
 private extension View {
     func pointingHandCursor() -> some View {
-        overlay {
-            PointingHandCursorView()
-        }
+        modifier(PointingHandCursorModifier())
     }
 }
 
-private struct PointingHandCursorView: NSViewRepresentable {
-    func makeNSView(context: Context) -> PointingHandCursorNSView {
-        PointingHandCursorNSView()
-    }
+private struct PointingHandCursorModifier: ViewModifier {
+    @State private var isHovering = false
 
-    func updateNSView(_ view: PointingHandCursorNSView, context: Context) {
-        view.window?.invalidateCursorRects(for: view)
-    }
-}
-
-private final class PointingHandCursorNSView: NSView {
-    override func resetCursorRects() {
-        super.resetCursorRects()
-        addCursorRect(bounds, cursor: .pointingHand)
-    }
-
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        nil
+    func body(content: Content) -> some View {
+        content
+            .onHover { hovering in
+                if hovering {
+                    guard !isHovering else {
+                        return
+                    }
+                    NSCursor.pointingHand.push()
+                    isHovering = true
+                } else {
+                    guard isHovering else {
+                        return
+                    }
+                    NSCursor.pop()
+                    isHovering = false
+                }
+            }
+            .onDisappear {
+                guard isHovering else {
+                    return
+                }
+                NSCursor.pop()
+                isHovering = false
+            }
     }
 }
 
