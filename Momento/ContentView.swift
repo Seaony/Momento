@@ -98,6 +98,7 @@ struct ContentView: View {
         .background {
             WindowTransparencyConfigurator()
         }
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .onChange(of: defaultViewMode) { _, newValue in
             store.setViewMode(newValue)
         }
