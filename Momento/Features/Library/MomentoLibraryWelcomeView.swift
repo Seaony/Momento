@@ -45,11 +45,23 @@ struct MomentoLibraryWelcomeView: View {
                             .font(.system(size: 14, weight: .semibold))
                             .frame(width: welcomeButtonWidth, height: welcomeButtonHeight)
                     }
-                    .buttonStyle(WelcomePrimaryButtonStyle(isHovered: isCreateHovered))
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color.white)
+                    .contentShape(Capsule(style: .continuous))
+                    .glassEffect(.regular.tint(Color.accentColor).interactive(), in: Capsule(style: .continuous))
+                    .environment(\.appearsActive, true)
+                    .scaleEffect(isCreateHovered ? 1.025 : 1)
+                    .shadow(
+                        color: .black.opacity(isCreateHovered ? 0.24 : 0.18),
+                        radius: isCreateHovered ? 14 : 10,
+                        x: 0,
+                        y: isCreateHovered ? 8 : 5
+                    )
                     .onHover { hovering in
                         isCreateHovered = hovering
-                        updatePointingHandCursor(isHovered: hovering)
                     }
+                    .pointingHandCursor()
+                    .animation(.smooth(duration: 0.16), value: isCreateHovered)
 
                     Button {
                         onOpenLibrary()
@@ -73,8 +85,8 @@ struct MomentoLibraryWelcomeView: View {
                     )
                     .onHover { hovering in
                         isOpenHovered = hovering
-                        updatePointingHandCursor(isHovered: hovering)
                     }
+                    .pointingHandCursor()
                     .animation(.smooth(duration: 0.16), value: isOpenHovered)
                 }
             }
@@ -83,11 +95,32 @@ struct MomentoLibraryWelcomeView: View {
     }
 }
 
-private func updatePointingHandCursor(isHovered: Bool) {
-    if isHovered {
-        NSCursor.pointingHand.set()
-    } else {
-        NSCursor.arrow.set()
+private extension View {
+    func pointingHandCursor() -> some View {
+        overlay {
+            PointingHandCursorView()
+        }
+    }
+}
+
+private struct PointingHandCursorView: NSViewRepresentable {
+    func makeNSView(context: Context) -> PointingHandCursorNSView {
+        PointingHandCursorNSView()
+    }
+
+    func updateNSView(_ view: PointingHandCursorNSView, context: Context) {
+        view.window?.invalidateCursorRects(for: view)
+    }
+}
+
+private final class PointingHandCursorNSView: NSView {
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
     }
 }
 
@@ -192,42 +225,6 @@ private struct WelcomeGlassBackdrop: View {
             )
         }
         .ignoresSafeArea()
-    }
-}
-
-private struct WelcomePrimaryButtonStyle: ButtonStyle {
-    var isHovered: Bool
-
-    func makeBody(configuration: Configuration) -> some View {
-        let isPressed = configuration.isPressed
-        let fillOpacity = isPressed ? 0.82 : (isHovered ? 1.0 : 0.94)
-        let shadowOpacity = isPressed ? 0.12 : (isHovered ? 0.24 : 0.18)
-
-        configuration.label
-            .foregroundStyle(Color.white)
-            .background {
-                Capsule(style: .continuous)
-                    .fill(Color.accentColor.opacity(fillOpacity))
-                    .overlay(alignment: .top) {
-                        Capsule(style: .continuous)
-                            .fill(Color.white.opacity(isHovered ? 0.24 : 0.18))
-                            .frame(height: 1)
-                            .padding(.horizontal, 13)
-                    }
-                    .overlay {
-                        Capsule(style: .continuous)
-                            .strokeBorder(Color.white.opacity(isHovered ? 0.28 : 0.20), lineWidth: 1)
-                    }
-                    .shadow(
-                        color: .black.opacity(shadowOpacity),
-                        radius: isPressed ? 6 : (isHovered ? 14 : 10),
-                        x: 0,
-                        y: isPressed ? 3 : (isHovered ? 8 : 5)
-                    )
-            }
-            .scaleEffect(isPressed ? 0.98 : (isHovered ? 1.025 : 1))
-            .animation(.smooth(duration: 0.16), value: isHovered)
-            .animation(.smooth(duration: 0.12), value: isPressed)
     }
 }
 

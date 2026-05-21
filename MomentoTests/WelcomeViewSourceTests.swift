@@ -12,12 +12,14 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertFalse(source.contains("No library selected"))
     }
 
-    func testWelcomeViewUsesPrimaryAndNativeGlassButtons() throws {
+    func testWelcomeButtonsUseNativeGlassEffects() throws {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 
-        XCTAssertTrue(source.contains("WelcomePrimaryButtonStyle"))
+        XCTAssertTrue(source.contains(".glassEffect(.regular.tint(Color.accentColor).interactive(), in: Capsule(style: .continuous))"))
         XCTAssertTrue(source.contains(".glassEffect(.regular.interactive(), in: Capsule(style: .continuous))"))
+        XCTAssertFalse(source.contains("WelcomePrimaryButtonStyle"))
         XCTAssertFalse(source.contains("WelcomeGlassButtonStyle"))
+        XCTAssertFalse(source.contains(".overlay(alignment: .top)"))
     }
 
     func testWelcomeBackdropAdjustsOpacityWhenWindowIsFocused() throws {
@@ -69,12 +71,13 @@ final class WelcomeViewSourceTests: XCTestCase {
     func testWelcomeButtonsUsePointingHandCursorOnHover() throws {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 
-        XCTAssertTrue(source.contains("updatePointingHandCursor(isHovered: hovering)"))
-        XCTAssertTrue(source.contains("NSCursor.pointingHand.set()"))
+        XCTAssertTrue(source.contains("pointingHandCursor()"))
+        XCTAssertTrue(source.contains("addCursorRect(bounds, cursor: .pointingHand)"))
         let pointingHandUpdateCount = source
-            .components(separatedBy: "updatePointingHandCursor(isHovered: hovering)")
+            .components(separatedBy: ".pointingHandCursor()")
             .count - 1
         XCTAssertGreaterThanOrEqual(pointingHandUpdateCount, 2)
+        XCTAssertFalse(source.contains("updatePointingHandCursor(isHovered: hovering)"))
     }
 
     func testOpenLibraryButtonKeepsWhiteGlassAppearance() throws {
