@@ -208,6 +208,23 @@
         }
       }
     },
+    "Change this library name. Assets and files stay in the same library package." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Change this library name. Assets and files stay in the same library package."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "修改这个资源库的名称。素材和文件会继续保留在原来的资源库包中。"
+          }
+        }
+      }
+    },
     "Choose a .momento package." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -447,6 +464,7 @@
       }
     },
     "Delete library warning: %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -531,6 +549,7 @@
       }
     },
     "Edit Library" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -563,6 +582,23 @@
         }
       }
     },
+    "Enter a library name." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a library name."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请输入资源库名称。"
+          }
+        }
+      }
+    },
     "Enter a name for this library, then choose where to save it." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -580,34 +616,19 @@
         }
       }
     },
-    "Change this library name. Assets and files stay in the same library package." : {
+    "Favorited" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Change this library name. Assets and files stay in the same library package."
+            "value" : "Favorites"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "修改这个资源库的名称。素材和文件会继续保留在原来的资源库包中。"
-          }
-        }
-      }
-    },
-    "Enter a library name." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enter a library name."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请输入资源库名称。"
+            "value" : "已收藏"
           }
         }
       }
@@ -625,23 +646,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "收藏"
-          }
-        }
-      }
-    },
-    "Favorited" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Favorites"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已收藏"
           }
         }
       }
@@ -1360,6 +1364,23 @@
         }
       }
     },
+    "Save Changes" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save Changes"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存更改"
+          }
+        }
+      }
+    },
     "Screenshots" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1390,22 +1411,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "搜索资源、标签、颜色..."
-          }
-        }
-      }
-    },
-    "Save Changes" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Save Changes"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存更改"
           }
         }
       }
@@ -1767,23 +1772,6 @@
         }
       }
     },
-    "Untagged" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Untagged"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "未标签"
-          }
-        }
-      }
-    },
     "Unsupported library schema version: %d." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1797,6 +1785,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "不支持的资源库 schema 版本：%d。"
+          }
+        }
+      }
+    },
+    "Untagged" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untagged"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未标签"
           }
         }
       }
