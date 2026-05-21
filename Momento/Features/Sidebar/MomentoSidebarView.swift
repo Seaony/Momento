@@ -141,31 +141,35 @@ struct MomentoSidebarView: View {
                 sidebarNavigationItem(
                     id: "all-assets",
                     title: localization.string("All"),
-                    systemImage: "square.grid.2x2"
+                    systemImage: "square.3.layers.3d"
                 )
+
+                sidebarNavigationDivider
 
                 sidebarNavigationItem(
                     id: "favorites",
                     title: localization.string("Favorited"),
-                    systemImage: "star"
+                    systemImage: "heart"
                 )
 
                 sidebarNavigationItem(
                     id: "uncategorized",
                     title: localization.string("Uncategorized"),
-                    systemImage: "tray"
+                    systemImage: "folder.fill.badge.questionmark"
                 )
 
                 sidebarNavigationItem(
                     id: "untagged",
                     title: localization.string("Untagged"),
-                    systemImage: "tag.slash"
+                    systemImage: "xmark.triangle.circle.square"
                 )
+
+                sidebarNavigationDivider
 
                 sidebarNavigationItem(
                     id: "tag-management",
                     title: localization.string("Tag Management"),
-                    systemImage: "tag"
+                    systemImage: "number"
                 )
             }
 
