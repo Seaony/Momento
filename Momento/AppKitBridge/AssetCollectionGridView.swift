@@ -458,7 +458,8 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
     var onHoverFocus: (() -> Void)?
 
-    private let containerView = HoverSelectionView()
+    private let containerView = HoverTrackingView()
+    private let contentView = HoverSelectionView()
     private let previewImageView = NSImageView()
     private let fileNameLabel = NSTextField(labelWithString: "")
     private let subtitleLabel = NSTextField(labelWithString: "")
@@ -473,26 +474,25 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
     override var isSelected: Bool {
         didSet {
-            containerView.isSelected = isSelected
+            contentView.isSelected = isSelected
             updateContainerScale(animated: true)
         }
     }
 
     override func loadView() {
-        containerView.wantsLayer = true
-        containerView.layer?.cornerRadius = AssetCollectionMetrics.selectionCornerRadius
-        containerView.layer?.cornerCurve = .continuous
-        containerView.layer?.masksToBounds = false
-        containerView.layer?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
         containerView.translatesAutoresizingMaskIntoConstraints = false
         containerView.hoverChanged = { [weak self] isHovered in
             self?.isHovering = isHovered
-            self?.containerView.isHovered = isHovered
+            self?.contentView.isHovered = isHovered
             self?.updateContainerScale(animated: true)
             if isHovered {
                 self?.onHoverFocus?()
             }
         }
+
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.layer?.masksToBounds = false
+        contentView.layer?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
 
         previewImageView.imageScaling = .scaleProportionallyUpOrDown
         previewImageView.translatesAutoresizingMaskIntoConstraints = false
@@ -520,54 +520,62 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         dimensionBadgeView.translatesAutoresizingMaskIntoConstraints = false
         dimensionBadgeView.isHidden = true
 
-        containerView.addSubview(previewImageView)
-        containerView.addSubview(fileNameLabel)
-        containerView.addSubview(subtitleLabel)
-        containerView.addSubview(dimensionBadgeView)
+        contentView.addSubview(previewImageView)
+        contentView.addSubview(fileNameLabel)
+        contentView.addSubview(subtitleLabel)
+        contentView.addSubview(dimensionBadgeView)
+        containerView.addSubview(contentView)
         view = containerView
 
+        NSLayoutConstraint.activate([
+            contentView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
+            contentView.topAnchor.constraint(equalTo: containerView.topAnchor),
+            contentView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
+        ])
+
         gridConstraints = [
-            previewImageView.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 10),
-            previewImageView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 10),
-            previewImageView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -10),
+            previewImageView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 10),
+            previewImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 10),
+            previewImageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -10),
             previewImageView.bottomAnchor.constraint(equalTo: fileNameLabel.topAnchor, constant: -8),
             previewImageView.heightAnchor.constraint(greaterThanOrEqualToConstant: 96),
 
-            fileNameLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 8),
-            fileNameLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -8),
+            fileNameLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8),
+            fileNameLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
             fileNameLabel.heightAnchor.constraint(equalToConstant: gridTitleHeight),
             fileNameLabel.bottomAnchor.constraint(equalTo: subtitleLabel.topAnchor, constant: -2),
 
-            subtitleLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 8),
-            subtitleLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -8),
+            subtitleLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8),
+            subtitleLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
             subtitleLabel.heightAnchor.constraint(equalToConstant: gridSubtitleHeight),
-            subtitleLabel.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -8)
+            subtitleLabel.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -8)
         ]
 
         masonryConstraints = [
-            previewImageView.topAnchor.constraint(equalTo: containerView.topAnchor, constant: AssetCollectionMetrics.masonryImageInset),
-            previewImageView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: AssetCollectionMetrics.masonryImageInset),
-            previewImageView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -AssetCollectionMetrics.masonryImageInset),
-            previewImageView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -AssetCollectionMetrics.masonryImageInset),
+            previewImageView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: AssetCollectionMetrics.masonryImageInset),
+            previewImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: AssetCollectionMetrics.masonryImageInset),
+            previewImageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -AssetCollectionMetrics.masonryImageInset),
+            previewImageView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -AssetCollectionMetrics.masonryImageInset),
             dimensionBadgeView.topAnchor.constraint(equalTo: previewImageView.topAnchor, constant: 8),
             dimensionBadgeView.trailingAnchor.constraint(equalTo: previewImageView.trailingAnchor, constant: -8),
             dimensionBadgeView.heightAnchor.constraint(equalToConstant: AssetCollectionMetrics.dimensionBadgeHeight)
         ]
 
         listConstraints = [
-            previewImageView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 10),
-            previewImageView.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
+            previewImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 10),
+            previewImageView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
             previewImageView.widthAnchor.constraint(equalToConstant: 36),
             previewImageView.heightAnchor.constraint(equalToConstant: 36),
 
             fileNameLabel.leadingAnchor.constraint(equalTo: previewImageView.trailingAnchor, constant: 10),
-            fileNameLabel.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -12),
-            fileNameLabel.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 9),
+            fileNameLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
+            fileNameLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 9),
 
             subtitleLabel.leadingAnchor.constraint(equalTo: fileNameLabel.leadingAnchor),
             subtitleLabel.trailingAnchor.constraint(equalTo: fileNameLabel.trailingAnchor),
             subtitleLabel.topAnchor.constraint(equalTo: fileNameLabel.bottomAnchor, constant: 2),
-            subtitleLabel.bottomAnchor.constraint(lessThanOrEqualTo: containerView.bottomAnchor, constant: -8)
+            subtitleLabel.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -8)
         ]
     }
 
@@ -580,8 +588,8 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         dimensionBadgeView.isHidden = true
         onHoverFocus = nil
         isHovering = false
-        containerView.isHovered = false
-        containerView.isSelected = false
+        contentView.isHovered = false
+        contentView.isSelected = false
         updateContainerScale(animated: false)
         mode = .grid
     }
@@ -656,16 +664,16 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     }
 
     func previewSourceFrameInScreen() -> NSRect? {
-        guard let window = containerView.window else {
+        guard let window = contentView.window else {
             return nil
         }
 
-        let rectInWindow = containerView.convert(containerView.bounds, to: nil)
+        let rectInWindow = contentView.convert(contentView.bounds, to: nil)
         return window.convertToScreen(rectInWindow)
     }
 
     private func updateContainerScale(animated: Bool) {
-        guard let layer = containerView.layer else {
+        guard let layer = contentView.layer else {
             return
         }
 
@@ -681,7 +689,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         let currentShadowOffset = layer.presentation()?.shadowOffset ?? layer.shadowOffset
         let shouldAnimate = animated && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
 
-        containerView.updateShadowPath()
+        contentView.updateShadowPath()
         layer.shadowColor = NSColor.black.withAlphaComponent(0.52).cgColor
         layer.zPosition = isElevated ? 12 : 0
 
@@ -799,8 +807,38 @@ private final class DimensionBadgeView: NSView {
     }
 }
 
-private final class HoverSelectionView: NSView {
+private final class HoverTrackingView: NSView {
     var hoverChanged: ((Bool) -> Void)?
+    private var trackingArea: NSTrackingArea?
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+
+        let options: NSTrackingArea.Options = [.activeInActiveApp, .mouseEnteredAndExited, .inVisibleRect]
+        let newTrackingArea = NSTrackingArea(rect: bounds, options: options, owner: self)
+        addTrackingArea(newTrackingArea)
+        trackingArea = newTrackingArea
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        hoverChanged?(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        hoverChanged?(false)
+    }
+}
+
+private final class HoverSelectionView: NSView {
     var isHovered = false {
         didSet {
             updateAppearance()
@@ -813,7 +851,6 @@ private final class HoverSelectionView: NSView {
     }
 
     private let glassBackgroundView = NSGlassEffectView()
-    private var trackingArea: NSTrackingArea?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -858,30 +895,9 @@ private final class HoverSelectionView: NSView {
         )
     }
 
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-
-        if let trackingArea {
-            removeTrackingArea(trackingArea)
-        }
-
-        let options: NSTrackingArea.Options = [.activeInActiveApp, .mouseEnteredAndExited, .inVisibleRect]
-        let newTrackingArea = NSTrackingArea(rect: bounds, options: options, owner: self)
-        addTrackingArea(newTrackingArea)
-        trackingArea = newTrackingArea
-    }
-
     override func resetCursorRects() {
         super.resetCursorRects()
         addCursorRect(bounds, cursor: .pointingHand)
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        hoverChanged?(true)
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        hoverChanged?(false)
     }
 
     private func updateAppearance() {
