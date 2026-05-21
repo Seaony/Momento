@@ -114,7 +114,7 @@ struct ContentView: View {
         .onChange(of: defaultViewMode) { _, newValue in
             store.setViewMode(newValue)
         }
-        .frame(minWidth: 540, minHeight: 340)
+        .frame(minWidth: MomentoTheme.mainWindowMinWidth, minHeight: MomentoTheme.mainWindowMinHeight)
     }
 
     private var libraryBody: some View {

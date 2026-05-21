@@ -181,12 +181,6 @@ struct MomentoShellView<Content: View>: View {
 
                         sidebarResizeStartWidth = startWidth
 
-                        if proposedWidth < widthRange.lowerBound - MomentoTheme.sidebarCollapseDragOvershoot {
-                            sidebarWidth = widthRange.lowerBound
-                            collapseSidebarFromResize()
-                            return
-                        }
-
                         sidebarWidth = proposedWidth.clamped(to: widthRange)
                     }
                     .onEnded { _ in
@@ -215,17 +209,6 @@ struct MomentoShellView<Content: View>: View {
         return MomentoTheme.floatingSidebarInset + effectiveSidebarWidth - MomentoTheme.sidebarTitlebarButtonTrailingInset - MomentoTheme.sidebarTitlebarButtonSize
     }
 
-    private func collapseSidebarFromResize() {
-        guard !isSidebarCollapsed else {
-            return
-        }
-
-        sidebarResizeStartWidth = nil
-
-        withAnimation(.smooth(duration: 0.18)) {
-            isSidebarCollapsed = true
-        }
-    }
 }
 
 private extension CGFloat {

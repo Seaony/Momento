@@ -163,21 +163,17 @@ final class LiquidGlassSourceTests: XCTestCase {
         XCTAssertFalse(shellSource.contains("HSplitView"))
     }
 
-    func testDraggingSidebarBelowMinimumCollapsesFloatingSidebar() throws {
+    func testDraggingSidebarBelowMinimumClampsWithoutCollapsing() throws {
         let shellSource = try String(contentsOf: shellViewURL(), encoding: .utf8)
         let designSource = try String(contentsOf: designSystemURL(), encoding: .utf8)
 
-        XCTAssertTrue(designSource.contains("static let sidebarCollapseDragOvershoot: CGFloat = 24"))
         XCTAssertTrue(shellSource.contains("let widthRange = sidebarWidthRange"))
         XCTAssertTrue(shellSource.contains("let proposedWidth = startWidth + value.translation.width"))
-        XCTAssertTrue(shellSource.contains("if proposedWidth < widthRange.lowerBound - MomentoTheme.sidebarCollapseDragOvershoot {"))
-        XCTAssertTrue(shellSource.contains("sidebarWidth = widthRange.lowerBound"))
-        XCTAssertTrue(shellSource.contains("collapseSidebarFromResize()"))
-        XCTAssertTrue(shellSource.contains("private func collapseSidebarFromResize()"))
-        XCTAssertTrue(shellSource.contains("guard !isSidebarCollapsed else {"))
-        XCTAssertTrue(shellSource.contains("sidebarResizeStartWidth = nil"))
-        XCTAssertTrue(shellSource.contains("withAnimation(.smooth(duration: 0.18))"))
-        XCTAssertTrue(shellSource.contains("isSidebarCollapsed = true"))
+        XCTAssertTrue(shellSource.contains("sidebarWidth = proposedWidth.clamped(to: widthRange)"))
+        XCTAssertFalse(designSource.contains("sidebarCollapseDragOvershoot"))
+        XCTAssertFalse(shellSource.contains("widthRange.lowerBound - MomentoTheme.sidebarCollapseDragOvershoot"))
+        XCTAssertFalse(shellSource.contains("collapseSidebarFromResize()"))
+        XCTAssertFalse(shellSource.contains("private func collapseSidebarFromResize()"))
     }
 
     func testFloatingSidebarCanCollapseFromTitlebarButton() throws {

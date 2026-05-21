@@ -28,6 +28,8 @@ struct MomentoApp: App {
                 }
         }
         .windowToolbarStyle(.unified)
+        .defaultSize(width: MomentoTheme.defaultWindowWidth, height: MomentoTheme.defaultWindowHeight)
+        .windowResizability(.contentMinSize)
 
         Settings {
             MomentoSettingsView(

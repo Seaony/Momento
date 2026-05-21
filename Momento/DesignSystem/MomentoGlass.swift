@@ -52,7 +52,6 @@ enum MomentoTheme {
     static let sidebarMinWidth: CGFloat = 196
     static let sidebarWidth: CGFloat = 280
     static let sidebarMaxWidth: CGFloat = 340
-    static let sidebarCollapseDragOvershoot: CGFloat = 24
     static let floatingSidebarInset: CGFloat = 8
     static let floatingSidebarRadius: CGFloat = 20
     static let floatingSidebarTitlebarContentInset: CGFloat = 54
@@ -69,6 +68,10 @@ enum MomentoTheme {
     static let inspectorMaxWidth: CGFloat = 460
     static let contentMinWidth: CGFloat = 520
     static let toolbarHeight: CGFloat = 56
+    static let mainWindowMinWidth = sidebarWidth + floatingSidebarInset * 2 + contentMinWidth + inspectorWidth
+    static let mainWindowMinHeight: CGFloat = 640
+    static let defaultWindowWidth: CGFloat = 1280
+    static let defaultWindowHeight: CGFloat = 800
     static let panelRadius: CGFloat = 14
     static let subtleStroke = Color(nsColor: .separatorColor)
     static let primaryText = Color(nsColor: .labelColor)

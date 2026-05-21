@@ -85,6 +85,21 @@ final class WindowChromeSourceTests: XCTestCase {
         XCTAssertFalse(appSource.contains(".windowStyle(.hiddenTitleBar)"))
     }
 
+    func testMainWindowSizeFitsDefaultSidebarShell() throws {
+        let appSource = try String(contentsOf: appURL(), encoding: .utf8)
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+        let themeSource = try String(contentsOf: themeURL(), encoding: .utf8)
+
+        XCTAssertTrue(themeSource.contains("static let mainWindowMinWidth = sidebarWidth + floatingSidebarInset * 2 + contentMinWidth + inspectorWidth"))
+        XCTAssertTrue(themeSource.contains("static let mainWindowMinHeight: CGFloat = 640"))
+        XCTAssertTrue(themeSource.contains("static let defaultWindowWidth: CGFloat = 1280"))
+        XCTAssertTrue(themeSource.contains("static let defaultWindowHeight: CGFloat = 800"))
+        XCTAssertTrue(contentSource.contains(".frame(minWidth: MomentoTheme.mainWindowMinWidth, minHeight: MomentoTheme.mainWindowMinHeight)"))
+        XCTAssertFalse(contentSource.contains(".frame(minWidth: 540, minHeight: 340)"))
+        XCTAssertTrue(appSource.contains(".defaultSize(width: MomentoTheme.defaultWindowWidth, height: MomentoTheme.defaultWindowHeight)"))
+        XCTAssertTrue(appSource.contains(".windowResizability(.contentMinSize)"))
+    }
+
     func testSidebarLibraryMenuUsesCustomGlassLibrarySwitcher() throws {
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
         let shellSource = try String(contentsOf: shellViewURL(), encoding: .utf8)
