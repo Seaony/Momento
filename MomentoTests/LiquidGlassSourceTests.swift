@@ -144,10 +144,35 @@ final class LiquidGlassSourceTests: XCTestCase {
         XCTAssertTrue(shellSource.contains("DragGesture(minimumDistance: 0, coordinateSpace: .global)"))
         XCTAssertTrue(shellSource.contains("value.translation.width"))
         XCTAssertTrue(shellSource.contains(".clamped(to: MomentoTheme.sidebarMinWidth...MomentoTheme.sidebarMaxWidth)"))
-        XCTAssertTrue(shellSource.contains(".frame(width: sidebarWidth)"))
+        XCTAssertTrue(shellSource.contains(".frame(width: isSidebarCollapsed ? MomentoTheme.collapsedSidebarWidth : sidebarWidth)"))
         XCTAssertTrue(shellSource.contains(".frame(width: 14)"))
         XCTAssertTrue(shellSource.contains(".pointerStyle(.columnResize(directions: .all))"))
         XCTAssertFalse(shellSource.contains("HSplitView"))
+    }
+
+    func testFloatingSidebarCanCollapseFromTitlebarButton() throws {
+        let shellSource = try String(contentsOf: shellViewURL(), encoding: .utf8)
+        let sidebarSource = try String(contentsOf: sidebarViewURL(), encoding: .utf8)
+        let designSource = try String(contentsOf: designSystemURL(), encoding: .utf8)
+
+        XCTAssertTrue(designSource.contains("static let collapsedSidebarWidth: CGFloat = 196"))
+        XCTAssertTrue(shellSource.contains("@State private var isSidebarCollapsed = false"))
+        XCTAssertTrue(shellSource.contains("isCollapsed: isSidebarCollapsed"))
+        XCTAssertTrue(shellSource.contains("onToggleCollapsed: toggleSidebarCollapsed"))
+        XCTAssertTrue(shellSource.contains("isSidebarCollapsed ? MomentoTheme.collapsedSidebarWidth : sidebarWidth"))
+        XCTAssertTrue(shellSource.contains(".animation(.smooth(duration: 0.18), value: isSidebarCollapsed)"))
+        XCTAssertTrue(shellSource.contains("if !isSidebarCollapsed {"))
+        XCTAssertTrue(shellSource.contains("private func toggleSidebarCollapsed()"))
+        XCTAssertTrue(shellSource.contains("withAnimation(.smooth(duration: 0.18))"))
+        XCTAssertTrue(shellSource.contains("isSidebarCollapsed.toggle()"))
+
+        XCTAssertTrue(sidebarSource.contains("var isCollapsed: Bool"))
+        XCTAssertTrue(sidebarSource.contains("var onToggleCollapsed: () -> Void"))
+        XCTAssertTrue(sidebarSource.contains("private var sidebarCollapseButton: some View"))
+        XCTAssertTrue(sidebarSource.contains("Image(systemName: \"sidebar.left\")"))
+        XCTAssertTrue(sidebarSource.contains("if isCollapsed"))
+        XCTAssertTrue(sidebarSource.contains("expandedSidebarContent"))
+        XCTAssertTrue(sidebarSource.contains(".pointerStyle(.link)"))
     }
 
     func testFloatingSidebarExtendsIntoWindowTitlebarArea() throws {

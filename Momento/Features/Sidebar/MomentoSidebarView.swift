@@ -53,6 +53,8 @@ struct MomentoSidebarView: View {
     var onOpenLibrary: () -> Void
     var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
     var onCloseLibrary: () -> Void
+    var isCollapsed: Bool
+    var onToggleCollapsed: () -> Void
     var onItemContextMenu: ((MomentoSidebarItem) -> AnyView)?
 
     @State private var collapsedSectionIDs: Set<MomentoSidebarSection.ID> = []
@@ -67,6 +69,8 @@ struct MomentoSidebarView: View {
         onOpenLibrary: @escaping () -> Void = {},
         onSwitchLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
         onCloseLibrary: @escaping () -> Void = {},
+        isCollapsed: Bool = false,
+        onToggleCollapsed: @escaping () -> Void = {},
         onItemContextMenu: ((MomentoSidebarItem) -> AnyView)? = nil
     ) {
         self.sections = sections
@@ -77,35 +81,26 @@ struct MomentoSidebarView: View {
         self.onOpenLibrary = onOpenLibrary
         self.onSwitchLibrary = onSwitchLibrary
         self.onCloseLibrary = onCloseLibrary
+        self.isCollapsed = isCollapsed
+        self.onToggleCollapsed = onToggleCollapsed
         self.onItemContextMenu = onItemContextMenu
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            libraryMenu
-            .padding(.horizontal, 14)
-            .padding(.top, MomentoTheme.floatingSidebarTitlebarContentInset)
-            .padding(.bottom, 10)
-
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 14) {
-                    ForEach(sections) { section in
-                        sectionView(section)
-                    }
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
+            if isCollapsed {
+                Spacer(minLength: 0)
+            } else {
+                expandedSidebarContent
+                    .transition(.opacity)
             }
-            .scrollIndicators(.never)
-
-            sidebarBottomSeparator
-            bottomActionBar
         }
         .frame(
             minWidth: MomentoTheme.sidebarMinWidth,
             idealWidth: MomentoTheme.sidebarWidth,
             maxWidth: MomentoTheme.sidebarMaxWidth
         )
+        .frame(maxHeight: .infinity)
         .background {
             MomentoGlassBackground(cornerRadius: MomentoTheme.floatingSidebarRadius)
         }
@@ -113,6 +108,33 @@ struct MomentoSidebarView: View {
         .overlay {
             sidebarShape.strokeBorder(MomentoTheme.subtleStroke.opacity(0.42), lineWidth: 1)
         }
+        .overlay(alignment: .topTrailing) {
+            sidebarCollapseButton
+                .padding(.top, 28)
+                .padding(.trailing, 14)
+        }
+    }
+
+    @ViewBuilder
+    private var expandedSidebarContent: some View {
+        libraryMenu
+            .padding(.horizontal, 14)
+            .padding(.top, MomentoTheme.floatingSidebarTitlebarContentInset)
+            .padding(.bottom, 10)
+
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 14) {
+                ForEach(sections) { section in
+                    sectionView(section)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+        }
+        .scrollIndicators(.never)
+
+        sidebarBottomSeparator
+        bottomActionBar
     }
 
     private var sidebarShape: RoundedRectangle {
@@ -124,6 +146,22 @@ struct MomentoSidebarView: View {
             .fill(MomentoTheme.subtleStroke.opacity(1))
             .frame(height: 0.5)
             .padding(.horizontal, 14)
+    }
+
+    private var sidebarCollapseButton: some View {
+        let label = isCollapsed ? localization.string("Expand Sidebar") : localization.string("Collapse Sidebar")
+
+        return Button(action: onToggleCollapsed) {
+            Image(systemName: "sidebar.left")
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(MomentoTheme.primaryText)
+                .frame(width: 28, height: 28)
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .help(label)
+        .accessibilityLabel(label)
     }
 
     private var bottomActionBar: some View {

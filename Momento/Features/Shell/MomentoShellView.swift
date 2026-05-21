@@ -24,6 +24,7 @@ struct MomentoShellView<Content: View>: View {
 
     @State private var sidebarWidth = MomentoTheme.sidebarWidth
     @State private var sidebarResizeStartWidth: CGFloat?
+    @State private var isSidebarCollapsed = false
 
     init(
         sidebarSelection: Binding<MomentoSidebarItem.ID?>,
@@ -82,6 +83,7 @@ struct MomentoShellView<Content: View>: View {
             }
         }
         .animation(.smooth(duration: 0.18), value: isInspectorPresented)
+        .animation(.smooth(duration: 0.18), value: isSidebarCollapsed)
         .momentoCommandPalette(
             isPresented: $isCommandPalettePresented,
             commands: commands,
@@ -102,11 +104,15 @@ struct MomentoShellView<Content: View>: View {
             onCreateLibrary: onCreateLibrary,
             onOpenLibrary: onOpenLibrary,
             onSwitchLibrary: onSwitchLibrary,
-            onCloseLibrary: onCloseLibrary
+            onCloseLibrary: onCloseLibrary,
+            isCollapsed: isSidebarCollapsed,
+            onToggleCollapsed: toggleSidebarCollapsed
         )
-        .frame(width: sidebarWidth)
+        .frame(width: isSidebarCollapsed ? MomentoTheme.collapsedSidebarWidth : sidebarWidth)
         .overlay(alignment: .trailing) {
-            sidebarResizeHandle
+            if !isSidebarCollapsed {
+                sidebarResizeHandle
+            }
         }
         .padding(.leading, MomentoTheme.floatingSidebarInset)
         .padding(.trailing, MomentoTheme.floatingSidebarInset)
@@ -142,6 +148,12 @@ struct MomentoShellView<Content: View>: View {
                         sidebarResizeStartWidth = nil
                     }
             )
+    }
+
+    private func toggleSidebarCollapsed() {
+        withAnimation(.smooth(duration: 0.18)) {
+            isSidebarCollapsed.toggle()
+        }
     }
 }
 

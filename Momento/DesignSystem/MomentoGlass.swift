@@ -51,6 +51,7 @@ extension View {
 enum MomentoTheme {
     static let sidebarMinWidth: CGFloat = 196
     static let sidebarWidth: CGFloat = 280
+    static let collapsedSidebarWidth: CGFloat = 196
     static let sidebarMaxWidth: CGFloat = 340
     static let floatingSidebarInset: CGFloat = 8
     static let floatingSidebarRadius: CGFloat = 22
