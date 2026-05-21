@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Momento is a native macOS asset-management app (Eagle-class functionality, Craft-class UI). Pure SwiftUI + AppKit, no web tech. The full product spec lives in `FEATURE.md` — read it before touching new features. Highlights:
 
 - macOS 26+, Swift 6, strict concurrency.
-- Liquid Glass UI: use SwiftUI's native `.glassEffect`, `.buttonStyle(.glass)` / `.buttonStyle(.glassProminent)`. Do **not** fake glass with `NSVisualEffectView` + custom blur/stroke/shadow — there are source-level tests enforcing this (see "Source-level tests" below).
+- Liquid Glass UI: use SwiftUI's native `.glassEffect`, `.buttonStyle(.glass)` / `.buttonStyle(.glassProminent)`. Do **not** fake glass with `NSVisualEffectView` + custom blur/stroke/shadow.
 - Files must stay under 1000 lines; avoid speculative abstraction.
 
 ## Build / Test Commands
@@ -86,15 +86,19 @@ One folder per surface — `Sidebar`, `Settings`, `Inspector`, `Shell` (HSplitVi
 - Single string catalog at `Momento/Localizable.xcstrings`. Use `localization.string("Key")` / `localization.format("…%d…", n)` everywhere user-facing. The fallback `value` passed to `localizedString` is the key itself, so English keys double as English copy.
 - Adding a new user-visible string: add it to `Localizable.xcstrings` (Xcode handles `en` and `zh-Hans` columns), then call `localization.string("…")` from the view.
 
-## Source-level architectural tests
+## Testing policy
 
-`MomentoTests/` contains tests that load Swift files as text and grep for forbidden/required patterns. They guard architectural invariants that can't be expressed in the type system:
+Do not default to strict TDD for this project. Unless the user explicitly asks for it, or the change touches high-risk data/state/filesystem behavior, implement directly and verify afterward.
 
-- `LiquidGlassSourceTests` — `DesignSystem/MomentoGlass.swift` must use `.glassEffect`, must not fall back to `MomentoVisualEffectView` for the glass background, no `.strokeBorder` / `.shadow` glass simulation.
-- `WelcomeViewSourceTests` — `Features/Library/MomentoLibraryWelcomeView.swift` must use `.buttonStyle(.glass)` / `.buttonStyle(.glassProminent)`, `.buttonBorderShape(.capsule)`, `.pointerStyle(.link)`, and the native glass tint; must not hand-roll buttons, cursors, or shadows.
-- `WindowChromeSourceTests` — `ContentView.swift` must not override the system window corner radius (no `cornerRadius` / `masksToBounds` on `contentView.layer`).
+Keep tests focused on durable behavior:
 
-If you change those files, run the relevant test class and update assertions only when the underlying architectural rule has genuinely changed. Don't relax these without reading `FEATURE.md`'s Design Rules first.
+- Library package creation/opening/renaming/deletion, recent-library persistence, missing-library pruning, import/dedup/cache behavior, and other user-data safety paths.
+- Localization catalog integrity.
+- A small number of coarse architecture guards for rules that have repeatedly regressed, such as native Liquid Glass usage, transparent window toolbar behavior, current-library validation on appear, and main-window minimum sizing.
+
+Do not add tests for pure visual tuning: padding, font size, icon size, hover brightness, menu spacing, or exact SwiftUI view structure. If a source-level test starts locking those details, delete it or collapse it into a coarse architecture guard.
+
+For visual UI changes, the default validation is: compile/build if needed, run the most relevant existing tests, and run `git diff --check`. The user will launch the app and judge visual output; do not proactively open or launch Momento for inspection.
 
 ## Project Settings
 
@@ -105,8 +109,8 @@ If you change those files, run the relevant test class and update assertions onl
 
 ## Working Rules (carried from `FEATURE.md` and global rules)
 
-- **Never auto-start a dev server / Xcode build for the user.** Build commands above are for verification only — run them only when asked.
-- **Never auto-commit.** Ask before running `git commit`. Commit messages follow `<type>: <summary>` (see global rules) and use the Co-Authored-By trailer in the global instructions.
+- **Never auto-start a dev server or launch the app for the user.** Build commands above are for verification only.
+- **Commit completed updates after basic validation.** The current project preference is to commit each finished user-requested update. Commit messages follow `<type>: <summary>`.
 - **Strict scope control.** Don't refactor adjacent code while fixing a bug. Surface unrelated issues separately.
 - **No fake placeholders.** Don't return `[]` / `nil` / empty dicts to silence the type checker — finish the read/write path or stop.
 - **Never hardcode library-absolute paths** into the database — only relative paths under the library root (see `LibraryStorage.relativePath` / `resolveAssetURL`).
