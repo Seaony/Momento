@@ -103,6 +103,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
             context.coordinator.currentAssets = assets
             collectionView.reloadData()
             context.coordinator.syncSelection()
+            context.coordinator.syncHoveredPreviewAsset()
             return
         }
 
@@ -115,6 +116,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
         }
 
         context.coordinator.syncSelection()
+        context.coordinator.syncHoveredPreviewAsset()
     }
 
     private func makeLayout(for viewMode: AssetViewMode, assets: [AssetItem]) -> NSCollectionViewLayout {
@@ -154,6 +156,7 @@ extension AssetCollectionGridView {
         var currentViewMode: AssetViewMode
         var currentAssets: [AssetItem]
         private var isSyncingSelection = false
+        private var hoveredPreviewAssetID: AssetItem.ID?
 
         init(_ parent: AssetCollectionGridView) {
             self.parent = parent
@@ -181,13 +184,10 @@ extension AssetCollectionGridView {
                 return item
             }
 
-            assetItem.configure(with: parent.assets[indexPath.item], viewMode: parent.viewMode)
-            assetItem.onHoverFocus = { [weak self, weak collectionView] in
-                guard let collectionView else {
-                    return
-                }
-
-                self?.focusAsset(at: indexPath, in: collectionView)
+            let asset = parent.assets[indexPath.item]
+            assetItem.configure(with: asset, viewMode: parent.viewMode)
+            assetItem.onHoverPreviewChange = { [weak self, assetID = asset.id] isHovered in
+                self?.updateHoveredPreviewAsset(assetID: assetID, isHovered: isHovered)
             }
             return assetItem
         }
@@ -237,6 +237,14 @@ extension AssetCollectionGridView {
             isSyncingSelection = false
         }
 
+        func syncHoveredPreviewAsset() {
+            guard let hoveredPreviewAssetID,
+                  parent.assets.contains(where: { $0.id == hoveredPreviewAssetID }) else {
+                self.hoveredPreviewAssetID = nil
+                return
+            }
+        }
+
         @objc func handleDoubleClick(_ sender: NSClickGestureRecognizer) {
             guard let collectionView = sender.view as? NSCollectionView else {
                 return
@@ -254,7 +262,7 @@ extension AssetCollectionGridView {
 
         func startSpacePreview() {
             guard let collectionView,
-                  let indexPath = collectionView.selectionIndexPaths.sorted(by: { $0.item < $1.item }).first,
+                  let indexPath = previewIndexPath(in: collectionView),
                   parent.assets.indices.contains(indexPath.item) else {
                 return
             }
@@ -267,23 +275,21 @@ extension AssetCollectionGridView {
             parent.onSpacePreviewEnd()
         }
 
-        private func focusAsset(at indexPath: IndexPath, in collectionView: NSCollectionView) {
-            guard parent.assets.indices.contains(indexPath.item) else {
-                return
+        private func updateHoveredPreviewAsset(assetID: AssetItem.ID, isHovered: Bool) {
+            if isHovered {
+                hoveredPreviewAssetID = assetID
+            } else if hoveredPreviewAssetID == assetID {
+                hoveredPreviewAssetID = nil
+            }
+        }
+
+        private func previewIndexPath(in collectionView: NSCollectionView) -> IndexPath? {
+            if let hoveredPreviewAssetID,
+               let index = parent.assets.firstIndex(where: { $0.id == hoveredPreviewAssetID }) {
+                return IndexPath(item: index, section: 0)
             }
 
-            collectionView.window?.makeFirstResponder(collectionView)
-            let assetID = parent.assets[indexPath.item].id
-
-            let targetSelection: Set<IndexPath> = [indexPath]
-            guard collectionView.selectionIndexPaths != targetSelection else {
-                return
-            }
-
-            isSyncingSelection = true
-            collectionView.selectionIndexPaths = targetSelection
-            isSyncingSelection = false
-            parent.onSelectionChange([assetID])
+            return collectionView.selectionIndexPaths.sorted(by: { $0.item < $1.item }).first
         }
 
         private func publishSelection(from collectionView: NSCollectionView) {
@@ -454,7 +460,7 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
 private final class AssetCollectionViewItem: NSCollectionViewItem {
     static let reuseIdentifier = NSUserInterfaceItemIdentifier("AssetCollectionViewItem")
 
-    var onHoverFocus: (() -> Void)?
+    var onHoverPreviewChange: ((Bool) -> Void)?
 
     private let containerView = HoverTrackingView()
     private let contentView = HoverSelectionView()
@@ -480,7 +486,9 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         containerView.hoverChanged = { [weak self] isHovered in
             self?.contentView.isHovered = isHovered
             if isHovered {
-                self?.onHoverFocus?()
+                self?.onHoverPreviewChange?(true)
+            } else {
+                self?.onHoverPreviewChange?(false)
             }
         }
 
@@ -579,7 +587,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         subtitleLabel.stringValue = ""
         dimensionBadgeView.stringValue = ""
         dimensionBadgeView.isHidden = true
-        onHoverFocus = nil
+        onHoverPreviewChange = nil
         contentView.isHovered = false
         contentView.isSelected = false
         mode = .grid
