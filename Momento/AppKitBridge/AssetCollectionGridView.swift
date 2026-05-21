@@ -4,6 +4,7 @@
 //
 
 import AppKit
+import QuartzCore
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -17,6 +18,7 @@ private enum AssetCollectionMetrics {
     static let dimensionBadgeHorizontalPadding: CGFloat = 3
     static let sectionHorizontalInset: CGFloat = 8
     static let sectionVerticalInset: CGFloat = 14
+    static let selectionBackgroundAnimationDuration: CFTimeInterval = 0.16
 }
 
 struct AssetCollectionGridView: NSViewRepresentable {
@@ -738,6 +740,8 @@ private final class HoverTrackingView: NSView {
 }
 
 private final class HoverSelectionView: NSView {
+    private static let backgroundColorAnimationKey = "selectionBackgroundColor"
+
     var isHovered = false {
         didSet {
             updateAppearance()
@@ -805,13 +809,33 @@ private final class HoverSelectionView: NSView {
         layer?.borderColor = NSColor.clear.cgColor
         layer?.borderWidth = 0
 
-        if isHovered {
-            layer?.backgroundColor = NSColor.controlAccentColor.cgColor
-        } else if isSelected {
-            layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+        let targetColor = if isHovered || isSelected {
+            NSColor.controlAccentColor.cgColor
         } else {
-            layer?.backgroundColor = NSColor.clear.cgColor
+            NSColor.clear.cgColor
         }
+        updateBackgroundColor(targetColor)
+    }
+
+    private func updateBackgroundColor(_ targetColor: CGColor) {
+        guard let layer else {
+            return
+        }
+
+        let currentColor = layer.presentation()?.backgroundColor ?? layer.backgroundColor ?? NSColor.clear.cgColor
+        layer.backgroundColor = targetColor
+
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            layer.removeAnimation(forKey: Self.backgroundColorAnimationKey)
+            return
+        }
+
+        let animation = CABasicAnimation(keyPath: "backgroundColor")
+        animation.fromValue = currentColor
+        animation.toValue = targetColor
+        animation.duration = AssetCollectionMetrics.selectionBackgroundAnimationDuration
+        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer.add(animation, forKey: Self.backgroundColorAnimationKey)
     }
 }
 
