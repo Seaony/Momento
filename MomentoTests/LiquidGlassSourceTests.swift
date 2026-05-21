@@ -107,7 +107,7 @@ final class LiquidGlassSourceTests: XCTestCase {
         let footerSource = String(sidebarSource[footerStart.lowerBound..<footerEnd.lowerBound])
 
         XCTAssertTrue(sidebarSource.contains("sidebarBottomSeparator"))
-        XCTAssertTrue(sidebarSource.contains("MomentoTheme.subtleStroke.opacity(0.34)"))
+        XCTAssertTrue(sidebarSource.contains("MomentoTheme.subtleStroke.opacity(1)"))
         XCTAssertTrue(sidebarSource.contains(".frame(height: 0.5)"))
         XCTAssertTrue(sidebarSource.contains(".padding(.horizontal, 14)"))
         XCTAssertTrue(sidebarSource.contains("bottomActionBar"))

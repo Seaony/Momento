@@ -121,7 +121,7 @@ struct MomentoSidebarView: View {
 
     private var sidebarBottomSeparator: some View {
         Rectangle()
-            .fill(MomentoTheme.subtleStroke.opacity(0.34))
+            .fill(MomentoTheme.subtleStroke.opacity(1))
             .frame(height: 0.5)
             .padding(.horizontal, 14)
     }
