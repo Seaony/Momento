@@ -484,7 +484,10 @@ private struct MomentoLibrarySwitcherMenu: View {
         return HStack(spacing: 8) {
             libraryDragHandle(isActive: isSelected || isHovered)
                 .contentShape(Rectangle())
-                .draggable(library.id)
+                .dragHandleCursor()
+                .draggable(library.id) {
+                    libraryDragPreview(library)
+                }
 
             Button {
                 onSwitchLibrary(library.id)
@@ -560,6 +563,38 @@ private struct MomentoLibrarySwitcherMenu: View {
         }
     }
 
+    private func libraryDragPreview(_ library: RecentLibraryReference) -> some View {
+        HStack(spacing: 8) {
+            libraryDragHandle(isActive: true)
+
+            Image(systemName: "archivebox.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 26, height: 26)
+                .background(.blue.gradient, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(library.name)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(MomentoTheme.primaryText)
+                    .lineLimit(1)
+
+                Text(libraryPath(for: library))
+                    .font(.system(size: 11))
+                    .foregroundStyle(MomentoTheme.primaryText.opacity(0.82))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+        }
+        .padding(.horizontal, 7)
+        .frame(width: MomentoTheme.librarySwitcherWidth - 16, height: 42)
+        .background {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(MomentoTheme.sidebarIconHoverBackground)
+        }
+    }
+
     private func libraryDragHandle(isActive: Bool) -> some View {
         VStack(spacing: 2) {
             ForEach(0..<3, id: \.self) { _ in
@@ -585,7 +620,7 @@ private struct MomentoLibrarySwitcherMenu: View {
         VStack(spacing: 2) {
             libraryMoreActionRow(
                 id: "\(library.id)-rename",
-                title: localization.string("Rename Library"),
+                title: localization.string("Edit Library"),
                 systemImage: "pencil",
                 isDestructive: false
             ) {
@@ -881,6 +916,34 @@ private struct MomentoSidebarRow: View {
         } else {
             Color.clear
         }
+    }
+}
+
+private extension View {
+    func dragHandleCursor() -> some View {
+        background(DragHandleCursorView())
+    }
+}
+
+private struct DragHandleCursorView: NSViewRepresentable {
+    func makeNSView(context: Context) -> DragHandleCursorNSView {
+        DragHandleCursorNSView()
+    }
+
+    func updateNSView(_ nsView: DragHandleCursorNSView, context: Context) {
+        nsView.window?.invalidateCursorRects(for: nsView)
+    }
+}
+
+private final class DragHandleCursorNSView: NSView {
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .openHand)
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.invalidateCursorRects(for: self)
     }
 }
 

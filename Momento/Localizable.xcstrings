@@ -429,6 +429,22 @@
         }
       }
     },
+    "Delete library warning: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” will be moved to the Trash. It will be removed from Momento’s recent libraries, and you can restore the package from the Trash before it is emptied."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” 将被移动到废纸篓，并从 Momento 的最近资源库列表中移除。在废纸篓清空之前，你仍然可以从废纸篓中恢复这个资源库包。"
+          }
+        }
+      }
+    },
     "Details" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -497,6 +513,22 @@
         }
       }
     },
+    "Edit Library" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit Library"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑资源库"
+          }
+        }
+      }
+    },
     "English" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -527,6 +559,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请输入资源库的名称（例：我的灵感、设计素材），并点击下方按钮选择资源库保存的路径。"
+          }
+        }
+      }
+    },
+    "Change this library name. Assets and files stay in the same library package." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Change this library name. Assets and files stay in the same library package."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "修改这个资源库的名称。素材和文件会继续保留在原来的资源库包中。"
           }
         }
       }
@@ -1274,6 +1322,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "搜索资源、标签、颜色..."
+          }
+        }
+      }
+    },
+    "Save Changes" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save Changes"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存更改"
           }
         }
       }

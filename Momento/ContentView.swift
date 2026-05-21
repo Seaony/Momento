@@ -10,6 +10,8 @@ struct ContentView: View {
     @State private var isImporterPresented = false
     @State private var isCommandPalettePresented = false
     @State private var isCreateLibraryDialogPresented = false
+    @State private var editingLibrary: RecentLibraryReference?
+    @State private var deletingLibrary: RecentLibraryReference?
     @State private var isInspectorPresented = true
     @State private var inspectorNotesByAssetID: [AssetItem.ID: String] = [:]
     @State private var importError: String?
@@ -78,14 +80,7 @@ struct ContentView: View {
             }
         }
         .overlay {
-            if isCreateLibraryDialogPresented {
-                MomentoCreateLibraryDialog(
-                    isPresented: $isCreateLibraryDialogPresented,
-                    initialName: localization.string("Untitled Library"),
-                    onContinue: chooseLibraryDestination
-                )
-                .zIndex(30)
-            }
+            libraryDialogOverlay
         }
         .fileImporter(
             isPresented: $isImporterPresented,
@@ -189,6 +184,62 @@ struct ContentView: View {
         }
         .searchable(text: $store.searchQuery, placement: .toolbar, prompt: Text(localization.string("Search assets, tags, colors...")))
         .navigationTitle("")
+    }
+
+    @ViewBuilder
+    private var libraryDialogOverlay: some View {
+        if isCreateLibraryDialogPresented {
+            MomentoCreateLibraryDialog(
+                mode: .create,
+                isPresented: $isCreateLibraryDialogPresented,
+                initialName: localization.string("Untitled Library"),
+                onSubmit: chooseLibraryDestination
+            )
+            .zIndex(30)
+        }
+
+        if let editingLibrary {
+            MomentoCreateLibraryDialog(
+                mode: .edit,
+                isPresented: editingLibraryDialogIsPresented,
+                initialName: editingLibrary.name,
+                onSubmit: { name in
+                    renameLibrary(editingLibrary.id, to: name)
+                }
+            )
+            .zIndex(31)
+        }
+
+        if let deletingLibrary {
+            MomentoDeleteLibraryDialog(
+                isPresented: deletingLibraryDialogIsPresented,
+                libraryName: deletingLibrary.name,
+                onConfirm: {
+                    confirmDeleteLibrary(deletingLibrary.id)
+                }
+            )
+            .zIndex(32)
+        }
+    }
+
+    private var editingLibraryDialogIsPresented: Binding<Bool> {
+        Binding {
+            editingLibrary != nil
+        } set: { isPresented in
+            if !isPresented {
+                editingLibrary = nil
+            }
+        }
+    }
+
+    private var deletingLibraryDialogIsPresented: Binding<Bool> {
+        Binding {
+            deletingLibrary != nil
+        } set: { isPresented in
+            if !isPresented {
+                deletingLibrary = nil
+            }
+        }
     }
 
     private var defaultViewMode: AssetViewMode {
@@ -413,21 +464,14 @@ struct ContentView: View {
             return
         }
 
-        let alert = NSAlert()
-        let nameField = NSTextField(string: library.name)
-        nameField.placeholderString = localization.string("Library Name")
-        nameField.frame = NSRect(x: 0, y: 0, width: 260, height: 24)
-        alert.messageText = localization.string("Rename Library")
-        alert.accessoryView = nameField
-        alert.addButton(withTitle: localization.string("Rename Library"))
-        alert.addButton(withTitle: localization.string("Cancel"))
-
-        guard alert.runModal() == .alertFirstButtonReturn else {
-            return
+        withAnimation(.smooth(duration: 0.16)) {
+            editingLibrary = library
         }
+    }
 
+    private func renameLibrary(_ id: RecentLibraryReference.ID, to name: String) {
         do {
-            try store.renameRecentLibrary(id: id, to: nameField.stringValue)
+            try store.renameRecentLibrary(id: id, to: name)
         } catch {
             showImportError(error)
         }
@@ -438,17 +482,12 @@ struct ContentView: View {
             return
         }
 
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = localization.string("Delete Library")
-        alert.informativeText = library.name
-        alert.addButton(withTitle: localization.string("Move to Trash"))
-        alert.addButton(withTitle: localization.string("Cancel"))
-
-        guard alert.runModal() == .alertFirstButtonReturn else {
-            return
+        withAnimation(.smooth(duration: 0.16)) {
+            deletingLibrary = library
         }
+    }
 
+    private func confirmDeleteLibrary(_ id: RecentLibraryReference.ID) {
         do {
             try store.deleteRecentLibrary(id: id)
         } catch {
