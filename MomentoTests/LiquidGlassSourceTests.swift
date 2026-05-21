@@ -101,12 +101,13 @@ final class LiquidGlassSourceTests: XCTestCase {
 
     func testSidebarFooterUsesInsetHairlineAndIconOnlyActions() throws {
         let sidebarSource = try String(contentsOf: sidebarViewURL(), encoding: .utf8)
+        let designSource = try String(contentsOf: designSystemURL(), encoding: .utf8)
         let footerStart = try XCTUnwrap(sidebarSource.range(of: "private var bottomActionBar: some View {"))
         let footerEnd = try XCTUnwrap(sidebarSource[footerStart.lowerBound...].range(of: "    private func sidebarFooterButton("))
         let footerSource = String(sidebarSource[footerStart.lowerBound..<footerEnd.lowerBound])
 
         XCTAssertTrue(sidebarSource.contains("sidebarBottomSeparator"))
-        XCTAssertTrue(sidebarSource.contains("MomentoTheme.subtleStroke.opacity(0.24)"))
+        XCTAssertTrue(sidebarSource.contains("MomentoTheme.subtleStroke.opacity(0.34)"))
         XCTAssertTrue(sidebarSource.contains(".frame(height: 0.5)"))
         XCTAssertTrue(sidebarSource.contains(".padding(.horizontal, 14)"))
         XCTAssertTrue(sidebarSource.contains("bottomActionBar"))
@@ -116,6 +117,13 @@ final class LiquidGlassSourceTests: XCTestCase {
         XCTAssertTrue(footerSource.contains("systemImage: \"gear\""))
         XCTAssertTrue(footerSource.contains("systemImage: \"questionmark.circle\""))
         XCTAssertFalse(sidebarSource.contains("systemImage: \"externaldrive\""))
+        XCTAssertTrue(designSource.contains("static let primaryText = Color(nsColor: .labelColor)"))
+        XCTAssertTrue(sidebarSource.contains("@State private var hoveredFooterActionID: String?"))
+        XCTAssertTrue(footerSource.contains("isSelected: selection == \"trash\""))
+        XCTAssertTrue(sidebarSource.contains("hoveredFooterActionID == id"))
+        XCTAssertTrue(sidebarSource.contains("updateFooterHover(id: id, isHovering: hovering)"))
+        XCTAssertTrue(sidebarSource.contains("MomentoTheme.primaryText"))
+        XCTAssertTrue(sidebarSource.contains("sidebarFooterIconBackground(id: id, isSelected: isSelected)"))
     }
 
     func testFloatingSidebarWidthIsUserResizableWithoutSplitViewBorders() throws {

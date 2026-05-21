@@ -56,6 +56,7 @@ struct MomentoSidebarView: View {
     var onItemContextMenu: ((MomentoSidebarItem) -> AnyView)?
 
     @State private var collapsedSectionIDs: Set<MomentoSidebarSection.ID> = []
+    @State private var hoveredFooterActionID: String?
 
     init(
         sections: [MomentoSidebarSection] = .momentoDefaultSections,
@@ -120,7 +121,7 @@ struct MomentoSidebarView: View {
 
     private var sidebarBottomSeparator: some View {
         Rectangle()
-            .fill(MomentoTheme.subtleStroke.opacity(0.24))
+            .fill(MomentoTheme.subtleStroke.opacity(0.34))
             .frame(height: 0.5)
             .padding(.horizontal, 14)
     }
@@ -128,8 +129,10 @@ struct MomentoSidebarView: View {
     private var bottomActionBar: some View {
         HStack(spacing: 10) {
             sidebarFooterButton(
+                id: "trash",
                 systemImage: "trash",
-                label: localization.string("Trash")
+                label: localization.string("Trash"),
+                isSelected: selection == "trash"
             ) {
                 withAnimation(.smooth(duration: 0.16)) {
                     selection = "trash"
@@ -137,12 +140,14 @@ struct MomentoSidebarView: View {
             }
 
             sidebarFooterButton(
+                id: "settings",
                 systemImage: "gear",
                 label: localization.string("Settings"),
                 action: openSettings.callAsFunction
             )
 
             sidebarFooterIcon(
+                id: "help",
                 systemImage: "questionmark.circle",
                 label: localization.string("Help Center")
             )
@@ -153,29 +158,75 @@ struct MomentoSidebarView: View {
     }
 
     private func sidebarFooterButton(
+        id: String,
         systemImage: String,
         label: String,
+        isSelected: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(MomentoTheme.secondaryText)
-                .frame(width: 28, height: 28)
-                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            sidebarFooterIconContent(
+                id: id,
+                systemImage: systemImage,
+                isSelected: isSelected
+            )
         }
         .buttonStyle(.plain)
+        .onHover { hovering in
+            updateFooterHover(id: id, isHovering: hovering)
+        }
         .help(label)
         .accessibilityLabel(label)
     }
 
-    private func sidebarFooterIcon(systemImage: String, label: String) -> some View {
+    private func sidebarFooterIcon(id: String, systemImage: String, label: String) -> some View {
+        sidebarFooterIconContent(
+            id: id,
+            systemImage: systemImage,
+            isSelected: false
+        )
+        .onHover { hovering in
+            updateFooterHover(id: id, isHovering: hovering)
+        }
+        .help(label)
+        .accessibilityLabel(label)
+    }
+
+    private func sidebarFooterIconContent(
+        id: String,
+        systemImage: String,
+        isSelected: Bool
+    ) -> some View {
         Image(systemName: systemImage)
             .font(.system(size: 14, weight: .medium))
-            .foregroundStyle(MomentoTheme.secondaryText)
+            .foregroundStyle(isSelected || hoveredFooterActionID == id ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
             .frame(width: 28, height: 28)
-            .help(label)
-            .accessibilityLabel(label)
+            .background {
+                sidebarFooterIconBackground(id: id, isSelected: isSelected)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    @ViewBuilder
+    private func sidebarFooterIconBackground(id: String, isSelected: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+
+        if isSelected || hoveredFooterActionID == id {
+            Color.clear
+                .glassEffect(.regular, in: shape)
+        } else {
+            Color.clear
+        }
+    }
+
+    private func updateFooterHover(id: String, isHovering: Bool) {
+        withAnimation(.smooth(duration: 0.14)) {
+            if isHovering {
+                hoveredFooterActionID = id
+            } else if hoveredFooterActionID == id {
+                hoveredFooterActionID = nil
+            }
+        }
     }
 
     private func sectionView(_ section: MomentoSidebarSection) -> some View {

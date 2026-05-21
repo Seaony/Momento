@@ -63,6 +63,7 @@ enum MomentoTheme {
     static let rowRadius: CGFloat = 8
     static let panelRadius: CGFloat = 14
     static let subtleStroke = Color(nsColor: .separatorColor)
+    static let primaryText = Color(nsColor: .labelColor)
     static let secondaryText = Color(nsColor: .secondaryLabelColor)
     static let tertiaryText = Color(nsColor: .tertiaryLabelColor)
 }
