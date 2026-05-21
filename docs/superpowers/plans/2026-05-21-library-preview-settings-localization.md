@@ -4,7 +4,7 @@
 
 **Goal:** Turn Momento into an Eagle-style library-based macOS app with real library creation/opening/switching, image previews with resolution subtitles, a native Settings window, and English/Simplified Chinese localization.
 
-**Architecture:** Implement this as several small, separately committed milestones. Keep the current SwiftUI + AppKit bridge structure, introduce localization before adding more UI text, then add native Settings, grid preview metadata, and finally the library package/session/persistence path. Library metadata uses Core Data + SQLite inside a user-selected `.momentolibrary` package; sandbox access uses read-write security-scoped bookmarks.
+**Architecture:** Implement this as small, separately committed, shippable milestones. Keep the current SwiftUI + AppKit bridge structure, but avoid intermediate states where the app can create a library yet cannot safely import or reload assets. Library metadata uses Core Data + SQLite inside a user-selected `.momentolibrary` package; persisted asset paths are relative to the package, and sandbox access uses read-write security-scoped bookmarks.
 
 **Tech Stack:** Swift 6, SwiftUI, AppKit, NSCollectionView, Core Data/SQLite, String Catalogs (`Localizable.xcstrings`), macOS Settings scene.
 
@@ -15,7 +15,8 @@
 - `LibraryStore` is an in-memory `@Observable` object with sample assets and no persisted library metadata.
 - `LibraryStorage` creates `Libraries/<id>/.library` under Application Support, not a user-selected `.momentolibrary` package.
 - `AssetImportService` copies files into `assets/` and returns in-memory `AssetItem` values; it does not write library metadata.
-- `AssetCollectionGridView` uses `NSCollectionView`, but item cells only have one label and use synchronous `NSImage(contentsOf:)` fallback behavior.
+- `AssetItem.originalURL` is non-optional, and preview paths can fall back to original source files.
+- `AssetCollectionGridView` uses `NSCollectionView`; item cells only have one label and use synchronous `NSImage(contentsOf:)` fallback behavior.
 - `MomentoApp` only defines a `WindowGroup`; there is no native `Settings` scene for `Command + ,`.
 - User-facing strings are hard-coded across `ContentView`, Sidebar, Search, Inspector, Command Palette, and previews.
 - The project currently has sandbox enabled with user-selected files set to read-only. Creating and reopening user-selected libraries requires read-write access and persisted bookmarks.
@@ -36,7 +37,8 @@
    - If a duplicate is imported into a folder later, add folder membership only.
 
 4. **Original source URL**
-   - After copy import, browsing must not depend on the original path.
+   - After copy import, browsing and preview must not depend on the original source path.
+   - `AssetItem.originalURL` should become optional or be replaced by an optional source-reference field.
    - Store original source path/bookmark later only for "Reveal Original" or watched-folder features.
 
 5. **Thumbnail scope**
@@ -51,21 +53,33 @@
 7. **Settings first version**
    - Only include settings that work immediately.
    - First version includes app language, default view mode, and About/version.
-   - Library path/recent libraries move into Settings only after the library package foundation exists.
+   - Library path/recent libraries move into Settings only after the library package workflow exists.
+
+## Implementation Rules
+
+- Each milestone must leave the app in a usable state and must be committed separately.
+- Do not create a milestone where library creation works but import/reload is disabled or data disappears on relaunch.
+- Do not silently create a default library in Application Support after the library-based workflow exists.
+- Do not persist absolute asset storage paths. Persist paths relative to the selected `.momentolibrary` package.
+- Do not add full tags, folders, search index, watched folders, source bookmarks, Finder Sync, or async thumbnail queues in this plan.
+- Do not stage or modify existing untracked `FEATURE.md` or `MomentoTests/` unless that is intentionally pulled into the implementation.
 
 ---
 
-## Milestone 1: Localization Foundation and App Language
+## Milestone 1: Localization and Native Settings
 
-**Goal:** Add English and Simplified Chinese localization infrastructure before adding more UI surfaces.
+**Goal:** Make `Command + ,` open a native Settings window and add working English/Simplified Chinese app language switching.
 
 **Files:**
 - Create: `Momento/Localizable.xcstrings`
 - Create: `Momento/Core/AppLanguage.swift`
+- Create: `Momento/Core/AppLocalization.swift`
+- Create: `Momento/Features/Settings/MomentoSettingsView.swift`
 - Modify: `Momento.xcodeproj/project.pbxproj`
 - Modify: `Momento/MomentoApp.swift`
+- Modify: `Momento/ContentView.swift`
+- Modify: `Momento/Core/LibraryStore.swift`
 - Modify user-facing text in:
-  - `Momento/ContentView.swift`
   - `Momento/Features/Sidebar/MomentoSidebarView.swift`
   - `Momento/Features/Search/MomentoSearchBar.swift`
   - `Momento/Features/CommandPalette/MomentoCommandPalette.swift`
@@ -76,76 +90,55 @@
 - Add `en` and `zh-Hans` to `Localizable.xcstrings`.
 - Add `zh-Hans` to project known localizations.
 - Add an `AppLanguage` enum with `system`, `english`, and `simplifiedChinese`.
-- Store the selected app language in `@AppStorage`.
-- Apply the selected language at the app root using SwiftUI environment locale for SwiftUI `Text`.
-- Add one helper for non-SwiftUI strings, backed by the selected language, so AppKit cells and imperative code do not call `NSLocalizedString` with the system locale by accident.
-- Dynamic app-level language switching must update SwiftUI views without relaunch.
-- AppKit-backed cells must read localized strings during configuration so reloads pick up the selected language.
+- Store selected app language in `@AppStorage`.
+- Apply selected language at the app root using SwiftUI environment locale for SwiftUI `Text`.
+- Add `AppLocalization` for model-backed and AppKit strings so code does not accidentally use the system locale through `NSLocalizedString`.
+- Localize model-backed strings, including sidebar item titles, command palette command titles/subtitles, top bar title/subtitle, empty states, import errors, Inspector labels, and Settings labels.
+- Add a SwiftUI `Settings` scene in `MomentoApp`.
+- Ensure the main window and Settings scene observe the same app-level settings/store state where needed; do not create a second independent `LibraryStore` for Settings.
+- Settings includes:
+  - Language picker: `System`, `English`, `Simplified Chinese`.
+  - Default view mode picker backed by `@AppStorage`.
+  - About/version section.
+- Default view mode setting is separate from current session view mode:
+  - `LibraryStore` initializes from the default setting.
+  - Changing Settings updates both the stored default and current `LibraryStore.viewMode`.
+  - Command palette view changes update the current session view mode only.
 - Avoid string concatenation for translatable sentences.
 - For dynamic counts, use localizable format strings.
 
 **Known limits:**
 - System-owned menu titles and some Info.plist-localized values may continue following system language until InfoPlist localization is added.
-- AppKit cell content may need collection reload after language changes.
-
-**References:**
-- Apple Localization: https://developer.apple.com/documentation/xcode/localization
-- Apple String Catalogs: https://developer.apple.com/documentation/xcode/localizing-and-varying-text-with-a-string-catalog
-- SwiftUI localization: https://developer.apple.com/documentation/swiftui/preparing-views-for-localization
+- AppKit cell content must be reloaded after language changes if visible AppKit-backed cells contain localized text.
 
 **Steps:**
 
 - [ ] Add `Localizable.xcstrings` with `en` and `zh-Hans`.
 - [ ] Add `zh-Hans` to project known regions.
-- [ ] Add `AppLanguage`, `@AppStorage` key, and non-SwiftUI localization helper.
+- [ ] Add `AppLanguage`, `@AppStorage` key, and `AppLocalization`.
+- [ ] Add `MomentoSettingsView` with language, default view mode, and About/version only.
+- [ ] Move or expose app-level store/settings ownership so `ContentView` and Settings operate on the same current view mode state.
+- [ ] Add `Settings { MomentoSettingsView(...) }` to `MomentoApp`.
 - [ ] Apply `.environment(\.locale, selectedLocale)` at the app root.
-- [ ] Localize major visible strings.
+- [ ] Wire default view mode into `LibraryStore` without making `@AppStorage` and `LibraryStore.viewMode` compete as uncontrolled sources.
+- [ ] Localize major visible strings, including model-backed strings.
+- [ ] Reload AppKit-backed visible content when selected app language changes.
 - [ ] Build with `xcodebuild -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' build`.
-- [ ] Manually verify English, Simplified Chinese, and System modes.
-- [ ] Commit: `feat: add english and chinese localization`.
+- [ ] Manually verify `Command + ,` opens Settings.
+- [ ] Manually verify `System`, `English`, and `Simplified Chinese` modes from Settings without relaunch.
+- [ ] Manually verify command palette, sidebar, top bar, empty state, and Inspector labels switch language consistently.
+- [ ] Commit: `feat: add settings and localization`.
 
 ---
 
-## Milestone 2: Native Settings Window
-
-**Goal:** Make `Command + ,` open a useful native Settings window with only working settings.
-
-**Files:**
-- Modify: `Momento/MomentoApp.swift`
-- Modify: `Momento/Core/LibraryStore.swift`
-- Create: `Momento/Features/Settings/MomentoSettingsView.swift`
-- Optional modify: `Momento/DesignSystem/MomentoGlass.swift`
-
-**Behavior:**
-- Add a SwiftUI `Settings` scene in `MomentoApp`.
-- Settings includes:
-  - Language picker: `System`, `English`, `Simplified Chinese`.
-  - Default view mode picker backed by `@AppStorage`.
-  - About/version section.
-- Do not include library path or recent-library controls until Milestone 4.
-- Use native macOS Settings behavior, not a custom modal.
-- Default view mode must affect new library/store sessions and should update the current view mode when changed during the session.
-
-**Steps:**
-
-- [ ] Add `MomentoSettingsView`.
-- [ ] Add real `@AppStorage` values for language and default view mode.
-- [ ] Wire default view mode to `LibraryStore` instead of leaving it as a saved-but-unused preference.
-- [ ] Add `Settings { MomentoSettingsView() }` to `MomentoApp`.
-- [ ] Build with `xcodebuild -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' build`.
-- [ ] Manually verify `Command + ,` opens Settings and changes language/default view.
-- [ ] Commit: `feat: add native settings window`.
-
----
-
-## Milestone 3: Grid Preview and Resolution Subtitle
+## Milestone 2: Grid Preview and Resolution Subtitle
 
 **Goal:** Grid/list cells show a real image preview when available, and show image resolution under the title.
 
 **Files:**
 - Modify: `Momento/AppKitBridge/AssetCollectionGridView.swift`
-- Reuse: `Momento/Core/AssetModels.swift`
-- Reuse: `Momento/Services/AssetImportService.swift`
+- Reuse/modify if needed: `Momento/Core/AssetModels.swift`
+- Reuse/modify if needed: `Momento/Services/AssetImportService.swift`
 
 **Behavior:**
 - Add a subtitle label to `AssetCollectionViewItem`.
@@ -153,40 +146,101 @@
 - For assets without dimensions, subtitle can show file extension or file size only if already available; avoid inventing metadata.
 - Image/GIF cells show `NSImage` from copied storage path when available.
 - Non-image formats keep system icon fallback.
+- `prepareForReuse` clears title, subtitle, image, hover state, and any mode-specific state.
 
 **Constraints:**
 - First investigate why current imported images may be falling back to file icons even though `previewImage(for:)` tries `NSImage(contentsOf:)`.
+- Fix stored URL/kind/path root causes before changing UI fallback behavior.
 - Keep this pass small. Do not build full async thumbnail cache here.
 - Do not degrade list mode layout.
 
 **Steps:**
 
 - [ ] Inspect one imported raster image and confirm `kind`, `storageURL`, `FileManager.fileExists`, and `NSImage(contentsOf:)` behavior.
-- [ ] Fix the root cause if previews currently fall back to icons because the stored URL/kind/path is wrong.
-- [ ] Add subtitle label and layout constraints.
-- [ ] Update `configure(with:viewMode:)` to populate title and subtitle.
-- [ ] Ensure `prepareForReuse` resets subtitle.
+- [ ] Fix the root cause if previews currently fall back to icons because stored URL/kind/path is wrong.
+- [ ] Add subtitle label and layout constraints for grid, masonry, and list modes.
+- [ ] Update `configure(with:viewMode:)` to populate title, subtitle, and preview image.
+- [ ] Ensure `prepareForReuse` resets subtitle and image state.
 - [ ] Build with `xcodebuild -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' build`.
 - [ ] Manually import a PNG/JPG and verify preview + resolution in Grid/Masonry/List.
+- [ ] Manually verify non-image formats still show system icon fallback.
 - [ ] Commit: `feat: show asset preview metadata in grid`.
 
 ---
 
-## Milestone 4: Library Package Foundation
+## Milestone 3: Library Package and Minimal Persistence
 
-**Goal:** Support Eagle-style user-selected library packages without replacing all metadata internals at once.
+**Goal:** Support Eagle-style user-selected `.momentolibrary` packages with working create/open/switch/import/relaunch behavior in one shippable milestone.
 
 **Files:**
 - Modify: `Momento.xcodeproj/project.pbxproj`
+- Create: `Momento/Info.plist`
 - Modify: `Momento/Core/AssetModels.swift`
 - Modify: `Momento/Core/LibraryStore.swift`
 - Modify: `Momento/Storage/LibraryStorage.swift`
 - Create: `Momento/Storage/LibraryManifest.swift`
+- Create: `Momento/Storage/LibraryAccessScope.swift`
+- Create: `Momento/Storage/LibraryMetadataStore.swift`
+- Create: `Momento/Storage/MomentoCoreDataStack.swift`
+- Create: `Momento/Storage/MomentoModel.xcdatamodeld`
+- Modify: `Momento/Services/AssetImportService.swift`
 - Create: `Momento/Features/Library/MomentoLibraryWelcomeView.swift`
 - Modify: `Momento/ContentView.swift`
 - Modify: `Momento/Features/Sidebar/MomentoSidebarView.swift`
 
-**Behavior:**
+**Package Structure:**
+
+```text
+<Name>.momentolibrary/
+  manifest.json
+  database/
+    library.sqlite
+    library.sqlite-wal
+    library.sqlite-shm
+  assets/
+    <first-two-hash-chars>/
+      <sha256>.<ext>
+  thumbnails/
+  previews/
+  metadata/
+    import-sessions/
+```
+
+**Core Data Model:**
+- Create a minimal model file, `MomentoModel.xcdatamodeld`.
+- First version includes only the asset metadata needed for current UI:
+  - `id: String`
+  - `libraryID: String`
+  - `displayName: String`
+  - `storageRelativePath: String`
+  - `kindRaw: String`
+  - `fileExtension: String`
+  - `byteSize: Int64`
+  - `contentHash: String`
+  - `pixelWidth: Int64?`
+  - `pixelHeight: Int64?`
+  - `isFavorite: Bool`
+  - `importedAt: Date`
+- Use fetch-before-insert on `contentHash` within the current library for duplicate reuse.
+- Do not model tags, folders, search index, asset colors, trash, or source bookmarks yet.
+
+**Document and Package Registration:**
+- Register `.momentolibrary` as an exported package type and app document type.
+- Include a stable UTI such as `com.seaony.momento.library`.
+- Use explicit `Momento/Info.plist` as the source of truth for `CFBundleDocumentTypes` and `UTExportedTypeDeclarations`; nested document/package metadata should not be hidden in unreadable project build settings.
+- Configure the target to use `Momento/Info.plist` and preserve existing generated values through build setting placeholders such as `$(PRODUCT_BUNDLE_IDENTIFIER)`, `$(PRODUCT_NAME)`, `$(MARKETING_VERSION)`, and `$(CURRENT_PROJECT_VERSION)`.
+- Ensure Finder treats `.momentolibrary` as a package and the app can open it.
+
+**Sandbox and Bookmark Behavior:**
+- Change sandbox user-selected file access from read-only to read-write (`ENABLE_USER_SELECTED_FILES = readwrite`).
+- Store recent libraries as security-scoped bookmark data plus display names in `UserDefaults`.
+- Add `LibraryAccessScope` to resolve bookmarks, detect stale bookmarks, refresh stale bookmarks when possible, and keep package access active while reading/writing.
+- Call `startAccessingSecurityScopedResource()` before opening the Core Data store, validating a package, importing into a package, or reading package assets for preview.
+- Call `stopAccessingSecurityScopedResource()` when switching libraries, closing a session, or deinitializing the access scope.
+- Source URLs from file import/drop must also be accessed for the duration of the copy/hash operation.
+- Do not start a detached import task after source or destination security scope has already been stopped.
+
+**Library Workflow Behavior:**
 - First launch with no recent library shows a welcome view:
   - Create Library
   - Open Library
@@ -195,95 +249,66 @@
   - App creates `<Name>.momentolibrary`.
   - App writes `manifest.json`.
   - App creates `database/`, `assets/`, `thumbnails/`, `previews/`, `metadata/import-sessions/`.
-- Register `.momentolibrary` as an app document/package type.
-- Change sandbox user-selected file access from read-only to read-write (`ENABLE_USER_SELECTED_FILES = readwrite`).
-- Store security-scoped bookmarks for recent libraries and keep access active while reading or writing package contents.
+  - App initializes `database/library.sqlite`.
+  - App switches to the new library and stores its bookmark.
 - Open Library:
   - User selects an existing `.momentolibrary`.
   - App validates `manifest.json`.
+  - App resolves/starts bookmark access.
+  - App opens `database/library.sqlite`.
+  - App loads persisted assets.
   - App switches current library.
 - Sidebar top library header becomes a switcher button/menu.
-- Recent libraries are saved in `UserDefaults` as bookmark data plus display names.
-- Until Milestone 5 lands, importing from a selected library session is disabled instead of performing copy-only imports that disappear on relaunch.
+- Recent libraries are saved and can be reopened on next launch.
+- Normal app launch should not show sample assets after library workflow exists.
+- Import copies files into the selected package and writes metadata in the same operation.
+- After import, browsing and preview use package-internal storage paths only.
+- `AssetItem.originalURL` becomes optional or is replaced by an optional source-reference field; loaded persisted assets do not require original source URLs.
 
 **Constraints:**
-- Do not add sample assets when no library exists.
-- Do not silently create a default library in Application Support.
-- Do not require Core Data to be complete before the welcome flow works.
-- Do not leave an import path that writes new assets to the old Application Support `.library` location.
+- Do not create a package-only milestone that disables import.
+- Do not leave any import path that writes new assets to the old Application Support `.library` location.
+- Do not persist absolute package paths inside Core Data asset records.
+- Treat the entire `database/` directory as Core Data-owned, including SQLite sidecar files such as `-wal` and `-shm`.
+- Preserve compatibility DTOs only where needed to avoid rewriting unrelated UI.
 
 **Steps:**
 
-- [ ] Register `.momentolibrary` document/package metadata in the Xcode project / generated Info.plist settings.
+- [ ] Register `.momentolibrary` document/package metadata in the target.
+- [ ] Add explicit `Momento/Info.plist` and preserve current generated plist behavior through build setting placeholders.
 - [ ] Change sandbox user-selected file access from read-only to read-write.
 - [ ] Define `LibraryManifest`.
-- [ ] Update `LibraryStorage` to create/read/validate `.momentolibrary` packages.
-- [ ] Add bookmark persistence and resolution for recent libraries.
+- [ ] Add `LibraryAccessScope` for bookmark resolution, stale handling, and scoped access lifetime.
+- [ ] Update `LibraryStorage` to create/read/validate `.momentolibrary` packages and resolve package-relative asset paths.
+- [ ] Add `MomentoModel.xcdatamodeld` with the minimal Asset entity.
+- [ ] Add `MomentoCoreDataStack` configured for `database/library.sqlite` inside the current package.
+- [ ] Add `LibraryMetadataStore` for loading, inserting, and duplicate lookup by `contentHash`.
+- [ ] Update `AssetItem` source URL contract so persisted assets do not require original source paths.
+- [ ] Update `AssetImportService` to hash, copy to `assets/<prefix>/<sha256>.<ext>`, and write metadata while source and destination security scopes are active.
+- [ ] Change `LibraryStore` initialization so it can represent "no current library".
+- [ ] Remove sample asset dependency from normal app launch.
 - [ ] Add library welcome view.
 - [ ] Add create/open actions using `NSOpenPanel` / `NSSavePanel` or SwiftUI file importer/exporter where appropriate.
-- [ ] Change `LibraryStore` initialization so it can represent "no current library".
 - [ ] Update `ContentView` to show welcome view when no library is selected.
 - [ ] Update sidebar header to show current library name and switcher affordance.
-- [ ] Disable import for selected library sessions until metadata persistence exists, and ensure no import path writes to an old non-selected library path.
+- [ ] Ensure Quick Look, Inspector preview, and grid preview resolve package-relative storage URLs and do not fall back to original source paths for persisted assets.
+- [ ] Add or wire smoke tests for library package creation, duplicate import, and reload-after-relaunch behavior if a test target is intentionally brought into the build.
 - [ ] Build with `xcodebuild -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' build`.
-- [ ] Manually verify first launch, create, open, switch.
-- [ ] Commit: `feat: add library package workflow`.
-
----
-
-## Milestone 5: Library Metadata Persistence
-
-**Goal:** Persist imported assets inside the selected library instead of keeping them only in memory.
-
-**Files:**
-- Modify: `Momento/Core/AssetModels.swift`
-- Modify: `Momento/Core/LibraryStore.swift`
-- Modify: `Momento/Services/AssetImportService.swift`
-- Modify: `Momento/Storage/LibraryStorage.swift`
-- Create: `Momento/Storage/LibraryMetadataStore.swift`
-- Create: `Momento/Storage/MomentoCoreDataStack.swift` if no equivalent Core Data stack exists.
-- Update: `MomentoTests/ImportServiceSmokeTests.swift` only if tests are intentionally brought into the build/test flow.
-
-**Behavior:**
-- Store metadata in `database/library.sqlite` within the current `.momentolibrary`.
-- Treat the entire `database/` directory as Core Data-owned, including SQLite sidecar files such as `-wal` and `-shm`.
-- Asset records use stable IDs and `contentHash`.
-- Physical files copy to `assets/<first-two-hash-chars>/<sha256>.<ext>`.
-- `(libraryID, contentHash)` is unique.
-- Importing duplicate files returns/reuses existing asset metadata.
-- `LibraryStore` loads current library assets from metadata store.
-- Import only runs when a writable current library is selected and bookmark access is active.
-- Resolve and start the selected library security-scoped bookmark before loading the Core Data store.
-
-**Constraints:**
-- Avoid implementing full Tags/Folders/SearchIndex/AssetColor in this milestone unless required for compile.
-- Keep compatibility DTOs if needed so existing UI does not need a full rewrite.
-- Do not copy or export only `library.sqlite`; preserve the whole `database/` directory.
-
-**Steps:**
-
-- [ ] Add metadata store abstraction.
-- [ ] Add Core Data stack configured for the current library package path.
-- [ ] Add minimal Asset persistence.
-- [ ] Update import pipeline to write metadata.
-- [ ] Update `LibraryStore` load/import path.
-- [ ] Remove sample asset dependency from normal app launch.
-- [ ] Add or wire smoke tests for library package creation, duplicate import, and reload-after-relaunch behavior.
-- [ ] Build with `xcodebuild -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' build`.
-- [ ] Manually verify create library -> import -> quit/relaunch -> assets remain.
-- [ ] Commit: `feat: persist library assets`.
+- [ ] Manually verify first launch -> create library -> import PNG/JPG -> quit/relaunch -> assets remain.
+- [ ] Manually verify opening an existing `.momentolibrary` from Finder/Open panel.
+- [ ] Manually verify duplicate import does not create a second physical copy or duplicate visible asset.
+- [ ] Manually verify imported assets still preview after the original source file is moved or deleted.
+- [ ] Commit: `feat: add library package persistence`.
 
 ---
 
 ## Recommended Execution Order
 
-1. Milestone 1: Localization foundation and app language.
-2. Milestone 2: Settings window.
-3. Milestone 3: Grid preview and resolution subtitle.
-4. Milestone 4: Library package foundation.
-5. Milestone 5: Library metadata persistence.
+1. Milestone 1: Localization and native Settings.
+2. Milestone 2: Grid preview and resolution subtitle.
+3. Milestone 3: Library package and minimal persistence.
 
-This order avoids adding new hard-coded UI text before localization exists, keeps early changes small and verifiable, then handles the larger library workflow in two stages. Library package creation and metadata persistence are separate, but imports must be disabled during the package-only stage so data cannot be written to the wrong location or disappear on relaunch.
+This order fixes `Command + ,` and app-level language switching first, then fixes the currently visible grid preview issue, then moves to the larger library architecture change as one complete, shippable slice. The library work is intentionally not split into package-only and persistence-only commits because that would create an unusable intermediate app state.
 
 ## Review Checklist
 
@@ -291,11 +316,13 @@ This order avoids adding new hard-coded UI text before localization exists, keep
 - [x] `.momentolibrary` package extension.
 - [x] Duplicate import reuses existing asset metadata.
 - [x] Original source paths/bookmarks are not needed for normal browsing in first pass.
+- [x] Persist package-relative asset paths, not absolute asset storage paths.
 - [x] First thumbnail scope is raster images/GIFs; PDF/video/SVG remain icon fallback.
 - [x] Support `en` and `zh-Hans`.
-- [x] Add App-level language switch.
+- [x] Add app-level language switch.
 - [x] Settings first version only includes working settings.
 - [x] Each implementation milestone should be committed separately.
+- [x] Each milestone leaves the app in a usable state.
 
 ## Not In Scope For This Plan
 
@@ -303,4 +330,5 @@ This order avoids adding new hard-coded UI text before localization exists, keep
 - Async thumbnail generation queue for all file types.
 - Finder Sync extension.
 - Watched folders.
-- Full Core Data model for tags, folders, search index, and colors unless explicitly pulled into Milestone 5.
+- "Reveal Original" source bookmarks.
+- Full Core Data model for tags, folders, search index, trash, and colors.
