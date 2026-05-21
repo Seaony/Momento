@@ -38,7 +38,8 @@
 
 4. **Original source URL**
    - After copy import, browsing and preview must not depend on the original source path.
-   - `AssetItem.originalURL` should become optional or be replaced by an optional source-reference field.
+   - Change `AssetItem.originalURL` to `URL?`.
+   - Persisted assets loaded from `.momentolibrary` set `originalURL` to `nil`.
    - Store original source path/bookmark later only for "Reveal Original" or watched-folder features.
 
 5. **Thumbnail scope**
@@ -63,6 +64,7 @@
 - Do not persist absolute asset storage paths. Persist paths relative to the selected `.momentolibrary` package.
 - Do not add full tags, folders, search index, watched folders, source bookmarks, Finder Sync, or async thumbnail queues in this plan.
 - Do not stage or modify existing untracked `FEATURE.md` or `MomentoTests/` unless that is intentionally pulled into the implementation.
+- When `MomentoTests/` is pulled into Milestone 3, inspect any existing untracked files first and only stage test files that are part of that milestone.
 
 ---
 
@@ -95,7 +97,12 @@
 - Add `AppLocalization` for model-backed and AppKit strings so code does not accidentally use the system locale through `NSLocalizedString`.
 - Localize model-backed strings, including sidebar item titles, command palette command titles/subtitles, top bar title/subtitle, empty states, import errors, Inspector labels, and Settings labels.
 - Add a SwiftUI `Settings` scene in `MomentoApp`.
-- Ensure the main window and Settings scene observe the same app-level settings/store state where needed; do not create a second independent `LibraryStore` for Settings.
+- `MomentoApp` owns the shared app state:
+  - `@State private var store = LibraryStore(...)`.
+  - `@AppStorage` values for app language and default view mode.
+  - `ContentView` receives the shared `LibraryStore` instead of creating its own `@State private var store`.
+  - `MomentoSettingsView` receives bindings/actions for app language and default view mode, plus access to the same `LibraryStore` when changing the current view mode.
+- Do not introduce a singleton store or a second independent `LibraryStore` for Settings.
 - Settings includes:
   - Language picker: `System`, `English`, `Simplified Chinese`.
   - Default view mode picker backed by `@AppStorage`.
@@ -117,7 +124,7 @@
 - [ ] Add `zh-Hans` to project known regions.
 - [ ] Add `AppLanguage`, `@AppStorage` key, and `AppLocalization`.
 - [ ] Add `MomentoSettingsView` with language, default view mode, and About/version only.
-- [ ] Move or expose app-level store/settings ownership so `ContentView` and Settings operate on the same current view mode state.
+- [ ] Move `LibraryStore` ownership from `ContentView` into `MomentoApp` and pass the same store into `ContentView` and `MomentoSettingsView`.
 - [ ] Add `Settings { MomentoSettingsView(...) }` to `MomentoApp`.
 - [ ] Apply `.environment(\.locale, selectedLocale)` at the app root.
 - [ ] Wire default view mode into `LibraryStore` without making `@AppStorage` and `LibraryStore.viewMode` compete as uncontrolled sources.
@@ -184,9 +191,12 @@
 - Create: `Momento/Storage/MomentoCoreDataStack.swift`
 - Create: `Momento/Storage/MomentoModel.xcdatamodeld`
 - Modify: `Momento/Services/AssetImportService.swift`
+- Create: `Momento/AppOpenHandler.swift`
 - Create: `Momento/Features/Library/MomentoLibraryWelcomeView.swift`
 - Modify: `Momento/ContentView.swift`
 - Modify: `Momento/Features/Sidebar/MomentoSidebarView.swift`
+- Create/modify: `MomentoTests/LibraryPackagePersistenceTests.swift`
+- Modify: `Momento.xcodeproj/project.pbxproj` to create a `MomentoTests` target and attach it to a scheme that can run `xcodebuild ... test`.
 
 **Package Structure:**
 
@@ -222,6 +232,8 @@
   - `isFavorite: Bool`
   - `importedAt: Date`
 - Use fetch-before-insert on `contentHash` within the current library for duplicate reuse.
+- Add a Core Data uniqueness constraint for `libraryID + contentHash`.
+- Use a merge policy that preserves the existing asset record on duplicate import instead of creating a second visible asset.
 - Do not model tags, folders, search index, asset colors, trash, or source bookmarks yet.
 
 **Document and Package Registration:**
@@ -230,6 +242,12 @@
 - Use explicit `Momento/Info.plist` as the source of truth for `CFBundleDocumentTypes` and `UTExportedTypeDeclarations`; nested document/package metadata should not be hidden in unreadable project build settings.
 - Configure the target to use `Momento/Info.plist` and preserve existing generated values through build setting placeholders such as `$(PRODUCT_BUNDLE_IDENTIFIER)`, `$(PRODUCT_NAME)`, `$(MARKETING_VERSION)`, and `$(CURRENT_PROJECT_VERSION)`.
 - Ensure Finder treats `.momentolibrary` as a package and the app can open it.
+
+**External Open Behavior:**
+- Add one explicit app-open entry point for `.momentolibrary` URLs.
+- Implement `AppOpenHandler` using `NSApplicationDelegateAdaptor` to handle macOS file-open events and forward accepted `.momentolibrary` URLs to the shared `LibraryStore`.
+- If an external open event arrives before `LibraryStore` is ready, queue the URL in app state and open it once the shared store is initialized.
+- Reject non-`.momentolibrary` URLs with a visible error instead of silently ignoring them.
 
 **Sandbox and Bookmark Behavior:**
 - Change sandbox user-selected file access from read-only to read-write (`ENABLE_USER_SELECTED_FILES = readwrite`).
@@ -258,12 +276,16 @@
   - App opens `database/library.sqlite`.
   - App loads persisted assets.
   - App switches current library.
+- Open From Finder/Open With:
+  - User opens a `.momentolibrary` package from Finder or Open With.
+  - App receives the URL through the external open entry point.
+  - App validates and opens the library through the same `LibraryStore.openLibrary(at:)` path as the Open Library action.
 - Sidebar top library header becomes a switcher button/menu.
 - Recent libraries are saved and can be reopened on next launch.
 - Normal app launch should not show sample assets after library workflow exists.
 - Import copies files into the selected package and writes metadata in the same operation.
 - After import, browsing and preview use package-internal storage paths only.
-- `AssetItem.originalURL` becomes optional or is replaced by an optional source-reference field; loaded persisted assets do not require original source URLs.
+- `AssetItem.originalURL` becomes optional; loaded persisted assets set it to `nil` and do not require original source URLs.
 
 **Constraints:**
 - Do not create a package-only milestone that disables import.
@@ -276,23 +298,28 @@
 
 - [ ] Register `.momentolibrary` document/package metadata in the target.
 - [ ] Add explicit `Momento/Info.plist` and preserve current generated plist behavior through build setting placeholders.
+- [ ] Add the external `.momentolibrary` open handler and route Finder/Open With URLs to the same open-library path used by the Open Library button.
 - [ ] Change sandbox user-selected file access from read-only to read-write.
 - [ ] Define `LibraryManifest`.
 - [ ] Add `LibraryAccessScope` for bookmark resolution, stale handling, and scoped access lifetime.
 - [ ] Update `LibraryStorage` to create/read/validate `.momentolibrary` packages and resolve package-relative asset paths.
 - [ ] Add `MomentoModel.xcdatamodeld` with the minimal Asset entity.
+- [ ] Add the `libraryID + contentHash` Core Data uniqueness constraint and duplicate merge behavior.
 - [ ] Add `MomentoCoreDataStack` configured for `database/library.sqlite` inside the current package.
 - [ ] Add `LibraryMetadataStore` for loading, inserting, and duplicate lookup by `contentHash`.
-- [ ] Update `AssetItem` source URL contract so persisted assets do not require original source paths.
+- [ ] Change `AssetItem.originalURL` to `URL?` and update preview/import call sites so persisted assets do not require original source paths.
 - [ ] Update `AssetImportService` to hash, copy to `assets/<prefix>/<sha256>.<ext>`, and write metadata while source and destination security scopes are active.
 - [ ] Change `LibraryStore` initialization so it can represent "no current library".
 - [ ] Remove sample asset dependency from normal app launch.
 - [ ] Add library welcome view.
-- [ ] Add create/open actions using `NSOpenPanel` / `NSSavePanel` or SwiftUI file importer/exporter where appropriate.
+- [ ] Add Create Library with `NSSavePanel` and Open Library with `NSOpenPanel`, configured for `.momentolibrary` packages.
 - [ ] Update `ContentView` to show welcome view when no library is selected.
 - [ ] Update sidebar header to show current library name and switcher affordance.
 - [ ] Ensure Quick Look, Inspector preview, and grid preview resolve package-relative storage URLs and do not fall back to original source paths for persisted assets.
-- [ ] Add or wire smoke tests for library package creation, duplicate import, and reload-after-relaunch behavior if a test target is intentionally brought into the build.
+- [ ] Create a `MomentoTests` target.
+- [ ] Ensure the test target is included in a scheme that supports `xcodebuild -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' test`.
+- [ ] Add automated smoke tests for library package creation, duplicate import, and reload-after-relaunch behavior.
+- [ ] Run `xcodebuild -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' test`.
 - [ ] Build with `xcodebuild -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' build`.
 - [ ] Manually verify first launch -> create library -> import PNG/JPG -> quit/relaunch -> assets remain.
 - [ ] Manually verify opening an existing `.momentolibrary` from Finder/Open panel.
@@ -320,7 +347,11 @@ This order fixes `Command + ,` and app-level language switching first, then fixe
 - [x] First thumbnail scope is raster images/GIFs; PDF/video/SVG remain icon fallback.
 - [x] Support `en` and `zh-Hans`.
 - [x] Add app-level language switch.
+- [x] `MomentoApp` owns shared app state; Settings and main window do not create separate stores.
 - [x] Settings first version only includes working settings.
+- [x] Finder/Open With `.momentolibrary` URLs route through the same open-library path.
+- [x] Core Data enforces duplicate asset uniqueness with `libraryID + contentHash`.
+- [x] Milestone 3 creates/runs automated smoke tests through a test target.
 - [x] Each implementation milestone should be committed separately.
 - [x] Each milestone leaves the app in a usable state.
 
