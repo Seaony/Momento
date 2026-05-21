@@ -96,6 +96,12 @@ final class WindowChromeSourceTests: XCTestCase {
         XCTAssertTrue(sidebarSource.contains("Close Library"))
     }
 
+    func testContentViewValidatesCurrentLibraryWhenWindowAppears() throws {
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+
+        XCTAssertTrue(contentSource.contains("store.validateCurrentLibraryAvailability()"))
+    }
+
     private func contentViewURL() -> URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

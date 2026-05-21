@@ -173,6 +173,31 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         }
         XCTAssertTrue(store.recentLibraries.isEmpty)
     }
+
+    @MainActor
+    func testValidatingMissingCurrentLibraryClosesLibraryAndReportsError() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+        store.searchQuery = "asset"
+        try FileManager.default.removeItem(at: environment.packageURL)
+
+        try store.validateCurrentLibraryAvailability()
+
+        XCTAssertNil(store.currentLibrary)
+        XCTAssertTrue(store.libraries.isEmpty)
+        XCTAssertTrue(store.assets.isEmpty)
+        XCTAssertNil(store.selectedAssetID)
+        XCTAssertEqual(store.searchQuery, "")
+        XCTAssertTrue(store.recentLibraries.isEmpty)
+        XCTAssertEqual(store.libraryErrorMessage, LibraryStorageError.missingLibraryPackage.errorDescription)
+    }
 }
 
 private struct TestEnvironment {

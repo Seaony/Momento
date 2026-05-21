@@ -100,6 +100,9 @@ struct ContentView: View {
             WindowTransparencyConfigurator()
         }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .onAppear {
+            validateCurrentLibraryAvailability()
+        }
         .onChange(of: defaultViewMode) { _, newValue in
             store.setViewMode(newValue)
         }
@@ -383,6 +386,14 @@ struct ContentView: View {
         withAnimation(.smooth(duration: 0.18)) {
             importError = nil
             store.closeCurrentLibrary()
+        }
+    }
+
+    private func validateCurrentLibraryAvailability() {
+        do {
+            try store.validateCurrentLibraryAvailability()
+        } catch {
+            showImportError(error)
         }
     }
 

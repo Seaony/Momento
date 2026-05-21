@@ -136,6 +136,22 @@ final class LibraryStore {
         try openRecentLibrary(reference)
     }
 
+    func validateCurrentLibraryAvailability() throws {
+        guard let currentLibrary else {
+            return
+        }
+
+        do {
+            _ = try storage.openLibraryPackage(at: storage.rootURL(for: currentLibrary))
+        } catch LibraryStorageError.missingLibraryPackage {
+            let libraryID = currentLibrary.id
+            closeCurrentLibrary()
+            try recentStore.remove(id: libraryID)
+            recentLibraries = recentStore.load()
+            libraryErrorMessage = LibraryStorageError.missingLibraryPackage.errorDescription
+        }
+    }
+
     func selectAsset(_ asset: AssetItem?) {
         selectedAssetID = asset?.id
     }
