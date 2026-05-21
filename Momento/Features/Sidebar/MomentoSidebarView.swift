@@ -127,7 +127,7 @@ struct MomentoSidebarView: View {
     }
 
     private var bottomActionBar: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 6) {
             sidebarFooterButton(
                 id: "trash",
                 systemImage: "trash",
@@ -172,6 +172,7 @@ struct MomentoSidebarView: View {
             )
         }
         .buttonStyle(.plain)
+        .pointerStyle(.link)
         .onHover { hovering in
             updateFooterHover(id: id, isHovering: hovering)
         }

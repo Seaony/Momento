@@ -87,6 +87,7 @@ final class LiquidGlassSourceTests: XCTestCase {
         let designSource = try String(contentsOf: designSystemURL(), encoding: .utf8)
 
         XCTAssertTrue(shellSource.contains("floatingSidebar"))
+        XCTAssertTrue(designSource.contains("static let sidebarWidth: CGFloat = 280"))
         XCTAssertTrue(designSource.contains("static let floatingSidebarInset: CGFloat = 8"))
         XCTAssertTrue(shellSource.contains(".padding(.leading, MomentoTheme.floatingSidebarInset)"))
         XCTAssertTrue(shellSource.contains(".padding(.trailing, MomentoTheme.floatingSidebarInset)"))
@@ -114,6 +115,7 @@ final class LiquidGlassSourceTests: XCTestCase {
         XCTAssertTrue(sidebarSource.contains(".frame(height: 0.5)"))
         XCTAssertTrue(sidebarSource.contains(".padding(.horizontal, 14)"))
         XCTAssertTrue(sidebarSource.contains("bottomActionBar"))
+        XCTAssertTrue(footerSource.contains("HStack(spacing: 6)"))
         XCTAssertTrue(footerSource.contains(".frame(maxWidth: .infinity, alignment: .leading)"))
         XCTAssertFalse(footerSource.contains("Spacer()"))
         XCTAssertTrue(footerSource.contains("systemImage: \"trash\""))
@@ -129,6 +131,7 @@ final class LiquidGlassSourceTests: XCTestCase {
         XCTAssertTrue(sidebarSource.contains("sidebarFooterIconBackground(id: id, isSelected: isSelected)"))
         XCTAssertTrue(backgroundSource.contains("Color.white.opacity(0.08)"))
         XCTAssertFalse(backgroundSource.contains(".glassEffect(.regular, in: shape)"))
+        XCTAssertTrue(sidebarSource.contains(".pointerStyle(.link)"))
     }
 
     func testFloatingSidebarWidthIsUserResizableWithoutSplitViewBorders() throws {
