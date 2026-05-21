@@ -29,11 +29,14 @@ final class WindowChromeSourceTests: XCTestCase {
         XCTAssertFalse(shellSource.contains("MomentoTopBar("))
     }
 
-    func testWelcomeStateHidesWindowToolbarWithoutRemovingLibraryToolbar() throws {
+    func testWelcomeStateKeepsWindowControlsVisible() throws {
         let appSource = try String(contentsOf: appURL(), encoding: .utf8)
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
 
-        XCTAssertTrue(contentSource.contains(".toolbarVisibility(store.currentLibrary == nil ? .hidden : .visible, for: .windowToolbar)"))
+        // Hiding the window toolbar in the `.unified` style collapses the
+        // title bar and takes the close/minimize/zoom controls with it, so the
+        // welcome state must never hide the window toolbar.
+        XCTAssertFalse(contentSource.contains("for: .windowToolbar)"))
         XCTAssertTrue(contentSource.contains(".toolbar {"))
         XCTAssertTrue(contentSource.contains(".searchable(text: $store.searchQuery, placement: .toolbar"))
         XCTAssertTrue(appSource.contains(".windowToolbarStyle(.unified)"))

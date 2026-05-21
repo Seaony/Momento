@@ -6,13 +6,23 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		759F43872FBEA00000E3B15F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 759F43692FBE919C00E3B15F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 759F43702FBE919C00E3B15F;
+			remoteInfo = Momento;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		759F43712FBE919C00E3B15F /* Momento.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Momento.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		759F43802FBEA00000E3B15F /* MomentoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MomentoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		759F438B2FBEA00000E3B15F /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+		759F438B2FBEA00000E3B15F /* Exceptions for "Momento" folder in "Momento" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -25,7 +35,7 @@
 		759F43732FBE919C00E3B15F /* Momento */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				759F438B2FBEA00000E3B15F /* PBXFileSystemSynchronizedBuildFileExceptionSet */,
+				759F438B2FBEA00000E3B15F /* Exceptions for "Momento" folder in "Momento" target */,
 			);
 			path = Momento;
 			sourceTree = "<group>";
@@ -122,16 +132,6 @@
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
-
-/* Begin PBXContainerItemProxy section */
-		759F43872FBEA00000E3B15F /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 759F43692FBE919C00E3B15F /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 759F43702FBE919C00E3B15F;
-			remoteInfo = Momento;
-		};
-/* End PBXContainerItemProxy section */
 
 /* Begin PBXProject section */
 		759F43692FBE919C00E3B15F /* Project object */ = {

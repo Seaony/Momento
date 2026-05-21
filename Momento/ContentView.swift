@@ -64,6 +64,7 @@ struct ContentView: View {
                     onCreateLibrary: createLibrary,
                     onOpenLibrary: openLibrary
                 )
+                .navigationTitle("")
             } else {
                 libraryBody
             }
@@ -94,10 +95,12 @@ struct ContentView: View {
             .frame(width: 0, height: 0)
             .opacity(0)
         }
+        .background {
+            WindowTransparencyConfigurator()
+        }
         .onChange(of: defaultViewMode) { _, newValue in
             store.setViewMode(newValue)
         }
-        .toolbarVisibility(store.currentLibrary == nil ? .hidden : .visible, for: .windowToolbar)
         .frame(minWidth: 540, minHeight: 340)
     }
 
