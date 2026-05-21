@@ -154,10 +154,10 @@ final class WelcomeViewSourceTests: XCTestCase {
     func testCreateLibraryDialogUsesReferenceGlassLayout() throws {
         let source = try String(contentsOf: createLibraryDialogURL(), encoding: .utf8)
 
-        XCTAssertTrue(source.contains("private let createLibraryDialogWidth: CGFloat = 440"))
-        XCTAssertTrue(source.contains("private let createLibraryDialogIconSize: CGFloat = 44"))
-        XCTAssertTrue(source.contains("private let createLibraryDialogFieldHeight: CGFloat = 34"))
-        XCTAssertTrue(source.contains("HStack(alignment: .top, spacing: 14)"))
+        XCTAssertTrue(source.contains("private let createLibraryDialogWidth: CGFloat = 400"))
+        XCTAssertTrue(source.contains("private let createLibraryDialogIconSize: CGFloat = 40"))
+        XCTAssertTrue(source.contains("private let createLibraryDialogFieldHeight: CGFloat = 30"))
+        XCTAssertTrue(source.contains("HStack(alignment: .top, spacing: 12)"))
         XCTAssertTrue(source.contains("Image(systemName: \"archivebox.fill\")"))
         XCTAssertTrue(source.contains("MomentoGlassBackground(glass: .regular.tint(Color.accentColor), cornerRadius: 14)"))
         XCTAssertTrue(source.contains("Text(localization.string(\"Enter a name for this library, then choose where to save it.\"))"))
@@ -166,24 +166,32 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertTrue(source.contains("createLibraryNameFieldBackground"))
         XCTAssertTrue(source.contains("isNameFocused ? Color.accentColor : MomentoTheme.subtleStroke"))
         XCTAssertTrue(source.contains("Text(localization.string(\"Choose Save Location\"))"))
-        XCTAssertTrue(source.contains(".font(.system(size: 17, weight: .semibold))"))
+        XCTAssertTrue(source.contains(".font(.system(size: 16, weight: .semibold))"))
+        XCTAssertTrue(source.contains(".font(.system(size: 11, weight: .regular))"))
         XCTAssertTrue(source.contains(".font(.system(size: 12, weight: .regular))"))
-        XCTAssertTrue(source.contains(".font(.system(size: 13, weight: .regular))"))
-        XCTAssertTrue(source.contains(".font(.system(size: 13, weight: .semibold))"))
-        XCTAssertTrue(source.contains(".frame(width: 104, height: 34)"))
-        XCTAssertTrue(source.contains(".frame(width: 160, height: 34)"))
+        XCTAssertTrue(source.contains(".font(.system(size: 12, weight: .semibold))"))
+        XCTAssertTrue(source.contains(".contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))"))
+        XCTAssertTrue(source.contains(".onTapGesture {}"))
 
         let capsuleButtonCount = source
             .components(separatedBy: ".buttonBorderShape(.capsule)")
             .count - 1
         XCTAssertGreaterThanOrEqual(capsuleButtonCount, 2)
 
+        let smallButtonCount = source
+            .components(separatedBy: ".controlSize(.small)")
+            .count - 1
+        XCTAssertGreaterThanOrEqual(smallButtonCount, 2)
+
         let pointerStyleCount = source
             .components(separatedBy: ".pointerStyle(.link)")
             .count - 1
         XCTAssertGreaterThanOrEqual(pointerStyleCount, 2)
 
+        XCTAssertFalse(source.contains(".frame(width: 104, height: 34)"))
+        XCTAssertFalse(source.contains(".frame(width: 160, height: 34)"))
         XCTAssertFalse(source.contains("height: 44"))
+        XCTAssertFalse(source.contains("height: 34"))
         XCTAssertFalse(source.contains(".font(.system(size: 30"))
         XCTAssertFalse(source.contains(".font(.system(size: 22"))
         XCTAssertFalse(source.contains("height: 64"))
