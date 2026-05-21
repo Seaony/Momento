@@ -166,8 +166,6 @@ struct MomentoSidebarView: View {
                     systemImage: "xmark.triangle.circle.square"
                 )
 
-                sidebarNavigationDivider
-
                 sidebarNavigationItem(
                     id: "tag-management",
                     title: localization.string("Tag Management"),
@@ -186,6 +184,7 @@ struct MomentoSidebarView: View {
         Rectangle()
             .fill(MomentoTheme.subtleStroke.opacity(0.72))
             .frame(height: 0.5)
+            .padding(.horizontal, 12)
             .padding(.vertical, 6)
     }
 
