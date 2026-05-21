@@ -21,6 +21,8 @@ struct MomentoSidebarView: View {
 
     @State private var hoveredFooterActionID: String?
     @State private var hoveredNavigationItemID: String?
+    @State private var hoveredFolderControlID: String?
+    @State private var isFolderSectionExpanded = true
     @State private var isLibraryMenuHovered = false
     @State private var isLibrarySwitcherPresented = false
 
@@ -175,11 +177,7 @@ struct MomentoSidebarView: View {
 
             sidebarNavigationDivider
 
-            sidebarNavigationItem(
-                id: "folder-management",
-                title: localization.string("Folder Management"),
-                systemImage: "folder"
-            )
+            sidebarFolderSection
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -198,6 +196,7 @@ struct MomentoSidebarView: View {
     ) -> some View {
         let isSelected = selection == id
         let isHovered = hoveredNavigationItemID == id
+        let foregroundStyle = sidebarNavigationForeground(isSelected: isSelected, isHovered: isHovered)
 
         return Button {
             withAnimation(.smooth(duration: 0.16)) {
@@ -207,12 +206,12 @@ struct MomentoSidebarView: View {
             HStack(spacing: 10) {
                 Image(systemName: systemImage)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(isSelected || isHovered ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
+                    .foregroundStyle(foregroundStyle)
                     .frame(width: 18)
 
                 Text(title)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(isSelected || isHovered ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
+                    .foregroundStyle(foregroundStyle)
                     .lineLimit(1)
                     .truncationMode(.tail)
 
@@ -235,6 +234,18 @@ struct MomentoSidebarView: View {
         .accessibilityLabel(title)
     }
 
+    private func sidebarNavigationForeground(isSelected: Bool, isHovered: Bool) -> Color {
+        if isSelected {
+            return .white
+        }
+
+        if isHovered {
+            return MomentoTheme.primaryText
+        }
+
+        return MomentoTheme.primaryText.opacity(0.72)
+    }
+
     @ViewBuilder
     private func sidebarNavigationItemBackground(id: String, isSelected: Bool) -> some View {
         let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
@@ -252,6 +263,116 @@ struct MomentoSidebarView: View {
                 hoveredNavigationItemID = id
             } else if hoveredNavigationItemID == id {
                 hoveredNavigationItemID = nil
+            }
+        }
+    }
+
+    private var sidebarFolderSection: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 8) {
+                Text(localization.string("Folders"))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(MomentoTheme.primaryText)
+
+                Spacer(minLength: 8)
+
+                folderSectionButton(
+                    id: "new-folder",
+                    systemImage: "plus",
+                    label: localization.string("New Folder")
+                ) {
+                    withAnimation(.smooth(duration: 0.16)) {
+                        selection = "folder-management"
+                    }
+                }
+
+                folderSectionButton(
+                    id: "toggle-folders",
+                    systemImage: isFolderSectionExpanded ? "chevron.down" : "chevron.right",
+                    label: localization.string("Folders")
+                ) {
+                    withAnimation(.smooth(duration: 0.18)) {
+                        isFolderSectionExpanded.toggle()
+                    }
+                }
+            }
+            .padding(.leading, 10)
+            .padding(.trailing, 7)
+            .frame(height: 32)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(MomentoTheme.sidebarIconHoverBackground)
+            }
+
+            if isFolderSectionExpanded {
+                emptyFolderPlaceholder
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+    }
+
+    private func folderSectionButton(
+        id: String,
+        systemImage: String,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(hoveredFolderControlID == id ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
+                .frame(width: 24, height: 24)
+                .background {
+                    folderSectionButtonBackground(id: id)
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .onHover { hovering in
+            updateFolderControlHover(id: id, isHovering: hovering)
+        }
+        .help(label)
+        .accessibilityLabel(label)
+    }
+
+    @ViewBuilder
+    private func folderSectionButtonBackground(id: String) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+
+        if hoveredFolderControlID == id {
+            shape.fill(MomentoTheme.sidebarIconHoverBackground)
+        } else {
+            Color.clear
+        }
+    }
+
+    private var emptyFolderPlaceholder: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "tray")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(MomentoTheme.secondaryText)
+                .frame(width: 18)
+
+            Text(localization.string("No folders"))
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(MomentoTheme.secondaryText)
+                .lineLimit(1)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 30)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func updateFolderControlHover(id: String, isHovering: Bool) {
+        withAnimation(.smooth(duration: 0.14)) {
+            if isHovering {
+                hoveredFolderControlID = id
+            } else if hoveredFolderControlID == id {
+                hoveredFolderControlID = nil
             }
         }
     }

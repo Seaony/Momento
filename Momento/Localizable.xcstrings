@@ -1071,6 +1071,23 @@
         }
       }
     },
+    "No folders" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No folders"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无文件夹"
+          }
+        }
+      }
+    },
     "No Library Open" : {
       "extractionState" : "stale",
       "localizations" : {
