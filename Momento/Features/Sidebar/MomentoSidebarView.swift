@@ -114,7 +114,7 @@ struct MomentoSidebarView: View {
             maxWidth: MomentoTheme.sidebarMaxWidth
         )
         .background {
-            MomentoVisualEffectView(material: .sidebar)
+            MomentoGlassBackground(cornerRadius: 0)
                 .ignoresSafeArea()
         }
     }
@@ -252,8 +252,7 @@ private struct MomentoSidebarRow: View {
             .padding(.horizontal, 8)
             .frame(height: 28)
             .background {
-                RoundedRectangle(cornerRadius: MomentoTheme.rowRadius, style: .continuous)
-                    .fill(backgroundStyle)
+                rowBackground
             }
             .contentShape(RoundedRectangle(cornerRadius: MomentoTheme.rowRadius, style: .continuous))
         }
@@ -265,14 +264,19 @@ private struct MomentoSidebarRow: View {
         }
     }
 
-    private var backgroundStyle: Color {
+    @ViewBuilder
+    private var rowBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: MomentoTheme.rowRadius, style: .continuous)
+
         if isSelected {
-            return Color.accentColor.opacity(0.16)
+            Color.clear
+                .glassEffect(.regular.tint(Color.accentColor), in: shape)
+        } else if isHovered {
+            Color.clear
+                .glassEffect(.regular, in: shape)
+        } else {
+            Color.clear
         }
-        if isHovered {
-            return Color.primary.opacity(0.06)
-        }
-        return .clear
     }
 }
 

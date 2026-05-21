@@ -24,23 +24,24 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertFalse(source.contains(".shadow("))
     }
 
-    func testWelcomeBackdropAdjustsOpacityWhenWindowIsFocused() throws {
+    func testWelcomeBackdropDoesNotUseManualOpacityState() throws {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 
-        XCTAssertTrue(source.contains("@Environment(\\.appearsActive)"))
-        XCTAssertTrue(source.contains("inactiveBackdropOpacity = 1.0"))
-        XCTAssertTrue(source.contains("focusedBackdropOpacity = 0.64"))
-        XCTAssertTrue(source.contains("appearsActive ? focusedBackdropOpacity : inactiveBackdropOpacity"))
+        XCTAssertFalse(source.contains("@Environment(\\.appearsActive)"))
+        XCTAssertFalse(source.contains("inactiveBackdropOpacity"))
+        XCTAssertFalse(source.contains("focusedBackdropOpacity"))
+        XCTAssertFalse(source.contains("windowBackgroundOpacity"))
         XCTAssertFalse(source.contains("@Environment(\\.controlActiveState)"))
     }
 
-    func testWelcomeConfiguresTransparentWindowForBehindWindowGlass() throws {
+    func testWelcomeDoesNotConfigureManualWindowTransparency() throws {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 
-        XCTAssertTrue(source.contains("WelcomeWindowTransparencyConfigurator"))
-        XCTAssertTrue(source.contains("window.isOpaque = false"))
-        XCTAssertTrue(source.contains("window.backgroundColor = .clear"))
-        XCTAssertTrue(source.contains("restoreWindowConfiguration()"))
+        XCTAssertFalse(source.contains("WelcomeWindowTransparencyConfigurator"))
+        XCTAssertFalse(source.contains("window.isOpaque"))
+        XCTAssertFalse(source.contains("window.backgroundColor"))
+        XCTAssertFalse(source.contains("restoreWindowConfiguration()"))
+        XCTAssertFalse(source.contains("NSViewRepresentable"))
     }
 
     func testWelcomeDoesNotOwnWindowCornerRadius() throws {
@@ -105,11 +106,13 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertFalse(source.contains("isOpenHovered ? Color.primary : MomentoTheme.secondaryText"))
     }
 
-    func testWelcomeBackdropUsesNativeGlassEffect() throws {
+    func testWelcomeBackdropUsesNativeGlassEffectWithoutTintOpacity() throws {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 
-        XCTAssertTrue(source.contains("welcomeGlassTintOpacity = 0.28"))
-        XCTAssertTrue(source.contains(".glassEffect(.regular.tint(Color(nsColor: .windowBackgroundColor).opacity(welcomeGlassTintOpacity)), in: Rectangle())"))
+        XCTAssertTrue(source.contains("MomentoGlassBackground(cornerRadius: 0)"))
+        XCTAssertFalse(source.contains("welcomeGlassTintOpacity"))
+        XCTAssertFalse(source.contains(".opacity("))
+        XCTAssertFalse(source.contains("LinearGradient("))
         XCTAssertFalse(source.contains("MomentoVisualEffectView("))
         XCTAssertFalse(source.contains("NSVisualEffectView"))
     }

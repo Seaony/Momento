@@ -35,6 +35,10 @@ struct MomentoSettingsView: View {
         }
         .formStyle(.grouped)
         .padding(20)
+        .background {
+            MomentoGlassBackground(cornerRadius: 0)
+                .ignoresSafeArea()
+        }
         .frame(width: 420)
     }
 

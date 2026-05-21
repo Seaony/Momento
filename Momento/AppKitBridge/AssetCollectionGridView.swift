@@ -375,7 +375,37 @@ private final class HoverSelectionView: NSView {
         }
     }
 
+    private let glassBackgroundView = NSGlassEffectView()
     private var trackingArea: NSTrackingArea?
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setUpGlassBackground()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setUpGlassBackground()
+    }
+
+    private func setUpGlassBackground() {
+        wantsLayer = true
+        layer?.cornerRadius = 8
+        layer?.cornerCurve = .continuous
+
+        glassBackgroundView.translatesAutoresizingMaskIntoConstraints = false
+        glassBackgroundView.cornerRadius = 8
+        glassBackgroundView.style = .regular
+        glassBackgroundView.isHidden = true
+        addSubview(glassBackgroundView)
+
+        NSLayoutConstraint.activate([
+            glassBackgroundView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            glassBackgroundView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            glassBackgroundView.topAnchor.constraint(equalTo: topAnchor),
+            glassBackgroundView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+    }
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -400,17 +430,22 @@ private final class HoverSelectionView: NSView {
 
     private func updateAppearance() {
         wantsLayer = true
+        layer?.backgroundColor = NSColor.clear.cgColor
 
         if isSelected {
-            layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.22).cgColor
-            layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.72).cgColor
+            glassBackgroundView.isHidden = false
+            glassBackgroundView.style = .regular
+            glassBackgroundView.tintColor = .controlAccentColor
+            layer?.borderColor = NSColor.controlAccentColor.cgColor
             layer?.borderWidth = 1
         } else if isHovered {
-            layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.08).cgColor
-            layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.35).cgColor
+            glassBackgroundView.isHidden = false
+            glassBackgroundView.style = .clear
+            glassBackgroundView.tintColor = .controlAccentColor
+            layer?.borderColor = NSColor.separatorColor.cgColor
             layer?.borderWidth = 1
         } else {
-            layer?.backgroundColor = NSColor.clear.cgColor
+            glassBackgroundView.isHidden = true
             layer?.borderColor = NSColor.clear.cgColor
             layer?.borderWidth = 0
         }

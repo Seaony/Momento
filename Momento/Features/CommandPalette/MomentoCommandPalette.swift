@@ -45,8 +45,9 @@ struct MomentoCommandPalette: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.18)
+            Color.clear
                 .ignoresSafeArea()
+                .contentShape(Rectangle())
                 .onTapGesture {
                     dismiss()
                 }
@@ -140,8 +141,7 @@ private struct MomentoCommandRow: View {
                     .foregroundStyle(isSelected ? Color.accentColor : MomentoTheme.secondaryText)
                     .frame(width: 26, height: 26)
                     .background {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(Color.primary.opacity(0.055))
+                        MomentoGlassBackground(cornerRadius: 7)
                     }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -163,20 +163,30 @@ private struct MomentoCommandRow: View {
                         .padding(.horizontal, 7)
                         .frame(height: 22)
                         .background {
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .fill(Color.primary.opacity(0.05))
+                            MomentoGlassBackground(cornerRadius: 6)
                         }
                 }
             }
             .padding(.horizontal, 10)
             .frame(height: 48)
             .background {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isSelected ? Color.accentColor.opacity(0.14) : .clear)
+                rowBackground
             }
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var rowBackground: some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+
+        if isSelected {
+            Color.clear
+                .glassEffect(.regular.tint(Color.accentColor), in: shape)
+        } else {
+            Color.clear
+        }
     }
 }
 

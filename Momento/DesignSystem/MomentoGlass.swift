@@ -1,40 +1,4 @@
 import SwiftUI
-import AppKit
-
-struct MomentoVisualEffectView: NSViewRepresentable {
-    var material: NSVisualEffectView.Material
-    var blendingMode: NSVisualEffectView.BlendingMode
-    var state: NSVisualEffectView.State
-    var emphasized: Bool
-
-    init(
-        material: NSVisualEffectView.Material = .sidebar,
-        blendingMode: NSVisualEffectView.BlendingMode = .behindWindow,
-        state: NSVisualEffectView.State = .active,
-        emphasized: Bool = false
-    ) {
-        self.material = material
-        self.blendingMode = blendingMode
-        self.state = state
-        self.emphasized = emphasized
-    }
-
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.isEmphasized = emphasized
-        view.material = material
-        view.blendingMode = blendingMode
-        view.state = state
-        return view
-    }
-
-    func updateNSView(_ view: NSVisualEffectView, context: Context) {
-        view.isEmphasized = emphasized
-        view.material = material
-        view.blendingMode = blendingMode
-        view.state = state
-    }
-}
 
 struct MomentoGlassBackground: View {
     var glass: Glass
@@ -95,7 +59,7 @@ enum MomentoTheme {
     static let toolbarHeight: CGFloat = 56
     static let rowRadius: CGFloat = 8
     static let panelRadius: CGFloat = 14
-    static let subtleStroke = Color(nsColor: .separatorColor).opacity(0.5)
+    static let subtleStroke = Color(nsColor: .separatorColor)
     static let secondaryText = Color(nsColor: .secondaryLabelColor)
     static let tertiaryText = Color(nsColor: .tertiaryLabelColor)
 }

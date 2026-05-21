@@ -77,7 +77,9 @@ struct MomentoShellView<Content: View>: View {
             VStack(spacing: 0) {
                 content()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(nsColor: .windowBackgroundColor))
+                    .background {
+                        MomentoGlassBackground(cornerRadius: 0)
+                    }
             }
             .frame(minWidth: MomentoTheme.contentMinWidth, maxWidth: .infinity, maxHeight: .infinity)
 
@@ -87,7 +89,10 @@ struct MomentoShellView<Content: View>: View {
                 notes: $inspectorNotes
             )
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background {
+            MomentoGlassBackground(cornerRadius: 0)
+                .ignoresSafeArea()
+        }
         .momentoCommandPalette(
             isPresented: $isCommandPalettePresented,
             commands: commands,
@@ -128,7 +133,7 @@ private struct MomentoShellPreview: View {
             inspectorNotes: $notes
         ) {
             ZStack {
-                Color(nsColor: .windowBackgroundColor)
+                MomentoGlassBackground(cornerRadius: 0)
                 Text("Grid bridge placeholder")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(MomentoTheme.secondaryText)

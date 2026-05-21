@@ -134,7 +134,9 @@ struct ContentView: View {
                     emptyGridState
                 }
             }
-            .background(Color(nsColor: .windowBackgroundColor))
+            .background {
+                MomentoGlassBackground(cornerRadius: 0)
+            }
         }
         .toolbar {
             ToolbarItemGroup(placement: .navigation) {
@@ -288,7 +290,7 @@ struct ContentView: View {
             } label: {
                 Label(localization.string("Import Assets"), systemImage: "square.and.arrow.down")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.glassProminent)
             .controlSize(.large)
         }
         .padding(28)
@@ -308,7 +310,7 @@ struct ContentView: View {
                     store.libraryErrorMessage = nil
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.glass)
         }
         .font(.system(size: 12, weight: .medium))
         .padding(.horizontal, 14)

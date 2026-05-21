@@ -97,7 +97,7 @@ struct MomentoInspectorView: View {
             maxWidth: MomentoTheme.inspectorMaxWidth
         )
         .background {
-            MomentoVisualEffectView(material: .contentBackground)
+            MomentoGlassBackground(cornerRadius: 0)
                 .ignoresSafeArea()
         }
     }
@@ -105,8 +105,7 @@ struct MomentoInspectorView: View {
     private func preview(_ asset: MomentoInspectorAsset) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             ZStack {
-                RoundedRectangle(cornerRadius: MomentoTheme.panelRadius, style: .continuous)
-                    .fill(Color.primary.opacity(0.045))
+                MomentoGlassBackground(cornerRadius: MomentoTheme.panelRadius)
 
                 if let image = asset.previewImage {
                     Image(nsImage: image)
@@ -178,7 +177,7 @@ struct MomentoInspectorView: View {
                         .font(.system(size: 12, weight: .medium))
                         .padding(.horizontal, 8)
                         .frame(height: 24)
-                        .background(Color.accentColor.opacity(0.12), in: Capsule())
+                        .glassEffect(.regular.tint(Color.accentColor), in: Capsule())
                     }
                 }
             }
@@ -198,8 +197,7 @@ struct MomentoInspectorView: View {
             .padding(.horizontal, 9)
             .frame(height: 30)
             .background {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.primary.opacity(0.045))
+                MomentoGlassBackground(cornerRadius: 8)
                     .overlay {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .strokeBorder(MomentoTheme.subtleStroke, lineWidth: 1)
@@ -240,8 +238,7 @@ struct MomentoInspectorView: View {
                 .frame(minHeight: 86)
                 .padding(6)
                 .background {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.primary.opacity(0.045))
+                    MomentoGlassBackground(cornerRadius: 8)
                         .overlay {
                             RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 .strokeBorder(MomentoTheme.subtleStroke, lineWidth: 1)
@@ -263,7 +260,7 @@ struct MomentoInspectorView: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: 30)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.glass)
             }
         }
     }
