@@ -77,7 +77,11 @@ struct MomentoShellView<Content: View>: View {
             }
             .frame(minWidth: MomentoTheme.contentMinWidth, maxWidth: .infinity, maxHeight: .infinity)
 
+            if isInspectorPresented {
+                trailingInspector
+            }
         }
+        .animation(.smooth(duration: 0.18), value: isInspectorPresented)
         .momentoCommandPalette(
             isPresented: $isCommandPalettePresented,
             commands: commands,
@@ -86,18 +90,6 @@ struct MomentoShellView<Content: View>: View {
         .background {
             MomentoGlassBackground(cornerRadius: 0)
                 .ignoresSafeArea()
-        }
-        .inspector(isPresented: $isInspectorPresented) {
-            MomentoInspectorView(
-                asset: inspectorAsset,
-                tags: $inspectorTags,
-                notes: $inspectorNotes
-            )
-            .inspectorColumnWidth(
-                min: MomentoTheme.inspectorMinWidth,
-                ideal: MomentoTheme.inspectorWidth,
-                max: MomentoTheme.inspectorMaxWidth
-            )
         }
     }
 
@@ -120,6 +112,16 @@ struct MomentoShellView<Content: View>: View {
         .padding(.trailing, MomentoTheme.floatingSidebarInset)
         .padding(.vertical, MomentoTheme.floatingSidebarInset)
         .ignoresSafeArea(.container, edges: .top)
+    }
+
+    private var trailingInspector: some View {
+        MomentoInspectorView(
+            asset: inspectorAsset,
+            tags: $inspectorTags,
+            notes: $inspectorNotes
+        )
+        .frame(width: MomentoTheme.inspectorWidth)
+        .transition(.move(edge: .trailing).combined(with: .opacity))
     }
 
     private var sidebarResizeHandle: some View {

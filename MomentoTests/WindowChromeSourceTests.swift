@@ -48,7 +48,7 @@ final class WindowChromeSourceTests: XCTestCase {
         XCTAssertFalse(contentSource.contains(".toolbarVisibility("))
     }
 
-    func testInspectorUsesCollapsibleTrailingColumnAndToolbarToggle() throws {
+    func testInspectorUsesCustomTransparentTrailingColumnAndToolbarToggle() throws {
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
         let shellSource = try String(contentsOf: shellViewURL(), encoding: .utf8)
 
@@ -61,8 +61,10 @@ final class WindowChromeSourceTests: XCTestCase {
         XCTAssertTrue(contentSource.contains("isInspectorPresented.toggle()"))
 
         XCTAssertTrue(shellSource.contains("@Binding var isInspectorPresented: Bool"))
-        XCTAssertTrue(shellSource.contains(".inspector(isPresented: $isInspectorPresented)"))
-        XCTAssertTrue(shellSource.contains(".inspectorColumnWidth("))
+        XCTAssertTrue(shellSource.contains("trailingInspector"))
+        XCTAssertTrue(shellSource.contains("if isInspectorPresented {"))
+        XCTAssertFalse(shellSource.contains(".inspector(isPresented: $isInspectorPresented)"))
+        XCTAssertFalse(shellSource.contains(".inspectorColumnWidth("))
         XCTAssertFalse(shellSource.contains("HSplitView"))
     }
 

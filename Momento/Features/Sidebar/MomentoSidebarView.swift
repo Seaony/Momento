@@ -43,6 +43,7 @@ struct MomentoSidebarSection: Identifiable, Hashable {
 
 struct MomentoSidebarView: View {
     @Environment(\.appLocalization) private var localization
+    @Environment(\.openSettings) private var openSettings
 
     var sections: [MomentoSidebarSection]
     @Binding var selection: MomentoSidebarItem.ID?
@@ -96,17 +97,8 @@ struct MomentoSidebarView: View {
             }
             .scrollIndicators(.never)
 
-            Divider()
-
-            HStack(spacing: 8) {
-                Image(systemName: "externaldrive")
-                Text(libraryName ?? localization.string("No library selected"))
-                    .lineLimit(1)
-                Spacer()
-            }
-            .font(.system(size: 12))
-            .foregroundStyle(MomentoTheme.secondaryText)
-            .padding(12)
+            sidebarBottomSeparator
+            bottomActionBar
         }
         .frame(
             minWidth: MomentoTheme.sidebarMinWidth,
@@ -124,6 +116,67 @@ struct MomentoSidebarView: View {
 
     private var sidebarShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: MomentoTheme.floatingSidebarRadius, style: .continuous)
+    }
+
+    private var sidebarBottomSeparator: some View {
+        Rectangle()
+            .fill(MomentoTheme.subtleStroke.opacity(0.24))
+            .frame(height: 0.5)
+            .padding(.horizontal, 14)
+    }
+
+    private var bottomActionBar: some View {
+        HStack(spacing: 10) {
+            sidebarFooterButton(
+                systemImage: "trash",
+                label: localization.string("Trash")
+            ) {
+                withAnimation(.smooth(duration: 0.16)) {
+                    selection = "trash"
+                }
+            }
+
+            Spacer()
+
+            sidebarFooterButton(
+                systemImage: "gearshape",
+                label: localization.string("Settings"),
+                action: openSettings.callAsFunction
+            )
+
+            sidebarFooterIcon(
+                systemImage: "questionmark.circle",
+                label: localization.string("Help Center")
+            )
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+    }
+
+    private func sidebarFooterButton(
+        systemImage: String,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(MomentoTheme.secondaryText)
+                .frame(width: 28, height: 28)
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .help(label)
+        .accessibilityLabel(label)
+    }
+
+    private func sidebarFooterIcon(systemImage: String, label: String) -> some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 14, weight: .medium))
+            .foregroundStyle(MomentoTheme.secondaryText)
+            .frame(width: 28, height: 28)
+            .help(label)
+            .accessibilityLabel(label)
     }
 
     private func sectionView(_ section: MomentoSidebarSection) -> some View {

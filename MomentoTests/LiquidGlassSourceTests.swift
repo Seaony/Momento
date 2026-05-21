@@ -38,8 +38,10 @@ final class LiquidGlassSourceTests: XCTestCase {
 """))
         XCTAssertFalse(shellSource.contains("HSplitView"))
         XCTAssertTrue(shellSource.contains("HStack(spacing: 0)"))
-        XCTAssertTrue(shellSource.contains(".inspector(isPresented: $isInspectorPresented)"))
-        XCTAssertTrue(shellSource.contains(".inspectorColumnWidth("))
+        XCTAssertTrue(shellSource.contains("trailingInspector"))
+        XCTAssertTrue(shellSource.contains("if isInspectorPresented {"))
+        XCTAssertFalse(shellSource.contains(".inspector(isPresented: $isInspectorPresented)"))
+        XCTAssertFalse(shellSource.contains(".inspectorColumnWidth("))
         XCTAssertFalse(contentSource.contains("            .background {\n                MomentoGlassBackground(cornerRadius: 0)\n            }\n"))
         XCTAssertFalse(shellSource.contains("                    .background {\n                        MomentoGlassBackground(cornerRadius: 0)\n                    }\n"))
         XCTAssertFalse(inspectorSource.contains("        .background {\n            MomentoGlassBackground(cornerRadius: 0)\n                .ignoresSafeArea()\n        }\n"))
@@ -61,7 +63,8 @@ final class LiquidGlassSourceTests: XCTestCase {
 """))
         XCTAssertFalse(shellSource.contains("HSplitView"))
         XCTAssertTrue(shellSource.contains("HStack(spacing: 0)"))
-        XCTAssertTrue(shellSource.contains(".inspector(isPresented: $isInspectorPresented)"))
+        XCTAssertTrue(shellSource.contains("trailingInspector"))
+        XCTAssertFalse(shellSource.contains(".inspector(isPresented: $isInspectorPresented)"))
         XCTAssertFalse(contentSource.contains("            .background {\n                MomentoGlassBackground(cornerRadius: 0)\n            }\n"))
         XCTAssertFalse(shellSource.contains("                    .background {\n                        MomentoGlassBackground(cornerRadius: 0)\n                    }\n"))
         XCTAssertFalse(inspectorSource.contains("        .background {\n            MomentoGlassBackground(cornerRadius: 0)\n                .ignoresSafeArea()\n        }\n"))
@@ -94,6 +97,20 @@ final class LiquidGlassSourceTests: XCTestCase {
         XCTAssertTrue(sidebarSource.contains(".clipShape(sidebarShape)"))
         XCTAssertTrue(sidebarSource.contains("sidebarShape.strokeBorder"))
         XCTAssertFalse(sidebarSource.contains(".ignoresSafeArea()"))
+    }
+
+    func testSidebarFooterUsesInsetHairlineAndIconOnlyActions() throws {
+        let sidebarSource = try String(contentsOf: sidebarViewURL(), encoding: .utf8)
+
+        XCTAssertTrue(sidebarSource.contains("sidebarBottomSeparator"))
+        XCTAssertTrue(sidebarSource.contains("MomentoTheme.subtleStroke.opacity(0.24)"))
+        XCTAssertTrue(sidebarSource.contains(".frame(height: 0.5)"))
+        XCTAssertTrue(sidebarSource.contains(".padding(.horizontal, 14)"))
+        XCTAssertTrue(sidebarSource.contains("bottomActionBar"))
+        XCTAssertTrue(sidebarSource.contains("systemImage: \"trash\""))
+        XCTAssertTrue(sidebarSource.contains("systemImage: \"gearshape\""))
+        XCTAssertTrue(sidebarSource.contains("systemImage: \"questionmark.circle\""))
+        XCTAssertFalse(sidebarSource.contains("systemImage: \"externaldrive\""))
     }
 
     func testFloatingSidebarWidthIsUserResizableWithoutSplitViewBorders() throws {
