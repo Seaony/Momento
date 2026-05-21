@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 private let inactiveBackdropOpacity = 1.0
-private let focusedBackdropOpacity = 0.28
+private let focusedBackdropOpacity = 0.38
 private let welcomeButtonWidth: CGFloat = 152
 private let welcomeButtonHeight: CGFloat = 36
 

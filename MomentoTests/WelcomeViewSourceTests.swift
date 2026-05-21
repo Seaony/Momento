@@ -25,7 +25,7 @@ final class WelcomeViewSourceTests: XCTestCase {
 
         XCTAssertTrue(source.contains("@Environment(\\.appearsActive)"))
         XCTAssertTrue(source.contains("inactiveBackdropOpacity = 1.0"))
-        XCTAssertTrue(source.contains("focusedBackdropOpacity = 0.28"))
+        XCTAssertTrue(source.contains("focusedBackdropOpacity = 0.38"))
         XCTAssertTrue(source.contains("appearsActive ? focusedBackdropOpacity : inactiveBackdropOpacity"))
         XCTAssertFalse(source.contains("@Environment(\\.controlActiveState)"))
     }
