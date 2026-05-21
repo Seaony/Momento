@@ -15,9 +15,6 @@ struct MomentoLibraryWelcomeView: View {
 
     var body: some View {
         ZStack {
-            WelcomeWindowTransparencyConfigurator()
-                .frame(width: 0, height: 0)
-
             WelcomeGlassBackdrop()
 
             VStack(spacing: 18) {
@@ -70,76 +67,6 @@ struct MomentoLibraryWelcomeView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-}
-
-private struct WelcomeWindowTransparencyConfigurator: NSViewRepresentable {
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    func makeNSView(context: Context) -> WelcomeWindowObserverView {
-        let view = WelcomeWindowObserverView()
-        view.onWindowChanged = { [weak coordinator = context.coordinator] window in
-            coordinator?.configureWindow(window)
-        }
-        return view
-    }
-
-    func updateNSView(_ view: WelcomeWindowObserverView, context: Context) {
-        context.coordinator.configureWindow(view.window)
-    }
-
-    static func dismantleNSView(_ view: WelcomeWindowObserverView, coordinator: Coordinator) {
-        coordinator.restoreWindowConfiguration()
-    }
-
-    final class Coordinator {
-        private weak var configuredWindow: NSWindow?
-        private var originalIsOpaque: Bool?
-        private var originalBackgroundColor: NSColor?
-
-        func configureWindow(_ window: NSWindow?) {
-            guard let window else {
-                return
-            }
-
-            if configuredWindow !== window {
-                restoreWindowConfiguration()
-                configuredWindow = window
-                originalIsOpaque = window.isOpaque
-                originalBackgroundColor = window.backgroundColor
-            }
-
-            window.isOpaque = false
-            window.backgroundColor = .clear
-        }
-
-        func restoreWindowConfiguration() {
-            guard let configuredWindow else {
-                return
-            }
-
-            if let originalIsOpaque {
-                configuredWindow.isOpaque = originalIsOpaque
-            }
-            if let originalBackgroundColor {
-                configuredWindow.backgroundColor = originalBackgroundColor
-            }
-
-            self.configuredWindow = nil
-            originalIsOpaque = nil
-            originalBackgroundColor = nil
-        }
-    }
-}
-
-private final class WelcomeWindowObserverView: NSView {
-    var onWindowChanged: ((NSWindow?) -> Void)?
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        onWindowChanged?(window)
     }
 }
 

@@ -2,15 +2,18 @@ import Foundation
 import XCTest
 
 final class WindowChromeSourceTests: XCTestCase {
-    func testContentViewDoesNotOverrideSystemWindowCornerRadius() throws {
+    func testContentViewInstallsGlobalWindowChromeConfigurator() throws {
         let source = try String(contentsOf: contentViewURL(), encoding: .utf8)
 
-        XCTAssertFalse(source.contains("MomentoWindowCornerRadiusConfigurator"))
-        XCTAssertFalse(source.contains("momentoWindowCornerRadius"))
-        XCTAssertFalse(source.contains("contentView.layer?.cornerRadius"))
-        XCTAssertFalse(source.contains("contentView.layer?.cornerCurve"))
-        XCTAssertFalse(source.contains("contentView.layer?.masksToBounds"))
-        XCTAssertFalse(source.contains("import QuartzCore"))
+        XCTAssertTrue(source.contains("MomentoWindowChromeConfigurator()"))
+        XCTAssertTrue(source.contains("momentoWindowCornerRadius: CGFloat = 36"))
+        XCTAssertTrue(source.contains("window.isOpaque = false"))
+        XCTAssertTrue(source.contains("window.backgroundColor = .clear"))
+        XCTAssertTrue(source.contains("contentView.layer?.cornerRadius = momentoWindowCornerRadius"))
+        XCTAssertTrue(source.contains("contentView.layer?.cornerCurve = .continuous"))
+        XCTAssertTrue(source.contains("contentView.layer?.masksToBounds = true"))
+        XCTAssertTrue(source.contains("window.invalidateShadow()"))
+        XCTAssertTrue(source.contains("restoreWindowConfiguration()"))
     }
 
     private func contentViewURL() -> URL {
