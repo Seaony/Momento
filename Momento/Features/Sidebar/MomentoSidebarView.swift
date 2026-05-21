@@ -606,7 +606,7 @@ private struct MomentoLibrarySwitcherMenu: View {
         .padding(6)
         .frame(width: 150, alignment: .leading)
         .background {
-            MomentoGlassBackground(glass: .regular, cornerRadius: 12)
+            MomentoGlassBackground(glass: .regular.tint(Color.white.opacity(0.08)), cornerRadius: 12)
         }
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
