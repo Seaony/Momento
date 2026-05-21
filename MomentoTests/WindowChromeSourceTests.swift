@@ -25,7 +25,7 @@ final class WindowChromeSourceTests: XCTestCase {
         XCTAssertTrue(contentSource.contains(".toolbar {"))
         XCTAssertFalse(contentSource.contains("ToolbarItemGroup(placement: .navigation)"))
         XCTAssertFalse(contentSource.contains("ToolbarItem(placement: .principal)"))
-        XCTAssertTrue(contentSource.contains(".searchable(text: $store.searchQuery, placement: .toolbar"))
+        XCTAssertTrue(contentSource.contains(".libraryToolbarSearch(isVisible: !isLibraryDialogVisible"))
         XCTAssertFalse(shellSource.contains("MomentoTopBar("))
     }
 
@@ -79,7 +79,8 @@ final class WindowChromeSourceTests: XCTestCase {
         XCTAssertTrue(contentSource.contains(".toolbarBackgroundVisibility(.hidden, for: .windowToolbar)"))
         XCTAssertFalse(contentSource.contains(".toolbarVisibility("))
         XCTAssertTrue(contentSource.contains(".toolbar {"))
-        XCTAssertTrue(contentSource.contains(".searchable(text: $store.searchQuery, placement: .toolbar"))
+        XCTAssertTrue(contentSource.contains("if !isLibraryDialogVisible {\n                ToolbarItemGroup(placement: .primaryAction)"))
+        XCTAssertTrue(contentSource.contains(".libraryToolbarSearch(isVisible: !isLibraryDialogVisible"))
         XCTAssertTrue(appSource.contains(".windowToolbarStyle(.unified)"))
         XCTAssertFalse(appSource.contains(".windowStyle(.hiddenTitleBar)"))
     }

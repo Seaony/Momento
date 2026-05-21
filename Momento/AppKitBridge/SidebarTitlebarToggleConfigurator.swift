@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SidebarTitlebarToggleConfigurator: NSViewRepresentable {
     @Binding var isCollapsed: Bool
+    var isVisible: Bool
     var buttonMinX: CGFloat
     var label: String
 
@@ -25,6 +26,7 @@ struct SidebarTitlebarToggleConfigurator: NSViewRepresentable {
         context.coordinator.update(
             configuration: Configuration(
                 isCollapsed: $isCollapsed,
+                isVisible: isVisible,
                 buttonMinX: buttonMinX,
                 label: label
             )
@@ -39,6 +41,7 @@ struct SidebarTitlebarToggleConfigurator: NSViewRepresentable {
 
     struct Configuration {
         var isCollapsed: Binding<Bool>
+        var isVisible: Bool
         var buttonMinX: CGFloat
         var label: String
     }
@@ -102,6 +105,12 @@ extension SidebarTitlebarToggleConfigurator {
 
             if accessoryController == nil {
                 installAccessoryView(configuration: configuration)
+            }
+
+            accessoryController?.isHidden = !configuration.isVisible
+
+            guard configuration.isVisible else {
+                return
             }
 
             let rootView = SidebarTitlebarToggleAccessoryView(

@@ -137,6 +137,7 @@ struct ContentView: View {
             onCloseLibrary: closeLibrary,
             title: title,
             subtitle: localization.itemCount(store.visibleAssets.count),
+            showsChromeControls: !isLibraryDialogVisible,
             inspectorAsset: store.selectedAsset.map { MomentoInspectorAsset(asset: $0, localization: localization) },
             inspectorTags: selectedTags,
             inspectorNotes: inspectorNotes,
@@ -158,33 +159,35 @@ struct ContentView: View {
             }
         }
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Picker(localization.string("View"), selection: viewModeSelection) {
-                    ForEach(AssetViewMode.allCases) { viewMode in
-                        Text(localization.title(for: viewMode))
-                            .tag(viewMode)
+            if !isLibraryDialogVisible {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Picker(localization.string("View"), selection: viewModeSelection) {
+                        ForEach(AssetViewMode.allCases) { viewMode in
+                            Text(localization.title(for: viewMode))
+                                .tag(viewMode)
+                        }
                     }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
 
-                Toggle(isOn: $isInspectorPresented) {
-                    Label(localization.string("Toggle Inspector"), systemImage: "sidebar.right")
-                }
-                .toggleStyle(.button)
-                .help(localization.string("Toggle Inspector"))
-
-                Button {
-                    withAnimation(.smooth(duration: 0.18)) {
-                        isCommandPalettePresented = true
+                    Toggle(isOn: $isInspectorPresented) {
+                        Label(localization.string("Toggle Inspector"), systemImage: "sidebar.right")
                     }
-                } label: {
-                    Label(localization.string("Open command palette"), systemImage: "command")
+                    .toggleStyle(.button)
+                    .help(localization.string("Toggle Inspector"))
+
+                    Button {
+                        withAnimation(.smooth(duration: 0.18)) {
+                            isCommandPalettePresented = true
+                        }
+                    } label: {
+                        Label(localization.string("Open command palette"), systemImage: "command")
+                    }
+                    .help(localization.string("Open command palette"))
                 }
-                .help(localization.string("Open command palette"))
             }
         }
-        .searchable(text: $store.searchQuery, placement: .toolbar, prompt: Text(localization.string("Search assets, tags, colors...")))
+        .libraryToolbarSearch(isVisible: !isLibraryDialogVisible, text: $store.searchQuery, prompt: Text(localization.string("Search assets, tags, colors...")))
         .navigationTitle("")
     }
 
@@ -587,6 +590,17 @@ private extension MomentoInspectorAsset {
             addedDate: asset.importedAt,
             kind: localization.kindTitle(for: asset.kind)
         )
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func libraryToolbarSearch(isVisible: Bool, text: Binding<String>, prompt: Text) -> some View {
+        if isVisible {
+            searchable(text: text, placement: .toolbar, prompt: prompt)
+        } else {
+            self
+        }
     }
 }
 

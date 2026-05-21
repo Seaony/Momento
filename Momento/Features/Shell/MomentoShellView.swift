@@ -22,6 +22,7 @@ struct MomentoShellView<Content: View>: View {
     var onCloseLibrary: () -> Void
     var title: String
     var subtitle: String?
+    var showsChromeControls: Bool
     var inspectorAsset: MomentoInspectorAsset?
     @Binding var inspectorTags: [String]
     @Binding var inspectorNotes: String
@@ -52,6 +53,7 @@ struct MomentoShellView<Content: View>: View {
         onCloseLibrary: @escaping () -> Void = {},
         title: String = "All Assets",
         subtitle: String? = "0 items",
+        showsChromeControls: Bool = true,
         inspectorAsset: MomentoInspectorAsset? = nil,
         inspectorTags: Binding<[String]> = .constant([]),
         inspectorNotes: Binding<String> = .constant(""),
@@ -77,6 +79,7 @@ struct MomentoShellView<Content: View>: View {
         self.onCloseLibrary = onCloseLibrary
         self.title = title
         self.subtitle = subtitle
+        self.showsChromeControls = showsChromeControls
         self.inspectorAsset = inspectorAsset
         self._inspectorTags = inspectorTags
         self._inspectorNotes = inspectorNotes
@@ -119,6 +122,7 @@ struct MomentoShellView<Content: View>: View {
         .background {
             SidebarTitlebarToggleConfigurator(
                 isCollapsed: $isSidebarCollapsed,
+                isVisible: showsChromeControls,
                 buttonMinX: sidebarToggleButtonMinX(availableWidth: availableWidth),
                 label: sidebarToggleLabel
             )
