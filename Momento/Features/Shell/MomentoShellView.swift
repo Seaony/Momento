@@ -72,9 +72,15 @@ struct MomentoShellView<Content: View>: View {
     }
 
     var body: some View {
+        GeometryReader { geometry in
+            shellContent(availableWidth: geometry.size.width)
+        }
+    }
+
+    private func shellContent(availableWidth: CGFloat) -> some View {
         HStack(spacing: 0) {
             if !isSidebarCollapsed {
-                floatingSidebar
+                floatingSidebar(availableWidth: availableWidth)
                     .transition(.move(edge: .leading).combined(with: .opacity))
             }
 
@@ -88,10 +94,11 @@ struct MomentoShellView<Content: View>: View {
                 trailingInspector
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .animation(.smooth(duration: 0.18), value: isInspectorPresented)
         .animation(.smooth(duration: 0.18), value: isSidebarCollapsed)
         .overlay(alignment: .topLeading) {
-            sidebarTitlebarControls
+            sidebarTitlebarControls(availableWidth: availableWidth)
         }
         .momentoCommandPalette(
             isPresented: $isCommandPalettePresented,
@@ -104,20 +111,20 @@ struct MomentoShellView<Content: View>: View {
         }
     }
 
-    private var sidebarTitlebarControls: some View {
+    private func sidebarTitlebarControls(availableWidth: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
             Color.clear
                 .allowsHitTesting(false)
 
             sidebarToggleButton
-                .padding(.leading, sidebarToggleLeadingInset)
+                .padding(.leading, sidebarToggleLeadingInset(availableWidth: availableWidth))
                 .padding(.top, MomentoTheme.sidebarTitlebarButtonTopInset)
         }
         .frame(height: MomentoTheme.floatingSidebarTitlebarContentInset, alignment: .topLeading)
         .ignoresSafeArea(.container, edges: .top)
     }
 
-    private var floatingSidebar: some View {
+    private func floatingSidebar(availableWidth: CGFloat) -> some View {
         MomentoSidebarView(
             sections: sidebarSections,
             selection: $sidebarSelection,
@@ -128,9 +135,9 @@ struct MomentoShellView<Content: View>: View {
             onSwitchLibrary: onSwitchLibrary,
             onCloseLibrary: onCloseLibrary
         )
-        .frame(width: sidebarWidth)
+        .frame(width: effectiveSidebarWidth(availableWidth: availableWidth))
         .overlay(alignment: .trailing) {
-            sidebarResizeHandle
+            sidebarResizeHandle(availableWidth: availableWidth)
         }
         .padding(.leading, MomentoTheme.floatingSidebarInset)
         .padding(.trailing, MomentoTheme.floatingSidebarInset)
@@ -148,7 +155,7 @@ struct MomentoShellView<Content: View>: View {
         .transition(.move(edge: .trailing).combined(with: .opacity))
     }
 
-    private var sidebarResizeHandle: some View {
+    private func sidebarResizeHandle(availableWidth: CGFloat) -> some View {
         Rectangle()
             .fill(Color.clear)
             .frame(width: 14)
@@ -157,15 +164,27 @@ struct MomentoShellView<Content: View>: View {
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .global)
                     .onChanged { value in
-                        let startWidth = sidebarResizeStartWidth ?? sidebarWidth
+                        let startWidth = sidebarResizeStartWidth ?? effectiveSidebarWidth(availableWidth: availableWidth)
                         sidebarResizeStartWidth = startWidth
                         sidebarWidth = (startWidth + value.translation.width)
-                            .clamped(to: MomentoTheme.sidebarMinWidth...MomentoTheme.sidebarMaxWidth)
+                            .clamped(to: sidebarWidthRange(availableWidth: availableWidth))
                     }
                     .onEnded { _ in
                         sidebarResizeStartWidth = nil
                     }
             )
+    }
+
+    private func effectiveSidebarWidth(availableWidth: CGFloat) -> CGFloat {
+        sidebarWidth.clamped(to: sidebarWidthRange(availableWidth: availableWidth))
+    }
+
+    private func sidebarWidthRange(availableWidth: CGFloat) -> ClosedRange<CGFloat> {
+        let inspectorWidth = isInspectorPresented ? MomentoTheme.inspectorWidth : 0
+        let availableSidebarWidth = availableWidth - MomentoTheme.contentMinWidth - inspectorWidth - MomentoTheme.floatingSidebarInset * 2
+        let maxWidth = min(MomentoTheme.sidebarMaxWidth, max(MomentoTheme.sidebarMinWidth, availableSidebarWidth))
+
+        return MomentoTheme.sidebarMinWidth...maxWidth
     }
 
     private var sidebarToggleButton: some View {
@@ -198,12 +217,12 @@ struct MomentoShellView<Content: View>: View {
         .accessibilityLabel(label)
     }
 
-    private var sidebarToggleLeadingInset: CGFloat {
+    private func sidebarToggleLeadingInset(availableWidth: CGFloat) -> CGFloat {
         if isSidebarCollapsed {
             return MomentoTheme.collapsedSidebarToggleLeadingInset
         }
 
-        return MomentoTheme.floatingSidebarInset + sidebarWidth - MomentoTheme.sidebarTitlebarButtonTrailingInset - MomentoTheme.sidebarTitlebarButtonSize
+        return MomentoTheme.floatingSidebarInset + effectiveSidebarWidth(availableWidth: availableWidth) - MomentoTheme.sidebarTitlebarButtonTrailingInset - MomentoTheme.sidebarTitlebarButtonSize
     }
 
     private func toggleSidebarCollapsed() {
