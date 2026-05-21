@@ -87,7 +87,7 @@ final class LiquidGlassSourceTests: XCTestCase {
         let designSource = try String(contentsOf: designSystemURL(), encoding: .utf8)
 
         XCTAssertTrue(shellSource.contains("floatingSidebar"))
-        XCTAssertTrue(designSource.contains("static let floatingSidebarInset: CGFloat = 4"))
+        XCTAssertTrue(designSource.contains("static let floatingSidebarInset: CGFloat = 6"))
         XCTAssertTrue(shellSource.contains(".padding(.leading, MomentoTheme.floatingSidebarInset)"))
         XCTAssertTrue(shellSource.contains(".padding(.trailing, MomentoTheme.floatingSidebarInset)"))
         XCTAssertTrue(shellSource.contains(".padding(.vertical, MomentoTheme.floatingSidebarInset)"))
