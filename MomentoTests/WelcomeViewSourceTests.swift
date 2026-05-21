@@ -133,6 +133,24 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertTrue(source.contains(".animation(reduceMotion ? nil : .smooth(duration: 0.16), value: isHovered)"))
     }
 
+    func testCreateLibraryUsesNameDialogBeforeDirectoryPicker() throws {
+        let source = try String(contentsOf: contentViewURL(), encoding: .utf8)
+
+        XCTAssertTrue(source.contains("@State private var isCreateLibraryDialogPresented = false"))
+        XCTAssertTrue(source.contains("MomentoCreateLibraryDialog("))
+        XCTAssertTrue(source.contains("isPresented: $isCreateLibraryDialogPresented"))
+        XCTAssertTrue(source.contains("onContinue: chooseLibraryDestination"))
+        XCTAssertTrue(source.contains("isCreateLibraryDialogPresented = true"))
+        XCTAssertFalse(source.contains("NSSavePanel()"))
+        XCTAssertTrue(source.contains("private func chooseLibraryDestination(named libraryName: String)"))
+        XCTAssertTrue(source.contains("let panel = NSOpenPanel()"))
+        XCTAssertTrue(source.contains("panel.canChooseFiles = false"))
+        XCTAssertTrue(source.contains("panel.canChooseDirectories = true"))
+        XCTAssertTrue(source.contains("panel.canCreateDirectories = true"))
+        XCTAssertTrue(source.contains("let packageURL = destinationURL.appendingPathComponent(libraryName, isDirectory: true)"))
+        XCTAssertTrue(source.contains("try store.createLibrary(at: packageURL)"))
+    }
+
     func testWelcomeButtonsUseNativeCapsuleBorderShape() throws {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 

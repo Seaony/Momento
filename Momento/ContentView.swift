@@ -9,6 +9,7 @@ struct ContentView: View {
 
     @State private var isImporterPresented = false
     @State private var isCommandPalettePresented = false
+    @State private var isCreateLibraryDialogPresented = false
     @State private var isInspectorPresented = true
     @State private var inspectorNotesByAssetID: [AssetItem.ID: String] = [:]
     @State private var importError: String?
@@ -74,6 +75,16 @@ struct ContentView: View {
             if let errorMessage {
                 importErrorBanner(errorMessage)
                     .padding(.bottom, 16)
+            }
+        }
+        .overlay {
+            if isCreateLibraryDialogPresented {
+                MomentoCreateLibraryDialog(
+                    isPresented: $isCreateLibraryDialogPresented,
+                    initialName: localization.string("Untitled Library"),
+                    onContinue: chooseLibraryDestination
+                )
+                .zIndex(30)
             }
         }
         .fileImporter(
@@ -340,17 +351,27 @@ struct ContentView: View {
     }
 
     private func createLibrary() {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.momentoLibrary]
-        panel.canCreateDirectories = true
-        panel.nameFieldStringValue = localization.string("Untitled Library") + ".\(LibraryStorage.packageExtension)"
+        withAnimation(.smooth(duration: 0.16)) {
+            isCreateLibraryDialogPresented = true
+        }
+    }
 
-        guard panel.runModal() == .OK, let url = panel.url else {
+    private func chooseLibraryDestination(named libraryName: String) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = localization.string("Create Library")
+
+        guard panel.runModal() == .OK, let destinationURL = panel.url else {
             return
         }
 
+        let packageURL = destinationURL.appendingPathComponent(libraryName, isDirectory: true)
+
         do {
-            try store.createLibrary(at: url)
+            try store.createLibrary(at: packageURL)
         } catch {
             showImportError(error)
         }
