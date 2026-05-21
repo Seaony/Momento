@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct MomentoSidebarItem: Identifiable, Hashable {
     var id: String
@@ -404,6 +405,7 @@ private struct MomentoLibrarySwitcherMenu: View {
     @State private var hoveredActionID: String?
     @State private var activeMoreLibraryID: RecentLibraryReference.ID?
     @State private var hoveredMoreActionID: String?
+    @State private var draggingLibraryID: RecentLibraryReference.ID?
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -485,9 +487,6 @@ private struct MomentoLibrarySwitcherMenu: View {
             libraryDragHandle(isActive: isSelected || isHovered)
                 .contentShape(Rectangle())
                 .dragHandleCursor()
-                .draggable(library.id) {
-                    libraryDragPreview(library)
-                }
 
             Button {
                 onSwitchLibrary(library.id)
@@ -546,17 +545,21 @@ private struct MomentoLibrarySwitcherMenu: View {
         .background {
             menuRowBackground(isHovered: isHovered, isSelected: isSelected)
         }
-        .dropDestination(for: RecentLibraryReference.ID.self) { draggedIDs, location in
-            guard let draggedID = draggedIDs.first,
-                  draggedID != library.id else {
-                return false
-            }
-
-            let insertAfterTarget = location.y > 21
-            onMoveLibrary(draggedID, library.id, insertAfterTarget)
-            return true
-        }
         .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .onDrag {
+            draggingLibraryID = library.id
+            activeMoreLibraryID = nil
+            return NSItemProvider(object: library.id as NSString)
+        } preview: {
+            libraryDragPreview(library)
+        }
+        .onDrop(of: [.text], delegate: LibraryReorderDropDelegate(
+            targetLibrary: library,
+            recentLibraries: recentLibraries,
+            draggingLibraryID: $draggingLibraryID,
+            onMoveLibrary: onMoveLibrary
+        ))
         .zIndex(activeMoreLibraryID == library.id ? 50 : 0)
         .onHover { hovering in
             updateLibraryHover(library.id, hovering: hovering)
@@ -778,6 +781,43 @@ private struct MomentoLibrarySwitcherMenu: View {
         }
 
         return resolved.url.deletingLastPathComponent().path
+    }
+}
+
+private struct LibraryReorderDropDelegate: DropDelegate {
+    var targetLibrary: RecentLibraryReference
+    var recentLibraries: [RecentLibraryReference]
+    @Binding var draggingLibraryID: RecentLibraryReference.ID?
+    var onMoveLibrary: (RecentLibraryReference.ID, RecentLibraryReference.ID, Bool) -> Void
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedID = draggingLibraryID,
+              draggedID != targetLibrary.id,
+              let sourceIndex = recentLibraries.firstIndex(where: { $0.id == draggedID }),
+              let targetIndex = recentLibraries.firstIndex(where: { $0.id == targetLibrary.id }) else {
+            return
+        }
+
+        let insertAfterTarget = info.location.y > 21
+        if !insertAfterTarget, sourceIndex + 1 == targetIndex {
+            return
+        }
+        if insertAfterTarget, sourceIndex == targetIndex + 1 {
+            return
+        }
+
+        withAnimation(.smooth(duration: 0.14)) {
+            onMoveLibrary(draggedID, targetLibrary.id, insertAfterTarget)
+        }
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        draggingLibraryID = nil
+        return true
     }
 }
 
