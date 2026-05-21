@@ -394,6 +394,8 @@ private struct MomentoLibrarySwitcherMenu: View {
 
     @State private var hoveredLibraryID: RecentLibraryReference.ID?
     @State private var hoveredActionID: String?
+    @State private var activeMoreLibraryID: RecentLibraryReference.ID?
+    @State private var hoveredMoreActionID: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -453,10 +455,7 @@ private struct MomentoLibrarySwitcherMenu: View {
                 onSwitchLibrary(library.id)
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: "circle.grid.2x3.fill")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(isSelected || isHovered ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
-                        .frame(width: 16)
+                    libraryDragHandle(isActive: isSelected || isHovered)
 
                     Image(systemName: "archivebox.fill")
                         .font(.system(size: 13, weight: .semibold))
@@ -471,8 +470,8 @@ private struct MomentoLibrarySwitcherMenu: View {
                             .lineLimit(1)
 
                         Text(libraryPath(for: library))
-                            .font(.system(size: 10))
-                            .foregroundStyle(MomentoTheme.tertiaryText)
+                            .font(.system(size: 11))
+                            .foregroundStyle(isSelected ? MomentoTheme.secondaryText : MomentoTheme.tertiaryText)
                             .lineLimit(1)
                     }
 
@@ -490,27 +489,20 @@ private struct MomentoLibrarySwitcherMenu: View {
             .buttonStyle(.plain)
             .pointerStyle(.link)
 
-            Menu {
-                Button {
-                    onRenameLibrary(library.id)
-                } label: {
-                    Label(localization.string("Rename Library"), systemImage: "pencil")
-                }
-
-                Button(role: .destructive) {
-                    onDeleteLibrary(library.id)
-                } label: {
-                    Label(localization.string("Delete Library"), systemImage: "trash")
+            Button {
+                withAnimation(.smooth(duration: 0.14)) {
+                    hoveredMoreActionID = nil
+                    activeMoreLibraryID = activeMoreLibraryID == library.id ? nil : library.id
                 }
             } label: {
                 Image(systemName: "ellipsis")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(MomentoTheme.secondaryText)
+                    .foregroundStyle(isSelected || isHovered ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
                     .frame(width: 24, height: 24)
                     .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            .menuIndicator(.hidden)
             .buttonStyle(.plain)
+            .pointerStyle(.link)
             .help(localization.string("More Actions"))
         }
         .padding(.horizontal, 7)
@@ -518,9 +510,111 @@ private struct MomentoLibrarySwitcherMenu: View {
         .background {
             menuRowBackground(isHovered: isHovered, isSelected: isSelected)
         }
+        .overlay(alignment: .topTrailing) {
+            if activeMoreLibraryID == library.id {
+                libraryMoreMenu(library)
+                    .offset(y: 28)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .topTrailing)))
+                    .zIndex(60)
+            }
+        }
         .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .zIndex(activeMoreLibraryID == library.id ? 50 : 0)
         .onHover { hovering in
             updateLibraryHover(library.id, hovering: hovering)
+        }
+    }
+
+    private func libraryDragHandle(isActive: Bool) -> some View {
+        VStack(spacing: 3) {
+            ForEach(0..<3, id: \.self) { _ in
+                HStack(spacing: 3) {
+                    Circle()
+                        .fill(isActive ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
+                        .frame(width: 2.6, height: 2.6)
+
+                    Circle()
+                        .fill(isActive ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
+                        .frame(width: 2.6, height: 2.6)
+                }
+            }
+        }
+        .frame(width: 16)
+    }
+
+    private func libraryMoreMenu(_ library: RecentLibraryReference) -> some View {
+        VStack(spacing: 2) {
+            libraryMoreActionRow(
+                id: "\(library.id)-rename",
+                title: localization.string("Rename Library"),
+                systemImage: "pencil",
+                isDestructive: false
+            ) {
+                activeMoreLibraryID = nil
+                onRenameLibrary(library.id)
+            }
+
+            libraryMoreActionRow(
+                id: "\(library.id)-delete",
+                title: localization.string("Delete Library"),
+                systemImage: "trash",
+                isDestructive: true
+            ) {
+                activeMoreLibraryID = nil
+                onDeleteLibrary(library.id)
+            }
+        }
+        .padding(6)
+        .frame(width: 150, alignment: .leading)
+        .background {
+            MomentoGlassBackground(glass: .regular, cornerRadius: 12)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(MomentoTheme.subtleStroke.opacity(0.45), lineWidth: 0.6)
+        }
+        .shadow(color: .black.opacity(0.2), radius: 14, y: 8)
+    }
+
+    private func libraryMoreActionRow(
+        id: String,
+        title: String,
+        systemImage: String,
+        isDestructive: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        let isHovered = hoveredMoreActionID == id
+
+        return Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(isDestructive ? Color.red : MomentoTheme.secondaryText)
+                    .frame(width: 16)
+
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(isDestructive ? Color.red : MomentoTheme.primaryText)
+
+                Spacer()
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 28)
+            .background {
+                moreActionBackground(isHovered: isHovered)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .onHover { hovering in
+            withAnimation(.smooth(duration: 0.12)) {
+                if hovering {
+                    hoveredMoreActionID = id
+                } else if hoveredMoreActionID == id {
+                    hoveredMoreActionID = nil
+                }
+            }
         }
     }
 
@@ -567,6 +661,17 @@ private struct MomentoLibrarySwitcherMenu: View {
             Color.clear
                 .glassEffect(.regular.tint(Color.accentColor), in: shape)
         } else if isHovered {
+            shape.fill(MomentoTheme.sidebarIconHoverBackground)
+        } else {
+            Color.clear
+        }
+    }
+
+    @ViewBuilder
+    private func moreActionBackground(isHovered: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+
+        if isHovered {
             shape.fill(MomentoTheme.sidebarIconHoverBackground)
         } else {
             Color.clear
