@@ -55,6 +55,7 @@ struct MomentoSidebarView: View {
     var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
     var onRenameLibrary: (RecentLibraryReference.ID) -> Void
     var onDeleteLibrary: (RecentLibraryReference.ID) -> Void
+    var onMoveLibrary: (RecentLibraryReference.ID, RecentLibraryReference.ID, Bool) -> Void
     var onReloadLibrary: () -> Void
     var onCloseLibrary: () -> Void
     var onItemContextMenu: ((MomentoSidebarItem) -> AnyView)?
@@ -74,6 +75,7 @@ struct MomentoSidebarView: View {
         onSwitchLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
         onRenameLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
         onDeleteLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
+        onMoveLibrary: @escaping (RecentLibraryReference.ID, RecentLibraryReference.ID, Bool) -> Void = { _, _, _ in },
         onReloadLibrary: @escaping () -> Void = {},
         onCloseLibrary: @escaping () -> Void = {},
         onItemContextMenu: ((MomentoSidebarItem) -> AnyView)? = nil
@@ -88,6 +90,7 @@ struct MomentoSidebarView: View {
         self.onSwitchLibrary = onSwitchLibrary
         self.onRenameLibrary = onRenameLibrary
         self.onDeleteLibrary = onDeleteLibrary
+        self.onMoveLibrary = onMoveLibrary
         self.onReloadLibrary = onReloadLibrary
         self.onCloseLibrary = onCloseLibrary
         self.onItemContextMenu = onItemContextMenu
@@ -158,6 +161,7 @@ struct MomentoSidebarView: View {
                     dismissLibrarySwitcher()
                     onDeleteLibrary(id)
                 },
+                onMoveLibrary: onMoveLibrary,
                 onReloadLibrary: performLibrarySwitcherAction(onReloadLibrary)
             )
             .frame(width: MomentoTheme.librarySwitcherWidth, alignment: .topLeading)
@@ -390,6 +394,7 @@ private struct MomentoLibrarySwitcherMenu: View {
     var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
     var onRenameLibrary: (RecentLibraryReference.ID) -> Void
     var onDeleteLibrary: (RecentLibraryReference.ID) -> Void
+    var onMoveLibrary: (RecentLibraryReference.ID, RecentLibraryReference.ID, Bool) -> Void
     var onReloadLibrary: () -> Void
 
     @State private var hoveredLibraryID: RecentLibraryReference.ID?
@@ -451,12 +456,14 @@ private struct MomentoLibrarySwitcherMenu: View {
         let isHovered = hoveredLibraryID == library.id
 
         return HStack(spacing: 8) {
+            libraryDragHandle(isActive: isSelected || isHovered)
+                .contentShape(Rectangle())
+                .draggable(library.id)
+
             Button {
                 onSwitchLibrary(library.id)
             } label: {
                 HStack(spacing: 8) {
-                    libraryDragHandle(isActive: isSelected || isHovered)
-
                     Image(systemName: "archivebox.fill")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.white)
@@ -504,19 +511,30 @@ private struct MomentoLibrarySwitcherMenu: View {
             .buttonStyle(.plain)
             .pointerStyle(.link)
             .help(localization.string("More Actions"))
+            .overlay(alignment: .topLeading) {
+                if activeMoreLibraryID == library.id {
+                    libraryMoreMenu(library)
+                        .offset(x: 28, y: -2)
+                        .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .topLeading)))
+                        .zIndex(60)
+                }
+            }
+            .zIndex(activeMoreLibraryID == library.id ? 50 : 0)
         }
         .padding(.horizontal, 7)
         .frame(height: 42)
         .background {
             menuRowBackground(isHovered: isHovered, isSelected: isSelected)
         }
-        .overlay(alignment: .topTrailing) {
-            if activeMoreLibraryID == library.id {
-                libraryMoreMenu(library)
-                    .offset(y: 28)
-                    .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .topTrailing)))
-                    .zIndex(60)
+        .dropDestination(for: RecentLibraryReference.ID.self) { draggedIDs, location in
+            guard let draggedID = draggedIDs.first,
+                  draggedID != library.id else {
+                return false
             }
+
+            let insertAfterTarget = location.y > 21
+            onMoveLibrary(draggedID, library.id, insertAfterTarget)
+            return true
         }
         .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .zIndex(activeMoreLibraryID == library.id ? 50 : 0)

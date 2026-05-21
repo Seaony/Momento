@@ -135,6 +135,7 @@ struct ContentView: View {
             onSwitchLibrary: switchLibrary,
             onRenameLibrary: renameLibrary,
             onDeleteLibrary: deleteLibrary,
+            onMoveLibrary: moveLibrary,
             onReloadLibrary: reloadLibrary,
             onCloseLibrary: closeLibrary,
             title: title,
@@ -450,6 +451,18 @@ struct ContentView: View {
 
         do {
             try store.deleteRecentLibrary(id: id)
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func moveLibrary(
+        _ id: RecentLibraryReference.ID,
+        relativeTo targetID: RecentLibraryReference.ID,
+        insertAfterTarget: Bool
+    ) {
+        do {
+            try store.moveRecentLibrary(id: id, relativeTo: targetID, insertAfterTarget: insertAfterTarget)
         } catch {
             showImportError(error)
         }

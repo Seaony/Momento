@@ -78,6 +78,24 @@ struct RecentLibraryStore {
         defaults.set(data, forKey: key)
     }
 
+    func move(id: RecentLibraryReference.ID, relativeTo targetID: RecentLibraryReference.ID, insertAfterTarget: Bool) throws {
+        var references = load()
+        guard let sourceIndex = references.firstIndex(where: { $0.id == id }),
+              references.contains(where: { $0.id == targetID }),
+              id != targetID else {
+            return
+        }
+
+        let reference = references.remove(at: sourceIndex)
+        guard let targetIndex = references.firstIndex(where: { $0.id == targetID }) else {
+            return
+        }
+
+        let insertionIndex = insertAfterTarget ? targetIndex + 1 : targetIndex
+        references.insert(reference, at: min(insertionIndex, references.endIndex))
+        try saveReferences(references)
+    }
+
     private func saveReferences(_ references: [RecentLibraryReference]) throws {
         let data = try JSONEncoder.momento.encode(references)
         defaults.set(data, forKey: key)

@@ -339,6 +339,37 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: environment.packageURL.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: environment.trashURL.appendingPathComponent("Test.momento").path))
     }
+
+    @MainActor
+    func testMovingRecentLibraryPersistsManualOrder() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        let alphaURL = environment.rootURL.appendingPathComponent("Alpha.momento", isDirectory: true)
+        let betaURL = environment.rootURL.appendingPathComponent("Beta.momento", isDirectory: true)
+        let gammaURL = environment.rootURL.appendingPathComponent("Gamma.momento", isDirectory: true)
+
+        try store.createLibrary(at: alphaURL)
+        try store.createLibrary(at: betaURL)
+        try store.createLibrary(at: gammaURL)
+
+        let alphaID = try XCTUnwrap(store.recentLibraries.first { $0.name == "Alpha" }?.id)
+        let gammaID = try XCTUnwrap(store.recentLibraries.first { $0.name == "Gamma" }?.id)
+
+        try store.moveRecentLibrary(id: gammaID, relativeTo: alphaID, insertAfterTarget: true)
+
+        XCTAssertEqual(store.recentLibraries.map(\.name), ["Beta", "Alpha", "Gamma"])
+
+        let relaunched = LibraryStore(
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        XCTAssertEqual(relaunched.recentLibraries.map(\.name), ["Beta", "Alpha", "Gamma"])
+    }
 }
 
 private struct TestEnvironment {

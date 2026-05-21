@@ -183,6 +183,15 @@ final class LibraryStore {
         recentLibraries = recentStore.load()
     }
 
+    func moveRecentLibrary(
+        id: RecentLibraryReference.ID,
+        relativeTo targetID: RecentLibraryReference.ID,
+        insertAfterTarget: Bool
+    ) throws {
+        try recentStore.move(id: id, relativeTo: targetID, insertAfterTarget: insertAfterTarget)
+        recentLibraries = recentStore.load()
+    }
+
     func validateCurrentLibraryAvailability() throws {
         guard let currentLibrary else {
             return
