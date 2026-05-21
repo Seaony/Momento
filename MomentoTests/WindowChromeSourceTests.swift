@@ -29,6 +29,17 @@ final class WindowChromeSourceTests: XCTestCase {
         XCTAssertFalse(shellSource.contains("MomentoTopBar("))
     }
 
+    func testWelcomeStateHidesWindowToolbarWithoutRemovingLibraryToolbar() throws {
+        let appSource = try String(contentsOf: appURL(), encoding: .utf8)
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+
+        XCTAssertTrue(contentSource.contains(".toolbarVisibility(store.currentLibrary == nil ? .hidden : .visible, for: .windowToolbar)"))
+        XCTAssertTrue(contentSource.contains(".toolbar {"))
+        XCTAssertTrue(contentSource.contains(".searchable(text: $store.searchQuery, placement: .toolbar"))
+        XCTAssertTrue(appSource.contains(".windowToolbarStyle(.unified)"))
+        XCTAssertFalse(appSource.contains(".windowStyle(.hiddenTitleBar)"))
+    }
+
     func testLibraryMenuExposesCloseLibraryAction() throws {
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
         let shellSource = try String(contentsOf: shellViewURL(), encoding: .utf8)

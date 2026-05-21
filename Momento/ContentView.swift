@@ -97,6 +97,7 @@ struct ContentView: View {
         .onChange(of: defaultViewMode) { _, newValue in
             store.setViewMode(newValue)
         }
+        .toolbarVisibility(store.currentLibrary == nil ? .hidden : .visible, for: .windowToolbar)
         .frame(minWidth: 540, minHeight: 340)
     }
 
