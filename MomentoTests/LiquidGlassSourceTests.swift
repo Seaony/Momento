@@ -157,7 +157,7 @@ final class LiquidGlassSourceTests: XCTestCase {
 
         XCTAssertFalse(designSource.contains("collapsedSidebarWidth"))
         XCTAssertTrue(designSource.contains("static let sidebarTitlebarButtonSize: CGFloat = 28"))
-        XCTAssertTrue(designSource.contains("static let sidebarTitlebarButtonTopInset: CGFloat = -18"))
+        XCTAssertTrue(designSource.contains("static let sidebarTitlebarButtonTopInset: CGFloat = 13"))
         XCTAssertTrue(designSource.contains("static let sidebarTitlebarButtonTrailingInset: CGFloat = 14"))
         XCTAssertTrue(designSource.contains("static let collapsedSidebarToggleLeadingInset: CGFloat = 92"))
         XCTAssertTrue(shellSource.contains("@State private var isSidebarCollapsed = false"))
@@ -165,6 +165,9 @@ final class LiquidGlassSourceTests: XCTestCase {
         XCTAssertTrue(shellSource.contains("floatingSidebar"))
         XCTAssertTrue(shellSource.contains(".transition(.move(edge: .leading).combined(with: .opacity))"))
         XCTAssertTrue(shellSource.contains(".overlay(alignment: .topLeading)"))
+        XCTAssertTrue(shellSource.contains("private var sidebarTitlebarControls: some View"))
+        XCTAssertTrue(shellSource.contains(".frame(height: MomentoTheme.floatingSidebarTitlebarContentInset, alignment: .topLeading)"))
+        XCTAssertTrue(shellSource.contains(".ignoresSafeArea(.container, edges: .top)"))
         XCTAssertTrue(shellSource.contains("private var sidebarToggleButton: some View"))
         XCTAssertTrue(shellSource.contains("private var sidebarToggleLeadingInset: CGFloat"))
         XCTAssertTrue(shellSource.contains("return MomentoTheme.collapsedSidebarToggleLeadingInset"))

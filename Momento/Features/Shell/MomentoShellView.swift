@@ -90,9 +90,7 @@ struct MomentoShellView<Content: View>: View {
         .animation(.smooth(duration: 0.18), value: isInspectorPresented)
         .animation(.smooth(duration: 0.18), value: isSidebarCollapsed)
         .overlay(alignment: .topLeading) {
-            sidebarToggleButton
-                .padding(.leading, sidebarToggleLeadingInset)
-                .padding(.top, MomentoTheme.sidebarTitlebarButtonTopInset)
+            sidebarTitlebarControls
         }
         .momentoCommandPalette(
             isPresented: $isCommandPalettePresented,
@@ -103,6 +101,19 @@ struct MomentoShellView<Content: View>: View {
             MomentoGlassBackground(cornerRadius: 0)
                 .ignoresSafeArea()
         }
+    }
+
+    private var sidebarTitlebarControls: some View {
+        ZStack(alignment: .topLeading) {
+            Color.clear
+                .allowsHitTesting(false)
+
+            sidebarToggleButton
+                .padding(.leading, sidebarToggleLeadingInset)
+                .padding(.top, MomentoTheme.sidebarTitlebarButtonTopInset)
+        }
+        .frame(height: MomentoTheme.floatingSidebarTitlebarContentInset, alignment: .topLeading)
+        .ignoresSafeArea(.container, edges: .top)
     }
 
     private var floatingSidebar: some View {
