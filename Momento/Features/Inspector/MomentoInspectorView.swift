@@ -96,10 +96,6 @@ struct MomentoInspectorView: View {
             idealWidth: MomentoTheme.inspectorWidth,
             maxWidth: MomentoTheme.inspectorMaxWidth
         )
-        .background {
-            MomentoGlassBackground(cornerRadius: 0)
-                .ignoresSafeArea()
-        }
     }
 
     private func preview(_ asset: MomentoInspectorAsset) -> some View {

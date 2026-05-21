@@ -30,10 +30,100 @@ final class LiquidGlassSourceTests: XCTestCase {
             XCTAssertFalse(source.contains(".thinMaterial"))
         }
 
-        XCTAssertTrue(shellSource.contains("MomentoGlassBackground(cornerRadius: 0)"))
-        XCTAssertTrue(sidebarSource.contains("MomentoGlassBackground(cornerRadius: 0)"))
-        XCTAssertTrue(inspectorSource.contains("MomentoGlassBackground(cornerRadius: 0)"))
+        XCTAssertTrue(shellSource.contains("""
+        .background {
+            MomentoGlassBackground(cornerRadius: 0)
+                .ignoresSafeArea()
+        }
+"""))
+        XCTAssertFalse(shellSource.contains("HSplitView"))
+        XCTAssertTrue(shellSource.contains("HStack(spacing: 0)"))
+        XCTAssertTrue(shellSource.contains(".inspector(isPresented: $isInspectorPresented)"))
+        XCTAssertTrue(shellSource.contains(".inspectorColumnWidth("))
+        XCTAssertFalse(contentSource.contains("            .background {\n                MomentoGlassBackground(cornerRadius: 0)\n            }\n"))
+        XCTAssertFalse(shellSource.contains("                    .background {\n                        MomentoGlassBackground(cornerRadius: 0)\n                    }\n"))
+        XCTAssertFalse(inspectorSource.contains("        .background {\n            MomentoGlassBackground(cornerRadius: 0)\n                .ignoresSafeArea()\n        }\n"))
+        XCTAssertTrue(sidebarSource.contains("MomentoGlassBackground(cornerRadius: MomentoTheme.floatingSidebarRadius)"))
         XCTAssertTrue(settingsSource.contains("MomentoGlassBackground(cornerRadius: 0)"))
+    }
+
+    func testWindowBackingOpacityControlsSingleGlobalMainGlassSurface() throws {
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+        let shellSource = try String(contentsOf: shellViewURL(), encoding: .utf8)
+        let inspectorSource = try String(contentsOf: inspectorViewURL(), encoding: .utf8)
+        let windowSource = try String(contentsOf: windowTransparencyURL(), encoding: .utf8)
+
+        XCTAssertTrue(shellSource.contains("""
+        .background {
+            MomentoGlassBackground(cornerRadius: 0)
+                .ignoresSafeArea()
+        }
+"""))
+        XCTAssertFalse(shellSource.contains("HSplitView"))
+        XCTAssertTrue(shellSource.contains("HStack(spacing: 0)"))
+        XCTAssertTrue(shellSource.contains(".inspector(isPresented: $isInspectorPresented)"))
+        XCTAssertFalse(contentSource.contains("            .background {\n                MomentoGlassBackground(cornerRadius: 0)\n            }\n"))
+        XCTAssertFalse(shellSource.contains("                    .background {\n                        MomentoGlassBackground(cornerRadius: 0)\n                    }\n"))
+        XCTAssertFalse(inspectorSource.contains("        .background {\n            MomentoGlassBackground(cornerRadius: 0)\n                .ignoresSafeArea()\n        }\n"))
+        XCTAssertTrue(windowSource.contains("static let backingOpacity: CGFloat ="))
+        XCTAssertTrue(windowSource.contains("NSColor.windowBackgroundColor"))
+        XCTAssertTrue(windowSource.contains(".withAlphaComponent(Self.backingOpacity)"))
+        XCTAssertFalse(windowSource.contains("window.backgroundColor = .clear"))
+    }
+
+    func testMainAppKitGridDoesNotDrawOpaqueBackgrounds() throws {
+        let source = try String(contentsOf: assetCollectionURL(), encoding: .utf8)
+
+        XCTAssertTrue(source.contains("collectionView.backgroundColors = [.clear]"))
+        XCTAssertTrue(source.contains("scrollView.drawsBackground = false"))
+    }
+
+    func testSidebarUsesFloatingLiquidGlassPanel() throws {
+        let shellSource = try String(contentsOf: shellViewURL(), encoding: .utf8)
+        let sidebarSource = try String(contentsOf: sidebarViewURL(), encoding: .utf8)
+        let designSource = try String(contentsOf: designSystemURL(), encoding: .utf8)
+
+        XCTAssertTrue(shellSource.contains("floatingSidebar"))
+        XCTAssertTrue(designSource.contains("static let floatingSidebarInset: CGFloat = 4"))
+        XCTAssertTrue(shellSource.contains(".padding(.leading, MomentoTheme.floatingSidebarInset)"))
+        XCTAssertTrue(shellSource.contains(".padding(.trailing, MomentoTheme.floatingSidebarInset)"))
+        XCTAssertTrue(shellSource.contains(".padding(.vertical, MomentoTheme.floatingSidebarInset)"))
+        XCTAssertTrue(sidebarSource.contains("MomentoGlassBackground(cornerRadius: MomentoTheme.floatingSidebarRadius)"))
+        XCTAssertTrue(sidebarSource.contains("RoundedRectangle(cornerRadius: MomentoTheme.floatingSidebarRadius"))
+        XCTAssertTrue(sidebarSource.contains("private var sidebarShape: RoundedRectangle"))
+        XCTAssertTrue(sidebarSource.contains(".clipShape(sidebarShape)"))
+        XCTAssertTrue(sidebarSource.contains("sidebarShape.strokeBorder"))
+        XCTAssertFalse(sidebarSource.contains(".ignoresSafeArea()"))
+    }
+
+    func testFloatingSidebarWidthIsUserResizableWithoutSplitViewBorders() throws {
+        let shellSource = try String(contentsOf: shellViewURL(), encoding: .utf8)
+
+        XCTAssertTrue(shellSource.contains("@State private var sidebarWidth = MomentoTheme.sidebarWidth"))
+        XCTAssertTrue(shellSource.contains("@State private var sidebarResizeStartWidth: CGFloat?"))
+        XCTAssertTrue(shellSource.contains("sidebarResizeHandle"))
+        XCTAssertTrue(shellSource.contains(".overlay(alignment: .trailing)"))
+        XCTAssertTrue(shellSource.contains("DragGesture(minimumDistance: 0, coordinateSpace: .global)"))
+        XCTAssertTrue(shellSource.contains("value.translation.width"))
+        XCTAssertTrue(shellSource.contains(".clamped(to: MomentoTheme.sidebarMinWidth...MomentoTheme.sidebarMaxWidth)"))
+        XCTAssertTrue(shellSource.contains(".frame(width: sidebarWidth)"))
+        XCTAssertTrue(shellSource.contains(".frame(width: 14)"))
+        XCTAssertTrue(shellSource.contains(".pointerStyle(.columnResize(directions: .all))"))
+        XCTAssertFalse(shellSource.contains("HSplitView"))
+    }
+
+    func testFloatingSidebarExtendsIntoWindowTitlebarArea() throws {
+        let shellSource = try String(contentsOf: shellViewURL(), encoding: .utf8)
+        let sidebarSource = try String(contentsOf: sidebarViewURL(), encoding: .utf8)
+        let designSource = try String(contentsOf: designSystemURL(), encoding: .utf8)
+        let windowSource = try String(contentsOf: windowTransparencyURL(), encoding: .utf8)
+
+        XCTAssertTrue(shellSource.contains(".ignoresSafeArea(.container, edges: .top)"))
+        XCTAssertTrue(sidebarSource.contains(".padding(.top, MomentoTheme.floatingSidebarTitlebarContentInset)"))
+        XCTAssertTrue(designSource.contains("static let floatingSidebarTitlebarContentInset"))
+        XCTAssertTrue(windowSource.contains("window.styleMask.insert(.fullSizeContentView)"))
+        XCTAssertTrue(windowSource.contains("window.titlebarAppearsTransparent = true"))
+        XCTAssertTrue(windowSource.contains("window.titleVisibility = .hidden"))
     }
 
     func testInteractiveBackgroundsDoNotUseManualOpacity() throws {
@@ -91,6 +181,10 @@ final class LiquidGlassSourceTests: XCTestCase {
 
     private func assetCollectionURL() -> URL {
         repositoryRoot().appendingPathComponent("Momento/AppKitBridge/AssetCollectionGridView.swift")
+    }
+
+    private func windowTransparencyURL() -> URL {
+        repositoryRoot().appendingPathComponent("Momento/AppKitBridge/WindowTransparencyConfigurator.swift")
     }
 
     private func repositoryRoot() -> URL {

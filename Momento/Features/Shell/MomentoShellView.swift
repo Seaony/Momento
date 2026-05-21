@@ -4,6 +4,7 @@ struct MomentoShellView<Content: View>: View {
     @Binding var sidebarSelection: MomentoSidebarItem.ID?
     @Binding var searchQuery: String
     @Binding var isCommandPalettePresented: Bool
+    @Binding var isInspectorPresented: Bool
 
     var sidebarSections: [MomentoSidebarSection]
     var libraryName: String?
@@ -21,10 +22,14 @@ struct MomentoShellView<Content: View>: View {
     var onCommandSelected: (MomentoCommand) -> Void
     var content: () -> Content
 
+    @State private var sidebarWidth = MomentoTheme.sidebarWidth
+    @State private var sidebarResizeStartWidth: CGFloat?
+
     init(
         sidebarSelection: Binding<MomentoSidebarItem.ID?>,
         searchQuery: Binding<String>,
         isCommandPalettePresented: Binding<Bool>,
+        isInspectorPresented: Binding<Bool> = .constant(true),
         sidebarSections: [MomentoSidebarSection] = .momentoDefaultSections,
         libraryName: String? = nil,
         recentLibraries: [RecentLibraryReference] = [],
@@ -44,6 +49,7 @@ struct MomentoShellView<Content: View>: View {
         self._sidebarSelection = sidebarSelection
         self._searchQuery = searchQuery
         self._isCommandPalettePresented = isCommandPalettePresented
+        self._isInspectorPresented = isInspectorPresented
         self.sidebarSections = sidebarSections
         self.libraryName = libraryName
         self.recentLibraries = recentLibraries
@@ -62,42 +68,84 @@ struct MomentoShellView<Content: View>: View {
     }
 
     var body: some View {
-        HSplitView {
-            MomentoSidebarView(
-                sections: sidebarSections,
-                selection: $sidebarSelection,
-                libraryName: libraryName,
-                recentLibraries: recentLibraries,
-                onCreateLibrary: onCreateLibrary,
-                onOpenLibrary: onOpenLibrary,
-                onSwitchLibrary: onSwitchLibrary,
-                onCloseLibrary: onCloseLibrary
-            )
+        HStack(spacing: 0) {
+            floatingSidebar
 
             VStack(spacing: 0) {
                 content()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background {
-                        MomentoGlassBackground(cornerRadius: 0)
-                    }
             }
             .frame(minWidth: MomentoTheme.contentMinWidth, maxWidth: .infinity, maxHeight: .infinity)
 
-            MomentoInspectorView(
-                asset: inspectorAsset,
-                tags: $inspectorTags,
-                notes: $inspectorNotes
-            )
-        }
-        .background {
-            MomentoGlassBackground(cornerRadius: 0)
-                .ignoresSafeArea()
         }
         .momentoCommandPalette(
             isPresented: $isCommandPalettePresented,
             commands: commands,
             onSelect: onCommandSelected
         )
+        .background {
+            MomentoGlassBackground(cornerRadius: 0)
+                .ignoresSafeArea()
+        }
+        .inspector(isPresented: $isInspectorPresented) {
+            MomentoInspectorView(
+                asset: inspectorAsset,
+                tags: $inspectorTags,
+                notes: $inspectorNotes
+            )
+            .inspectorColumnWidth(
+                min: MomentoTheme.inspectorMinWidth,
+                ideal: MomentoTheme.inspectorWidth,
+                max: MomentoTheme.inspectorMaxWidth
+            )
+        }
+    }
+
+    private var floatingSidebar: some View {
+        MomentoSidebarView(
+            sections: sidebarSections,
+            selection: $sidebarSelection,
+            libraryName: libraryName,
+            recentLibraries: recentLibraries,
+            onCreateLibrary: onCreateLibrary,
+            onOpenLibrary: onOpenLibrary,
+            onSwitchLibrary: onSwitchLibrary,
+            onCloseLibrary: onCloseLibrary
+        )
+        .frame(width: sidebarWidth)
+        .overlay(alignment: .trailing) {
+            sidebarResizeHandle
+        }
+        .padding(.leading, MomentoTheme.floatingSidebarInset)
+        .padding(.trailing, MomentoTheme.floatingSidebarInset)
+        .padding(.vertical, MomentoTheme.floatingSidebarInset)
+        .ignoresSafeArea(.container, edges: .top)
+    }
+
+    private var sidebarResizeHandle: some View {
+        Rectangle()
+            .fill(Color.clear)
+            .frame(width: 14)
+            .contentShape(Rectangle())
+            .pointerStyle(.columnResize(directions: .all))
+            .gesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                    .onChanged { value in
+                        let startWidth = sidebarResizeStartWidth ?? sidebarWidth
+                        sidebarResizeStartWidth = startWidth
+                        sidebarWidth = (startWidth + value.translation.width)
+                            .clamped(to: MomentoTheme.sidebarMinWidth...MomentoTheme.sidebarMaxWidth)
+                    }
+                    .onEnded { _ in
+                        sidebarResizeStartWidth = nil
+                    }
+            )
+    }
+}
+
+private extension CGFloat {
+    func clamped(to range: ClosedRange<CGFloat>) -> CGFloat {
+        Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
     }
 }
 
@@ -110,6 +158,7 @@ private struct MomentoShellPreview: View {
     @State private var sidebarSelection: MomentoSidebarItem.ID? = "all-assets"
     @State private var searchQuery = ""
     @State private var isCommandPalettePresented = false
+    @State private var isInspectorPresented = true
     @State private var tags = ["UI", "Reference"]
     @State private var notes = "A calm shell foundation for the first milestone."
 
@@ -118,6 +167,7 @@ private struct MomentoShellPreview: View {
             sidebarSelection: $sidebarSelection,
             searchQuery: $searchQuery,
             isCommandPalettePresented: $isCommandPalettePresented,
+            isInspectorPresented: $isInspectorPresented,
             inspectorAsset: MomentoInspectorAsset(
                 id: "preview",
                 title: "Desktop Reference",

@@ -23,10 +23,47 @@ final class WindowChromeSourceTests: XCTestCase {
         XCTAssertFalse(appSource.contains(".windowToolbarStyle(.unifiedCompact)"))
 
         XCTAssertTrue(contentSource.contains(".toolbar {"))
-        XCTAssertTrue(contentSource.contains("ToolbarItemGroup(placement: .navigation)"))
-        XCTAssertTrue(contentSource.contains("ToolbarItem(placement: .principal)"))
+        XCTAssertFalse(contentSource.contains("ToolbarItemGroup(placement: .navigation)"))
+        XCTAssertFalse(contentSource.contains("ToolbarItem(placement: .principal)"))
         XCTAssertTrue(contentSource.contains(".searchable(text: $store.searchQuery, placement: .toolbar"))
         XCTAssertFalse(shellSource.contains("MomentoTopBar("))
+    }
+
+    func testMainToolbarDoesNotShowAllAssetsTitleOrAdjacentImportButton() throws {
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+
+        XCTAssertFalse(contentSource.contains("MomentoToolbarTitle("))
+        XCTAssertFalse(contentSource.contains("private struct MomentoToolbarTitle"))
+        XCTAssertFalse(contentSource.contains("ToolbarItemGroup(placement: .navigation)"))
+        XCTAssertFalse(contentSource.contains("case .library:\n            localization.string(\"All Assets\")"))
+    }
+
+    func testLibraryWindowHidesTitleTextButKeepsToolbarControls() throws {
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+        let windowSource = try String(contentsOf: windowTransparencyURL(), encoding: .utf8)
+
+        XCTAssertTrue(contentSource.contains(".navigationTitle(\"\")"))
+        XCTAssertFalse(contentSource.contains(".navigationTitle(title)"))
+        XCTAssertTrue(windowSource.contains("window.titleVisibility = .hidden"))
+        XCTAssertFalse(contentSource.contains(".toolbarVisibility("))
+    }
+
+    func testInspectorUsesCollapsibleTrailingColumnAndToolbarToggle() throws {
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+        let shellSource = try String(contentsOf: shellViewURL(), encoding: .utf8)
+
+        XCTAssertTrue(contentSource.contains("@State private var isInspectorPresented = true"))
+        XCTAssertTrue(contentSource.contains("isInspectorPresented: $isInspectorPresented"))
+        XCTAssertTrue(contentSource.contains("Toggle(isOn: $isInspectorPresented)"))
+        XCTAssertTrue(contentSource.contains("Label(localization.string(\"Toggle Inspector\"), systemImage: \"sidebar.right\")"))
+        XCTAssertTrue(contentSource.contains("MomentoCommand(id: \"toggle-inspector\""))
+        XCTAssertTrue(contentSource.contains("case \"toggle-inspector\":"))
+        XCTAssertTrue(contentSource.contains("isInspectorPresented.toggle()"))
+
+        XCTAssertTrue(shellSource.contains("@Binding var isInspectorPresented: Bool"))
+        XCTAssertTrue(shellSource.contains(".inspector(isPresented: $isInspectorPresented)"))
+        XCTAssertTrue(shellSource.contains(".inspectorColumnWidth("))
+        XCTAssertFalse(shellSource.contains("HSplitView"))
     }
 
     func testWindowToolbarBackgroundIsTransparentWithoutHidingControls() throws {
@@ -83,5 +120,12 @@ final class WindowChromeSourceTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("Momento/Features/Sidebar/MomentoSidebarView.swift")
+    }
+
+    private func windowTransparencyURL() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Momento/AppKitBridge/WindowTransparencyConfigurator.swift")
     }
 }

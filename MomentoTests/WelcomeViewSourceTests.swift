@@ -12,6 +12,13 @@ final class WelcomeViewSourceTests: XCTestCase {
         XCTAssertFalse(source.contains("No library selected"))
     }
 
+    func testMainSidebarDoesNotListAllAssetsEntry() throws {
+        let source = try String(contentsOf: contentViewURL(), encoding: .utf8)
+
+        XCTAssertFalse(source.contains("id: \"all-assets\""))
+        XCTAssertFalse(source.contains("id: \"recent\""))
+    }
+
     func testWelcomeButtonsUseNativeGlassEffects() throws {
         let source = try String(contentsOf: welcomeViewURL(), encoding: .utf8)
 
@@ -122,5 +129,12 @@ final class WelcomeViewSourceTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("Momento/Features/Library/MomentoLibraryWelcomeView.swift")
+    }
+
+    private func contentViewURL() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Momento/ContentView.swift")
     }
 }

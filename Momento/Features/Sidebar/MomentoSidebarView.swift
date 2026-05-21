@@ -82,7 +82,7 @@ struct MomentoSidebarView: View {
         VStack(spacing: 0) {
             libraryMenu
             .padding(.horizontal, 14)
-            .padding(.top, 14)
+            .padding(.top, MomentoTheme.floatingSidebarTitlebarContentInset)
             .padding(.bottom, 10)
 
             ScrollView {
@@ -114,9 +114,16 @@ struct MomentoSidebarView: View {
             maxWidth: MomentoTheme.sidebarMaxWidth
         )
         .background {
-            MomentoGlassBackground(cornerRadius: 0)
-                .ignoresSafeArea()
+            MomentoGlassBackground(cornerRadius: MomentoTheme.floatingSidebarRadius)
         }
+        .clipShape(sidebarShape)
+        .overlay {
+            sidebarShape.strokeBorder(MomentoTheme.subtleStroke.opacity(0.42), lineWidth: 1)
+        }
+    }
+
+    private var sidebarShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: MomentoTheme.floatingSidebarRadius, style: .continuous)
     }
 
     private func sectionView(_ section: MomentoSidebarSection) -> some View {
@@ -284,11 +291,10 @@ extension Array where Element == MomentoSidebarSection {
     static func momentoDefaultSections(localization: AppLocalization) -> [MomentoSidebarSection] {
         [
             MomentoSidebarSection(
-                id: "library",
-                title: localization.string("Library"),
+                id: "favorites",
+                title: localization.string("Favorites"),
                 items: [
-                    MomentoSidebarItem(id: "all-assets", title: localization.string("All Assets"), systemImage: "photo.on.rectangle.angled", count: 0),
-                    MomentoSidebarItem(id: "recent", title: localization.string("Recent"), systemImage: "clock", count: 0)
+                    MomentoSidebarItem(id: "favorites", title: localization.string("Starred Assets"), systemImage: "star", count: 0, tint: .yellow)
                 ],
                 isCollapsible: false
             ),
@@ -307,14 +313,6 @@ extension Array where Element == MomentoSidebarSection {
                     MomentoSidebarItem(id: "tag-ui", title: "UI", systemImage: "tag", count: 0, tint: .blue),
                     MomentoSidebarItem(id: "tag-brand", title: "Brand", systemImage: "tag", count: 0, tint: .purple)
                 ]
-            ),
-            MomentoSidebarSection(
-                id: "favorites",
-                title: localization.string("Favorites"),
-                items: [
-                    MomentoSidebarItem(id: "favorites", title: localization.string("Starred Assets"), systemImage: "star", count: 0, tint: .yellow)
-                ],
-                isCollapsible: false
             ),
             MomentoSidebarSection(
                 id: "trash",

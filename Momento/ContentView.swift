@@ -9,6 +9,7 @@ struct ContentView: View {
 
     @State private var isImporterPresented = false
     @State private var isCommandPalettePresented = false
+    @State private var isInspectorPresented = true
     @State private var inspectorNotesByAssetID: [AssetItem.ID: String] = [:]
     @State private var importError: String?
 
@@ -110,6 +111,7 @@ struct ContentView: View {
             sidebarSelection: sidebarSelection,
             searchQuery: $store.searchQuery,
             isCommandPalettePresented: $isCommandPalettePresented,
+            isInspectorPresented: $isInspectorPresented,
             sidebarSections: sidebarSections,
             libraryName: store.currentLibrary?.name,
             recentLibraries: store.recentLibraries,
@@ -138,27 +140,8 @@ struct ContentView: View {
                     emptyGridState
                 }
             }
-            .background {
-                MomentoGlassBackground(cornerRadius: 0)
-            }
         }
         .toolbar {
-            ToolbarItemGroup(placement: .navigation) {
-                Button {
-                    isImporterPresented = true
-                } label: {
-                    Label(localization.string("Import Assets"), systemImage: "square.and.arrow.down")
-                }
-                .help(localization.string("Import Assets"))
-            }
-
-            ToolbarItem(placement: .principal) {
-                MomentoToolbarTitle(
-                    title: title,
-                    subtitle: localization.itemCount(store.visibleAssets.count)
-                )
-            }
-
             ToolbarItemGroup(placement: .primaryAction) {
                 Picker(localization.string("View"), selection: viewModeSelection) {
                     ForEach(AssetViewMode.allCases) { viewMode in
@@ -168,6 +151,12 @@ struct ContentView: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
+
+                Toggle(isOn: $isInspectorPresented) {
+                    Label(localization.string("Toggle Inspector"), systemImage: "sidebar.right")
+                }
+                .toggleStyle(.button)
+                .help(localization.string("Toggle Inspector"))
 
                 Button {
                     withAnimation(.smooth(duration: 0.18)) {
@@ -180,7 +169,7 @@ struct ContentView: View {
             }
         }
         .searchable(text: $store.searchQuery, placement: .toolbar, prompt: Text(localization.string("Search assets, tags, colors...")))
-        .navigationTitle(title)
+        .navigationTitle("")
     }
 
     private var defaultViewMode: AssetViewMode {
@@ -194,7 +183,7 @@ struct ContentView: View {
     private var title: String {
         switch store.sidebarSelection {
         case .library:
-            localization.string("All Assets")
+            store.currentLibrary?.name ?? localization.string("Library")
         case .favorites:
             localization.string("Favorites")
         case .tag(let tagID):
@@ -207,21 +196,9 @@ struct ContentView: View {
     private var sidebarSections: [MomentoSidebarSection] {
         [
             MomentoSidebarSection(
-                id: "library",
-                title: localization.string("Library"),
+                id: "favorites",
+                title: localization.string("Favorites"),
                 items: [
-                    MomentoSidebarItem(
-                        id: "all-assets",
-                        title: store.currentLibrary?.name ?? localization.string("Library"),
-                        systemImage: "photo.on.rectangle.angled",
-                        count: store.assets.count
-                    ),
-                    MomentoSidebarItem(
-                        id: "recent",
-                        title: localization.string("Recent"),
-                        systemImage: "clock",
-                        count: store.assets.count
-                    ),
                     MomentoSidebarItem(
                         id: "favorites",
                         title: localization.string("Favorites"),
@@ -270,6 +247,7 @@ struct ContentView: View {
             MomentoCommand(id: "view-masonry", title: localization.string("Masonry View"), subtitle: localization.string("Show adaptive visual grid"), systemImage: "rectangle.grid.2x2", shortcut: "1"),
             MomentoCommand(id: "view-grid", title: localization.string("Grid View"), subtitle: localization.string("Show uniform thumbnails"), systemImage: "square.grid.3x3", shortcut: "2"),
             MomentoCommand(id: "view-list", title: localization.string("List View"), subtitle: localization.string("Show compact rows"), systemImage: "list.bullet", shortcut: "3"),
+            MomentoCommand(id: "toggle-inspector", title: localization.string("Toggle Inspector"), subtitle: localization.string("Show or hide asset details"), systemImage: "sidebar.right", shortcut: "⌥⌘I"),
             MomentoCommand(id: "quick-preview", title: localization.string("Quick Preview"), subtitle: localization.string("Preview the selected asset"), systemImage: "eye", shortcut: "Space")
         ]
     }
@@ -357,6 +335,10 @@ struct ContentView: View {
             if let selectedAsset = store.selectedAsset {
                 preview(selectedAsset)
             }
+        case "toggle-inspector":
+            withAnimation(.smooth(duration: 0.18)) {
+                isInspectorPresented.toggle()
+            }
         default:
             break
         }
@@ -439,25 +421,6 @@ struct ContentView: View {
         withAnimation(.smooth(duration: 0.16)) {
             importError = localization.errorMessage(error)
         }
-    }
-}
-
-private struct MomentoToolbarTitle: View {
-    var title: String
-    var subtitle: String
-
-    var body: some View {
-        VStack(spacing: 1) {
-            Text(title)
-                .font(.system(size: 13, weight: .semibold))
-                .lineLimit(1)
-
-            Text(subtitle)
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
-        .frame(minWidth: 130)
     }
 }
 
