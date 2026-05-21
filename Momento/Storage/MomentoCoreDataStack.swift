@@ -9,6 +9,8 @@ nonisolated final class MomentoCoreDataStack {
 
         let storeDescription = NSPersistentStoreDescription(url: storage.databaseURL(for: library))
         storeDescription.type = NSSQLiteStoreType
+        storeDescription.shouldMigrateStoreAutomatically = true
+        storeDescription.shouldInferMappingModelAutomatically = true
         container.persistentStoreDescriptions = [storeDescription]
 
         var loadError: Error?

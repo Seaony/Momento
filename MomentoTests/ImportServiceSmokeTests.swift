@@ -16,9 +16,6 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: environment.packageURL.appendingPathComponent("database").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: environment.packageURL.appendingPathComponent("assets").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: environment.packageURL.appendingPathComponent("thumbnails").path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: environment.packageURL.appendingPathComponent("thumbnails/small").path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: environment.packageURL.appendingPathComponent("thumbnails/medium").path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: environment.packageURL.appendingPathComponent("thumbnails/large").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: environment.packageURL.appendingPathComponent("previews").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: environment.packageURL.appendingPathComponent("metadata/import-sessions").path))
 
@@ -101,6 +98,9 @@ final class LibraryPackagePersistenceTests: XCTestCase {
 
         XCTAssertEqual(store.assets.count, 1)
         XCTAssertEqual(store.assets.first?.dimensions, AssetDimensions(width: 1, height: 1))
+        XCTAssertNotNil(store.assets.first?.thumbnailURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(store.assets.first?.thumbnailURL).path))
+        XCTAssertLessThanOrEqual(store.assets.first?.paletteColors.count ?? 0, 8)
         XCTAssertEqual(try environment.storedAssetFiles().count, 1)
     }
 
@@ -130,6 +130,7 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         XCTAssertEqual(reopened.assets.count, 1)
         XCTAssertNil(reopened.assets.first?.originalURL)
         XCTAssertEqual(reopened.assets.first?.dimensions, AssetDimensions(width: 1, height: 1))
+        XCTAssertNotNil(reopened.assets.first?.thumbnailURL)
         XCTAssertTrue(FileManager.default.fileExists(atPath: reopened.assets[0].storageURL.path))
     }
 
@@ -174,6 +175,7 @@ final class LibraryPackagePersistenceTests: XCTestCase {
             contentHash: "tagged",
             dimensions: nil,
             tags: [TagItem(name: "Reference")],
+            folderIDs: ["folder"],
             isFavorite: true,
             importedAt: Date(timeIntervalSince1970: 0)
         )
@@ -204,7 +206,11 @@ final class LibraryPackagePersistenceTests: XCTestCase {
 
         store.selectSidebarItem(id: "uncategorized")
         XCTAssertEqual(store.sidebarItemID(), "uncategorized")
-        XCTAssertEqual(store.visibleAssets.map(\.id), ["tagged", "untagged"])
+        XCTAssertEqual(store.visibleAssets.map(\.id), ["untagged"])
+
+        store.selectSidebarItem(id: "folder-folder")
+        XCTAssertEqual(store.sidebarItemID(), "folder-folder")
+        XCTAssertEqual(store.visibleAssets.map(\.id), ["tagged"])
 
         store.selectSidebarItem(id: "tag-management")
         XCTAssertEqual(store.sidebarItemID(), "tag-management")
@@ -332,7 +338,7 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         try store.createLibrary(at: environment.packageURL)
 
         let thumbnailURL = environment.packageURL
-            .appendingPathComponent("thumbnails/small", isDirectory: true)
+            .appendingPathComponent("thumbnails", isDirectory: true)
             .appendingPathComponent("cached-thumb.dat")
         let previewURL = environment.packageURL
             .appendingPathComponent("previews", isDirectory: true)
@@ -345,8 +351,41 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         XCTAssertEqual(store.currentLibrary?.name, "Test")
         XCTAssertFalse(FileManager.default.fileExists(atPath: thumbnailURL.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: previewURL.path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: environment.packageURL.appendingPathComponent("thumbnails/small").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: environment.packageURL.appendingPathComponent("thumbnails").path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: environment.packageURL.appendingPathComponent("previews").path))
+    }
+
+    @MainActor
+    func testFoldersPersistNestedHierarchyAndDeleteDescendants() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        try store.createFolder(name: "Jobs")
+        let rootID = try XCTUnwrap(store.folders.first?.id)
+        try store.createFolder(name: "Mantis", parentID: rootID)
+
+        XCTAssertEqual(store.folders.map(\.name), ["Jobs", "Mantis"])
+        XCTAssertEqual(store.folders.first { $0.name == "Mantis" }?.parentID, rootID)
+
+        let reopened = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try reopened.openLibrary(at: environment.packageURL)
+        XCTAssertEqual(reopened.folders.map(\.name), ["Jobs", "Mantis"])
+        XCTAssertEqual(reopened.folders.first { $0.name == "Mantis" }?.parentID, rootID)
+
+        try reopened.deleteFolder(id: rootID)
+        XCTAssertTrue(reopened.folders.isEmpty)
+        XCTAssertEqual(reopened.sidebarItemID(), "all-assets")
     }
 
     @MainActor

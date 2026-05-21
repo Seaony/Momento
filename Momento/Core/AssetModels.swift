@@ -38,6 +38,59 @@ nonisolated struct AssetDimensions: Hashable, Codable, Sendable {
     var height: Int
 }
 
+nonisolated struct AssetFolder: Identifiable, Hashable, Codable, Sendable {
+    var id: String
+    var libraryID: String
+    var name: String
+    var parentID: String?
+    var sortIndex: Int
+    var createdAt: Date
+    var updatedAt: Date
+
+    init(
+        id: String = UUID().uuidString,
+        libraryID: String,
+        name: String,
+        parentID: String? = nil,
+        sortIndex: Int,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
+        self.id = id
+        self.libraryID = libraryID
+        self.name = name
+        self.parentID = parentID
+        self.sortIndex = sortIndex
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+nonisolated struct AssetColor: Identifiable, Hashable, Codable, Sendable {
+    var id: String
+    var libraryID: String
+    var assetID: String
+    var hex: String
+    var coverage: Double
+    var sortIndex: Int
+
+    init(
+        id: String = UUID().uuidString,
+        libraryID: String,
+        assetID: String,
+        hex: String,
+        coverage: Double,
+        sortIndex: Int
+    ) {
+        self.id = id
+        self.libraryID = libraryID
+        self.assetID = assetID
+        self.hex = hex
+        self.coverage = coverage
+        self.sortIndex = sortIndex
+    }
+}
+
 nonisolated enum AssetKind: String, CaseIterable, Hashable, Codable, Sendable {
     case image
     case gif
@@ -58,8 +111,47 @@ nonisolated struct AssetItem: Identifiable, Hashable, Codable, Sendable {
     var contentHash: String
     var dimensions: AssetDimensions?
     var tags: [TagItem]
+    var folderIDs: [String]
+    var paletteColors: [AssetColor]
+    var thumbnailURL: URL?
     var isFavorite: Bool
     var importedAt: Date
+
+    init(
+        id: String,
+        libraryID: String,
+        displayName: String,
+        originalURL: URL?,
+        storageURL: URL,
+        kind: AssetKind,
+        fileExtension: String,
+        byteSize: Int64,
+        contentHash: String,
+        dimensions: AssetDimensions?,
+        tags: [TagItem],
+        folderIDs: [String] = [],
+        paletteColors: [AssetColor] = [],
+        thumbnailURL: URL? = nil,
+        isFavorite: Bool,
+        importedAt: Date
+    ) {
+        self.id = id
+        self.libraryID = libraryID
+        self.displayName = displayName
+        self.originalURL = originalURL
+        self.storageURL = storageURL
+        self.kind = kind
+        self.fileExtension = fileExtension
+        self.byteSize = byteSize
+        self.contentHash = contentHash
+        self.dimensions = dimensions
+        self.tags = tags
+        self.folderIDs = folderIDs
+        self.paletteColors = paletteColors
+        self.thumbnailURL = thumbnailURL
+        self.isFavorite = isFavorite
+        self.importedAt = importedAt
+    }
 }
 
 nonisolated enum AssetViewMode: String, CaseIterable, Identifiable, Hashable, Codable, Sendable {
@@ -77,6 +169,7 @@ nonisolated enum SidebarSelection: Hashable, Codable, Sendable {
     case untagged
     case tagManagement
     case folderManagement
+    case folder(String)
     case tag(String)
     case trash
 }

@@ -5,9 +5,14 @@ import UniformTypeIdentifiers
 
 struct AssetImportService: Sendable {
     private let storage: LibraryStorage
+    private let thumbnailService: AssetThumbnailService
+    private let colorAnalysisService: AssetColorAnalysisService
 
     init(applicationSupportRoot: URL? = nil) {
-        self.storage = LibraryStorage(applicationSupportRoot: applicationSupportRoot)
+        let storage = LibraryStorage(applicationSupportRoot: applicationSupportRoot)
+        self.storage = storage
+        self.thumbnailService = AssetThumbnailService(storage: storage)
+        self.colorAnalysisService = AssetColorAnalysisService()
     }
 
     nonisolated func importItems(from urls: [URL], into library: AssetLibrary) async throws -> [AssetItem] {
@@ -61,6 +66,19 @@ struct AssetImportService: Sendable {
                     try FileManager.default.copyItem(at: fileURL, to: destination)
                 }
 
+                let thumbnailURL = try? thumbnailService.generateThumbnail(
+                    for: destination,
+                    contentHash: hash,
+                    in: library
+                )
+                let paletteSourceURL = thumbnailURL ?? destination
+                let paletteColors = colorAnalysisService.paletteColors(
+                    for: paletteSourceURL,
+                    libraryID: library.id,
+                    assetID: hash,
+                    maxColorCount: 8
+                )
+
                 let values = try fileURL.resourceValues(forKeys: [.fileSizeKey])
                 imported.append(
                     AssetItem(
@@ -75,6 +93,8 @@ struct AssetImportService: Sendable {
                         contentHash: hash,
                         dimensions: imageDimensions(for: fileURL),
                         tags: [],
+                        paletteColors: paletteColors,
+                        thumbnailURL: thumbnailURL,
                         isFavorite: false,
                         importedAt: Date()
                     )
@@ -142,28 +162,16 @@ nonisolated private func assetKind(for url: URL) -> AssetKind? {
         return .gif
     }
 
-    if fileExtension == "svg" {
-        return .svg
-    }
-
-    if fileExtension == "pdf" {
-        return .pdf
+    if fileExtension == "svg" || fileExtension == "svgz" {
+        return nil
     }
 
     guard let type = UTType(filenameExtension: fileExtension) else {
         return nil
     }
 
-    if type.conforms(to: .movie) {
-        return .video
-    }
-
     if type.conforms(to: .image) {
         return .image
-    }
-
-    if type.conforms(to: .pdf) {
-        return .pdf
     }
 
     return nil

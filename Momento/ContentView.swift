@@ -126,6 +126,7 @@ struct ContentView: View {
             libraryName: store.currentLibrary?.name,
             currentLibraryID: store.currentLibrary?.id,
             recentLibraries: store.recentLibraries,
+            folders: store.folders,
             onCreateLibrary: createLibrary,
             onOpenLibrary: openLibrary,
             onSwitchLibrary: switchLibrary,
@@ -134,6 +135,8 @@ struct ContentView: View {
             onMoveLibrary: moveLibrary,
             onReloadLibrary: reloadLibrary,
             onCloseLibrary: closeLibrary,
+            onCreateFolder: createFolder,
+            onDeleteFolder: deleteFolder,
             title: title,
             subtitle: localization.itemCount(store.visibleAssets.count),
             showsChromeControls: !isLibraryDialogVisible,
@@ -272,6 +275,8 @@ struct ContentView: View {
             localization.string("Tag Management")
         case .folderManagement:
             localization.string("Folder Management")
+        case .folder(let folderID):
+            store.folder(id: folderID)?.name ?? localization.string("Folder")
         case .tag(let tagID):
             store.tags.first { $0.id == tagID }?.name ?? localization.string("Tag")
         case .trash:
@@ -299,7 +304,7 @@ struct ContentView: View {
             Text(localization.string("Drop assets here"))
                 .font(.system(size: 15, weight: .semibold))
 
-            Text(localization.string("Import images, GIFs, SVG, videos, PDF files, or folders to start building this library."))
+            Text(localization.string("Import images or GIFs to start building this library."))
                 .font(.system(size: 12))
                 .foregroundStyle(MomentoTheme.secondaryText)
                 .multilineTextAlignment(.center)
@@ -491,6 +496,22 @@ struct ContentView: View {
         }
     }
 
+    private func createFolder(parentID: AssetFolder.ID?) {
+        do {
+            try store.createFolder(parentID: parentID)
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func deleteFolder(_ id: AssetFolder.ID) {
+        do {
+            try store.deleteFolder(id: id)
+        } catch {
+            showImportError(error)
+        }
+    }
+
     private func closeLibrary() {
         withAnimation(.smooth(duration: 0.18)) {
             importError = nil
@@ -538,21 +559,30 @@ struct ContentView: View {
 
 private extension MomentoInspectorAsset {
     init(asset: AssetItem, localization: AppLocalization) {
-        let previewURL: URL?
+        let fileURL: URL?
         if FileManager.default.fileExists(atPath: asset.storageURL.path) {
-            previewURL = asset.storageURL
+            fileURL = asset.storageURL
         } else {
-            previewURL = asset.originalURL
+            fileURL = asset.originalURL
+        }
+
+        let previewURL: URL?
+        if let thumbnailURL = asset.thumbnailURL, FileManager.default.fileExists(atPath: thumbnailURL.path) {
+            previewURL = thumbnailURL
+        } else {
+            previewURL = fileURL
         }
 
         self.init(
             id: asset.id,
             title: asset.displayName,
-            fileName: previewURL?.lastPathComponent ?? asset.displayName,
+            fileName: fileURL?.lastPathComponent ?? asset.displayName,
             previewImage: previewURL.flatMap { asset.kind == .image || asset.kind == .gif ? NSImage(contentsOf: $0) : nil },
             dimensions: asset.dimensions.map { "\($0.width) × \($0.height)" },
-            colorHexes: asset.tags.compactMap(\.colorHex),
-            filePath: previewURL?.path,
+            colors: asset.paletteColors.map { color in
+                MomentoInspectorColor(hex: color.hex, coverage: color.coverage)
+            },
+            filePath: fileURL?.path,
             fileSize: localization.fileSize(asset.byteSize),
             addedDate: asset.importedAt,
             kind: localization.kindTitle(for: asset.kind)

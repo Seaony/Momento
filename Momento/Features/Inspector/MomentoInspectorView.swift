@@ -1,13 +1,32 @@
 import SwiftUI
 import AppKit
 
+struct MomentoInspectorColor: Identifiable, Hashable {
+    var hex: String
+    var coverage: Double?
+
+    var id: String {
+        if let coverage {
+            return "\(hex)-\(coverage)"
+        }
+        return hex
+    }
+
+    var helpText: String {
+        guard let coverage else {
+            return hex
+        }
+        return "\(hex) (\((coverage * 100).formatted(.number.precision(.fractionLength(1))))%)"
+    }
+}
+
 struct MomentoInspectorAsset: Identifiable, Hashable {
     var id: String
     var title: String
     var fileName: String
     var previewImage: NSImage?
     var dimensions: String?
-    var colorHexes: [String]
+    var colors: [MomentoInspectorColor]
     var filePath: String?
     var fileSize: String?
     var addedDate: Date?
@@ -20,6 +39,7 @@ struct MomentoInspectorAsset: Identifiable, Hashable {
         previewImage: NSImage? = nil,
         dimensions: String? = nil,
         colorHexes: [String] = [],
+        colors: [MomentoInspectorColor]? = nil,
         filePath: String? = nil,
         fileSize: String? = nil,
         addedDate: Date? = nil,
@@ -30,7 +50,7 @@ struct MomentoInspectorAsset: Identifiable, Hashable {
         self.fileName = fileName
         self.previewImage = previewImage
         self.dimensions = dimensions
-        self.colorHexes = colorHexes
+        self.colors = colors ?? colorHexes.map { MomentoInspectorColor(hex: $0, coverage: nil) }
         self.filePath = filePath
         self.fileSize = fileSize
         self.addedDate = addedDate
@@ -80,7 +100,7 @@ struct MomentoInspectorView: View {
                         preview(asset)
                         metadata(asset)
                         tagEditor
-                        colorSection(asset.colorHexes)
+                        colorSection(asset.colors)
                         notesEditor
                         fileSection(asset)
                     }
@@ -202,7 +222,7 @@ struct MomentoInspectorView: View {
         }
     }
 
-    private func colorSection(_ colors: [String]) -> some View {
+    private func colorSection(_ colors: [MomentoInspectorColor]) -> some View {
         inspectorSection(localization.string("Colors")) {
             if colors.isEmpty {
                 Text(localization.string("No colors extracted"))
@@ -210,15 +230,15 @@ struct MomentoInspectorView: View {
                     .foregroundStyle(MomentoTheme.secondaryText)
             } else {
                 HStack(spacing: 7) {
-                    ForEach(colors, id: \.self) { hex in
+                    ForEach(colors) { color in
                         Circle()
-                            .fill(Color(hex: hex) ?? .clear)
+                            .fill(Color(hex: color.hex) ?? .clear)
                             .frame(width: 22, height: 22)
                             .overlay {
                                 Circle()
                                     .strokeBorder(MomentoTheme.subtleStroke, lineWidth: 1)
                             }
-                            .help(hex)
+                            .help(color.helpText)
                     }
                     Spacer()
                 }

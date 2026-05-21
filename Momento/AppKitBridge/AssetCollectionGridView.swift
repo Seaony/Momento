@@ -341,7 +341,8 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
     private func previewImage(for asset: AssetItem) -> NSImage {
         if asset.kind == .image || asset.kind == .gif {
-            if let image = NSImage(contentsOf: asset.storageURL) ?? asset.originalURL.flatMap(NSImage.init(contentsOf:)) {
+            if let thumbnailURL = asset.thumbnailURL,
+               let image = NSImage(contentsOf: thumbnailURL) {
                 return image
             }
         }

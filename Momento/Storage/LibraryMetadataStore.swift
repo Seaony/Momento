@@ -22,7 +22,35 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
             request.predicate = NSPredicate(format: "libraryID == %@", library.id)
             request.sortDescriptors = [NSSortDescriptor(key: "importedAt", ascending: true)]
             request.fetchBatchSize = 200
-            return try context.fetch(request).compactMap(asset(from:))
+
+            let records = try context.fetch(request)
+            let assetIDs = records.compactMap { $0.value(forKey: "id") as? String }
+            let folderIDsByAssetID = try folderIDsByAssetID(for: Set(assetIDs))
+            let colorsByAssetID = try colorsByAssetID(for: Set(assetIDs))
+
+            return records.compactMap { record in
+                guard let id = record.value(forKey: "id") as? String else {
+                    return nil
+                }
+                return asset(
+                    from: record,
+                    folderIDs: folderIDsByAssetID[id, default: []],
+                    paletteColors: colorsByAssetID[id, default: []]
+                )
+            }
+        }
+    }
+
+    func loadFolders() throws -> [AssetFolder] {
+        try context.performAndWait {
+            let request = NSFetchRequest<NSManagedObject>(entityName: "FolderRecord")
+            request.predicate = NSPredicate(format: "libraryID == %@", library.id)
+            request.sortDescriptors = [
+                NSSortDescriptor(key: "sortIndex", ascending: true),
+                NSSortDescriptor(key: "createdAt", ascending: true),
+                NSSortDescriptor(key: "id", ascending: true)
+            ]
+            return try context.fetch(request).compactMap(folder(from:))
         }
     }
 
@@ -46,7 +74,7 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
                     continue
                 }
 
-                let record = NSManagedObject(entity: entity(), insertInto: context)
+                let record = NSManagedObject(entity: entity(named: "AssetRecord"), insertInto: context)
                 record.setValue(asset.id, forKey: "id")
                 record.setValue(asset.libraryID, forKey: "libraryID")
                 record.setValue(asset.displayName, forKey: "displayName")
@@ -61,6 +89,7 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
                 record.setValue(asset.dimensions?.height, forKey: "pixelHeight")
                 record.setValue(asset.isFavorite, forKey: "isFavorite")
                 record.setValue(asset.importedAt, forKey: "importedAt")
+                saveColors(asset.paletteColors, forAssetID: asset.id)
                 savedAssets.append(asset)
             }
 
@@ -72,6 +101,130 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         }
     }
 
+    func createFolder(name: String, parentID: AssetFolder.ID?) throws -> AssetFolder {
+        try context.performAndWait {
+            let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedName.isEmpty else {
+                throw LibraryMetadataError.invalidFolderName
+            }
+
+            if let parentID, try folderRecord(id: parentID) == nil {
+                throw LibraryMetadataError.missingFolder
+            }
+
+            let now = Date()
+            let folder = AssetFolder(
+                libraryID: library.id,
+                name: trimmedName,
+                parentID: parentID,
+                sortIndex: try nextFolderSortIndex(parentID: parentID),
+                createdAt: now,
+                updatedAt: now
+            )
+
+            let record = NSManagedObject(entity: entity(named: "FolderRecord"), insertInto: context)
+            record.setValue(folder.id, forKey: "id")
+            record.setValue(folder.libraryID, forKey: "libraryID")
+            record.setValue(folder.name, forKey: "name")
+            record.setValue(folder.parentID, forKey: "parentID")
+            record.setValue(folder.sortIndex, forKey: "sortIndex")
+            record.setValue(folder.createdAt, forKey: "createdAt")
+            record.setValue(folder.updatedAt, forKey: "updatedAt")
+
+            try context.save()
+            return folder
+        }
+    }
+
+    func deleteFolder(id: AssetFolder.ID) throws -> [AssetFolder.ID] {
+        try context.performAndWait {
+            guard try folderRecord(id: id) != nil else {
+                throw LibraryMetadataError.missingFolder
+            }
+
+            let deletedIDs = try descendantFolderIDs(startingAt: id)
+            for record in try folderRecords(ids: deletedIDs) {
+                context.delete(record)
+            }
+            for record in try membershipRecords(folderIDs: deletedIDs) {
+                context.delete(record)
+            }
+
+            if context.hasChanges {
+                try context.save()
+            }
+            return Array(deletedIDs)
+        }
+    }
+
+    func assignAssets(ids: Set<AssetItem.ID>, to folderID: AssetFolder.ID) throws -> [AssetItem] {
+        try context.performAndWait {
+            guard try folderRecord(id: folderID) != nil else {
+                throw LibraryMetadataError.missingFolder
+            }
+
+            let validAssetIDs = try existingAssetIDs(in: ids)
+            let existing = try existingMembershipAssetIDs(folderID: folderID, assetIDs: validAssetIDs)
+            let now = Date()
+
+            for assetID in validAssetIDs.subtracting(existing) {
+                let record = NSManagedObject(entity: entity(named: "AssetFolderMembershipRecord"), insertInto: context)
+                record.setValue("\(assetID)-\(folderID)", forKey: "id")
+                record.setValue(library.id, forKey: "libraryID")
+                record.setValue(assetID, forKey: "assetID")
+                record.setValue(folderID, forKey: "folderID")
+                record.setValue(now, forKey: "createdAt")
+            }
+
+            if context.hasChanges {
+                try context.save()
+            }
+            return try assets(ids: validAssetIDs)
+        }
+    }
+
+    func unassignAssets(ids: Set<AssetItem.ID>, from folderID: AssetFolder.ID) throws -> [AssetItem] {
+        try context.performAndWait {
+            guard try folderRecord(id: folderID) != nil else {
+                throw LibraryMetadataError.missingFolder
+            }
+
+            let validAssetIDs = try existingAssetIDs(in: ids)
+            for record in try membershipRecords(folderID: folderID, assetIDs: validAssetIDs) {
+                context.delete(record)
+            }
+
+            if context.hasChanges {
+                try context.save()
+            }
+            return try assets(ids: validAssetIDs)
+        }
+    }
+
+    private func assets(ids: Set<AssetItem.ID>) throws -> [AssetItem] {
+        guard !ids.isEmpty else {
+            return []
+        }
+
+        let request = NSFetchRequest<NSManagedObject>(entityName: "AssetRecord")
+        request.predicate = NSPredicate(format: "libraryID == %@ AND id IN %@", library.id, Array(ids))
+        request.sortDescriptors = [NSSortDescriptor(key: "importedAt", ascending: true)]
+        let records = try context.fetch(request)
+        let folderIDsByAssetID = try folderIDsByAssetID(for: ids)
+        let colorsByAssetID = try colorsByAssetID(for: ids)
+
+        return records.compactMap { record in
+            guard let id = record.value(forKey: "id") as? String else {
+                return nil
+            }
+            return asset(
+                from: record,
+                folderIDs: folderIDsByAssetID[id, default: []],
+                paletteColors: colorsByAssetID[id, default: []]
+            )
+        }
+    }
+
     private func assetRecord(withContentHash contentHash: String) throws -> AssetItem? {
         let request = NSFetchRequest<NSManagedObject>(entityName: "AssetRecord")
         request.fetchLimit = 1
@@ -80,10 +233,24 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
             library.id,
             contentHash
         )
-        return try context.fetch(request).first.flatMap(asset(from:))
+
+        guard let record = try context.fetch(request).first,
+              let id = record.value(forKey: "id") as? String else {
+            return nil
+        }
+
+        return asset(
+            from: record,
+            folderIDs: try folderIDsByAssetID(for: [id])[id, default: []],
+            paletteColors: try colorsByAssetID(for: [id])[id, default: []]
+        )
     }
 
-    private func asset(from record: NSManagedObject) -> AssetItem? {
+    private func asset(
+        from record: NSManagedObject,
+        folderIDs: [String],
+        paletteColors: [AssetColor]
+    ) -> AssetItem? {
         guard let id = record.value(forKey: "id") as? String,
               let libraryID = record.value(forKey: "libraryID") as? String,
               let displayName = record.value(forKey: "displayName") as? String,
@@ -96,14 +263,17 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
             return nil
         }
 
-        let width = record.value(forKey: "pixelWidth") as? Int
-        let height = record.value(forKey: "pixelHeight") as? Int
+        let width = intValue(record.value(forKey: "pixelWidth"))
+        let height = intValue(record.value(forKey: "pixelHeight"))
         let dimensions: AssetDimensions?
         if let width, let height {
             dimensions = AssetDimensions(width: width, height: height)
         } else {
             dimensions = nil
         }
+
+        let thumbnailURL = storage.thumbnailURL(forContentHash: contentHash, in: library)
+        let resolvedThumbnailURL = FileManager.default.fileExists(atPath: thumbnailURL.path) ? thumbnailURL : nil
 
         return AssetItem(
             id: id,
@@ -113,16 +283,273 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
             storageURL: storage.resolveAssetURL(relativePath: storageRelativePath, in: library),
             kind: kind,
             fileExtension: fileExtension,
-            byteSize: record.value(forKey: "byteSize") as? Int64 ?? 0,
+            byteSize: int64Value(record.value(forKey: "byteSize")) ?? 0,
             contentHash: contentHash,
             dimensions: dimensions,
             tags: [],
+            folderIDs: folderIDs,
+            paletteColors: paletteColors,
+            thumbnailURL: resolvedThumbnailURL,
             isFavorite: record.value(forKey: "isFavorite") as? Bool ?? false,
             importedAt: importedAt
         )
     }
 
-    private func entity() -> NSEntityDescription {
-        NSEntityDescription.entity(forEntityName: "AssetRecord", in: context)!
+    private func loadMemberships() throws -> [NSManagedObject] {
+        let request = NSFetchRequest<NSManagedObject>(entityName: "AssetFolderMembershipRecord")
+        request.predicate = NSPredicate(format: "libraryID == %@", library.id)
+        request.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: true)]
+        return try context.fetch(request)
+    }
+
+    private func folderIDsByAssetID(for assetIDs: Set<String>) throws -> [String: [String]] {
+        guard !assetIDs.isEmpty else {
+            return [:]
+        }
+
+        let folders = try loadFolders()
+        let sortOrder = Dictionary(uniqueKeysWithValues: folders.enumerated().map { ($0.element.id, $0.offset) })
+        let request = NSFetchRequest<NSManagedObject>(entityName: "AssetFolderMembershipRecord")
+        request.predicate = NSPredicate(format: "libraryID == %@ AND assetID IN %@", library.id, Array(assetIDs))
+        let records = try context.fetch(request)
+
+        var grouped: [String: [String]] = [:]
+        for record in records {
+            guard let assetID = record.value(forKey: "assetID") as? String,
+                  let folderID = record.value(forKey: "folderID") as? String else {
+                continue
+            }
+            grouped[assetID, default: []].append(folderID)
+        }
+
+        return grouped.mapValues { folderIDs in
+            folderIDs.sorted { lhs, rhs in
+                let lhsOrder = sortOrder[lhs] ?? Int.max
+                let rhsOrder = sortOrder[rhs] ?? Int.max
+                if lhsOrder == rhsOrder {
+                    return lhs < rhs
+                }
+                return lhsOrder < rhsOrder
+            }
+        }
+    }
+
+    private func colorsByAssetID(for assetIDs: Set<String>) throws -> [String: [AssetColor]] {
+        guard !assetIDs.isEmpty else {
+            return [:]
+        }
+
+        let request = NSFetchRequest<NSManagedObject>(entityName: "AssetColorRecord")
+        request.predicate = NSPredicate(format: "libraryID == %@ AND assetID IN %@", library.id, Array(assetIDs))
+        request.sortDescriptors = [NSSortDescriptor(key: "sortIndex", ascending: true)]
+
+        var grouped: [String: [AssetColor]] = [:]
+        for record in try context.fetch(request) {
+            guard let color = color(from: record) else {
+                continue
+            }
+            grouped[color.assetID, default: []].append(color)
+        }
+        return grouped
+    }
+
+    private func saveColors(_ colors: [AssetColor], forAssetID assetID: String) {
+        for color in colors {
+            let record = NSManagedObject(entity: entity(named: "AssetColorRecord"), insertInto: context)
+            record.setValue(color.id, forKey: "id")
+            record.setValue(color.libraryID, forKey: "libraryID")
+            record.setValue(assetID, forKey: "assetID")
+            record.setValue(color.hex, forKey: "hex")
+            record.setValue(color.coverage, forKey: "coverage")
+            record.setValue(color.sortIndex, forKey: "sortIndex")
+        }
+    }
+
+    private func color(from record: NSManagedObject) -> AssetColor? {
+        guard let id = record.value(forKey: "id") as? String,
+              let libraryID = record.value(forKey: "libraryID") as? String,
+              let assetID = record.value(forKey: "assetID") as? String,
+              let hex = record.value(forKey: "hex") as? String,
+              let coverage = doubleValue(record.value(forKey: "coverage")),
+              let sortIndex = intValue(record.value(forKey: "sortIndex")) else {
+            return nil
+        }
+
+        return AssetColor(
+            id: id,
+            libraryID: libraryID,
+            assetID: assetID,
+            hex: hex,
+            coverage: coverage,
+            sortIndex: sortIndex
+        )
+    }
+
+    private func folder(from record: NSManagedObject) -> AssetFolder? {
+        guard let id = record.value(forKey: "id") as? String,
+              let libraryID = record.value(forKey: "libraryID") as? String,
+              let name = record.value(forKey: "name") as? String,
+              let sortIndex = intValue(record.value(forKey: "sortIndex")),
+              let createdAt = record.value(forKey: "createdAt") as? Date,
+              let updatedAt = record.value(forKey: "updatedAt") as? Date else {
+            return nil
+        }
+
+        return AssetFolder(
+            id: id,
+            libraryID: libraryID,
+            name: name,
+            parentID: record.value(forKey: "parentID") as? String,
+            sortIndex: sortIndex,
+            createdAt: createdAt,
+            updatedAt: updatedAt
+        )
+    }
+
+    private func nextFolderSortIndex(parentID: String?) throws -> Int {
+        let request = NSFetchRequest<NSManagedObject>(entityName: "FolderRecord")
+        if let parentID {
+            request.predicate = NSPredicate(
+                format: "libraryID == %@ AND parentID == %@",
+                library.id,
+                parentID
+            )
+        } else {
+            request.predicate = NSPredicate(format: "libraryID == %@ AND parentID == nil", library.id)
+        }
+
+        let records = try context.fetch(request)
+        let maxSortIndex = records.compactMap { intValue($0.value(forKey: "sortIndex")) }.max() ?? -1
+        return maxSortIndex + 1
+    }
+
+    private func folderRecord(id: String) throws -> NSManagedObject? {
+        let request = NSFetchRequest<NSManagedObject>(entityName: "FolderRecord")
+        request.fetchLimit = 1
+        request.predicate = NSPredicate(format: "libraryID == %@ AND id == %@", library.id, id)
+        return try context.fetch(request).first
+    }
+
+    private func folderRecords(ids: Set<String>) throws -> [NSManagedObject] {
+        guard !ids.isEmpty else {
+            return []
+        }
+        let request = NSFetchRequest<NSManagedObject>(entityName: "FolderRecord")
+        request.predicate = NSPredicate(format: "libraryID == %@ AND id IN %@", library.id, Array(ids))
+        return try context.fetch(request)
+    }
+
+    private func descendantFolderIDs(startingAt id: String) throws -> Set<String> {
+        let folders = try loadFolders()
+        let childrenByParentID = Dictionary(grouping: folders.compactMap { folder -> (String, String)? in
+            guard let parentID = folder.parentID else {
+                return nil
+            }
+            return (parentID, folder.id)
+        }, by: \.0).mapValues { pairs in pairs.map(\.1) }
+
+        var result: Set<String> = []
+        var pending = [id]
+        while let next = pending.popLast() {
+            guard result.insert(next).inserted else {
+                continue
+            }
+            pending.append(contentsOf: childrenByParentID[next, default: []])
+        }
+        return result
+    }
+
+    private func existingAssetIDs(in ids: Set<AssetItem.ID>) throws -> Set<String> {
+        guard !ids.isEmpty else {
+            return []
+        }
+        let request = NSFetchRequest<NSDictionary>(entityName: "AssetRecord")
+        request.resultType = .dictionaryResultType
+        request.propertiesToFetch = ["id"]
+        request.predicate = NSPredicate(format: "libraryID == %@ AND id IN %@", library.id, Array(ids))
+        return Set(try context.fetch(request).compactMap { $0["id"] as? String })
+    }
+
+    private func existingMembershipAssetIDs(folderID: String, assetIDs: Set<String>) throws -> Set<String> {
+        Set(try membershipRecords(folderID: folderID, assetIDs: assetIDs).compactMap {
+            $0.value(forKey: "assetID") as? String
+        })
+    }
+
+    private func membershipRecords(folderID: String, assetIDs: Set<String>) throws -> [NSManagedObject] {
+        guard !assetIDs.isEmpty else {
+            return []
+        }
+
+        let request = NSFetchRequest<NSManagedObject>(entityName: "AssetFolderMembershipRecord")
+        request.predicate = NSPredicate(
+            format: "libraryID == %@ AND folderID == %@ AND assetID IN %@",
+            library.id,
+            folderID,
+            Array(assetIDs)
+        )
+        return try context.fetch(request)
+    }
+
+    private func membershipRecords(folderIDs: Set<String>) throws -> [NSManagedObject] {
+        guard !folderIDs.isEmpty else {
+            return []
+        }
+
+        let request = NSFetchRequest<NSManagedObject>(entityName: "AssetFolderMembershipRecord")
+        request.predicate = NSPredicate(
+            format: "libraryID == %@ AND folderID IN %@",
+            library.id,
+            Array(folderIDs)
+        )
+        return try context.fetch(request)
+    }
+
+    private func entity(named name: String) -> NSEntityDescription {
+        NSEntityDescription.entity(forEntityName: name, in: context)!
+    }
+
+    private func intValue(_ value: Any?) -> Int? {
+        if let value = value as? Int {
+            return value
+        }
+        if let value = value as? NSNumber {
+            return value.intValue
+        }
+        return nil
+    }
+
+    private func int64Value(_ value: Any?) -> Int64? {
+        if let value = value as? Int64 {
+            return value
+        }
+        if let value = value as? NSNumber {
+            return value.int64Value
+        }
+        return nil
+    }
+
+    private func doubleValue(_ value: Any?) -> Double? {
+        if let value = value as? Double {
+            return value
+        }
+        if let value = value as? NSNumber {
+            return value.doubleValue
+        }
+        return nil
+    }
+}
+
+enum LibraryMetadataError: LocalizedError {
+    case invalidFolderName
+    case missingFolder
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidFolderName:
+            "Enter a folder name."
+        case .missingFolder:
+            "This folder no longer exists."
+        }
     }
 }

@@ -11,6 +11,7 @@ struct MomentoShellView<Content: View>: View {
     var libraryName: String?
     var currentLibraryID: RecentLibraryReference.ID?
     var recentLibraries: [RecentLibraryReference]
+    var folders: [AssetFolder]
     var onCreateLibrary: () -> Void
     var onOpenLibrary: () -> Void
     var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
@@ -19,6 +20,8 @@ struct MomentoShellView<Content: View>: View {
     var onMoveLibrary: (RecentLibraryReference.ID, RecentLibraryReference.ID, Bool) -> Void
     var onReloadLibrary: () -> Void
     var onCloseLibrary: () -> Void
+    var onCreateFolder: (AssetFolder.ID?) -> Void
+    var onDeleteFolder: (AssetFolder.ID) -> Void
     var title: String
     var subtitle: String?
     var showsChromeControls: Bool
@@ -41,6 +44,7 @@ struct MomentoShellView<Content: View>: View {
         libraryName: String? = nil,
         currentLibraryID: RecentLibraryReference.ID? = nil,
         recentLibraries: [RecentLibraryReference] = [],
+        folders: [AssetFolder] = [],
         onCreateLibrary: @escaping () -> Void = {},
         onOpenLibrary: @escaping () -> Void = {},
         onSwitchLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
@@ -49,6 +53,8 @@ struct MomentoShellView<Content: View>: View {
         onMoveLibrary: @escaping (RecentLibraryReference.ID, RecentLibraryReference.ID, Bool) -> Void = { _, _, _ in },
         onReloadLibrary: @escaping () -> Void = {},
         onCloseLibrary: @escaping () -> Void = {},
+        onCreateFolder: @escaping (AssetFolder.ID?) -> Void = { _ in },
+        onDeleteFolder: @escaping (AssetFolder.ID) -> Void = { _ in },
         title: String = "All Assets",
         subtitle: String? = "0 items",
         showsChromeControls: Bool = true,
@@ -66,6 +72,7 @@ struct MomentoShellView<Content: View>: View {
         self.libraryName = libraryName
         self.currentLibraryID = currentLibraryID
         self.recentLibraries = recentLibraries
+        self.folders = folders
         self.onCreateLibrary = onCreateLibrary
         self.onOpenLibrary = onOpenLibrary
         self.onSwitchLibrary = onSwitchLibrary
@@ -74,6 +81,8 @@ struct MomentoShellView<Content: View>: View {
         self.onMoveLibrary = onMoveLibrary
         self.onReloadLibrary = onReloadLibrary
         self.onCloseLibrary = onCloseLibrary
+        self.onCreateFolder = onCreateFolder
+        self.onDeleteFolder = onDeleteFolder
         self.title = title
         self.subtitle = subtitle
         self.showsChromeControls = showsChromeControls
@@ -135,6 +144,7 @@ struct MomentoShellView<Content: View>: View {
             libraryName: libraryName,
             currentLibraryID: currentLibraryID,
             recentLibraries: recentLibraries,
+            folders: folders,
             onCreateLibrary: onCreateLibrary,
             onOpenLibrary: onOpenLibrary,
             onSwitchLibrary: onSwitchLibrary,
@@ -142,7 +152,9 @@ struct MomentoShellView<Content: View>: View {
             onDeleteLibrary: onDeleteLibrary,
             onMoveLibrary: onMoveLibrary,
             onReloadLibrary: onReloadLibrary,
-            onCloseLibrary: onCloseLibrary
+            onCloseLibrary: onCloseLibrary,
+            onCreateFolder: onCreateFolder,
+            onDeleteFolder: onDeleteFolder
         )
         .frame(width: effectiveSidebarWidth)
         .fixedSize(horizontal: true, vertical: false)

@@ -10,6 +10,7 @@ struct MomentoSidebarView: View {
     var libraryName: String?
     var currentLibraryID: RecentLibraryReference.ID?
     var recentLibraries: [RecentLibraryReference]
+    var folders: [AssetFolder]
     var onCreateLibrary: () -> Void
     var onOpenLibrary: () -> Void
     var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
@@ -18,12 +19,16 @@ struct MomentoSidebarView: View {
     var onMoveLibrary: (RecentLibraryReference.ID, RecentLibraryReference.ID, Bool) -> Void
     var onReloadLibrary: () -> Void
     var onCloseLibrary: () -> Void
+    var onCreateFolder: (AssetFolder.ID?) -> Void
+    var onDeleteFolder: (AssetFolder.ID) -> Void
 
     @State private var hoveredFooterActionID: String?
     @State private var hoveredNavigationItemID: String?
     @State private var hoveredFolderControlID: String?
+    @State private var hoveredFolderID: AssetFolder.ID?
     @State private var isFolderSectionHovered = false
     @State private var isFolderSectionExpanded = true
+    @State private var expandedFolderIDs: Set<AssetFolder.ID> = []
     @State private var isLibraryMenuHovered = false
     @State private var isLibrarySwitcherPresented = false
 
@@ -32,6 +37,7 @@ struct MomentoSidebarView: View {
         libraryName: String? = nil,
         currentLibraryID: RecentLibraryReference.ID? = nil,
         recentLibraries: [RecentLibraryReference] = [],
+        folders: [AssetFolder] = [],
         onCreateLibrary: @escaping () -> Void = {},
         onOpenLibrary: @escaping () -> Void = {},
         onSwitchLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
@@ -39,12 +45,15 @@ struct MomentoSidebarView: View {
         onDeleteLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
         onMoveLibrary: @escaping (RecentLibraryReference.ID, RecentLibraryReference.ID, Bool) -> Void = { _, _, _ in },
         onReloadLibrary: @escaping () -> Void = {},
-        onCloseLibrary: @escaping () -> Void = {}
+        onCloseLibrary: @escaping () -> Void = {},
+        onCreateFolder: @escaping (AssetFolder.ID?) -> Void = { _ in },
+        onDeleteFolder: @escaping (AssetFolder.ID) -> Void = { _ in }
     ) {
         self._selection = selection
         self.libraryName = libraryName
         self.currentLibraryID = currentLibraryID
         self.recentLibraries = recentLibraries
+        self.folders = folders
         self.onCreateLibrary = onCreateLibrary
         self.onOpenLibrary = onOpenLibrary
         self.onSwitchLibrary = onSwitchLibrary
@@ -53,6 +62,8 @@ struct MomentoSidebarView: View {
         self.onMoveLibrary = onMoveLibrary
         self.onReloadLibrary = onReloadLibrary
         self.onCloseLibrary = onCloseLibrary
+        self.onCreateFolder = onCreateFolder
+        self.onDeleteFolder = onDeleteFolder
     }
 
     var body: some View {
@@ -76,10 +87,12 @@ struct MomentoSidebarView: View {
                 .padding(.top, MomentoTheme.floatingSidebarTitlebarContentInset)
                 .padding(.bottom, 18)
 
-            sidebarNavigation
-                .padding(.horizontal, 14)
-
-            Spacer(minLength: 0)
+            ScrollView {
+                sidebarNavigation
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 18)
+            }
+            .scrollIndicators(.never)
 
             sidebarBottomSeparator
             bottomActionBar
@@ -282,9 +295,7 @@ struct MomentoSidebarView: View {
                         systemImage: "plus",
                         label: localization.string("New Folder")
                     ) {
-                        withAnimation(.smooth(duration: 0.16)) {
-                            selection = "folder-management"
-                        }
+                        onCreateFolder(nil)
                     }
 
                     folderSectionButton(
@@ -311,10 +322,177 @@ struct MomentoSidebarView: View {
             .onHover(perform: updateFolderSectionHover)
 
             if isFolderSectionExpanded {
-                emptyFolderPlaceholder
+                if visibleFolderRows.isEmpty {
+                    emptyFolderPlaceholder
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                } else {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(visibleFolderRows) { row in
+                            folderRow(row)
+                        }
+                    }
                     .transition(.opacity.combined(with: .move(edge: .top)))
+                }
             }
         }
+    }
+
+    private var visibleFolderRows: [MomentoSidebarFolderRow] {
+        var rows: [MomentoSidebarFolderRow] = []
+        appendVisibleFolders(parentID: nil, depth: 0, to: &rows)
+        return rows
+    }
+
+    private func appendVisibleFolders(
+        parentID: AssetFolder.ID?,
+        depth: Int,
+        to rows: inout [MomentoSidebarFolderRow]
+    ) {
+        for folder in folders.filter({ $0.parentID == parentID }).sorted(by: folderSort) {
+            let hasChildren = folders.contains { $0.parentID == folder.id }
+            rows.append(MomentoSidebarFolderRow(folder: folder, depth: depth, hasChildren: hasChildren))
+            if hasChildren, expandedFolderIDs.contains(folder.id) {
+                appendVisibleFolders(parentID: folder.id, depth: depth + 1, to: &rows)
+            }
+        }
+    }
+
+    private func folderSort(_ lhs: AssetFolder, _ rhs: AssetFolder) -> Bool {
+        if lhs.sortIndex == rhs.sortIndex {
+            return lhs.createdAt < rhs.createdAt
+        }
+        return lhs.sortIndex < rhs.sortIndex
+    }
+
+    private func folderRow(_ row: MomentoSidebarFolderRow) -> some View {
+        let folder = row.folder
+        let isSelected = selection == "folder-\(folder.id)"
+        let isHovered = hoveredFolderID == folder.id
+        let foregroundStyle = sidebarNavigationForeground(isSelected: isSelected, isHovered: isHovered)
+
+        return HStack(spacing: 8) {
+            Button {
+                guard row.hasChildren else {
+                    return
+                }
+                withAnimation(.smooth(duration: 0.16)) {
+                    if expandedFolderIDs.contains(folder.id) {
+                        expandedFolderIDs.remove(folder.id)
+                    } else {
+                        expandedFolderIDs.insert(folder.id)
+                    }
+                }
+            } label: {
+                Image(systemName: row.hasChildren ? disclosureIcon(for: folder.id) : "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(row.hasChildren ? foregroundStyle : Color.clear)
+                    .frame(width: 12, height: 24)
+            }
+            .buttonStyle(.plain)
+            .disabled(!row.hasChildren)
+
+            Image(systemName: "folder")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(foregroundStyle)
+                .frame(width: 17)
+
+            Text(folder.name)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(foregroundStyle)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            Spacer(minLength: 6)
+
+            if isHovered {
+                HStack(spacing: 0) {
+                    folderRowButton(
+                        id: "\(folder.id)-child",
+                        systemImage: "plus",
+                        label: localization.string("New Folder")
+                    ) {
+                        withAnimation(.smooth(duration: 0.16)) {
+                            _ = expandedFolderIDs.insert(folder.id)
+                        }
+                        onCreateFolder(folder.id)
+                    }
+
+                    folderRowButton(
+                        id: "\(folder.id)-delete",
+                        systemImage: "trash",
+                        label: localization.string("Delete Folder")
+                    ) {
+                        onDeleteFolder(folder.id)
+                    }
+                }
+            }
+        }
+        .padding(.leading, CGFloat(row.depth) * 18 + 8)
+        .padding(.trailing, 7)
+        .frame(height: 30)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            folderRowBackground(isSelected: isSelected, isHovered: isHovered)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .pointerStyle(.link)
+        .onTapGesture {
+            withAnimation(.smooth(duration: 0.16)) {
+                selection = "folder-\(folder.id)"
+            }
+        }
+        .onHover { hovering in
+            withAnimation(.smooth(duration: 0.14)) {
+                if hovering {
+                    hoveredFolderID = folder.id
+                } else if hoveredFolderID == folder.id {
+                    hoveredFolderID = nil
+                    hoveredFolderControlID = nil
+                }
+            }
+        }
+        .help(folder.name)
+        .accessibilityLabel(folder.name)
+    }
+
+    @ViewBuilder
+    private func folderRowBackground(isSelected: Bool, isHovered: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
+
+        if isSelected || isHovered {
+            shape.fill(MomentoTheme.sidebarIconHoverBackground)
+        } else {
+            Color.clear
+        }
+    }
+
+    private func disclosureIcon(for folderID: AssetFolder.ID) -> String {
+        expandedFolderIDs.contains(folderID) ? "chevron.down" : "chevron.right"
+    }
+
+    private func folderRowButton(
+        id: String,
+        systemImage: String,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(hoveredFolderControlID == id ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
+                .frame(width: 22, height: 22)
+                .background {
+                    folderSectionButtonBackground(id: id)
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .onHover { hovering in
+            updateFolderControlHover(id: id, isHovering: hovering)
+        }
+        .help(label)
+        .accessibilityLabel(label)
     }
 
     private func folderSectionButton(
@@ -567,6 +745,14 @@ struct MomentoSidebarView: View {
             isLibrarySwitcherPresented = false
         }
     }
+}
+
+private struct MomentoSidebarFolderRow: Identifiable {
+    var folder: AssetFolder
+    var depth: Int
+    var hasChildren: Bool
+
+    var id: AssetFolder.ID { folder.id }
 }
 
 private struct MomentoLibrarySwitcherMenu: View {

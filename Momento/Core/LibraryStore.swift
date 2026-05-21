@@ -7,6 +7,7 @@ final class LibraryStore {
     var libraries: [AssetLibrary]
     var currentLibrary: AssetLibrary?
     var assets: [AssetItem]
+    var folders: [AssetFolder]
     var selectedAssetID: AssetItem.ID?
     var searchQuery = ""
     var viewMode: AssetViewMode = .masonry
@@ -15,6 +16,7 @@ final class LibraryStore {
     var libraryErrorMessage: String?
 
     private let importService: AssetImportService
+    private let thumbnailService: AssetThumbnailService
     private let storage: LibraryStorage
     private let recentStore: RecentLibraryStore
     private var metadataStore: LibraryMetadataStore?
@@ -32,10 +34,12 @@ final class LibraryStore {
         self.libraries = []
         self.currentLibrary = nil
         self.assets = []
+        self.folders = []
         self.selectedAssetID = nil
         self.viewMode = defaultViewMode
         self.importService = importService
         self.storage = storage
+        self.thumbnailService = AssetThumbnailService(storage: storage)
         self.recentStore = recentStore
         self.recentLibraries = recentStore.load()
         self.libraryErrorMessage = nil
@@ -46,6 +50,7 @@ final class LibraryStore {
             self.libraries = libraries.isEmpty ? [currentLibrary] : libraries
             self.currentLibrary = currentLibrary
             self.assets = initialAssets
+            self.folders = []
             self.selectedAssetID = initialAssets.first?.id
             self.sidebarSelection = .library(currentLibrary.id)
         } else if loadRecentLibrary, let reference = recentLibraries.first {
@@ -71,11 +76,13 @@ final class LibraryStore {
         case .favorites:
             scopedAssets = libraryAssets.filter(\.isFavorite)
         case .uncategorized:
-            scopedAssets = libraryAssets
+            scopedAssets = libraryAssets.filter(\.folderIDs.isEmpty)
         case .untagged:
             scopedAssets = libraryAssets.filter(\.tags.isEmpty)
         case .tagManagement, .folderManagement:
             scopedAssets = []
+        case .folder(let folderID):
+            scopedAssets = libraryAssets.filter { $0.folderIDs.contains(folderID) }
         case .tag(let tagID):
             scopedAssets = libraryAssets.filter { asset in
                 asset.tags.contains { $0.id == tagID }
@@ -102,6 +109,10 @@ final class LibraryStore {
             return nil
         }
         return assets.first { $0.id == selectedAssetID }
+    }
+
+    func folder(id: AssetFolder.ID) -> AssetFolder? {
+        folders.first { $0.id == id }
     }
 
     var tags: [TagItem] {
@@ -150,6 +161,7 @@ final class LibraryStore {
         let packageURL = storage.rootURL(for: currentLibrary)
         try storage.clearTransientCaches(for: currentLibrary)
         try openLibrary(at: packageURL)
+        try rebuildMissingThumbnails()
     }
 
     func renameRecentLibrary(id: RecentLibraryReference.ID, to name: String) throws {
@@ -232,6 +244,7 @@ final class LibraryStore {
         currentLibrary = nil
         libraries = []
         assets = []
+        folders = []
         selectedAssetID = nil
         searchQuery = ""
         sidebarSelection = .library("")
@@ -250,6 +263,8 @@ final class LibraryStore {
             sidebarSelection = .tagManagement
         case "folder-management":
             sidebarSelection = .folderManagement
+        case let id? where id.hasPrefix("folder-"):
+            sidebarSelection = .folder(String(id.dropFirst(7)))
         case "trash":
             sidebarSelection = .trash
         case let id? where id.hasPrefix("tag-"):
@@ -277,6 +292,8 @@ final class LibraryStore {
             "tag-management"
         case .folderManagement:
             "folder-management"
+        case .folder(let folderID):
+            "folder-\(folderID)"
         case .tag(let tagID):
             "tag-\(tagID)"
         case .trash:
@@ -291,6 +308,54 @@ final class LibraryStore {
         }
 
         assets[index].tags = names.map { TagItem(name: $0) }
+    }
+
+    func createFolder(name: String? = nil, parentID: AssetFolder.ID? = nil) throws {
+        guard let metadataStore else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        let folder = try metadataStore.createFolder(
+            name: name ?? nextFolderName(parentID: parentID),
+            parentID: parentID
+        )
+        folders = try metadataStore.loadFolders()
+        sidebarSelection = .folder(folder.id)
+        selectedAssetID = visibleAssets.first?.id
+    }
+
+    func deleteFolder(id: AssetFolder.ID) throws {
+        guard let metadataStore else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        let deletedIDs = Set(try metadataStore.deleteFolder(id: id))
+        folders = try metadataStore.loadFolders()
+        assets = try metadataStore.loadAssets()
+
+        if case .folder(let selectedFolderID) = sidebarSelection, deletedIDs.contains(selectedFolderID) {
+            sidebarSelection = .library(currentLibrary?.id ?? "")
+        }
+
+        if let selectedAssetID, !visibleAssets.contains(where: { $0.id == selectedAssetID }) {
+            self.selectedAssetID = visibleAssets.first?.id
+        }
+    }
+
+    func assignAssets(ids: Set<AssetItem.ID>, to folderID: AssetFolder.ID) throws {
+        guard let metadataStore else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        mergeAssets(try metadataStore.assignAssets(ids: ids, to: folderID))
+    }
+
+    func unassignAssets(ids: Set<AssetItem.ID>, from folderID: AssetFolder.ID) throws {
+        guard let metadataStore else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        mergeAssets(try metadataStore.unassignAssets(ids: ids, from: folderID))
     }
 
     func importItems(from urls: [URL]) async throws {
@@ -314,11 +379,7 @@ final class LibraryStore {
             return
         }
 
-        var existingIDs = Set(assets.map(\.id))
-
-        for asset in savedAssets where existingIDs.insert(asset.id).inserted {
-            assets.append(asset)
-        }
+        mergeAssets(savedAssets)
 
         if selectedAssetID == nil {
             selectedAssetID = visibleAssets.first?.id
@@ -358,12 +419,14 @@ final class LibraryStore {
     private func activateLibrary(_ library: AssetLibrary, accessScope: LibraryAccessScope) throws {
         let metadataStore = try LibraryMetadataStore(library: library, storage: storage)
         let loadedAssets = try metadataStore.loadAssets()
+        let loadedFolders = try metadataStore.loadFolders()
 
         libraryAccessScope = accessScope
         self.metadataStore = metadataStore
         currentLibrary = library
         libraries = [library]
         assets = loadedAssets
+        folders = loadedFolders
         selectedAssetID = loadedAssets.first?.id
         searchQuery = ""
         sidebarSelection = .library(library.id)
@@ -373,6 +436,54 @@ final class LibraryStore {
     private func saveRecentLibrary(_ library: AssetLibrary) throws {
         try recentStore.save(library)
         recentLibraries = recentStore.load()
+    }
+
+    private func mergeAssets(_ updatedAssets: [AssetItem]) {
+        for asset in updatedAssets {
+            if let index = assets.firstIndex(where: { $0.id == asset.id }) {
+                assets[index] = asset
+            } else {
+                assets.append(asset)
+            }
+        }
+    }
+
+    private func nextFolderName(parentID: AssetFolder.ID?) -> String {
+        let baseName = "New Folder"
+        let siblingNames = Set(folders.filter { $0.parentID == parentID }.map(\.name))
+        guard siblingNames.contains(baseName) else {
+            return baseName
+        }
+
+        var index = 2
+        while siblingNames.contains("\(baseName) \(index)") {
+            index += 1
+        }
+        return "\(baseName) \(index)"
+    }
+
+    private func rebuildMissingThumbnails() throws {
+        guard let currentLibrary, let metadataStore else {
+            return
+        }
+
+        var repairedAssets: [AssetItem] = []
+        for asset in assets where (asset.kind == .image || asset.kind == .gif) && asset.thumbnailURL == nil {
+            guard let thumbnailURL = try? thumbnailService.generateThumbnail(
+                for: asset.storageURL,
+                contentHash: asset.contentHash,
+                in: currentLibrary
+            ) else {
+                continue
+            }
+
+            var repairedAsset = asset
+            repairedAsset.thumbnailURL = thumbnailURL
+            repairedAssets.append(repairedAsset)
+        }
+
+        mergeAssets(repairedAssets)
+        assets = try metadataStore.loadAssets()
     }
 
     private func libraryErrorMessage(for error: Error) -> String {

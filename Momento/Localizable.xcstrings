@@ -463,6 +463,22 @@
         }
       }
     },
+    "Delete Folder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete Folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除文件夹"
+          }
+        }
+      }
+    },
     "Delete library warning: %@" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -667,6 +683,22 @@
         }
       }
     },
+    "Folder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件夹"
+          }
+        }
+      }
+    },
     "Folder Management" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -799,6 +831,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "导入图片、GIF、SVG、视频、PDF 文件或文件夹，开始构建这个资源库。"
+          }
+        }
+      }
+    },
+    "Import images or GIFs to start building this library." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Import images or GIFs to start building this library."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导入图片或 GIF，开始构建这个资源库。"
           }
         }
       }

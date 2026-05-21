@@ -46,14 +46,19 @@ nonisolated struct LibraryStorage: Sendable {
             .appendingPathExtension(fileExtension)
     }
 
+    nonisolated func thumbnailURL(forContentHash contentHash: String, in library: AssetLibrary) -> URL {
+        rootURL(for: library)
+            .appendingPathComponent("thumbnails", isDirectory: true)
+            .appendingPathComponent(contentHash)
+            .appendingPathExtension("png")
+    }
+
     nonisolated func prepareLibraryDirectories(for library: AssetLibrary) throws {
         let root = rootURL(for: library)
         for folder in [
             "database",
             "assets",
-            "thumbnails/small",
-            "thumbnails/medium",
-            "thumbnails/large",
+            "thumbnails",
             "previews",
             "metadata/import-sessions"
         ] {
