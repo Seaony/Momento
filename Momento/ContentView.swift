@@ -53,10 +53,8 @@ struct ContentView: View {
         Group {
             if store.currentLibrary == nil {
                 MomentoLibraryWelcomeView(
-                    recentLibraries: store.recentLibraries,
                     onCreateLibrary: createLibrary,
-                    onOpenLibrary: openLibrary,
-                    onSwitchLibrary: switchLibrary
+                    onOpenLibrary: openLibrary
                 )
             } else {
                 libraryBody
