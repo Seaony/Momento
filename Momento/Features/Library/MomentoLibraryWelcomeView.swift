@@ -2,6 +2,8 @@ import SwiftUI
 
 struct MomentoLibraryWelcomeView: View {
     @Environment(\.appLocalization) private var localization
+    @State private var isCreateHovered = false
+    @State private var isOpenHovered = false
 
     var onCreateLibrary: () -> Void
     var onOpenLibrary: () -> Void
@@ -31,14 +33,27 @@ struct MomentoLibraryWelcomeView: View {
                     } label: {
                         Label(localization.string("Create Library"), systemImage: "plus")
                     }
-                    .buttonStyle(WelcomeGlassButtonStyle(isProminent: true))
+                    .buttonStyle(WelcomePrimaryButtonStyle(isHovered: isCreateHovered))
+                    .onHover { isCreateHovered = $0 }
 
                     Button {
                         onOpenLibrary()
                     } label: {
                         Label(localization.string("Open Library"), systemImage: "folder")
                     }
-                    .buttonStyle(WelcomeGlassButtonStyle())
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.large)
+                    .foregroundStyle(isOpenHovered ? Color.primary : MomentoTheme.secondaryText)
+                    .scaleEffect(isOpenHovered ? 1.025 : 1)
+                    .shadow(
+                        color: .black.opacity(isOpenHovered ? 0.18 : 0.10),
+                        radius: isOpenHovered ? 14 : 8,
+                        x: 0,
+                        y: isOpenHovered ? 8 : 4
+                    )
+                    .onHover { isOpenHovered = $0 }
+                    .animation(.smooth(duration: 0.16), value: isOpenHovered)
                 }
             }
         }
@@ -56,74 +71,60 @@ private struct WelcomeGlassBackdrop: View {
                 emphasized: true
             )
 
+            Color(nsColor: .windowBackgroundColor)
+                .opacity(0.88)
+
             LinearGradient(
                 colors: [
-                    Color.white.opacity(0.10),
-                    Color.black.opacity(0.06),
-                    Color.accentColor.opacity(0.08)
+                    Color.white.opacity(0.035),
+                    Color.accentColor.opacity(0.030),
+                    Color.black.opacity(0.025)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
-            )
-
-            RadialGradient(
-                colors: [
-                    Color.white.opacity(0.12),
-                    .clear
-                ],
-                center: .center,
-                startRadius: 40,
-                endRadius: 380
             )
         }
         .ignoresSafeArea()
     }
 }
 
-private struct WelcomeGlassButtonStyle: ButtonStyle {
-    var isProminent = false
+private struct WelcomePrimaryButtonStyle: ButtonStyle {
+    var isHovered: Bool
 
     func makeBody(configuration: Configuration) -> some View {
+        let isPressed = configuration.isPressed
+        let fillOpacity = isPressed ? 0.82 : (isHovered ? 1.0 : 0.94)
+        let shadowOpacity = isPressed ? 0.12 : (isHovered ? 0.24 : 0.18)
+
         configuration.label
             .labelStyle(.titleAndIcon)
             .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(isProminent ? Color.white : Color.primary)
+            .foregroundStyle(Color.white)
             .padding(.horizontal, 18)
             .frame(height: 36)
             .background {
                 Capsule(style: .continuous)
-                    .fill(.clear)
-                    .background {
-                        MomentoVisualEffectView(
-                            material: .hudWindow,
-                            blendingMode: .withinWindow,
-                            state: .active,
-                            emphasized: isProminent
-                        )
-                        .clipShape(Capsule(style: .continuous))
-                    }
-                    .overlay {
-                        Capsule(style: .continuous)
-                            .fill(
-                                isProminent
-                                    ? Color.accentColor.opacity(configuration.isPressed ? 0.46 : 0.36)
-                                    : Color.white.opacity(configuration.isPressed ? 0.13 : 0.08)
-                            )
-                    }
+                    .fill(Color.accentColor.opacity(fillOpacity))
                     .overlay(alignment: .top) {
                         Capsule(style: .continuous)
-                            .fill(Color.white.opacity(isProminent ? 0.22 : 0.16))
+                            .fill(Color.white.opacity(isHovered ? 0.24 : 0.18))
                             .frame(height: 1)
                             .padding(.horizontal, 13)
                     }
                     .overlay {
                         Capsule(style: .continuous)
-                            .strokeBorder(Color.white.opacity(isProminent ? 0.28 : 0.18), lineWidth: 1)
+                            .strokeBorder(Color.white.opacity(isHovered ? 0.28 : 0.20), lineWidth: 1)
                     }
-                    .shadow(color: .black.opacity(configuration.isPressed ? 0.12 : 0.20), radius: configuration.isPressed ? 6 : 14, x: 0, y: configuration.isPressed ? 3 : 8)
+                    .shadow(
+                        color: .black.opacity(shadowOpacity),
+                        radius: isPressed ? 6 : (isHovered ? 14 : 10),
+                        x: 0,
+                        y: isPressed ? 3 : (isHovered ? 8 : 5)
+                    )
             }
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(.smooth(duration: 0.16), value: configuration.isPressed)
+            .scaleEffect(isPressed ? 0.98 : (isHovered ? 1.025 : 1))
+            .animation(.smooth(duration: 0.16), value: isHovered)
+            .animation(.smooth(duration: 0.12), value: isPressed)
     }
 }
 
