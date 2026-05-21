@@ -27,7 +27,6 @@ struct MomentoShellView<Content: View>: View {
     @State private var sidebarWidth = MomentoTheme.sidebarWidth
     @State private var sidebarResizeStartWidth: CGFloat?
     @State private var isSidebarCollapsed = false
-    @State private var isSidebarToggleHovered = false
 
     init(
         sidebarSelection: Binding<MomentoSidebarItem.ID?>,
@@ -97,31 +96,23 @@ struct MomentoShellView<Content: View>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .animation(.smooth(duration: 0.18), value: isInspectorPresented)
         .animation(.smooth(duration: 0.18), value: isSidebarCollapsed)
-        .overlay(alignment: .topLeading) {
-            sidebarTitlebarControls(availableWidth: availableWidth)
-        }
         .momentoCommandPalette(
             isPresented: $isCommandPalettePresented,
             commands: commands,
             onSelect: onCommandSelected
         )
         .background {
+            SidebarTitlebarToggleConfigurator(
+                isCollapsed: $isSidebarCollapsed,
+                leadingInset: sidebarToggleLeadingInset(availableWidth: availableWidth),
+                label: sidebarToggleLabel
+            )
+            .frame(width: 0, height: 0)
+        }
+        .background {
             MomentoGlassBackground(cornerRadius: 0)
                 .ignoresSafeArea()
         }
-    }
-
-    private func sidebarTitlebarControls(availableWidth: CGFloat) -> some View {
-        ZStack(alignment: .topLeading) {
-            Color.clear
-                .allowsHitTesting(false)
-
-            sidebarToggleButton
-                .padding(.leading, sidebarToggleLeadingInset(availableWidth: availableWidth))
-                .padding(.top, MomentoTheme.sidebarTitlebarButtonTopInset)
-        }
-        .frame(height: MomentoTheme.floatingSidebarTitlebarContentInset, alignment: .topLeading)
-        .ignoresSafeArea(.container, edges: .top)
     }
 
     private func floatingSidebar(availableWidth: CGFloat) -> some View {
@@ -187,34 +178,8 @@ struct MomentoShellView<Content: View>: View {
         return MomentoTheme.sidebarMinWidth...maxWidth
     }
 
-    private var sidebarToggleButton: some View {
-        let label = localization.string(isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar")
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-
-        return Button(action: toggleSidebarCollapsed) {
-            Image(systemName: "sidebar.left")
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(isSidebarToggleHovered ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
-                .frame(width: MomentoTheme.sidebarTitlebarButtonSize, height: MomentoTheme.sidebarTitlebarButtonSize)
-                .background {
-                    if isSidebarToggleHovered {
-                        shape.fill(MomentoTheme.sidebarIconHoverBackground)
-                    } else {
-                        Color.clear
-                    }
-                }
-        }
-        .buttonStyle(.plain)
-        .frame(width: MomentoTheme.sidebarTitlebarButtonSize, height: MomentoTheme.sidebarTitlebarButtonSize)
-        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .pointerStyle(.link)
-        .onHover { hovering in
-            withAnimation(.smooth(duration: 0.14)) {
-                isSidebarToggleHovered = hovering
-            }
-        }
-        .help(label)
-        .accessibilityLabel(label)
+    private var sidebarToggleLabel: String {
+        localization.string(isSidebarCollapsed ? "Expand Sidebar" : "Collapse Sidebar")
     }
 
     private func sidebarToggleLeadingInset(availableWidth: CGFloat) -> CGFloat {
@@ -223,12 +188,6 @@ struct MomentoShellView<Content: View>: View {
         }
 
         return MomentoTheme.floatingSidebarInset + effectiveSidebarWidth(availableWidth: availableWidth) - MomentoTheme.sidebarTitlebarButtonTrailingInset - MomentoTheme.sidebarTitlebarButtonSize
-    }
-
-    private func toggleSidebarCollapsed() {
-        withAnimation(.smooth(duration: 0.18)) {
-            isSidebarCollapsed.toggle()
-        }
     }
 }
 
