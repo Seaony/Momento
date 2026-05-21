@@ -33,7 +33,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let collectionView = NSCollectionView()
+        let collectionView = AssetPreviewCollectionView()
         collectionView.collectionViewLayout = makeLayout(for: viewMode)
         collectionView.backgroundColors = [.clear]
         collectionView.isSelectable = true
@@ -44,6 +44,9 @@ struct AssetCollectionGridView: NSViewRepresentable {
             AssetCollectionViewItem.self,
             forItemWithIdentifier: AssetCollectionViewItem.reuseIdentifier
         )
+        collectionView.onSpacePreview = { [weak coordinator = context.coordinator] in
+            coordinator?.previewSelectedAsset()
+        }
 
         let doubleClickRecognizer = NSClickGestureRecognizer(
             target: context.coordinator,
@@ -159,6 +162,7 @@ extension AssetCollectionGridView {
             _ collectionView: NSCollectionView,
             didSelectItemsAt indexPaths: Set<IndexPath>
         ) {
+            collectionView.window?.makeFirstResponder(collectionView)
             publishSelection(from: collectionView)
         }
 
@@ -198,6 +202,16 @@ extension AssetCollectionGridView {
             parent.onDoubleClick(parent.assets[indexPath.item])
         }
 
+        func previewSelectedAsset() {
+            guard let collectionView,
+                  let indexPath = collectionView.selectionIndexPaths.sorted(by: { $0.item < $1.item }).first,
+                  parent.assets.indices.contains(indexPath.item) else {
+                return
+            }
+
+            parent.onDoubleClick(parent.assets[indexPath.item])
+        }
+
         private func publishSelection(from collectionView: NSCollectionView) {
             guard !isSyncingSelection else {
                 return
@@ -212,6 +226,23 @@ extension AssetCollectionGridView {
     }
 }
 
+private final class AssetPreviewCollectionView: NSCollectionView {
+    var onSpacePreview: (() -> Void)?
+
+    override var acceptsFirstResponder: Bool {
+        true
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.charactersIgnoringModifiers == " " {
+            onSpacePreview?()
+            return
+        }
+
+        super.keyDown(with: event)
+    }
+}
+
 private final class AssetCollectionViewItem: NSCollectionViewItem {
     static let reuseIdentifier = NSUserInterfaceItemIdentifier("AssetCollectionViewItem")
 
@@ -222,7 +253,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     private var gridConstraints: [NSLayoutConstraint] = []
     private var listConstraints: [NSLayoutConstraint] = []
     private var mode: AssetViewMode = .grid
-    private let gridTitleHeight: CGFloat = 30
+    private let gridTitleHeight: CGFloat = 16
     private let gridSubtitleHeight: CGFloat = 14
 
     override var isSelected: Bool {
@@ -247,11 +278,11 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         previewImageView.layer?.cornerCurve = .continuous
         previewImageView.layer?.masksToBounds = true
 
-        fileNameLabel.lineBreakMode = .byTruncatingMiddle
-        fileNameLabel.maximumNumberOfLines = 2
+        fileNameLabel.lineBreakMode = .byTruncatingTail
+        fileNameLabel.maximumNumberOfLines = 1
         fileNameLabel.alignment = .center
         fileNameLabel.font = .systemFont(ofSize: 12, weight: .medium)
-        fileNameLabel.textColor = .labelColor
+        fileNameLabel.textColor = .secondaryLabelColor
         fileNameLabel.translatesAutoresizingMaskIntoConstraints = false
         fileNameLabel.setContentCompressionResistancePriority(.required, for: .vertical)
 
@@ -259,7 +290,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         subtitleLabel.maximumNumberOfLines = 1
         subtitleLabel.alignment = .center
         subtitleLabel.font = .systemFont(ofSize: 11)
-        subtitleLabel.textColor = .secondaryLabelColor
+        subtitleLabel.textColor = .tertiaryLabelColor
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
         subtitleLabel.setContentCompressionResistancePriority(.required, for: .vertical)
 
@@ -326,7 +357,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         switch mode {
         case .grid, .masonry:
             fileNameLabel.alignment = .center
-            fileNameLabel.maximumNumberOfLines = 2
+            fileNameLabel.maximumNumberOfLines = 1
             subtitleLabel.alignment = .center
             NSLayoutConstraint.activate(gridConstraints)
         case .list:
@@ -437,24 +468,16 @@ private final class HoverSelectionView: NSView {
 
     private func updateAppearance() {
         wantsLayer = true
-        layer?.backgroundColor = NSColor.clear.cgColor
+        glassBackgroundView.isHidden = true
+        layer?.borderColor = NSColor.clear.cgColor
+        layer?.borderWidth = 0
 
         if isSelected {
-            glassBackgroundView.isHidden = false
-            glassBackgroundView.style = .regular
-            glassBackgroundView.tintColor = .controlAccentColor
-            layer?.borderColor = NSColor.controlAccentColor.cgColor
-            layer?.borderWidth = 1
+            layer?.backgroundColor = NSColor.white.withAlphaComponent(0.14).cgColor
         } else if isHovered {
-            glassBackgroundView.isHidden = false
-            glassBackgroundView.style = .clear
-            glassBackgroundView.tintColor = .controlAccentColor
-            layer?.borderColor = NSColor.separatorColor.cgColor
-            layer?.borderWidth = 1
+            layer?.backgroundColor = NSColor.white.withAlphaComponent(0.08).cgColor
         } else {
-            glassBackgroundView.isHidden = true
-            layer?.borderColor = NSColor.clear.cgColor
-            layer?.borderWidth = 0
+            layer?.backgroundColor = NSColor.clear.cgColor
         }
     }
 }
