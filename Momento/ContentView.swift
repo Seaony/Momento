@@ -193,6 +193,16 @@ struct ContentView: View {
             }
         }
         .libraryToolbarSearch(isVisible: !isModalOverlayVisible, text: $store.searchQuery, prompt: Text(localization.string("Search assets, tags, colors...")))
+        .toolbar {
+            if !isModalOverlayVisible && isInspectorPresented {
+                ToolbarItem(placement: .primaryAction) {
+                    Color.clear
+                        .frame(width: MomentoTheme.inspectorWidth, height: 1)
+                        .accessibilityHidden(true)
+                        .allowsHitTesting(false)
+                }
+            }
+        }
         .navigationTitle("")
     }
 
