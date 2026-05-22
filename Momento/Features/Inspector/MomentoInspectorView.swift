@@ -101,8 +101,8 @@ struct MomentoInspectorView: View {
     private static let tagPickerCreateBottomPadding: CGFloat = 8
     private static let folderPickerMinimumContentHeight: CGFloat = 108
     private static let folderPickerMaximumContentHeight: CGFloat = 260
-    private static let folderPickerRowHeight: CGFloat = 28
-    private static let folderPickerRowSpacing: CGFloat = 3
+    private static let folderPickerRowHeight: CGFloat = 26
+    private static let folderPickerRowSpacing: CGFloat = 1
     private static let folderPickerEmptyMessageHeight: CGFloat = 26
     private static let inspectorSectionSpacing: CGFloat = 12
     private static let inspectorSectionSeparatorOpacity = 0.06
@@ -402,27 +402,27 @@ struct MomentoInspectorView: View {
             Text(tag)
                 .lineLimit(1)
 
-            if isHovered {
-                Button {
-                    removeTag(tag)
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 20, height: 20)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(MomentoTheme.primaryText)
-                .contentShape(Circle())
-                .pointerStyle(.link)
-                .transition(.opacity.combined(with: .scale(scale: 0.82)))
-                .accessibilityLabel(localization.format("Remove %@", tag))
+            Button {
+                removeTag(tag)
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 20, height: 20)
+                    .contentShape(Circle())
             }
+            .buttonStyle(.plain)
+            .foregroundStyle(MomentoTheme.primaryText)
+            .contentShape(Circle())
+            .pointerStyle(.link)
+            .opacity(isHovered ? 1 : 0)
+            .scaleEffect(isHovered ? 1 : 0.82)
+            .allowsHitTesting(isHovered)
+            .accessibilityLabel(localization.format("Remove %@", tag))
         }
         .font(.system(size: 12, weight: .medium))
         .foregroundStyle(MomentoTheme.primaryText)
         .padding(.leading, 9)
-        .padding(.trailing, isHovered ? 5 : 9)
+        .padding(.trailing, 5)
         .frame(height: 26)
         .glassEffect(
             .regular.tint(Color.white.opacity(isHovered ? 0.12 : 0.04)),
@@ -448,27 +448,27 @@ struct MomentoInspectorView: View {
             Text(folder.name)
                 .lineLimit(1)
 
-            if isHovered {
-                Button {
-                    removeFolder(folder.id)
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 13, weight: .semibold))
-                        .frame(width: 20, height: 20)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(MomentoTheme.primaryText)
-                .contentShape(Circle())
-                .pointerStyle(.link)
-                .transition(.opacity.combined(with: .scale(scale: 0.82)))
-                .accessibilityLabel(localization.format("Remove %@", folder.name))
+            Button {
+                removeFolder(folder.id)
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .frame(width: 20, height: 20)
+                    .contentShape(Circle())
             }
+            .buttonStyle(.plain)
+            .foregroundStyle(MomentoTheme.primaryText)
+            .contentShape(Circle())
+            .pointerStyle(.link)
+            .opacity(isHovered ? 1 : 0)
+            .scaleEffect(isHovered ? 1 : 0.82)
+            .allowsHitTesting(isHovered)
+            .accessibilityLabel(localization.format("Remove %@", folder.name))
         }
         .font(.system(size: 12, weight: .medium))
         .foregroundStyle(MomentoTheme.primaryText)
         .padding(.leading, 9)
-        .padding(.trailing, isHovered ? 5 : 9)
+        .padding(.trailing, 5)
         .frame(height: 26)
         .glassEffect(
             .regular.tint(Color.white.opacity(isHovered ? 0.12 : 0.04)),
@@ -714,14 +714,14 @@ struct MomentoInspectorView: View {
         let secondaryForeground = Color.white.opacity(0.72)
         let checkboxFill = Color.white.opacity(isSelected ? 0.22 : 0.08)
 
-        return HStack(spacing: 5) {
+        return HStack(spacing: 2) {
             Button {
                 toggleFolderExpansion(folder.id)
             } label: {
                 Image(systemName: expandedFolderIDs.contains(folder.id) ? "chevron.down" : "chevron.right")
                     .font(.system(size: 8, weight: .bold))
                     .foregroundStyle(secondaryForeground)
-                    .frame(width: 24, height: Self.folderPickerRowHeight)
+                    .frame(width: 20, height: Self.folderPickerRowHeight)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -762,7 +762,7 @@ struct MomentoInspectorView: View {
             .contentShape(rowShape)
             .pointerStyle(.link)
         }
-        .padding(.leading, CGFloat(row.depth) * 26)
+        .padding(.leading, CGFloat(row.depth) * 22)
         .frame(maxWidth: .infinity, alignment: .leading)
         .onHover { hovering in
             withAnimation(.smooth(duration: 0.12)) {
