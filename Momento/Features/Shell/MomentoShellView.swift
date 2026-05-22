@@ -50,7 +50,7 @@ struct MomentoShellView<Content: View>: View {
     @State private var sidebarWidth = MomentoTheme.sidebarWidth
     @State private var sidebarResizeStartWidth: CGFloat?
     @State private var isSidebarCollapsed = false
-    @State private var inspectorWidth = MomentoTheme.inspectorWidth
+    @State private var inspectorWidth = MomentoTheme.inspectorMinWidth
     @State private var inspectorResizeStartWidth: CGFloat?
     @State private var isInspectorHovered = false
     @State private var isInspectorResizeHandleHovered = false
@@ -340,10 +340,10 @@ struct MomentoShellView<Content: View>: View {
 
     private var inspectorResizeHandleColor: Color {
         if isInspectorResizeHandleHovered || inspectorResizeStartWidth != nil {
-            return .white.opacity(0.48)
+            return .white.opacity(0.34)
         }
 
-        return .white.opacity(0.24)
+        return .white.opacity(0.14)
     }
 
     @ViewBuilder

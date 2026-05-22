@@ -182,7 +182,8 @@ struct ContentView: View {
         }
         .toolbar {
             if !isModalOverlayVisible {
-                ToolbarItemGroup(placement: .confirmationAction) {
+                ToolbarSpacer(.flexible)
+                ToolbarItemGroup(placement: .automatic) {
                     toolbarViewModeSwitcher
                         .padding(.trailing, 6)
                     toolbarSearchControl
@@ -209,7 +210,7 @@ struct ContentView: View {
                         .background {
                             toolbarSegmentBackground(isSelected: isSelected, isHovered: isHovered)
                         }
-                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .contentShape(RoundedRectangle(cornerRadius: MomentoTheme.toolbarControlRadius - 3, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .pointerStyle(.link)
@@ -229,7 +230,7 @@ struct ContentView: View {
         .padding(3)
         .frame(height: 34)
         .background {
-            toolbarControlBackground(cornerRadius: 10)
+            toolbarControlBackground(cornerRadius: MomentoTheme.toolbarControlRadius)
         }
     }
 
@@ -258,7 +259,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private func toolbarSegmentBackground(isSelected: Bool, isHovered: Bool) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: MomentoTheme.toolbarControlRadius - 3, style: .continuous)
 
         if isSelected {
             shape.fill(Color.accentColor)

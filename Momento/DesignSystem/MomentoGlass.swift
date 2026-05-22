@@ -64,11 +64,11 @@ enum MomentoTheme {
     static let sidebarIconHoverBackground = Color.white.opacity(0.08)
     static let toolbarIconButtonWidth: CGFloat = 38
     static let toolbarControlHeight: CGFloat = 34
-    static let toolbarControlRadius: CGFloat = 10
+    static let toolbarControlRadius: CGFloat = 14
     static let toolbarIconSize: CGFloat = 15
     static let librarySwitcherWidth: CGFloat = 300
     static let inspectorMinWidth: CGFloat = 260
-    static let inspectorWidth: CGFloat = 308
+    static let inspectorWidth: CGFloat = inspectorMinWidth
     static let inspectorMaxWidth: CGFloat = 460
     static let contentMinWidth: CGFloat = 520
     static let contentSidebarGap: CGFloat = 12

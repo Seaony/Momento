@@ -149,7 +149,7 @@ extension InspectorTitlebarSpacerConfigurator {
         private func accessorySize() -> NSSize {
             return NSSize(
                 width: MomentoTheme.sidebarTitlebarButtonTrailingInset
-                    + MomentoTheme.sidebarTitlebarButtonSize
+                    + MomentoTheme.toolbarIconButtonWidth
                     + MomentoTheme.sidebarTitlebarButtonTrailingInset,
                 height: MomentoTheme.floatingSidebarTitlebarContentInset
             )
@@ -164,8 +164,6 @@ private struct InspectorTitlebarControlAccessoryView: View {
     @State private var isHovered = false
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-
         Button {
             withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
                 isInspectorPresented.toggle()
@@ -174,18 +172,17 @@ private struct InspectorTitlebarControlAccessoryView: View {
             Image(systemName: "sidebar.right")
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(MomentoTheme.primaryText)
-                .frame(width: MomentoTheme.sidebarTitlebarButtonSize, height: MomentoTheme.sidebarTitlebarButtonSize)
+                .frame(width: MomentoTheme.toolbarIconButtonWidth, height: MomentoTheme.toolbarControlHeight)
                 .background {
-                    if isHovered {
-                        shape.fill(MomentoTheme.sidebarIconHoverBackground)
-                    } else {
-                        Color.clear
-                    }
+                    MomentoGlassBackground(
+                        glass: .regular.interactive(isHovered),
+                        cornerRadius: MomentoTheme.toolbarControlRadius
+                    )
                 }
         }
         .buttonStyle(.plain)
-        .frame(width: MomentoTheme.sidebarTitlebarButtonSize, height: MomentoTheme.sidebarTitlebarButtonSize)
-        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .frame(width: MomentoTheme.toolbarIconButtonWidth, height: MomentoTheme.toolbarControlHeight)
+        .contentShape(RoundedRectangle(cornerRadius: MomentoTheme.toolbarControlRadius, style: .continuous))
         .pointerStyle(.link)
         .onHover { hovering in
             withAnimation(.smooth(duration: 0.14)) {
@@ -227,13 +224,17 @@ private final class InspectorTitlebarControlContainerView: NSView {
             MomentoTheme.sidebarTitlebarButtonTrailingInset,
             bounds.width
                 - MomentoTheme.sidebarTitlebarButtonTrailingInset
-                - MomentoTheme.sidebarTitlebarButtonSize
+                - MomentoTheme.toolbarIconButtonWidth
         )
+        let buttonY = (
+            MomentoTheme.floatingSidebarTitlebarContentInset
+                - MomentoTheme.toolbarControlHeight
+        ) / 2
         let nextFrame = NSRect(
             x: buttonX,
-            y: MomentoTheme.sidebarTitlebarButtonTopInset,
-            width: MomentoTheme.sidebarTitlebarButtonSize,
-            height: MomentoTheme.sidebarTitlebarButtonSize
+            y: buttonY,
+            width: MomentoTheme.toolbarIconButtonWidth,
+            height: MomentoTheme.toolbarControlHeight
         )
 
         if hostingView.frame != nextFrame {
