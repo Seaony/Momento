@@ -2,8 +2,8 @@ import SwiftUI
 
 struct MomentoTagManagementView: View {
     private static let rowCornerRadius: CGFloat = 10
-    private static let actionColumnWidth: CGFloat = 86
-    private static let actionButtonWidth: CGFloat = 34
+    private static let assetCountColumnWidth: CGFloat = 118
+    private static let actionColumnWidth: CGFloat = 166
     private static let actionButtonHeight: CGFloat = 30
 
     @Environment(\.appLocalization) private var localization
@@ -78,7 +78,7 @@ struct MomentoTagManagementView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             Text(localization.string("Linked Assets"))
-                .frame(width: 112, alignment: .trailing)
+                .frame(width: Self.assetCountColumnWidth, alignment: .leading)
 
             Color.clear
                 .frame(width: Self.actionColumnWidth)
@@ -132,23 +132,23 @@ struct MomentoTagManagementView: View {
             Text(localization.itemCount(summary.assetCount))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(MomentoTheme.secondaryText)
-                .frame(width: 112, alignment: .trailing)
+                .frame(width: Self.assetCountColumnWidth, alignment: .leading)
 
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 if isEditing {
                     actionButton(
-                        systemImage: "checkmark",
+                        title: localization.string("Save Changes"),
                         accessibilityLabel: localization.string("Save Changes"),
-                        foregroundColor: Color.accentColor
+                        isProminent: true
                     ) {
                         commitEditing(summary)
                     }
                     .disabled(trimmedDraftTagName.isEmpty)
 
                     actionButton(
-                        systemImage: "xmark",
+                        title: localization.string("Cancel"),
                         accessibilityLabel: localization.string("Cancel"),
-                        foregroundColor: MomentoTheme.secondaryText
+                        isProminent: false
                     ) {
                         cancelEditing()
                     }
@@ -219,25 +219,38 @@ struct MomentoTagManagementView: View {
     }
 
     private func actionButton(
-        systemImage: String,
+        title: String,
         accessibilityLabel: String,
-        foregroundColor: Color? = nil,
+        isProminent: Bool,
         role: ButtonRole? = nil,
         action: @escaping () -> Void
     ) -> some View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-        let resolvedForegroundColor = foregroundColor ?? (role == .destructive ? Color.red.opacity(0.9) : MomentoTheme.primaryText)
+        let foregroundColor = role == .destructive ? Color.red.opacity(0.9) : MomentoTheme.primaryText
 
         return Button(role: role, action: action) {
-            Image(systemName: systemImage)
-                .symbolRenderingMode(.monochrome)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(resolvedForegroundColor)
-                .frame(width: Self.actionButtonWidth, height: Self.actionButtonHeight)
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+                .foregroundStyle(foregroundColor)
+                .padding(.horizontal, 12)
+                .frame(height: Self.actionButtonHeight)
+                .background {
+                    Color.clear
+                        .glassEffect(
+                            isProminent
+                                ? .regular.tint(Color.accentColor.opacity(0.28)).interactive(true)
+                                : .regular.interactive(true),
+                            in: shape
+                        )
+                }
+                .overlay {
+                    shape.strokeBorder(Color.white.opacity(isProminent ? 0.18 : 0.12), lineWidth: 1)
+                }
+                .contentShape(shape)
         }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.roundedRectangle(radius: 10))
-        .controlSize(.small)
+        .buttonStyle(.plain)
         .contentShape(shape)
         .pointerStyle(.link)
         .accessibilityLabel(accessibilityLabel)
