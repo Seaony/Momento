@@ -93,6 +93,7 @@ struct MomentoInspectorView: View {
     private static let tagPickerCreateBottomPadding: CGFloat = 8
     private static let inspectorSectionSpacing: CGFloat = 12
     private static let inspectorSectionSeparatorOpacity = 0.06
+    private static let titleLineSpacing: CGFloat = 3
 
     @Environment(\.appLocalization) private var localization
 
@@ -228,6 +229,7 @@ struct MomentoInspectorView: View {
             TextField("", text: $draftTitle, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13, weight: .regular))
+                .lineSpacing(Self.titleLineSpacing)
                 .lineLimit(1...6)
                 .focused($isTitleFieldFocused)
                 .padding(.horizontal, 6)
@@ -254,6 +256,7 @@ struct MomentoInspectorView: View {
         } else {
             Text(asset.title)
                 .font(.system(size: 13, weight: .regular))
+                .lineSpacing(Self.titleLineSpacing)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 6)
