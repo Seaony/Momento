@@ -17,7 +17,14 @@ private enum AssetFilterFacet: String, CaseIterable, Hashable, Identifiable {
 
 private enum ContentToolbarMetrics {
     static let searchFieldWidth: CGFloat = 168
+    static let searchControlWidth: CGFloat = 214
     static let iconButtonWidth: CGFloat = 38
+    static let viewModeSwitcherWidth: CGFloat = 112
+    static let controlSpacing: CGFloat = 6
+    static let controlClusterWidth: CGFloat = (iconButtonWidth * 2)
+        + viewModeSwitcherWidth
+        + searchControlWidth
+        + (controlSpacing * 3)
     static let filterPopoverWidth: CGFloat = 340
     static let filterScrollableContentMaxHeight: CGFloat = 220
     static let sortPopoverWidth: CGFloat = 156
@@ -205,13 +212,8 @@ struct ContentView: View {
         }
         .toolbar {
             ToolbarSpacer(.flexible)
-            ToolbarItemGroup(placement: .automatic) {
-                toolbarFilterButton
-                toolbarSortButton
-                    .padding(.trailing, 6)
-                toolbarViewModeSwitcher
-                    .padding(.trailing, 6)
-                toolbarSearchControl
+            ToolbarItem(placement: .automatic) {
+                toolbarControlCluster
             }
             .sharedBackgroundVisibility(.hidden)
         }
@@ -257,6 +259,18 @@ struct ContentView: View {
         )
     }
 
+    private var toolbarControlCluster: some View {
+        HStack(spacing: ContentToolbarMetrics.controlSpacing) {
+            toolbarFilterButton
+            toolbarSortButton
+            toolbarViewModeSwitcher
+            toolbarSearchControl
+        }
+        .frame(width: ContentToolbarMetrics.controlClusterWidth, height: MomentoTheme.toolbarControlHeight, alignment: .trailing)
+        .fixedSize(horizontal: true, vertical: false)
+        .layoutPriority(100)
+    }
+
     private var toolbarViewModeSwitcher: some View {
         HStack(spacing: 2) {
             ForEach(AssetViewMode.allCases) { viewMode in
@@ -291,7 +305,7 @@ struct ContentView: View {
             }
         }
         .padding(3)
-        .frame(height: 34)
+        .frame(width: ContentToolbarMetrics.viewModeSwitcherWidth, height: MomentoTheme.toolbarControlHeight)
         .background {
             toolbarControlBackground(cornerRadius: MomentoTheme.toolbarControlRadius)
         }
@@ -311,7 +325,7 @@ struct ContentView: View {
                 .frame(width: ContentToolbarMetrics.searchFieldWidth)
         }
         .padding(.horizontal, 11)
-        .frame(height: MomentoTheme.toolbarControlHeight)
+        .frame(width: ContentToolbarMetrics.searchControlWidth, height: MomentoTheme.toolbarControlHeight)
         .background {
             toolbarControlBackground(cornerRadius: MomentoTheme.toolbarControlRadius)
         }
