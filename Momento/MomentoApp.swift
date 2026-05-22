@@ -12,7 +12,6 @@ struct MomentoApp: App {
     @NSApplicationDelegateAdaptor(AppOpenHandler.self) private var appOpenHandler
     @State private var store = LibraryStore(defaultViewMode: AppSettings.defaultViewMode())
     @AppStorage(AppSettingsKeys.appLanguage) private var appLanguageRawValue = AppLanguage.system.rawValue
-    @AppStorage(AppSettingsKeys.defaultViewMode) private var defaultViewModeRawValue = AssetViewMode.masonry.rawValue
 
     var body: some Scene {
         let language = appLanguage
@@ -32,10 +31,7 @@ struct MomentoApp: App {
         .windowResizability(.contentMinSize)
 
         Settings {
-            MomentoSettingsView(
-                appLanguage: appLanguageBinding,
-                defaultViewMode: defaultViewModeBinding
-            )
+            MomentoSettingsView(appLanguage: appLanguageBinding)
             .environment(\.locale, language.locale)
             .environment(\.appLocalization, localization)
         }
@@ -45,24 +41,11 @@ struct MomentoApp: App {
         AppLanguage(rawValue: appLanguageRawValue) ?? .system
     }
 
-    private var defaultViewMode: AssetViewMode {
-        AssetViewMode(rawValue: defaultViewModeRawValue) ?? .masonry
-    }
-
     private var appLanguageBinding: Binding<AppLanguage> {
         Binding {
             appLanguage
         } set: { newValue in
             appLanguageRawValue = newValue.rawValue
-        }
-    }
-
-    private var defaultViewModeBinding: Binding<AssetViewMode> {
-        Binding {
-            defaultViewMode
-        } set: { newValue in
-            defaultViewModeRawValue = newValue.rawValue
-            store.setViewMode(newValue)
         }
     }
 

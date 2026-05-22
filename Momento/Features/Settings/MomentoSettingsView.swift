@@ -4,42 +4,38 @@ struct MomentoSettingsView: View {
     @Environment(\.appLocalization) private var localization
 
     @Binding var appLanguage: AppLanguage
-    @Binding var defaultViewMode: AssetViewMode
 
     var body: some View {
-        Form {
-            Section(localization.string("Language")) {
-                Picker(localization.string("App Language"), selection: $appLanguage) {
-                    ForEach(AppLanguage.allCases) { language in
-                        Text(localization.title(for: language))
-                            .tag(language)
+        VStack(alignment: .leading, spacing: 14) {
+            settingsSection(localization.string("Language")) {
+                settingsRow(label: localization.string("App Language")) {
+                    Picker("", selection: $appLanguage) {
+                        ForEach(AppLanguage.allCases) { language in
+                            Text(localization.title(for: language))
+                                .tag(language)
+                        }
                     }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .buttonStyle(.glass(.clear))
+                    .frame(width: 190)
                 }
-                .pickerStyle(.menu)
             }
 
-            Section(localization.string("Appearance")) {
-                Picker(localization.string("Default View"), selection: $defaultViewMode) {
-                    ForEach(AssetViewMode.allCases) { viewMode in
-                        Text(localization.title(for: viewMode))
-                            .tag(viewMode)
-                    }
-                }
-                .pickerStyle(.segmented)
+            settingsSection(localization.string("About")) {
+                settingsInfoRow(label: localization.string("Name"), value: "Momento")
+                settingsInfoRow(label: localization.string("Version"), value: versionText)
             }
 
-            Section(localization.string("About")) {
-                LabeledContent(localization.string("Name"), value: "Momento")
-                LabeledContent(localization.string("Version"), value: versionText)
-            }
+            Spacer(minLength: 0)
         }
-        .formStyle(.grouped)
         .padding(20)
         .background {
             MomentoGlassBackground(cornerRadius: 0)
                 .ignoresSafeArea()
         }
-        .frame(width: 420)
+        .frame(width: 420, alignment: .topLeading)
+        .frame(minHeight: 220, alignment: .topLeading)
     }
 
     private var versionText: String {
@@ -47,12 +43,66 @@ struct MomentoSettingsView: View {
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
         return "\(version) (\(build))"
     }
+
+    private func settingsSection<Content: View>(
+        _ title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(MomentoTheme.secondaryText)
+                .padding(.horizontal, 2)
+
+            VStack(spacing: 0) {
+                content()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background {
+                MomentoGlassBackground(
+                    glass: .regular.tint(Color.black.opacity(0.12)),
+                    cornerRadius: 16
+                )
+            }
+        }
+    }
+
+    private func settingsRow<Content: View>(
+        label: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        HStack(spacing: 12) {
+            Text(label)
+                .foregroundStyle(MomentoTheme.primaryText)
+
+            Spacer(minLength: 12)
+
+            content()
+        }
+        .font(.system(size: 13, weight: .medium))
+        .frame(minHeight: 34)
+    }
+
+    private func settingsInfoRow(label: String, value: String) -> some View {
+        HStack(spacing: 12) {
+            Text(label)
+                .foregroundStyle(MomentoTheme.secondaryText)
+
+            Spacer(minLength: 12)
+
+            Text(value)
+                .foregroundStyle(MomentoTheme.primaryText)
+                .multilineTextAlignment(.trailing)
+        }
+        .font(.system(size: 13, weight: .medium))
+        .frame(minHeight: 30)
+    }
 }
 
 #Preview {
     @Previewable @State var language = AppLanguage.system
-    @Previewable @State var viewMode = AssetViewMode.masonry
 
-    MomentoSettingsView(appLanguage: $language, defaultViewMode: $viewMode)
+    MomentoSettingsView(appLanguage: $language)
         .environment(\.appLocalization, AppLocalization(language: language))
 }
