@@ -78,19 +78,27 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
                 record.setValue(asset.id, forKey: "id")
                 record.setValue(asset.libraryID, forKey: "libraryID")
                 record.setValue(asset.displayName, forKey: "displayName")
+                record.setValue(asset.originalFileName, forKey: "originalFileName")
                 // 数据库只保存库包内的相对路径。用户移动整个 .momento 包后，
                 // 只要 manifest 和 database 仍在同一个包里，资源路径仍可重新解析。
                 record.setValue(try storage.relativePath(for: asset.storageURL, in: library), forKey: "storageRelativePath")
                 record.setValue(asset.kind.rawValue, forKey: "kindRaw")
                 record.setValue(asset.fileExtension, forKey: "fileExtension")
+                record.setValue(asset.utiIdentifier, forKey: "utiIdentifier")
                 record.setValue(asset.byteSize, forKey: "byteSize")
                 record.setValue(asset.contentHash, forKey: "contentHash")
                 record.setValue(asset.dimensions?.width, forKey: "pixelWidth")
                 record.setValue(asset.dimensions?.height, forKey: "pixelHeight")
+                record.setValue(asset.orientation, forKey: "orientation")
+                record.setValue(asset.colorProfileName, forKey: "colorProfileName")
                 let storedExifMetadataData = exifMetadataData(asset.exifMetadata)
                 record.setValue(storedExifMetadataData, forKey: "exifMetadataData")
+                record.setValue(asset.note, forKey: "note")
                 record.setValue(asset.isFavorite, forKey: "isFavorite")
+                record.setValue(asset.isTrashed, forKey: "isTrashed")
+                record.setValue(asset.trashedAt, forKey: "trashedAt")
                 record.setValue(asset.importedAt, forKey: "importedAt")
+                record.setValue(asset.updatedAt, forKey: "updatedAt")
                 record.setValue(tagsData(asset.tags), forKey: "tagsData")
                 saveColors(asset.paletteColors, forAssetID: asset.id)
 
@@ -236,7 +244,10 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
                 throw LibraryMetadataError.missingAsset
             }
 
-            record.setValue(isFavorite, forKey: "isFavorite")
+            if (record.value(forKey: "isFavorite") as? Bool) != isFavorite {
+                record.setValue(isFavorite, forKey: "isFavorite")
+                record.setValue(Date(), forKey: "updatedAt")
+            }
             if context.hasChanges {
                 try context.save()
             }
@@ -259,7 +270,10 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
                 throw LibraryMetadataError.missingAsset
             }
 
-            record.setValue(trimmedName, forKey: "displayName")
+            if (record.value(forKey: "displayName") as? String) != trimmedName {
+                record.setValue(trimmedName, forKey: "displayName")
+                record.setValue(Date(), forKey: "updatedAt")
+            }
             if context.hasChanges {
                 try context.save()
             }
@@ -409,28 +423,69 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
             dimensions = nil
         }
 
+        let storageURL = storage.resolveAssetURL(relativePath: storageRelativePath, in: library)
+        let exifMetadata = exifMetadata(from: record.value(forKey: "exifMetadataData"))
         let thumbnailURL = storage.thumbnailURL(forContentHash: contentHash, in: library)
         let resolvedThumbnailURL = FileManager.default.fileExists(atPath: thumbnailURL.path) ? thumbnailURL : nil
+        let originalFileName = storedOriginalFileName(
+            record.value(forKey: "originalFileName"),
+            displayName: displayName,
+            fileExtension: fileExtension,
+            storageURL: storageURL
+        )
 
         return AssetItem(
             id: id,
             libraryID: libraryID,
             displayName: displayName,
+            originalFileName: originalFileName,
             originalURL: nil,
-            storageURL: storage.resolveAssetURL(relativePath: storageRelativePath, in: library),
+            storageURL: storageURL,
             kind: kind,
             fileExtension: fileExtension,
+            utiIdentifier: storedUTIIdentifier(record.value(forKey: "utiIdentifier")),
             byteSize: int64Value(record.value(forKey: "byteSize")) ?? 0,
             contentHash: contentHash,
             dimensions: dimensions,
-            exifMetadata: exifMetadata(from: record.value(forKey: "exifMetadataData")),
+            exifMetadata: exifMetadata,
+            orientation: intValue(record.value(forKey: "orientation")),
+            colorProfileName: record.value(forKey: "colorProfileName") as? String ?? exifMetadata?.profileName,
+            note: record.value(forKey: "note") as? String,
             tags: tags(from: record.value(forKey: "tagsData")),
             folderIDs: folderIDs,
             paletteColors: paletteColors,
             thumbnailURL: resolvedThumbnailURL,
             isFavorite: record.value(forKey: "isFavorite") as? Bool ?? false,
-            importedAt: importedAt
+            isTrashed: record.value(forKey: "isTrashed") as? Bool ?? false,
+            trashedAt: record.value(forKey: "trashedAt") as? Date,
+            importedAt: importedAt,
+            updatedAt: record.value(forKey: "updatedAt") as? Date ?? importedAt
         )
+    }
+
+    private func storedOriginalFileName(
+        _ value: Any?,
+        displayName: String,
+        fileExtension: String,
+        storageURL: URL
+    ) -> String {
+        if let value = value as? String, !value.isEmpty {
+            return value
+        }
+
+        if !displayName.isEmpty {
+            return fileExtension.isEmpty ? displayName : "\(displayName).\(fileExtension)"
+        }
+
+        return storageURL.lastPathComponent
+    }
+
+    private func storedUTIIdentifier(_ value: Any?) -> String {
+        if let value = value as? String, !value.isEmpty {
+            return value
+        }
+
+        return "public.data"
     }
 
     private func loadMemberships() throws -> [NSManagedObject] {

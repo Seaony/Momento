@@ -1,4 +1,5 @@
 import Foundation
+import UniformTypeIdentifiers
 
 nonisolated struct AssetLibrary: Identifiable, Hashable, Codable, Sendable {
     var id: String
@@ -206,57 +207,85 @@ nonisolated struct AssetItem: Identifiable, Hashable, Codable, Sendable {
     var id: String
     var libraryID: String
     var displayName: String
+    var originalFileName: String
     var originalURL: URL?
     var storageURL: URL
     var kind: AssetKind
     var fileExtension: String
+    var utiIdentifier: String
     var byteSize: Int64
     var contentHash: String
     var dimensions: AssetDimensions?
     var exifMetadata: AssetExifMetadata?
+    var orientation: Int?
+    var colorProfileName: String?
+    var note: String?
     var tags: [TagItem]
     var folderIDs: [String]
     var paletteColors: [AssetColor]
     var thumbnailURL: URL?
     var isFavorite: Bool
+    var isTrashed: Bool
+    var trashedAt: Date?
     var importedAt: Date
+    var updatedAt: Date
 
     init(
         id: String,
         libraryID: String,
         displayName: String,
+        originalFileName: String? = nil,
         originalURL: URL?,
         storageURL: URL,
         kind: AssetKind,
         fileExtension: String,
+        utiIdentifier: String? = nil,
         byteSize: Int64,
         contentHash: String,
         dimensions: AssetDimensions?,
         exifMetadata: AssetExifMetadata? = nil,
+        orientation: Int? = nil,
+        colorProfileName: String? = nil,
+        note: String? = nil,
         tags: [TagItem],
         folderIDs: [String] = [],
         paletteColors: [AssetColor] = [],
         thumbnailURL: URL? = nil,
         isFavorite: Bool,
-        importedAt: Date
+        isTrashed: Bool = false,
+        trashedAt: Date? = nil,
+        importedAt: Date,
+        updatedAt: Date? = nil
     ) {
         self.id = id
         self.libraryID = libraryID
         self.displayName = displayName
+        self.originalFileName = originalFileName
+            ?? originalURL?.lastPathComponent
+            ?? storageURL.lastPathComponent
         self.originalURL = originalURL
         self.storageURL = storageURL
         self.kind = kind
         self.fileExtension = fileExtension
+        self.utiIdentifier = utiIdentifier
+            ?? UTType(filenameExtension: fileExtension)?.identifier
+            ?? "public.data"
         self.byteSize = byteSize
         self.contentHash = contentHash
         self.dimensions = dimensions
         self.exifMetadata = exifMetadata
+        self.orientation = orientation
+        self.colorProfileName = colorProfileName
+        self.note = note
         self.tags = tags
         self.folderIDs = folderIDs
         self.paletteColors = paletteColors
         self.thumbnailURL = thumbnailURL
         self.isFavorite = isFavorite
+        self.isTrashed = isTrashed
+        self.trashedAt = trashedAt
         self.importedAt = importedAt
+        self.updatedAt = updatedAt ?? importedAt
     }
 }
 

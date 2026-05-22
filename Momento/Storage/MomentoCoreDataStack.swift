@@ -28,16 +28,27 @@ nonisolated final class MomentoCoreDataStack {
         container.viewContext.mergePolicy = NSMergePolicy(merge: .mergeByPropertyStoreTrumpMergePolicyType)
     }
 
-    private static func managedObjectModel() throws -> NSManagedObjectModel {
+    static func managedObjectModel(versionName: String? = nil) throws -> NSManagedObjectModel {
         for bundle in [Bundle.main] + Bundle.allBundles + Bundle.allFrameworks {
             guard let modelURL = bundle.url(forResource: "MomentoModel", withExtension: "momd"),
-                  let model = NSManagedObjectModel(contentsOf: modelURL) else {
+                  let model = managedObjectModel(in: modelURL, versionName: versionName) else {
                 continue
             }
             return model
         }
 
         throw MomentoCoreDataStackError.missingManagedObjectModel
+    }
+
+    private static func managedObjectModel(in modelURL: URL, versionName: String?) -> NSManagedObjectModel? {
+        guard let versionName else {
+            return NSManagedObjectModel(contentsOf: modelURL)
+        }
+
+        let versionURL = modelURL
+            .appendingPathComponent(versionName)
+            .appendingPathExtension("mom")
+        return NSManagedObjectModel(contentsOf: versionURL)
     }
 }
 

@@ -80,24 +80,30 @@ struct AssetImportService: Sendable {
                 )
 
                 let values = try fileURL.resourceValues(forKeys: [.fileSizeKey])
+                let exifMetadata = imageExifMetadata(for: fileURL)
+                let importedAt = Date()
                 imported.append(
                     AssetItem(
                         id: hash,
                         libraryID: library.id,
                         displayName: fileURL.deletingPathExtension().lastPathComponent,
+                        originalFileName: fileURL.lastPathComponent,
                         originalURL: fileURL,
                         storageURL: destination,
                         kind: kind,
                         fileExtension: fileExtension,
+                        utiIdentifier: UTType(filenameExtension: fileExtension)?.identifier,
                         byteSize: Int64(values.fileSize ?? 0),
                         contentHash: hash,
                         dimensions: imageDimensions(for: fileURL),
-                        exifMetadata: imageExifMetadata(for: fileURL),
+                        exifMetadata: exifMetadata,
+                        colorProfileName: exifMetadata?.profileName,
                         tags: [],
                         paletteColors: paletteColors,
                         thumbnailURL: thumbnailURL,
                         isFavorite: false,
-                        importedAt: Date()
+                        importedAt: importedAt,
+                        updatedAt: importedAt
                     )
                 )
             }

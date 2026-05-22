@@ -1,4 +1,5 @@
 import CoreGraphics
+import CoreData
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
@@ -105,6 +106,84 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(store.assets.first?.thumbnailURL).path))
         XCTAssertLessThanOrEqual(store.assets.first?.paletteColors.count ?? 0, 8)
         XCTAssertEqual(try environment.storedAssetFiles().count, 1)
+    }
+
+    @MainActor
+    func testImportedAssetPersistsCoreMetadata() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        let source = try environment.writeOnePixelPNG(named: "core-metadata.png")
+        try await store.importItems(from: [source])
+        let imported = try XCTUnwrap(store.assets.first)
+
+        XCTAssertEqual(imported.displayName, "core-metadata")
+        XCTAssertEqual(imported.originalFileName, "core-metadata.png")
+        XCTAssertEqual(imported.utiIdentifier, UTType.png.identifier)
+        XCTAssertNil(imported.note)
+        XCTAssertFalse(imported.isTrashed)
+        XCTAssertNil(imported.trashedAt)
+        XCTAssertEqual(imported.updatedAt.timeIntervalSince1970, imported.importedAt.timeIntervalSince1970, accuracy: 0.01)
+
+        try await Task.sleep(nanoseconds: 10_000_000)
+        try store.renameAsset(id: imported.id, to: "Renamed Metadata")
+        let renamed = try XCTUnwrap(store.assets.first)
+
+        XCTAssertEqual(renamed.displayName, "Renamed Metadata")
+        XCTAssertEqual(renamed.originalFileName, "core-metadata.png")
+        XCTAssertGreaterThan(renamed.updatedAt, imported.updatedAt)
+
+        try await Task.sleep(nanoseconds: 10_000_000)
+        try store.toggleFavorite(for: imported.id)
+        let favorited = try XCTUnwrap(store.assets.first)
+
+        XCTAssertTrue(favorited.isFavorite)
+        XCTAssertGreaterThan(favorited.updatedAt, renamed.updatedAt)
+
+        let reopened = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try reopened.openLibrary(at: environment.packageURL)
+        let reloaded = try XCTUnwrap(reopened.assets.first)
+
+        XCTAssertEqual(reloaded.displayName, "Renamed Metadata")
+        XCTAssertEqual(reloaded.originalFileName, "core-metadata.png")
+        XCTAssertEqual(reloaded.utiIdentifier, UTType.png.identifier)
+        XCTAssertNil(reloaded.note)
+        XCTAssertFalse(reloaded.isTrashed)
+        XCTAssertNil(reloaded.trashedAt)
+        XCTAssertEqual(reloaded.updatedAt.timeIntervalSince1970, favorited.updatedAt.timeIntervalSince1970, accuracy: 0.01)
+    }
+
+    func testOpeningPreV3LibraryMigratesMetadata() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let storage = LibraryStorage(applicationSupportRoot: environment.rootURL)
+        let library = try storage.createLibraryPackage(at: environment.packageURL, name: "Test")
+        let fixture = try environment.writePreV3MetadataStore(for: library, storage: storage)
+
+        let metadataStore = try LibraryMetadataStore(library: library, storage: storage)
+        let asset = try XCTUnwrap(try metadataStore.loadAssets().first)
+
+        XCTAssertEqual(asset.id, fixture.assetID)
+        XCTAssertEqual(asset.updatedAt.timeIntervalSince1970, fixture.importedAt.timeIntervalSince1970, accuracy: 0.01)
+        XCTAssertEqual(asset.utiIdentifier, "public.data")
+        XCTAssertNil(asset.note)
+        XCTAssertFalse(asset.isTrashed)
+        XCTAssertNil(asset.trashedAt)
+        XCTAssertEqual(asset.tags.map(\.name), ["Legacy"])
+        XCTAssertEqual(asset.folderIDs, [fixture.folderID])
+        XCTAssertEqual(asset.paletteColors.map(\.hex), ["#123456"])
     }
 
     @MainActor
@@ -972,6 +1051,83 @@ private struct TestEnvironment {
             let values = try url.resourceValues(forKeys: [.isRegularFileKey])
             return values.isRegularFile == true ? url : nil
         }
+    }
+
+    func writePreV3MetadataStore(
+        for library: AssetLibrary,
+        storage: LibraryStorage
+    ) throws -> (assetID: String, folderID: String, importedAt: Date) {
+        let model = try MomentoCoreDataStack.managedObjectModel(versionName: "MomentoModel v2")
+        let coordinator = NSPersistentStoreCoordinator(managedObjectModel: model)
+        try coordinator.addPersistentStore(
+            ofType: NSSQLiteStoreType,
+            configurationName: nil,
+            at: storage.databaseURL(for: library),
+            options: nil
+        )
+
+        let context = NSManagedObjectContext(concurrencyType: .privateQueueConcurrencyType)
+        context.persistentStoreCoordinator = coordinator
+
+        let assetID = "legacy-asset"
+        let folderID = "legacy-folder"
+        let importedAt = Date(timeIntervalSince1970: 1_700_000_000)
+
+        try context.performAndWait {
+            let asset = NSManagedObject(
+                entity: NSEntityDescription.entity(forEntityName: "AssetRecord", in: context)!,
+                insertInto: context
+            )
+            asset.setValue(assetID, forKey: "id")
+            asset.setValue(library.id, forKey: "libraryID")
+            asset.setValue("Legacy Asset", forKey: "displayName")
+            asset.setValue("assets/legacy.png", forKey: "storageRelativePath")
+            asset.setValue("image", forKey: "kindRaw")
+            asset.setValue("png", forKey: "fileExtension")
+            asset.setValue(Int64(128), forKey: "byteSize")
+            asset.setValue("legacy-hash", forKey: "contentHash")
+            asset.setValue(1, forKey: "pixelWidth")
+            asset.setValue(1, forKey: "pixelHeight")
+            asset.setValue(false, forKey: "isFavorite")
+            asset.setValue(importedAt, forKey: "importedAt")
+            asset.setValue(try JSONEncoder.momento.encode([TagItem(id: "legacy", name: "Legacy")]), forKey: "tagsData")
+
+            let color = NSManagedObject(
+                entity: NSEntityDescription.entity(forEntityName: "AssetColorRecord", in: context)!,
+                insertInto: context
+            )
+            color.setValue("legacy-color", forKey: "id")
+            color.setValue(library.id, forKey: "libraryID")
+            color.setValue(assetID, forKey: "assetID")
+            color.setValue("#123456", forKey: "hex")
+            color.setValue(0.8, forKey: "coverage")
+            color.setValue(0, forKey: "sortIndex")
+
+            let folder = NSManagedObject(
+                entity: NSEntityDescription.entity(forEntityName: "FolderRecord", in: context)!,
+                insertInto: context
+            )
+            folder.setValue(folderID, forKey: "id")
+            folder.setValue(library.id, forKey: "libraryID")
+            folder.setValue("Legacy Folder", forKey: "name")
+            folder.setValue(0, forKey: "sortIndex")
+            folder.setValue(importedAt, forKey: "createdAt")
+            folder.setValue(importedAt, forKey: "updatedAt")
+
+            let membership = NSManagedObject(
+                entity: NSEntityDescription.entity(forEntityName: "AssetFolderMembershipRecord", in: context)!,
+                insertInto: context
+            )
+            membership.setValue("legacy-membership", forKey: "id")
+            membership.setValue(library.id, forKey: "libraryID")
+            membership.setValue(assetID, forKey: "assetID")
+            membership.setValue(folderID, forKey: "folderID")
+            membership.setValue(importedAt, forKey: "createdAt")
+
+            try context.save()
+        }
+
+        return (assetID, folderID, importedAt)
     }
 
     func cleanup() {

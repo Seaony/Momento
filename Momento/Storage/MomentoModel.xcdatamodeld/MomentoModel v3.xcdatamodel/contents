@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="26500" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
+    <entity name="AssetRecord" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="byteSize" optional="NO" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="contentHash" optional="NO" attributeType="String"/>
+        <attribute name="displayName" optional="NO" attributeType="String"/>
+        <attribute name="exifMetadataData" optional="YES" attributeType="Binary"/>
+        <attribute name="fileExtension" optional="NO" attributeType="String"/>
+        <attribute name="id" optional="NO" attributeType="String"/>
+        <attribute name="importedAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="isFavorite" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="isTrashed" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="kindRaw" optional="NO" attributeType="String"/>
+        <attribute name="libraryID" optional="NO" attributeType="String"/>
+        <attribute name="note" optional="YES" attributeType="String"/>
+        <attribute name="originalFileName" optional="NO" attributeType="String" defaultValueString=""/>
+        <attribute name="orientation" optional="YES" attributeType="Integer 64" usesScalarValueType="YES"/>
+        <attribute name="pixelHeight" optional="YES" attributeType="Integer 64" usesScalarValueType="YES"/>
+        <attribute name="pixelWidth" optional="YES" attributeType="Integer 64" usesScalarValueType="YES"/>
+        <attribute name="storageRelativePath" optional="NO" attributeType="String"/>
+        <attribute name="tagsData" optional="YES" attributeType="Binary"/>
+        <attribute name="trashedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="updatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="utiIdentifier" optional="NO" attributeType="String" defaultValueString="public.data"/>
+        <attribute name="colorProfileName" optional="YES" attributeType="String"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="libraryID"/>
+                <constraint value="contentHash"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+    <entity name="AssetColorRecord" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="assetID" optional="NO" attributeType="String"/>
+        <attribute name="coverage" optional="NO" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="hex" optional="NO" attributeType="String"/>
+        <attribute name="id" optional="NO" attributeType="String"/>
+        <attribute name="libraryID" optional="NO" attributeType="String"/>
+        <attribute name="sortIndex" optional="NO" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="libraryID"/>
+                <constraint value="assetID"/>
+                <constraint value="sortIndex"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+    <entity name="AssetFolderMembershipRecord" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="assetID" optional="NO" attributeType="String"/>
+        <attribute name="createdAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="folderID" optional="NO" attributeType="String"/>
+        <attribute name="id" optional="NO" attributeType="String"/>
+        <attribute name="libraryID" optional="NO" attributeType="String"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="libraryID"/>
+                <constraint value="assetID"/>
+                <constraint value="folderID"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+    <entity name="AssetTagRecord" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="assetID" optional="NO" attributeType="String"/>
+        <attribute name="createdAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="NO" attributeType="String"/>
+        <attribute name="libraryID" optional="NO" attributeType="String"/>
+        <attribute name="tagID" optional="NO" attributeType="String"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="libraryID"/>
+                <constraint value="assetID"/>
+                <constraint value="tagID"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+    <entity name="FolderRecord" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="createdAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="NO" attributeType="String"/>
+        <attribute name="libraryID" optional="NO" attributeType="String"/>
+        <attribute name="name" optional="NO" attributeType="String"/>
+        <attribute name="parentID" optional="YES" attributeType="String"/>
+        <attribute name="sortIndex" optional="NO" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="updatedAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="libraryID"/>
+                <constraint value="id"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+    <entity name="TagRecord" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="colorHex" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="NO" attributeType="String"/>
+        <attribute name="libraryID" optional="NO" attributeType="String"/>
+        <attribute name="name" optional="NO" attributeType="String"/>
+        <attribute name="normalizedName" optional="NO" attributeType="String"/>
+        <attribute name="updatedAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="libraryID"/>
+                <constraint value="normalizedName"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+    <elements>
+        <element name="AssetRecord" positionX="-63" positionY="-18" width="128" height="434"/>
+        <element name="AssetColorRecord" positionX="108" positionY="-18" width="128" height="149"/>
+        <element name="AssetFolderMembershipRecord" positionX="279" positionY="-18" width="128" height="134"/>
+        <element name="AssetTagRecord" positionX="450" positionY="-18" width="128" height="134"/>
+        <element name="FolderRecord" positionX="621" positionY="-18" width="128" height="164"/>
+        <element name="TagRecord" positionX="792" positionY="-18" width="128" height="179"/>
+    </elements>
+</model>
