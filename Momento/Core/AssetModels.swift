@@ -33,6 +33,15 @@ nonisolated struct TagItem: Identifiable, Hashable, Codable, Sendable {
     }
 }
 
+nonisolated struct TagSummary: Identifiable, Hashable, Sendable {
+    var tag: TagItem
+    var assetCount: Int
+
+    var id: TagItem.ID {
+        tag.id
+    }
+}
+
 nonisolated struct AssetDimensions: Hashable, Codable, Sendable {
     var width: Int
     var height: Int

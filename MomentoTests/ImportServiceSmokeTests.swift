@@ -234,6 +234,65 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testTagManagementRenamesAndDeletesTagsAcrossAssets() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        let firstSource = try environment.writeOnePixelPNG(named: "first-tagged.png")
+        let secondSource = try environment.writeOnePixelJPEGWithExif(named: "second-tagged.jpg")
+        try await store.importItems(from: [firstSource, secondSource])
+
+        let firstAsset = try XCTUnwrap(store.assets.first { $0.displayName == "first-tagged" })
+        let secondAsset = try XCTUnwrap(store.assets.first { $0.displayName == "second-tagged" })
+
+        store.selectAsset(id: firstAsset.id)
+        try store.updateSelectedTags(["Mood"])
+        store.selectAsset(id: secondAsset.id)
+        try store.updateSelectedTags(["Mood", "Travel"])
+
+        XCTAssertEqual(store.tagSummaries.map { "\($0.tag.name):\($0.assetCount)" }, [
+            "Mood:2",
+            "Travel:1"
+        ])
+
+        try store.renameTag(id: "mood", to: "Vibe")
+
+        XCTAssertEqual(store.tagSummaries.map { "\($0.tag.name):\($0.assetCount)" }, [
+            "Travel:1",
+            "Vibe:2"
+        ])
+        XCTAssertTrue(store.assets.allSatisfy { asset in
+            !asset.tags.contains { $0.name == "Mood" }
+        })
+
+        let reopened = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try reopened.openLibrary(at: environment.packageURL)
+        XCTAssertEqual(reopened.tagSummaries.map { "\($0.tag.name):\($0.assetCount)" }, [
+            "Travel:1",
+            "Vibe:2"
+        ])
+
+        try reopened.deleteTag(id: "mood")
+        XCTAssertEqual(reopened.tagSummaries.map { "\($0.tag.name):\($0.assetCount)" }, [
+            "Travel:1"
+        ])
+        XCTAssertTrue(reopened.assets.allSatisfy { asset in
+            !asset.tags.contains { $0.name == "Vibe" }
+        })
+    }
+
+    @MainActor
     func testImportPersistsExifMetadataAcrossReloads() async throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }

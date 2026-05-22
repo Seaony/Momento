@@ -169,29 +169,14 @@ struct ContentView: View {
             commands: commands,
             onCommandSelected: handleCommand
         ) {
-            ZStack {
-                AssetCollectionGridView(
-                    assets: visibleAssets,
-                    selectedAssetIDs: selectedAssetIDs,
-                    viewMode: store.viewMode,
-                    localization: localization,
-                    onSelectionChange: selectAssets,
-                    onDoubleClick: { asset in
-                        preview(asset)
-                    },
-                    onSpacePreviewStart: previewWhileSpaceIsPressed,
-                    onSpacePreviewEnd: endSpacePreview,
-                    onFavoriteToggle: toggleFavorite,
-                    onContextMenuAction: handleAssetContextMenuAction
-                )
-
-                if visibleAssets.isEmpty {
-                    emptyGridState
-                }
+            if isTagManagementSelected {
+                tagManagementContent
+            } else {
+                assetGridContent(visibleAssets)
             }
         }
         .toolbar {
-            if !isModalOverlayVisible {
+            if !isModalOverlayVisible && !isTagManagementSelected {
                 ToolbarSpacer(.flexible)
                 ToolbarItemGroup(placement: .automatic) {
                     toolbarViewModeSwitcher
@@ -202,6 +187,45 @@ struct ContentView: View {
             }
         }
         .navigationTitle("")
+    }
+
+    private var isTagManagementSelected: Bool {
+        if case .tagManagement = store.sidebarSelection {
+            return true
+        }
+        return false
+    }
+
+    @ViewBuilder
+    private func assetGridContent(_ visibleAssets: [AssetItem]) -> some View {
+        ZStack {
+            AssetCollectionGridView(
+                assets: visibleAssets,
+                selectedAssetIDs: selectedAssetIDs,
+                viewMode: store.viewMode,
+                localization: localization,
+                onSelectionChange: selectAssets,
+                onDoubleClick: { asset in
+                    preview(asset)
+                },
+                onSpacePreviewStart: previewWhileSpaceIsPressed,
+                onSpacePreviewEnd: endSpacePreview,
+                onFavoriteToggle: toggleFavorite,
+                onContextMenuAction: handleAssetContextMenuAction
+            )
+
+            if visibleAssets.isEmpty {
+                emptyGridState
+            }
+        }
+    }
+
+    private var tagManagementContent: some View {
+        MomentoTagManagementView(
+            tags: store.tagSummaries,
+            onRenameTag: renameTag,
+            onDeleteTag: deleteTag
+        )
     }
 
     private var toolbarViewModeSwitcher: some View {
@@ -658,6 +682,22 @@ struct ContentView: View {
     private func renameAssetTitle(_ assetID: AssetItem.ID, to title: String) {
         do {
             try store.renameAsset(id: assetID, to: title)
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func renameTag(_ tagID: TagItem.ID, to name: String) {
+        do {
+            try store.renameTag(id: tagID, to: name)
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func deleteTag(_ tagID: TagItem.ID) {
+        do {
+            try store.deleteTag(id: tagID)
         } catch {
             showImportError(error)
         }

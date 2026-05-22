@@ -130,6 +130,26 @@ final class LibraryStore {
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
+    var tagSummaries: [TagSummary] {
+        guard let currentLibrary else {
+            return []
+        }
+
+        var summariesByID: [TagItem.ID: TagSummary] = [:]
+        for asset in assets where asset.libraryID == currentLibrary.id {
+            var seenTagIDs = Set<TagItem.ID>()
+            for tag in asset.tags where seenTagIDs.insert(tag.id).inserted {
+                var summary = summariesByID[tag.id] ?? TagSummary(tag: tag, assetCount: 0)
+                summary.assetCount += 1
+                summariesByID[tag.id] = summary
+            }
+        }
+
+        return summariesByID.values.sorted {
+            $0.tag.name.localizedCaseInsensitiveCompare($1.tag.name) == .orderedAscending
+        }
+    }
+
     func createLibrary(at packageURL: URL) throws {
         let name = packageURL.deletingPathExtension().lastPathComponent
         let library = try storage.createLibraryPackage(at: packageURL, name: name)
@@ -322,6 +342,62 @@ final class LibraryStore {
             mergeAssets([try metadataStore.updateTags(updatedTags, forAssetID: selectedAssetID)])
         } else {
             assets[index].tags = updatedTags
+        }
+    }
+
+    func renameTag(id tagID: TagItem.ID, to name: String) throws {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            throw LibraryStoreError.invalidTagName
+        }
+
+        guard let currentLibrary else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        let libraryAssets = assets.filter { $0.libraryID == currentLibrary.id }
+        guard let existingTag = libraryAssets.flatMap(\.tags).first(where: { $0.id == tagID }) else {
+            throw LibraryStoreError.missingTag
+        }
+
+        let replacementTag = libraryAssets
+            .flatMap(\.tags)
+            .first {
+                $0.id != tagID && $0.name.caseInsensitiveCompare(trimmedName) == .orderedSame
+            }
+            ?? TagItem(id: existingTag.id, name: trimmedName, colorHex: existingTag.colorHex)
+
+        try updateAssetsWithTag(id: tagID) { tags in
+            deduplicatedTags(
+                tags.map { tag in
+                    tag.id == tagID ? replacementTag : tag
+                }
+            )
+        }
+
+        if case .tag(let selectedTagID) = sidebarSelection, selectedTagID == tagID {
+            sidebarSelection = .tag(replacementTag.id)
+        }
+    }
+
+    func deleteTag(id tagID: TagItem.ID) throws {
+        guard let currentLibrary else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        guard assets.contains(where: { asset in
+            asset.libraryID == currentLibrary.id &&
+            asset.tags.contains { $0.id == tagID }
+        }) else {
+            throw LibraryStoreError.missingTag
+        }
+
+        try updateAssetsWithTag(id: tagID) { tags in
+            tags.filter { $0.id != tagID }
+        }
+
+        if case .tag(let selectedTagID) = sidebarSelection, selectedTagID == tagID {
+            sidebarSelection = .tagManagement
         }
     }
 
@@ -575,6 +651,57 @@ final class LibraryStore {
         }
     }
 
+    private func updateAssetsWithTag(
+        id tagID: TagItem.ID,
+        transform: ([TagItem]) -> [TagItem]
+    ) throws {
+        guard let currentLibrary else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        let updatedAssetIDs = assets
+            .filter { asset in
+                asset.libraryID == currentLibrary.id &&
+                asset.tags.contains { $0.id == tagID }
+            }
+            .map(\.id)
+
+        guard !updatedAssetIDs.isEmpty else {
+            return
+        }
+
+        if let metadataStore {
+            var updatedAssets: [AssetItem] = []
+            for assetID in updatedAssetIDs {
+                guard let asset = assets.first(where: { $0.id == assetID }) else {
+                    continue
+                }
+                updatedAssets.append(
+                    try metadataStore.updateTags(transform(asset.tags), forAssetID: assetID)
+                )
+            }
+            mergeAssets(updatedAssets)
+        } else {
+            for assetID in updatedAssetIDs {
+                guard let index = assets.firstIndex(where: { $0.id == assetID }) else {
+                    continue
+                }
+                assets[index].tags = transform(assets[index].tags)
+            }
+        }
+
+        if let selectedAssetID, !visibleAssets.contains(where: { $0.id == selectedAssetID }) {
+            self.selectedAssetID = nil
+        }
+    }
+
+    private func deduplicatedTags(_ tags: [TagItem]) -> [TagItem] {
+        var seen = Set<TagItem.ID>()
+        return tags.filter { tag in
+            seen.insert(tag.id).inserted
+        }
+    }
+
     private func nextFolderName(parentID: AssetFolder.ID?) -> String {
         let baseName = "New Folder"
         let siblingNames = Set(folders.filter { $0.parentID == parentID }.map(\.name))
@@ -708,7 +835,9 @@ enum LibraryStoreError: LocalizedError {
     case unsupportedLibraryURL
     case invalidLibraryName
     case invalidAssetName
+    case invalidTagName
     case missingAsset
+    case missingTag
 
     var errorDescription: String? {
         switch self {
@@ -722,8 +851,12 @@ enum LibraryStoreError: LocalizedError {
             "Enter a library name."
         case .invalidAssetName:
             "Enter an asset title."
+        case .invalidTagName:
+            "Enter a tag name."
         case .missingAsset:
             "This asset is no longer available."
+        case .missingTag:
+            "This tag is no longer available."
         }
     }
 }

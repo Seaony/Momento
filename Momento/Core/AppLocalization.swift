@@ -79,8 +79,12 @@ struct AppLocalization: Equatable {
             string("Enter a library name.")
         case .invalidAssetName:
             string("Enter an asset title.")
+        case .invalidTagName:
+            string("Enter a tag name.")
         case .missingAsset:
             string("This asset is no longer available.")
+        case .missingTag:
+            string("This tag is no longer available.")
         }
     }
 

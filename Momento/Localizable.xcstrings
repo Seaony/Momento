@@ -918,6 +918,40 @@
         }
       }
     },
+    "Delete Tag" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete Tag"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除标签"
+          }
+        }
+      }
+    },
+    "Delete tag warning: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete “%@”? This removes the tag from every linked asset."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要删除“%@”吗？这会从所有关联图片中移除这个标签。"
+          }
+        }
+      }
+    },
     "Dismiss" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -986,6 +1020,23 @@
         }
       }
     },
+    "Edit Tag" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit Tag"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑标签"
+          }
+        }
+      }
+    },
     "English" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1050,6 +1101,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请输入资源库的名称（例：我的灵感、设计素材），并点击下方按钮选择资源库保存的路径。"
+          }
+        }
+      }
+    },
+    "Enter a tag name." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a tag name."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请输入标签名称。"
           }
         }
       }
@@ -1543,6 +1611,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "资源库名称"
+          }
+        }
+      }
+    },
+    "Linked Assets" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Linked Assets"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关联图片"
           }
         }
       }
@@ -2716,6 +2801,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "这个最近使用的资源库不再可用。"
+          }
+        }
+      }
+    },
+    "This tag is no longer available." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This tag is no longer available."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个标签已不可用。"
           }
         }
       }
