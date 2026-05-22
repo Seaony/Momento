@@ -108,8 +108,6 @@ struct MomentoInspectorView: View {
                         preview(asset)
                         metadata(asset)
                         tagEditor
-                        notesEditor
-                        fileSection(asset)
                     }
                     .padding(
                         EdgeInsets(
@@ -347,10 +345,10 @@ struct MomentoInspectorView: View {
                     .padding(.horizontal, 5)
                     .padding(.vertical, 3)
                     .background {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .fill(Color.black.opacity(0.24))
                             .overlay {
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
                                     .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                             }
                     }
