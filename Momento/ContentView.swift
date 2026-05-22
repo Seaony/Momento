@@ -61,6 +61,14 @@ struct ContentView: View {
         store.tags.map(\.name)
     }
 
+    private var selectedFolderIDs: Binding<[AssetFolder.ID]> {
+        Binding {
+            store.selectedAsset?.folderIDs ?? []
+        } set: { folderIDs in
+            updateSelectedFolders(folderIDs)
+        }
+    }
+
     private var inspectorNotes: Binding<String> {
         Binding {
             guard let selectedAssetID = store.selectedAssetID else {
@@ -163,6 +171,8 @@ struct ContentView: View {
             inspectorAsset: store.selectedAsset.map { MomentoInspectorAsset(asset: $0, localization: localization) },
             inspectorTags: selectedTags,
             inspectorAvailableTags: availableTagNames,
+            inspectorFolderIDs: selectedFolderIDs,
+            inspectorFolders: store.folders,
             inspectorNotes: inspectorNotes,
             toastRequest: $shellToastRequest,
             onRenameInspectorAsset: renameAssetTitle,
@@ -698,6 +708,27 @@ struct ContentView: View {
     private func deleteTag(_ tagID: TagItem.ID) {
         do {
             try store.deleteTag(id: tagID)
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func updateSelectedFolders(_ folderIDs: [AssetFolder.ID]) {
+        guard let selectedAsset = store.selectedAsset else {
+            return
+        }
+
+        let assetIDs = Set([selectedAsset.id])
+        let currentFolderIDs = Set(selectedAsset.folderIDs)
+        let nextFolderIDs = Set(folderIDs)
+
+        do {
+            for folderID in nextFolderIDs.subtracting(currentFolderIDs) {
+                try store.assignAssets(ids: assetIDs, to: folderID)
+            }
+            for folderID in currentFolderIDs.subtracting(nextFolderIDs) {
+                try store.unassignAssets(ids: assetIDs, from: folderID)
+            }
         } catch {
             showImportError(error)
         }

@@ -42,6 +42,8 @@ struct MomentoShellView<Content: View>: View {
     var inspectorAsset: MomentoInspectorAsset?
     @Binding var inspectorTags: [String]
     var inspectorAvailableTags: [String]
+    @Binding var inspectorFolderIDs: [AssetFolder.ID]
+    var inspectorFolders: [AssetFolder]
     @Binding var inspectorNotes: String
     @Binding var toastRequest: MomentoToastRequest?
     var onRenameInspectorAsset: (MomentoInspectorAsset.ID, String) -> Void
@@ -89,6 +91,8 @@ struct MomentoShellView<Content: View>: View {
         inspectorAsset: MomentoInspectorAsset? = nil,
         inspectorTags: Binding<[String]> = .constant([]),
         inspectorAvailableTags: [String] = [],
+        inspectorFolderIDs: Binding<[AssetFolder.ID]> = .constant([]),
+        inspectorFolders: [AssetFolder] = [],
         inspectorNotes: Binding<String> = .constant(""),
         toastRequest: Binding<MomentoToastRequest?> = .constant(nil),
         onRenameInspectorAsset: @escaping (MomentoInspectorAsset.ID, String) -> Void = { _, _ in },
@@ -124,6 +128,8 @@ struct MomentoShellView<Content: View>: View {
         self.inspectorAsset = inspectorAsset
         self._inspectorTags = inspectorTags
         self.inspectorAvailableTags = inspectorAvailableTags
+        self._inspectorFolderIDs = inspectorFolderIDs
+        self.inspectorFolders = inspectorFolders
         self._inspectorNotes = inspectorNotes
         self._toastRequest = toastRequest
         self.onRenameInspectorAsset = onRenameInspectorAsset
@@ -241,6 +247,8 @@ struct MomentoShellView<Content: View>: View {
             asset: inspectorAsset,
             tags: $inspectorTags,
             availableTags: inspectorAvailableTags,
+            folderIDs: $inspectorFolderIDs,
+            folders: inspectorFolders,
             notes: $inspectorNotes,
             onTitleCommit: onRenameInspectorAsset,
             onColorCopied: showColorCopyToast

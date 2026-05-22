@@ -36,6 +36,14 @@ struct MomentoInspectorInfoItem: Identifiable, Hashable {
     var id: String { label }
 }
 
+private struct MomentoInspectorFolderRow: Identifiable {
+    var folder: AssetFolder
+    var depth: Int
+    var hasChildren: Bool
+
+    var id: AssetFolder.ID { folder.id }
+}
+
 struct MomentoInspectorAsset: Identifiable, Hashable {
     var id: String
     var title: String
@@ -91,6 +99,11 @@ struct MomentoInspectorView: View {
     private static let tagPickerEmptyMessageHeight: CGFloat = 23
     private static let tagPickerCreateRowHeight: CGFloat = 34
     private static let tagPickerCreateBottomPadding: CGFloat = 8
+    private static let folderPickerMinimumContentHeight: CGFloat = 108
+    private static let folderPickerMaximumContentHeight: CGFloat = 260
+    private static let folderPickerRowHeight: CGFloat = 32
+    private static let folderPickerRowSpacing: CGFloat = 6
+    private static let folderPickerEmptyMessageHeight: CGFloat = 26
     private static let inspectorSectionSpacing: CGFloat = 12
     private static let inspectorSectionSeparatorOpacity = 0.06
     private static let titleLineSpacing: CGFloat = 3
@@ -100,6 +113,8 @@ struct MomentoInspectorView: View {
     var asset: MomentoInspectorAsset?
     @Binding var tags: [String]
     var availableTags: [String]
+    @Binding var folderIDs: [AssetFolder.ID]
+    var folders: [AssetFolder]
     @Binding var notes: String
     var onRevealInFinder: (() -> Void)?
     var onTitleCommit: ((MomentoInspectorAsset.ID, String) -> Void)?
@@ -108,19 +123,27 @@ struct MomentoInspectorView: View {
     @State private var hoveredColorID: String?
     @State private var hoveredTag: String?
     @State private var hoveredTagChoice: String?
+    @State private var hoveredFolderID: AssetFolder.ID?
+    @State private var hoveredFolderChoiceID: AssetFolder.ID?
     @State private var isCreateTagRowHovered = false
     @State private var isTagPickerPresented = false
+    @State private var isFolderPickerPresented = false
     @State private var tagSearchQuery = ""
+    @State private var folderSearchQuery = ""
+    @State private var expandedFolderIDs: Set<AssetFolder.ID> = []
     @State private var hoveredTitleID: MomentoInspectorAsset.ID?
     @State private var editingTitleID: MomentoInspectorAsset.ID?
     @State private var draftTitle = ""
     @FocusState private var isTitleFieldFocused: Bool
     @FocusState private var isTagSearchFocused: Bool
+    @FocusState private var isFolderSearchFocused: Bool
 
     init(
         asset: MomentoInspectorAsset?,
         tags: Binding<[String]> = .constant([]),
         availableTags: [String] = [],
+        folderIDs: Binding<[AssetFolder.ID]> = .constant([]),
+        folders: [AssetFolder] = [],
         notes: Binding<String> = .constant(""),
         onRevealInFinder: (() -> Void)? = nil,
         onTitleCommit: ((MomentoInspectorAsset.ID, String) -> Void)? = nil,
@@ -129,6 +152,8 @@ struct MomentoInspectorView: View {
         self.asset = asset
         self._tags = tags
         self.availableTags = availableTags
+        self._folderIDs = folderIDs
+        self.folders = folders
         self._notes = notes
         self.onRevealInFinder = onRevealInFinder
         self.onTitleCommit = onTitleCommit
@@ -143,6 +168,7 @@ struct MomentoInspectorView: View {
                         preview(asset)
                         metadata(asset)
                         tagEditor
+                        folderEditor
                         exifMetadata(asset)
                     }
                     .padding(
@@ -172,11 +198,18 @@ struct MomentoInspectorView: View {
             cancelTitleEditing()
             hoveredTitleID = nil
             hoveredTag = nil
+            hoveredFolderID = nil
             closeTagPicker()
+            closeFolderPicker()
         }
         .onChange(of: isTagPickerPresented) { _, isPresented in
             if !isPresented {
                 resetTagPicker()
+            }
+        }
+        .onChange(of: isFolderPickerPresented) { _, isPresented in
+            if !isPresented {
+                resetFolderPicker()
             }
         }
     }
@@ -347,6 +380,18 @@ struct MomentoInspectorView: View {
         }
     }
 
+    private var folderEditor: some View {
+        inspectorSection(localization.string("Folders")) {
+            FlowLayout(spacing: 6) {
+                ForEach(selectedFolders) { folder in
+                    folderChip(folder)
+                }
+
+                addFolderChip
+            }
+        }
+    }
+
     private func tagChip(_ tag: String) -> some View {
         let isHovered = hoveredTag == tag
 
@@ -392,6 +437,52 @@ struct MomentoInspectorView: View {
         }
     }
 
+    private func folderChip(_ folder: AssetFolder) -> some View {
+        let isHovered = hoveredFolderID == folder.id
+        let chipShape = RoundedRectangle(cornerRadius: 9, style: .continuous)
+
+        return HStack(spacing: 5) {
+            Image(systemName: "folder")
+                .font(.system(size: 11, weight: .semibold))
+
+            Text(folder.name)
+                .lineLimit(1)
+
+            if isHovered {
+                Button {
+                    removeFolder(folder.id)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 20, height: 20)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(MomentoTheme.primaryText)
+                .contentShape(Circle())
+                .pointerStyle(.link)
+                .transition(.opacity.combined(with: .scale(scale: 0.82)))
+                .accessibilityLabel(localization.format("Remove %@", folder.name))
+            }
+        }
+        .font(.system(size: 12, weight: .medium))
+        .foregroundStyle(MomentoTheme.primaryText)
+        .padding(.leading, 9)
+        .padding(.trailing, isHovered ? 5 : 9)
+        .frame(height: 26)
+        .glassEffect(
+            .regular.tint(Color.white.opacity(isHovered ? 0.12 : 0.04)),
+            in: chipShape
+        )
+        .contentShape(chipShape)
+        .animation(.smooth(duration: 0.14), value: isHovered)
+        .onHover { hovering in
+            withAnimation(.smooth(duration: 0.14)) {
+                hoveredFolderID = hovering ? folder.id : nil
+            }
+        }
+    }
+
     private var addTagChip: some View {
         Button {
             withAnimation(.smooth(duration: 0.16)) {
@@ -410,6 +501,27 @@ struct MomentoInspectorView: View {
         .accessibilityLabel(localization.string("Add tag"))
         .popover(isPresented: $isTagPickerPresented, arrowEdge: .bottom) {
             tagPicker
+        }
+    }
+
+    private var addFolderChip: some View {
+        Button {
+            withAnimation(.smooth(duration: 0.16)) {
+                isFolderPickerPresented = true
+            }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 34, height: 26)
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .pointerStyle(.link)
+        .accessibilityLabel(localization.string("Add folder"))
+        .popover(isPresented: $isFolderPickerPresented, arrowEdge: .bottom) {
+            folderPicker
         }
     }
 
@@ -503,6 +615,56 @@ struct MomentoInspectorView: View {
         }
     }
 
+    private var folderPicker: some View {
+        GlassEffectContainer(spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(MomentoTheme.primaryText)
+
+                    TextField(localization.string("Search folders"), text: $folderSearchQuery)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13, weight: .medium))
+                        .focused($isFolderSearchFocused)
+                }
+                .padding(.horizontal, 10)
+                .frame(height: 34)
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Self.folderPickerRowSpacing) {
+                        if visibleFolderRows.isEmpty {
+                            Text(folders.isEmpty ? localization.string("No folders") : localization.string("No matching folders"))
+                                .font(.system(size: 12))
+                                .foregroundStyle(MomentoTheme.secondaryText)
+                                .frame(height: Self.folderPickerEmptyMessageHeight)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        } else {
+                            ForEach(visibleFolderRows) { row in
+                                folderChoiceRow(row)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(height: folderPickerScrollHeight)
+                .scrollIndicators(.never)
+            }
+        }
+        .padding(Self.tagPickerContentHorizontalPadding)
+        .frame(width: Self.tagPickerWidth)
+        .background {
+            MomentoGlassBackground(
+                glass: .regular.tint(Color.black.opacity(0.16)),
+                cornerRadius: 16
+            )
+        }
+        .task {
+            isFolderSearchFocused = true
+        }
+    }
+
     private func tagChoiceButton(_ tag: String) -> some View {
         let isSelected = containsTag(tag)
         let isHovered = hoveredTagChoice == tag
@@ -539,6 +701,83 @@ struct MomentoInspectorView: View {
         .onHover { hovering in
             withAnimation(.smooth(duration: 0.12)) {
                 hoveredTagChoice = hovering ? tag : nil
+            }
+        }
+    }
+
+    private func folderChoiceRow(_ row: MomentoInspectorFolderRow) -> some View {
+        let folder = row.folder
+        let isSelected = containsFolder(folder.id)
+        let isHovered = hoveredFolderChoiceID == folder.id
+        let rowShape = RoundedRectangle(cornerRadius: 11, style: .continuous)
+        let checkboxShape = RoundedRectangle(cornerRadius: 6, style: .continuous)
+
+        return HStack(spacing: 7) {
+            Button {
+                toggleFolderExpansion(folder.id)
+            } label: {
+                Image(systemName: expandedFolderIDs.contains(folder.id) ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 14, height: 22)
+                    .opacity(row.hasChildren ? 1 : 0)
+            }
+            .buttonStyle(.plain)
+            .disabled(!row.hasChildren)
+            .contentShape(Rectangle())
+
+            Button {
+                toggleFolderSelection(folder.id)
+            } label: {
+                HStack(spacing: 8) {
+                    ZStack {
+                        checkboxShape
+                            .glassEffect(
+                                .regular.tint(Color.white.opacity(isSelected ? 0.18 : 0.08)).interactive(),
+                                in: checkboxShape
+                            )
+                            .overlay {
+                                checkboxShape.strokeBorder(Color.white.opacity(isSelected ? 0.22 : 0.12), lineWidth: 1)
+                            }
+
+                        if isSelected {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(MomentoTheme.primaryText)
+                        }
+                    }
+                    .frame(width: 20, height: 20)
+
+                    Image(systemName: "folder")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(MomentoTheme.secondaryText)
+
+                    Text(folder.name)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(MomentoTheme.primaryText)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 0)
+                }
+                .padding(.leading, CGFloat(row.depth) * 14)
+                .padding(.trailing, 9)
+                .frame(height: Self.folderPickerRowHeight)
+                .background {
+                    Color.clear
+                        .glassEffect(
+                            .regular.tint(Color.white.opacity(isHovered || isSelected ? 0.14 : 0.06)).interactive(),
+                            in: rowShape
+                        )
+                }
+                .contentShape(rowShape)
+            }
+            .buttonStyle(.plain)
+            .contentShape(rowShape)
+            .pointerStyle(.link)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onHover { hovering in
+            withAnimation(.smooth(duration: 0.12)) {
+                hoveredFolderChoiceID = hovering ? folder.id : nil
             }
         }
     }
@@ -735,6 +974,15 @@ struct MomentoInspectorView: View {
         tagSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var trimmedFolderSearchQuery: String {
+        folderSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var selectedFolders: [AssetFolder] {
+        let foldersByID = Dictionary(uniqueKeysWithValues: folders.map { ($0.id, $0) })
+        return folderIDs.compactMap { foldersByID[$0] }
+    }
+
     private var availableTagChoices: [String] {
         var seen = Set<String>()
         return (availableTags + tags)
@@ -766,6 +1014,12 @@ struct MomentoInspectorView: View {
         }
     }
 
+    private var visibleFolderRows: [MomentoInspectorFolderRow] {
+        var rows: [MomentoInspectorFolderRow] = []
+        appendVisibleFolderRows(parentID: nil, depth: 0, to: &rows)
+        return rows
+    }
+
     private var shouldShowCreateTag: Bool {
         let query = trimmedTagSearchQuery
         guard !query.isEmpty else {
@@ -781,6 +1035,17 @@ struct MomentoInspectorView: View {
         return min(
             max(estimatedTagPickerContentHeight, Self.tagPickerMinimumContentHeight),
             Self.tagPickerMaximumContentHeight
+        )
+    }
+
+    private var folderPickerScrollHeight: CGFloat {
+        let rowCount = max(visibleFolderRows.count, 1)
+        let estimatedHeight = CGFloat(rowCount) * Self.folderPickerRowHeight
+            + CGFloat(max(rowCount - 1, 0)) * Self.folderPickerRowSpacing
+
+        return min(
+            max(estimatedHeight, Self.folderPickerMinimumContentHeight),
+            Self.folderPickerMaximumContentHeight
         )
     }
 
@@ -837,6 +1102,55 @@ struct MomentoInspectorView: View {
         return ceil(textWidth + Self.tagChoiceHorizontalChrome)
     }
 
+    private func appendVisibleFolderRows(
+        parentID: AssetFolder.ID?,
+        depth: Int,
+        to rows: inout [MomentoInspectorFolderRow]
+    ) {
+        let query = trimmedFolderSearchQuery
+
+        for folder in childFolders(parentID: parentID) {
+            let hasChildren = !childFolders(parentID: folder.id).isEmpty
+            let matchesSearch = query.isEmpty || folderMatchesSearch(folder, query: query)
+
+            guard matchesSearch else {
+                continue
+            }
+
+            rows.append(MomentoInspectorFolderRow(folder: folder, depth: depth, hasChildren: hasChildren))
+
+            if hasChildren, query.isEmpty ? expandedFolderIDs.contains(folder.id) : true {
+                appendVisibleFolderRows(parentID: folder.id, depth: depth + 1, to: &rows)
+            }
+        }
+    }
+
+    private func childFolders(parentID: AssetFolder.ID?) -> [AssetFolder] {
+        folders
+            .filter { $0.parentID == parentID }
+            .sorted(by: folderSort)
+    }
+
+    private func folderSort(_ lhs: AssetFolder, _ rhs: AssetFolder) -> Bool {
+        if lhs.sortIndex != rhs.sortIndex {
+            return lhs.sortIndex < rhs.sortIndex
+        }
+        if lhs.createdAt != rhs.createdAt {
+            return lhs.createdAt < rhs.createdAt
+        }
+        return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+    }
+
+    private func folderMatchesSearch(_ folder: AssetFolder, query: String) -> Bool {
+        if folder.name.localizedCaseInsensitiveContains(query) {
+            return true
+        }
+
+        return childFolders(parentID: folder.id).contains {
+            folderMatchesSearch($0, query: query)
+        }
+    }
+
     private func submitTagSearch() {
         let query = trimmedTagSearchQuery
         guard !query.isEmpty else {
@@ -876,9 +1190,52 @@ struct MomentoInspectorView: View {
         }
     }
 
+    private func toggleFolderSelection(_ folderID: AssetFolder.ID) {
+        if containsFolder(folderID) {
+            removeFolder(folderID)
+        } else {
+            folderIDs = orderedFolderIDs(Set(folderIDs + [folderID]))
+        }
+    }
+
+    private func removeFolder(_ folderID: AssetFolder.ID) {
+        folderIDs.removeAll { $0 == folderID }
+    }
+
+    private func containsFolder(_ folderID: AssetFolder.ID) -> Bool {
+        folderIDs.contains(folderID)
+    }
+
+    private func orderedFolderIDs(_ ids: Set<AssetFolder.ID>) -> [AssetFolder.ID] {
+        let order = Dictionary(uniqueKeysWithValues: folders.enumerated().map { ($0.element.id, $0.offset) })
+        return ids.sorted {
+            let lhsOrder = order[$0] ?? Int.max
+            let rhsOrder = order[$1] ?? Int.max
+            if lhsOrder == rhsOrder {
+                return $0 < $1
+            }
+            return lhsOrder < rhsOrder
+        }
+    }
+
+    private func toggleFolderExpansion(_ folderID: AssetFolder.ID) {
+        withAnimation(.smooth(duration: 0.14)) {
+            if expandedFolderIDs.contains(folderID) {
+                expandedFolderIDs.remove(folderID)
+            } else {
+                expandedFolderIDs.insert(folderID)
+            }
+        }
+    }
+
     private func closeTagPicker() {
         isTagPickerPresented = false
         resetTagPicker()
+    }
+
+    private func closeFolderPicker() {
+        isFolderPickerPresented = false
+        resetFolderPicker()
     }
 
     private func resetTagPicker() {
@@ -886,6 +1243,12 @@ struct MomentoInspectorView: View {
         hoveredTagChoice = nil
         isCreateTagRowHovered = false
         isTagSearchFocused = false
+    }
+
+    private func resetFolderPicker() {
+        folderSearchQuery = ""
+        hoveredFolderChoiceID = nil
+        isFolderSearchFocused = false
     }
 
     private func updateColorHover(id: String, isHovering: Bool) {
@@ -1026,6 +1389,11 @@ private extension Color {
             kind: "PNG Image"
         ),
         tags: .constant(["UI", "Reference"]),
+        folderIDs: .constant(["folder-reference"]),
+        folders: [
+            AssetFolder(id: "folder-reference", libraryID: "sample-library", name: "Reference", sortIndex: 0),
+            AssetFolder(id: "folder-ui", libraryID: "sample-library", name: "UI", parentID: "folder-reference", sortIndex: 0)
+        ],
         notes: .constant("Strong card rhythm and useful spacing reference.")
     )
     .frame(width: 308, height: 720)

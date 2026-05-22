@@ -136,6 +136,22 @@
         }
       }
     },
+    "Add folder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加文件夹"
+          }
+        }
+      }
+    },
     "Added" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1921,6 +1937,22 @@
         }
       }
     },
+    "No matching folders" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No matching folders"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有匹配的文件夹"
+          }
+        }
+      }
+    },
     "No Library Open" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2478,6 +2510,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "搜索标签"
+          }
+        }
+      }
+    },
+    "Search folders" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search folders"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索文件夹"
           }
         }
       }
