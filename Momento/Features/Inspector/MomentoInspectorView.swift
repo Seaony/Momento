@@ -354,8 +354,11 @@ struct MomentoInspectorView: View {
         .padding(.leading, 9)
         .padding(.trailing, isHovered ? 5 : 9)
         .frame(height: 26)
-        .glassEffect(.regular.tint(Color.accentColor.opacity(isHovered ? 0.36 : 0.22)), in: Capsule())
-        .contentShape(Capsule())
+        .glassEffect(
+            .regular.tint(Color.white.opacity(isHovered ? 0.12 : 0.04)),
+            in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         .animation(.smooth(duration: 0.14), value: isHovered)
         .onHover { hovering in
             withAnimation(.smooth(duration: 0.14)) {
@@ -372,8 +375,8 @@ struct MomentoInspectorView: View {
         } label: {
             Image(systemName: "plus")
                 .font(.system(size: 12, weight: .semibold))
-                .frame(width: 28, height: 26)
-                .glassEffect(.regular, in: Capsule())
+                .frame(width: 34, height: 26)
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
         .buttonStyle(.plain)
         .pointerStyle(.link)
@@ -434,10 +437,10 @@ struct MomentoInspectorView: View {
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(MomentoTheme.primaryText)
                             .padding(.horizontal, 10)
-                            .frame(height: 30)
+                            .frame(height: 34)
                             .glassEffect(
                                 .regular.tint(Color.accentColor.opacity(isCreateTagRowHovered ? 0.32 : 0.18)),
-                                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                in: RoundedRectangle(cornerRadius: 11, style: .continuous)
                             )
                         }
                         .buttonStyle(.plain)
@@ -450,8 +453,9 @@ struct MomentoInspectorView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, shouldShowCreateTag ? 8 : 0)
             }
-            .frame(maxHeight: 220)
+            .frame(minHeight: shouldShowCreateTag ? 98 : 0, maxHeight: 220)
             .scrollIndicators(.never)
         }
         .padding(10)
