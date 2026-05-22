@@ -203,6 +203,14 @@ final class LibraryStore {
         recentLibraries = recentStore.load()
     }
 
+    func recentLibraryURL(id: RecentLibraryReference.ID) throws -> URL {
+        guard let reference = recentLibraries.first(where: { $0.id == id }) else {
+            throw LibraryStoreError.missingRecentLibrary
+        }
+
+        return try recentStore.resolve(reference).url
+    }
+
     func moveRecentLibrary(
         id: RecentLibraryReference.ID,
         relativeTo targetID: RecentLibraryReference.ID,

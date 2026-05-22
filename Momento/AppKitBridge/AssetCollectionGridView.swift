@@ -47,6 +47,7 @@ private enum AssetCollectionMetrics {
     static let contextMenuRowSpacing: CGFloat = 2
     static let contextMenuRowCornerRadius: CGFloat = 8
     static let contextMenuPanelCornerRadius: CGFloat = 12
+    static let contextMenuPanelBleed: CGFloat = 6
     static let contextMenuSeparatorHeight: CGFloat = 1
     static let contextMenuSeparatorHorizontalInset: CGFloat = 10
     static let contextMenuSeparatorVerticalPadding: CGFloat = 3
@@ -1398,6 +1399,7 @@ private final class DimensionBadgeView: NSView {
 }
 
 private final class AssetContextMenuView: NSView {
+    private let backgroundView = AssetContextMenuBackgroundView()
     private let rowViews: [AssetContextMenuRowView]
     private let separatorViewsByRowIndex: [Int: AssetContextMenuSeparatorView]
 
@@ -1451,6 +1453,11 @@ private final class AssetContextMenuView: NSView {
     override func layout() {
         super.layout()
 
+        backgroundView.frame = bounds.insetBy(
+            dx: -AssetCollectionMetrics.contextMenuPanelBleed,
+            dy: -AssetCollectionMetrics.contextMenuPanelBleed
+        )
+
         let rowWidth = max(bounds.width - AssetCollectionMetrics.contextMenuPadding * 2, 0)
         var y = AssetCollectionMetrics.contextMenuPadding
         for (index, rowView) in rowViews.enumerated() {
@@ -1485,19 +1492,34 @@ private final class AssetContextMenuView: NSView {
     }
 
     private func setUpView() {
-        wantsLayer = true
-        layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.72).cgColor
-        layer?.cornerRadius = AssetCollectionMetrics.contextMenuPanelCornerRadius
-        layer?.cornerCurve = .continuous
-        layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
-        layer?.borderWidth = 0.6
-
+        addSubview(backgroundView)
         for rowView in rowViews {
             addSubview(rowView)
         }
         for separatorView in separatorViewsByRowIndex.values {
             addSubview(separatorView)
         }
+    }
+}
+
+private final class AssetContextMenuBackgroundView: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setUpView()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setUpView()
+    }
+
+    private func setUpView() {
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.82).cgColor
+        layer?.cornerRadius = AssetCollectionMetrics.contextMenuPanelCornerRadius
+        layer?.cornerCurve = .continuous
+        layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
+        layer?.borderWidth = 0.6
     }
 }
 

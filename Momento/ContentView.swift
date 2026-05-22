@@ -139,6 +139,7 @@ struct ContentView: View {
             onSwitchLibrary: switchLibrary,
             onRenameLibrary: renameLibrary,
             onDeleteLibrary: deleteLibrary,
+            onRevealLibrary: revealLibraryInFinder,
             onMoveLibrary: moveLibrary,
             onReloadLibrary: reloadLibrary,
             onCloseLibrary: closeLibrary,
@@ -789,6 +790,22 @@ struct ContentView: View {
 
         withAnimation(.smooth(duration: 0.16)) {
             deletingLibrary = library
+        }
+    }
+
+    private func revealLibraryInFinder(_ id: RecentLibraryReference.ID) {
+        do {
+            let url = try store.recentLibraryURL(id: id)
+            let didStartAccessing = url.startAccessingSecurityScopedResource()
+            defer {
+                if didStartAccessing {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } catch {
+            showImportError(error)
         }
     }
 

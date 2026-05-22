@@ -18,6 +18,13 @@ struct MomentoSidebarAssetCounts: Equatable {
     )
 }
 
+private enum MomentoSidebarMenuMetrics {
+    static let separatorAlpha: Double = 0.1
+    static let separatorHeight: CGFloat = 1
+    static let separatorHorizontalInset: CGFloat = 10
+    static let separatorVerticalPadding: CGFloat = 3
+}
+
 struct MomentoSidebarView: View {
     @Environment(\.appLocalization) private var localization
     @Environment(\.openSettings) private var openSettings
@@ -33,6 +40,7 @@ struct MomentoSidebarView: View {
     var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
     var onRenameLibrary: (RecentLibraryReference.ID) -> Void
     var onDeleteLibrary: (RecentLibraryReference.ID) -> Void
+    var onRevealLibrary: (RecentLibraryReference.ID) -> Void
     var onMoveLibrary: (RecentLibraryReference.ID, RecentLibraryReference.ID, Bool) -> Void
     var onReloadLibrary: () -> Void
     var onCloseLibrary: () -> Void
@@ -62,6 +70,7 @@ struct MomentoSidebarView: View {
         onSwitchLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
         onRenameLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
         onDeleteLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
+        onRevealLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
         onMoveLibrary: @escaping (RecentLibraryReference.ID, RecentLibraryReference.ID, Bool) -> Void = { _, _, _ in },
         onReloadLibrary: @escaping () -> Void = {},
         onCloseLibrary: @escaping () -> Void = {},
@@ -80,6 +89,7 @@ struct MomentoSidebarView: View {
         self.onSwitchLibrary = onSwitchLibrary
         self.onRenameLibrary = onRenameLibrary
         self.onDeleteLibrary = onDeleteLibrary
+        self.onRevealLibrary = onRevealLibrary
         self.onMoveLibrary = onMoveLibrary
         self.onReloadLibrary = onReloadLibrary
         self.onCloseLibrary = onCloseLibrary
@@ -148,6 +158,10 @@ struct MomentoSidebarView: View {
                 onDeleteLibrary: { id in
                     dismissLibrarySwitcher()
                     onDeleteLibrary(id)
+                },
+                onRevealLibrary: { id in
+                    dismissLibrarySwitcher()
+                    onRevealLibrary(id)
                 },
                 onMoveLibrary: onMoveLibrary,
                 onReloadLibrary: performLibrarySwitcherAction(onReloadLibrary)
@@ -785,6 +799,7 @@ private struct MomentoLibrarySwitcherMenu: View {
     var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
     var onRenameLibrary: (RecentLibraryReference.ID) -> Void
     var onDeleteLibrary: (RecentLibraryReference.ID) -> Void
+    var onRevealLibrary: (RecentLibraryReference.ID) -> Void
     var onMoveLibrary: (RecentLibraryReference.ID, RecentLibraryReference.ID, Bool) -> Void
     var onReloadLibrary: () -> Void
 
@@ -827,9 +842,7 @@ private struct MomentoLibrarySwitcherMenu: View {
                     }
                 }
 
-                Divider()
-                    .overlay(MomentoTheme.subtleStroke.opacity(0.65))
-                    .padding(.vertical, 1)
+                librarySwitcherSeparator
             }
 
             VStack(spacing: 1) {
@@ -1036,6 +1049,18 @@ private struct MomentoLibrarySwitcherMenu: View {
             }
 
             libraryMoreActionRow(
+                id: "\(library.id)-reveal",
+                title: localization.string("Reveal in Finder"),
+                systemImage: "finder",
+                isDestructive: false
+            ) {
+                activeMoreLibraryID = nil
+                onRevealLibrary(library.id)
+            }
+
+            librarySwitcherSeparator
+
+            libraryMoreActionRow(
                 id: "\(library.id)-delete",
                 title: localization.string("Delete Library"),
                 systemImage: "trash",
@@ -1055,6 +1080,14 @@ private struct MomentoLibrarySwitcherMenu: View {
                 .strokeBorder(MomentoTheme.subtleStroke.opacity(0.45), lineWidth: 0.6)
         }
         .shadow(color: .black.opacity(0.2), radius: 14, y: 8)
+    }
+
+    private var librarySwitcherSeparator: some View {
+        Rectangle()
+            .fill(MomentoTheme.subtleStroke.opacity(MomentoSidebarMenuMetrics.separatorAlpha))
+            .frame(height: MomentoSidebarMenuMetrics.separatorHeight)
+            .padding(.horizontal, MomentoSidebarMenuMetrics.separatorHorizontalInset)
+            .padding(.vertical, MomentoSidebarMenuMetrics.separatorVerticalPadding)
     }
 
     private func libraryMoreActionRow(
