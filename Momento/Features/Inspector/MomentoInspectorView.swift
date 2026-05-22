@@ -396,33 +396,32 @@ struct MomentoInspectorView: View {
         let isHovered = hoveredTag == tag
 
         return HStack(spacing: 5) {
-            Image(systemName: "number")
-                .font(.system(size: 10, weight: .semibold))
-
-            Text(tag)
-                .lineLimit(1)
-
             Button {
+                guard isHovered else {
+                    return
+                }
+
                 removeTag(tag)
             } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .frame(width: 20, height: 20)
+                Image(systemName: isHovered ? "xmark.circle.fill" : "number")
+                    .font(.system(size: isHovered ? 13 : 10, weight: .semibold))
+                    .frame(width: 18, height: 20)
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
             .foregroundStyle(MomentoTheme.primaryText)
             .contentShape(Circle())
             .pointerStyle(.link)
-            .opacity(isHovered ? 1 : 0)
-            .scaleEffect(isHovered ? 1 : 0.82)
-            .allowsHitTesting(isHovered)
             .accessibilityLabel(localization.format("Remove %@", tag))
+            .accessibilityHidden(!isHovered)
+
+            Text(tag)
+                .lineLimit(1)
         }
         .font(.system(size: 12, weight: .medium))
         .foregroundStyle(MomentoTheme.primaryText)
         .padding(.leading, 9)
-        .padding(.trailing, 5)
+        .padding(.trailing, 9)
         .frame(height: 26)
         .glassEffect(
             .regular.tint(Color.white.opacity(isHovered ? 0.12 : 0.04)),
@@ -442,33 +441,32 @@ struct MomentoInspectorView: View {
         let chipShape = RoundedRectangle(cornerRadius: 9, style: .continuous)
 
         return HStack(spacing: 5) {
-            Image(systemName: "folder")
-                .font(.system(size: 11, weight: .semibold))
-
-            Text(folder.name)
-                .lineLimit(1)
-
             Button {
+                guard isHovered else {
+                    return
+                }
+
                 removeFolder(folder.id)
             } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .frame(width: 20, height: 20)
+                Image(systemName: isHovered ? "xmark.circle.fill" : "folder")
+                    .font(.system(size: isHovered ? 13 : 11, weight: .semibold))
+                    .frame(width: 18, height: 20)
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
             .foregroundStyle(MomentoTheme.primaryText)
             .contentShape(Circle())
             .pointerStyle(.link)
-            .opacity(isHovered ? 1 : 0)
-            .scaleEffect(isHovered ? 1 : 0.82)
-            .allowsHitTesting(isHovered)
             .accessibilityLabel(localization.format("Remove %@", folder.name))
+            .accessibilityHidden(!isHovered)
+
+            Text(folder.name)
+                .lineLimit(1)
         }
         .font(.system(size: 12, weight: .medium))
         .foregroundStyle(MomentoTheme.primaryText)
         .padding(.leading, 9)
-        .padding(.trailing, 5)
+        .padding(.trailing, 9)
         .frame(height: 26)
         .glassEffect(
             .regular.tint(Color.white.opacity(isHovered ? 0.12 : 0.04)),
