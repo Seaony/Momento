@@ -550,23 +550,13 @@ struct ContentView: View {
         }
 
         return tags.sorted { lhs, rhs in
-            let lhsSelected = store.filterState.tagIDs.contains(lhs.id)
-            let rhsSelected = store.filterState.tagIDs.contains(rhs.id)
-            if lhsSelected != rhsSelected {
-                return lhsSelected
-            }
-            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
     }
 
     private var sortedFilterFileExtensions: [String] {
         store.availableFilterFileExtensions.sorted { lhs, rhs in
-            let lhsSelected = store.filterState.fileExtensions.contains(lhs)
-            let rhsSelected = store.filterState.fileExtensions.contains(rhs)
-            if lhsSelected != rhsSelected {
-                return lhsSelected
-            }
-            return lhs.localizedStandardCompare(rhs) == .orderedAscending
+            lhs.localizedStandardCompare(rhs) == .orderedAscending
         }
     }
 
