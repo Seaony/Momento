@@ -136,6 +136,29 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         }
     }
 
+    func renameFolder(id: AssetFolder.ID, to name: String) throws -> AssetFolder {
+        try context.performAndWait {
+            let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedName.isEmpty else {
+                throw LibraryMetadataError.invalidFolderName
+            }
+
+            guard let record = try folderRecord(id: id) else {
+                throw LibraryMetadataError.missingFolder
+            }
+
+            let updatedAt = Date()
+            record.setValue(trimmedName, forKey: "name")
+            record.setValue(updatedAt, forKey: "updatedAt")
+
+            try context.save()
+            guard let folder = folder(from: record) else {
+                throw LibraryMetadataError.missingFolder
+            }
+            return folder
+        }
+    }
+
     func deleteFolder(id: AssetFolder.ID) throws -> [AssetFolder.ID] {
         try context.performAndWait {
             guard try folderRecord(id: id) != nil else {

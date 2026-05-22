@@ -326,6 +326,15 @@ final class LibraryStore {
         selectedAssetID = visibleAssets.first?.id
     }
 
+    func renameFolder(id: AssetFolder.ID, to name: String) throws {
+        guard let metadataStore else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        _ = try metadataStore.renameFolder(id: id, to: name)
+        folders = try metadataStore.loadFolders()
+    }
+
     func deleteFolder(id: AssetFolder.ID) throws {
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary

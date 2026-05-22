@@ -31,6 +31,7 @@ struct MomentoShellView<Content: View>: View {
     var onReloadLibrary: () -> Void
     var onCloseLibrary: () -> Void
     var onCreateFolder: (AssetFolder.ID?) -> Void
+    var onRenameFolder: (AssetFolder.ID) -> Void
     var onDeleteFolder: (AssetFolder.ID) -> Void
     var title: String
     var subtitle: String?
@@ -72,6 +73,7 @@ struct MomentoShellView<Content: View>: View {
         onReloadLibrary: @escaping () -> Void = {},
         onCloseLibrary: @escaping () -> Void = {},
         onCreateFolder: @escaping (AssetFolder.ID?) -> Void = { _ in },
+        onRenameFolder: @escaping (AssetFolder.ID) -> Void = { _ in },
         onDeleteFolder: @escaping (AssetFolder.ID) -> Void = { _ in },
         title: String = "All Assets",
         subtitle: String? = "0 items",
@@ -101,6 +103,7 @@ struct MomentoShellView<Content: View>: View {
         self.onReloadLibrary = onReloadLibrary
         self.onCloseLibrary = onCloseLibrary
         self.onCreateFolder = onCreateFolder
+        self.onRenameFolder = onRenameFolder
         self.onDeleteFolder = onDeleteFolder
         self.title = title
         self.subtitle = subtitle
@@ -199,6 +202,7 @@ struct MomentoShellView<Content: View>: View {
             onReloadLibrary: onReloadLibrary,
             onCloseLibrary: onCloseLibrary,
             onCreateFolder: onCreateFolder,
+            onRenameFolder: onRenameFolder,
             onDeleteFolder: onDeleteFolder
         )
         .frame(width: effectiveSidebarWidth)

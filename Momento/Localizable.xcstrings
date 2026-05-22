@@ -259,6 +259,23 @@
         }
       }
     },
+    "Change this folder name. Assets stay in the same folder." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Change this folder name. Assets stay in the same folder."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "修改这个文件夹名称，素材仍会保留在同一个文件夹中。"
+          }
+        }
+      }
+    },
     "Choose Save Location" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -394,6 +411,23 @@
         }
       }
     },
+    "Create Folder" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create Folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建文件夹"
+          }
+        }
+      }
+    },
     "Create Library" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -496,6 +530,23 @@
         }
       }
     },
+    "Delete folder warning: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” and its subfolders will be deleted. Assets inside the folder will stay in the library, but they will be removed from this folder."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” 及其子文件夹将被删除。文件夹中的素材仍会保留在资源库中，但会从这个文件夹移除。"
+          }
+        }
+      }
+    },
     "Delete library warning: %@" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -581,6 +632,23 @@
         }
       }
     },
+    "Edit Folder" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit Folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑文件夹"
+          }
+        }
+      }
+    },
     "Edit Library" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -628,6 +696,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "请输入资源库名称。"
+          }
+        }
+      }
+    },
+    "Enter a name for this folder." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a name for this folder."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请输入这个文件夹的名称。"
           }
         }
       }
@@ -730,6 +815,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "文件夹管理"
+          }
+        }
+      }
+    },
+    "Folder Name" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folder Name"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件夹名称"
           }
         }
       }
@@ -1937,6 +2039,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未标签"
+          }
+        }
+      }
+    },
+    "Untitled Folder" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untitled Folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未命名文件夹"
           }
         }
       }

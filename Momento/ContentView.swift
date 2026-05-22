@@ -2,6 +2,11 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+private struct FolderCreationRequest: Identifiable {
+    let id = UUID()
+    var parentID: AssetFolder.ID?
+}
+
 struct ContentView: View {
     @Environment(\.appLocalization) private var localization
     @AppStorage(AppSettingsKeys.defaultViewMode) private var defaultViewModeRawValue = AssetViewMode.masonry.rawValue
@@ -12,10 +17,14 @@ struct ContentView: View {
     @State private var isCreateLibraryDialogPresented = false
     @State private var editingLibrary: RecentLibraryReference?
     @State private var deletingLibrary: RecentLibraryReference?
+    @State private var creatingFolder: FolderCreationRequest?
+    @State private var editingFolder: AssetFolder?
+    @State private var deletingFolder: AssetFolder?
     @State private var isInspectorPresented = true
     @State private var inspectorNotesByAssetID: [AssetItem.ID: String] = [:]
     @State private var importError: String?
     @State private var isToolbarSearchExpanded = false
+    @State private var hoveredToolbarViewMode: AssetViewMode?
     @State private var shellToastRequest: MomentoToastRequest?
     @FocusState private var isToolbarSearchFocused: Bool
 
@@ -39,14 +48,6 @@ struct ContentView: View {
             store.selectedAsset?.tags.map(\.name) ?? []
         } set: { names in
             store.updateSelectedTags(names)
-        }
-    }
-
-    private var viewModeSelection: Binding<AssetViewMode> {
-        Binding {
-            store.viewMode
-        } set: { mode in
-            store.setViewMode(mode)
         }
     }
 
@@ -140,8 +141,9 @@ struct ContentView: View {
             onMoveLibrary: moveLibrary,
             onReloadLibrary: reloadLibrary,
             onCloseLibrary: closeLibrary,
-            onCreateFolder: createFolder,
-            onDeleteFolder: deleteFolder,
+            onCreateFolder: presentCreateFolderDialog,
+            onRenameFolder: presentRenameFolderDialog,
+            onDeleteFolder: presentDeleteFolderDialog,
             title: title,
             subtitle: localization.itemCount(visibleAssets.count),
             showsChromeControls: !isModalOverlayVisible,
@@ -175,16 +177,7 @@ struct ContentView: View {
         .toolbar {
             if !isModalOverlayVisible {
                 ToolbarItemGroup(placement: .primaryAction) {
-                    Picker(localization.string("View"), selection: viewModeSelection) {
-                        ForEach(AssetViewMode.allCases) { viewMode in
-                            Label(localization.title(for: viewMode), systemImage: systemImage(for: viewMode))
-                                .labelStyle(.iconOnly)
-                                .tag(viewMode)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-
+                    toolbarViewModeSwitcher
                     toolbarSearchControl
                 }
             }
@@ -204,6 +197,46 @@ struct ContentView: View {
         }
     }
 
+    private var toolbarViewModeSwitcher: some View {
+        HStack(spacing: 2) {
+            ForEach(AssetViewMode.allCases) { viewMode in
+                let isSelected = store.viewMode == viewMode
+                let isHovered = hoveredToolbarViewMode == viewMode
+
+                Button {
+                    store.setViewMode(viewMode)
+                } label: {
+                    Image(systemName: systemImage(for: viewMode))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(isSelected ? Color.white : MomentoTheme.secondaryText)
+                        .frame(width: 30, height: 24)
+                        .background {
+                            toolbarSegmentBackground(isSelected: isSelected, isHovered: isHovered)
+                        }
+                        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .pointerStyle(.link)
+                .help(localization.title(for: viewMode))
+                .accessibilityLabel(localization.title(for: viewMode))
+                .onHover { hovering in
+                    withAnimation(.smooth(duration: 0.14)) {
+                        if hovering {
+                            hoveredToolbarViewMode = viewMode
+                        } else if hoveredToolbarViewMode == viewMode {
+                            hoveredToolbarViewMode = nil
+                        }
+                    }
+                }
+            }
+        }
+        .padding(3)
+        .frame(height: 30)
+        .background {
+            toolbarControlBackground(cornerRadius: 10)
+        }
+    }
+
     @ViewBuilder
     private var toolbarSearchControl: some View {
         if isToolbarSearchExpanded || !store.searchQuery.isEmpty {
@@ -219,12 +252,7 @@ struct ContentView: View {
             .padding(.horizontal, 10)
             .frame(height: 28)
             .background {
-                Capsule(style: .continuous)
-                    .fill(Color.white.opacity(0.08))
-            }
-            .overlay {
-                Capsule(style: .continuous)
-                    .stroke(MomentoTheme.subtleStroke.opacity(0.38), lineWidth: 1)
+                toolbarControlBackground(cornerRadius: 10)
             }
             .onAppear {
                 isToolbarSearchFocused = true
@@ -236,11 +264,43 @@ struct ContentView: View {
                 }
                 isToolbarSearchFocused = true
             } label: {
-                Label(localization.string("Search assets, tags, colors..."), systemImage: "magnifyingglass")
-                    .labelStyle(.iconOnly)
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(MomentoTheme.secondaryText)
+                    .frame(width: 34, height: 28)
+                    .background {
+                        toolbarControlBackground(cornerRadius: 10)
+                    }
+                    .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
+            .buttonStyle(.plain)
+            .pointerStyle(.link)
             .help(localization.string("Search assets, tags, colors..."))
         }
+    }
+
+    @ViewBuilder
+    private func toolbarSegmentBackground(isSelected: Bool, isHovered: Bool) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+
+        if isSelected {
+            Color.clear
+                .glassEffect(.regular.tint(Color.accentColor), in: shape)
+        } else if isHovered {
+            shape.fill(MomentoTheme.sidebarIconHoverBackground)
+        } else {
+            Color.clear
+        }
+    }
+
+    private func toolbarControlBackground(cornerRadius: CGFloat) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+
+        return shape
+            .fill(Color.white.opacity(0.08))
+            .overlay {
+                shape.stroke(MomentoTheme.subtleStroke.opacity(0.38), lineWidth: 1)
+            }
     }
 
     @ViewBuilder
@@ -277,6 +337,41 @@ struct ContentView: View {
             )
             .zIndex(32)
         }
+
+        if let creatingFolder {
+            MomentoFolderNameDialog(
+                mode: .create,
+                isPresented: creatingFolderDialogIsPresented,
+                initialName: localization.string("Untitled Folder"),
+                onSubmit: { name in
+                    createFolder(name: name, parentID: creatingFolder.parentID)
+                }
+            )
+            .zIndex(33)
+        }
+
+        if let editingFolder {
+            MomentoFolderNameDialog(
+                mode: .edit,
+                isPresented: editingFolderDialogIsPresented,
+                initialName: editingFolder.name,
+                onSubmit: { name in
+                    renameFolder(editingFolder.id, to: name)
+                }
+            )
+            .zIndex(34)
+        }
+
+        if let deletingFolder {
+            MomentoDeleteFolderDialog(
+                isPresented: deletingFolderDialogIsPresented,
+                folderName: deletingFolder.name,
+                onConfirm: {
+                    deleteFolder(deletingFolder.id)
+                }
+            )
+            .zIndex(35)
+        }
     }
 
     private var editingLibraryDialogIsPresented: Binding<Bool> {
@@ -299,6 +394,36 @@ struct ContentView: View {
         }
     }
 
+    private var creatingFolderDialogIsPresented: Binding<Bool> {
+        Binding {
+            creatingFolder != nil
+        } set: { isPresented in
+            if !isPresented {
+                creatingFolder = nil
+            }
+        }
+    }
+
+    private var editingFolderDialogIsPresented: Binding<Bool> {
+        Binding {
+            editingFolder != nil
+        } set: { isPresented in
+            if !isPresented {
+                editingFolder = nil
+            }
+        }
+    }
+
+    private var deletingFolderDialogIsPresented: Binding<Bool> {
+        Binding {
+            deletingFolder != nil
+        } set: { isPresented in
+            if !isPresented {
+                deletingFolder = nil
+            }
+        }
+    }
+
     private var defaultViewMode: AssetViewMode {
         AssetViewMode(rawValue: defaultViewModeRawValue) ?? .masonry
     }
@@ -307,8 +432,12 @@ struct ContentView: View {
         isCreateLibraryDialogPresented || editingLibrary != nil || deletingLibrary != nil
     }
 
+    private var isFolderDialogVisible: Bool {
+        creatingFolder != nil || editingFolder != nil || deletingFolder != nil
+    }
+
     private var isModalOverlayVisible: Bool {
-        isLibraryDialogVisible
+        isLibraryDialogVisible || isFolderDialogVisible
     }
 
     private var errorMessage: String? {
@@ -665,9 +794,43 @@ struct ContentView: View {
         }
     }
 
-    private func createFolder(parentID: AssetFolder.ID?) {
+    private func presentCreateFolderDialog(parentID: AssetFolder.ID?) {
+        withAnimation(.smooth(duration: 0.16)) {
+            creatingFolder = FolderCreationRequest(parentID: parentID)
+        }
+    }
+
+    private func presentRenameFolderDialog(_ id: AssetFolder.ID) {
+        guard let folder = store.folder(id: id) else {
+            return
+        }
+
+        withAnimation(.smooth(duration: 0.16)) {
+            editingFolder = folder
+        }
+    }
+
+    private func presentDeleteFolderDialog(_ id: AssetFolder.ID) {
+        guard let folder = store.folder(id: id) else {
+            return
+        }
+
+        withAnimation(.smooth(duration: 0.16)) {
+            deletingFolder = folder
+        }
+    }
+
+    private func createFolder(name: String, parentID: AssetFolder.ID?) {
         do {
-            try store.createFolder(parentID: parentID)
+            try store.createFolder(name: name, parentID: parentID)
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func renameFolder(_ id: AssetFolder.ID, to name: String) {
+        do {
+            try store.renameFolder(id: id, to: name)
         } catch {
             showImportError(error)
         }

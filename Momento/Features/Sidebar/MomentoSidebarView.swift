@@ -20,6 +20,7 @@ struct MomentoSidebarView: View {
     var onReloadLibrary: () -> Void
     var onCloseLibrary: () -> Void
     var onCreateFolder: (AssetFolder.ID?) -> Void
+    var onRenameFolder: (AssetFolder.ID) -> Void
     var onDeleteFolder: (AssetFolder.ID) -> Void
 
     @State private var hoveredFooterActionID: String?
@@ -47,6 +48,7 @@ struct MomentoSidebarView: View {
         onReloadLibrary: @escaping () -> Void = {},
         onCloseLibrary: @escaping () -> Void = {},
         onCreateFolder: @escaping (AssetFolder.ID?) -> Void = { _ in },
+        onRenameFolder: @escaping (AssetFolder.ID) -> Void = { _ in },
         onDeleteFolder: @escaping (AssetFolder.ID) -> Void = { _ in }
     ) {
         self._selection = selection
@@ -63,6 +65,7 @@ struct MomentoSidebarView: View {
         self.onReloadLibrary = onReloadLibrary
         self.onCloseLibrary = onCloseLibrary
         self.onCreateFolder = onCreateFolder
+        self.onRenameFolder = onRenameFolder
         self.onDeleteFolder = onDeleteFolder
     }
 
@@ -372,9 +375,6 @@ struct MomentoSidebarView: View {
 
         return HStack(spacing: 8) {
             Button {
-                guard row.hasChildren else {
-                    return
-                }
                 withAnimation(.smooth(duration: 0.16)) {
                     if expandedFolderIDs.contains(folder.id) {
                         expandedFolderIDs.remove(folder.id)
@@ -383,18 +383,12 @@ struct MomentoSidebarView: View {
                     }
                 }
             } label: {
-                Image(systemName: row.hasChildren ? disclosureIcon(for: folder.id) : "chevron.right")
+                Image(systemName: disclosureIcon(for: folder.id))
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(row.hasChildren ? foregroundStyle : Color.clear)
+                    .foregroundStyle(foregroundStyle)
                     .frame(width: 12, height: 24)
             }
             .buttonStyle(.plain)
-            .disabled(!row.hasChildren)
-
-            Image(systemName: "folder")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(foregroundStyle)
-                .frame(width: 17)
 
             Text(folder.name)
                 .font(.system(size: 13, weight: .medium))
@@ -405,26 +399,7 @@ struct MomentoSidebarView: View {
             Spacer(minLength: 6)
 
             if isHovered {
-                HStack(spacing: 0) {
-                    folderRowButton(
-                        id: "\(folder.id)-child",
-                        systemImage: "plus",
-                        label: localization.string("New Folder")
-                    ) {
-                        withAnimation(.smooth(duration: 0.16)) {
-                            _ = expandedFolderIDs.insert(folder.id)
-                        }
-                        onCreateFolder(folder.id)
-                    }
-
-                    folderRowButton(
-                        id: "\(folder.id)-delete",
-                        systemImage: "trash",
-                        label: localization.string("Delete Folder")
-                    ) {
-                        onDeleteFolder(folder.id)
-                    }
-                }
+                folderRowMenu(for: folder)
             }
         }
         .padding(.leading, CGFloat(row.depth) * 18 + 8)
@@ -470,15 +445,35 @@ struct MomentoSidebarView: View {
         expandedFolderIDs.contains(folderID) ? "chevron.down" : "chevron.right"
     }
 
-    private func folderRowButton(
-        id: String,
-        systemImage: String,
-        label: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 11, weight: .semibold))
+    private func folderRowMenu(for folder: AssetFolder) -> some View {
+        let id = "\(folder.id)-more"
+
+        return Menu {
+            Button {
+                withAnimation(.smooth(duration: 0.16)) {
+                    _ = expandedFolderIDs.insert(folder.id)
+                }
+                onCreateFolder(folder.id)
+            } label: {
+                Label(localization.string("New Folder"), systemImage: "folder.badge.plus")
+            }
+
+            Button {
+                onRenameFolder(folder.id)
+            } label: {
+                Label(localization.string("Edit Folder"), systemImage: "pencil")
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                onDeleteFolder(folder.id)
+            } label: {
+                Label(localization.string("Delete Folder"), systemImage: "trash")
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(hoveredFolderControlID == id ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
                 .frame(width: 22, height: 22)
                 .background {
@@ -491,8 +486,8 @@ struct MomentoSidebarView: View {
         .onHover { hovering in
             updateFolderControlHover(id: id, isHovering: hovering)
         }
-        .help(label)
-        .accessibilityLabel(label)
+        .help(localization.string("More Actions"))
+        .accessibilityLabel(localization.string("More Actions"))
     }
 
     private func folderSectionButton(

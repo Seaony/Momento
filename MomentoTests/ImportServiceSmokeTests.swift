@@ -445,9 +445,21 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         XCTAssertEqual(reopened.folders.map(\.name), ["Jobs", "Mantis"])
         XCTAssertEqual(reopened.folders.first { $0.name == "Mantis" }?.parentID, rootID)
 
-        try reopened.deleteFolder(id: rootID)
-        XCTAssertTrue(reopened.folders.isEmpty)
-        XCTAssertEqual(reopened.sidebarItemID(), "all-assets")
+        let childID = try XCTUnwrap(reopened.folders.first { $0.name == "Mantis" }?.id)
+        try reopened.renameFolder(id: childID, to: "Design")
+        XCTAssertEqual(reopened.folders.map(\.name), ["Jobs", "Design"])
+
+        let renamed = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try renamed.openLibrary(at: environment.packageURL)
+        XCTAssertEqual(renamed.folders.map(\.name), ["Jobs", "Design"])
+
+        try renamed.deleteFolder(id: rootID)
+        XCTAssertTrue(renamed.folders.isEmpty)
+        XCTAssertEqual(renamed.sidebarItemID(), "all-assets")
     }
 
     @MainActor
