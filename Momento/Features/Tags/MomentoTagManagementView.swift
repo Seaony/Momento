@@ -3,8 +3,9 @@ import SwiftUI
 struct MomentoTagManagementView: View {
     private static let rowCornerRadius: CGFloat = 10
     private static let assetCountColumnWidth: CGFloat = 118
-    private static let actionColumnWidth: CGFloat = 166
-    private static let actionButtonHeight: CGFloat = 30
+    private static let actionColumnWidth: CGFloat = 196
+    private static let actionButtonCornerRadius: CGFloat = 13
+    private static let actionButtonHeight: CGFloat = 34
 
     @Environment(\.appLocalization) private var localization
 
@@ -17,6 +18,7 @@ struct MomentoTagManagementView: View {
     @State private var deletingTag: TagSummary?
     @State private var hoveredRowID: TagItem.ID?
     @State private var hoveredMenuID: TagItem.ID?
+    @State private var hoveredActionID: String?
     @FocusState private var isNameFieldFocused: Bool
 
     var body: some View {
@@ -137,6 +139,7 @@ struct MomentoTagManagementView: View {
             HStack(spacing: 8) {
                 if isEditing {
                     actionButton(
+                        id: "\(summary.id)-save",
                         title: localization.string("Save Changes"),
                         accessibilityLabel: localization.string("Save Changes"),
                         isProminent: true
@@ -146,6 +149,7 @@ struct MomentoTagManagementView: View {
                     .disabled(trimmedDraftTagName.isEmpty)
 
                     actionButton(
+                        id: "\(summary.id)-cancel",
                         title: localization.string("Cancel"),
                         accessibilityLabel: localization.string("Cancel"),
                         isProminent: false
@@ -219,22 +223,24 @@ struct MomentoTagManagementView: View {
     }
 
     private func actionButton(
+        id: String,
         title: String,
         accessibilityLabel: String,
         isProminent: Bool,
         role: ButtonRole? = nil,
         action: @escaping () -> Void
     ) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        let isHovered = hoveredActionID == id
+        let shape = RoundedRectangle(cornerRadius: Self.actionButtonCornerRadius, style: .continuous)
         let foregroundColor = role == .destructive ? Color.red.opacity(0.9) : MomentoTheme.primaryText
 
         return Button(role: role, action: action) {
             Text(title)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .lineLimit(1)
                 .minimumScaleFactor(0.82)
                 .foregroundStyle(foregroundColor)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 16)
                 .frame(height: Self.actionButtonHeight)
                 .background {
                     Color.clear
@@ -246,14 +252,31 @@ struct MomentoTagManagementView: View {
                         )
                 }
                 .overlay {
-                    shape.strokeBorder(Color.white.opacity(isProminent ? 0.18 : 0.12), lineWidth: 1)
+                    if isHovered {
+                        shape.fill(Color.white.opacity(isProminent ? 0.16 : 0.1))
+                    }
+                }
+                .overlay {
+                    shape.strokeBorder(Color.white.opacity(isHovered ? 0.28 : 0.14), lineWidth: 1)
                 }
                 .contentShape(shape)
         }
         .buttonStyle(.plain)
+        .scaleEffect(isHovered ? 1.035 : 1)
+        .shadow(color: isHovered ? Color.black.opacity(0.2) : Color.clear, radius: 8, y: 3)
+        .animation(.smooth(duration: 0.14), value: isHovered)
         .contentShape(shape)
         .pointerStyle(.link)
         .accessibilityLabel(accessibilityLabel)
+        .onHover { hovering in
+            withAnimation(.smooth(duration: 0.14)) {
+                if hovering {
+                    hoveredActionID = id
+                } else if hoveredActionID == id {
+                    hoveredActionID = nil
+                }
+            }
+        }
     }
 
     private var emptyState: some View {
