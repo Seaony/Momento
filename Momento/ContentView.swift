@@ -7,10 +7,20 @@ private struct FolderCreationRequest: Identifiable {
     var parentID: AssetFolder.ID?
 }
 
+private enum AssetFilterFacet: String, CaseIterable, Identifiable {
+    case colors
+    case tags
+    case fileTypes
+
+    var id: String { rawValue }
+}
+
 private enum ContentToolbarMetrics {
     static let searchFieldWidth: CGFloat = 168
     static let iconButtonWidth: CGFloat = 38
-    static let filterPopoverWidth: CGFloat = 320
+    static let filterPopoverWidth: CGFloat = 392
+    static let filterPopoverHeight: CGFloat = 304
+    static let filterNavigationWidth: CGFloat = 108
     static let sortPopoverWidth: CGFloat = 156
     static let popoverSectionSpacing: CGFloat = 12
 }
@@ -35,6 +45,8 @@ struct ContentView: View {
     @State private var hoveredToolbarActionID: String?
     @State private var hoveredFilterOptionID: String?
     @State private var hoveredSortOptionID: String?
+    @State private var selectedFilterFacet: AssetFilterFacet = .colors
+    @State private var filterTagSearchQuery = ""
     @State private var isFilterPopoverPresented = false
     @State private var isSortPopoverPresented = false
     @State private var shellToastRequest: MomentoToastRequest?
@@ -389,22 +401,28 @@ struct ContentView: View {
 
     private var filterPopover: some View {
         GlassEffectContainer(spacing: 10) {
-            VStack(alignment: .leading, spacing: ContentToolbarMetrics.popoverSectionSpacing) {
-                popoverHeader(
-                    title: localization.string("Filter"),
-                    actionTitle: localization.string("Clear Filters"),
-                    showsAction: store.filterState.isActive
-                ) {
-                    store.clearAssetFilters()
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 10) {
+                    filterFacetNavigation
+                    filterFacetContent
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
-                filterColorsSection
-                filterTagsSection
-                filterFileTypesSection
+                if store.filterState.isActive {
+                    HStack {
+                        Spacer(minLength: 0)
+                        Button(localization.string("Clear Filters")) {
+                            store.clearAssetFilters()
+                        }
+                        .font(.system(size: 12, weight: .medium))
+                        .buttonStyle(.glass)
+                        .controlSize(.small)
+                    }
+                }
             }
         }
         .padding(12)
-        .frame(width: ContentToolbarMetrics.filterPopoverWidth)
+        .frame(width: ContentToolbarMetrics.filterPopoverWidth, height: ContentToolbarMetrics.filterPopoverHeight)
         .background {
             MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.16)), cornerRadius: 18)
         }
@@ -433,57 +451,90 @@ struct ContentView: View {
         }
     }
 
-    private var filterColorsSection: some View {
+    private var filterFacetNavigation: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            ForEach(AssetFilterFacet.allCases) { facet in
+                filterFacetButton(facet)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(width: ContentToolbarMetrics.filterNavigationWidth)
+        .frame(maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    @ViewBuilder
+    private var filterFacetContent: some View {
+        switch selectedFilterFacet {
+        case .colors:
+            filterColorsContent
+        case .tags:
+            filterTagsContent
+        case .fileTypes:
+            filterFileTypesContent
+        }
+    }
+
+    private var filterColorsContent: some View {
         let colorCategories = store.availableFilterColorCategories
 
-        return filterSection(title: localization.string("Colors")) {
+        return ScrollView {
             if colorCategories.isEmpty {
                 filterEmptyText(localization.string("No colors available"))
             } else {
                 LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 88), spacing: 7)],
+                    columns: [GridItem(.adaptive(minimum: 34, maximum: 34), spacing: 8)],
                     alignment: .leading,
-                    spacing: 7
+                    spacing: 8
                 ) {
                     ForEach(colorCategories) { category in
                         colorCategoryFilterButton(category)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private var filterTagsSection: some View {
-        let tags = store.tags
+    private var filterTagsContent: some View {
+        let tags = filteredFilterTags
 
-        return filterSection(title: localization.string("Tags")) {
-            if tags.isEmpty {
-                filterEmptyText(localization.string("No tags"))
-            } else {
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 88), spacing: 7)],
-                    alignment: .leading,
-                    spacing: 7
-                ) {
-                    ForEach(tags) { tag in
-                        filterChoiceButton(
-                            id: "filter-tag-\(tag.id)",
-                            title: tag.name,
-                            systemImage: "number",
-                            isSelected: store.filterState.tagIDs.contains(tag.id)
-                        ) {
-                            store.toggleFilterTag(id: tag.id)
+        return VStack(alignment: .leading, spacing: 8) {
+            if store.tags.count > 12 || !filterTagSearchQuery.isEmpty {
+                filterTagSearchField
+            }
+
+            ScrollView {
+                if tags.isEmpty {
+                    filterEmptyText(localization.string("No tags"))
+                } else {
+                    LazyVGrid(
+                        columns: [GridItem(.adaptive(minimum: 88), spacing: 7)],
+                        alignment: .leading,
+                        spacing: 7
+                    ) {
+                        ForEach(tags) { tag in
+                            filterChoiceButton(
+                                id: "filter-tag-\(tag.id)",
+                                title: tag.name,
+                                systemImage: "number",
+                                isSelected: store.filterState.tagIDs.contains(tag.id)
+                            ) {
+                                store.toggleFilterTag(id: tag.id)
+                            }
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private var filterFileTypesSection: some View {
-        let fileExtensions = store.availableFilterFileExtensions
+    private var filterFileTypesContent: some View {
+        let fileExtensions = sortedFilterFileExtensions
 
-        return filterSection(title: localization.string("File Types")) {
+        return ScrollView {
             if fileExtensions.isEmpty {
                 filterEmptyText(localization.string("No file types available"))
             } else {
@@ -503,42 +554,125 @@ struct ContentView: View {
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var filteredFilterTags: [TagItem] {
+        let query = filterTagSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tags = query.isEmpty ? store.tags : store.tags.filter {
+            $0.name.localizedCaseInsensitiveContains(query)
+        }
+
+        return tags.sorted { lhs, rhs in
+            let lhsSelected = store.filterState.tagIDs.contains(lhs.id)
+            let rhsSelected = store.filterState.tagIDs.contains(rhs.id)
+            if lhsSelected != rhsSelected {
+                return lhsSelected
+            }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
     }
 
-    private func popoverHeader(
-        title: String,
-        actionTitle: String,
-        showsAction: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        HStack(spacing: 10) {
-            Text(title)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(MomentoTheme.primaryText)
-
-            Spacer(minLength: 8)
-
-            if showsAction {
-                Button(actionTitle, action: action)
-                    .font(.system(size: 12, weight: .medium))
-                    .buttonStyle(.glass)
-                    .controlSize(.small)
+    private var sortedFilterFileExtensions: [String] {
+        store.availableFilterFileExtensions.sorted { lhs, rhs in
+            let lhsSelected = store.filterState.fileExtensions.contains(lhs)
+            let rhsSelected = store.filterState.fileExtensions.contains(rhs)
+            if lhsSelected != rhsSelected {
+                return lhsSelected
             }
+            return lhs.localizedStandardCompare(rhs) == .orderedAscending
         }
     }
 
-    private func filterSection<Content: View>(
-        title: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text(title)
-                .font(.system(size: 11, weight: .semibold))
+    private var filterTagSearchField: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(MomentoTheme.secondaryText)
 
-            content()
+            TextField(localization.string("Search tags"), text: $filterTagSearchQuery)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(MomentoTheme.primaryText)
+        }
+        .padding(.horizontal, 9)
+        .frame(height: 30)
+        .background {
+            MomentoGlassBackground(glass: .regular.interactive(true), cornerRadius: 10)
+        }
+    }
+
+    private func filterFacetButton(_ facet: AssetFilterFacet) -> some View {
+        let isSelected = selectedFilterFacet == facet
+        let count = selectedFilterCount(for: facet)
+        let optionID = "filter-facet-\(facet.id)"
+        let isHovered = hoveredFilterOptionID == optionID
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+
+        return Button {
+            withAnimation(.smooth(duration: 0.14)) {
+                selectedFilterFacet = facet
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(filterFacetTitle(for: facet))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+
+                Spacer(minLength: 0)
+
+                if count > 0 {
+                    Text("\(count)")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(MomentoTheme.primaryText)
+                        .padding(.horizontal, 5)
+                        .frame(minWidth: 18, minHeight: 18)
+                        .glassEffect(
+                            .regular.tint(Color.white.opacity(0.14)).interactive(),
+                            in: Capsule()
+                        )
+                }
+            }
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(MomentoTheme.primaryText)
+            .padding(.horizontal, 9)
+            .frame(height: 32)
+            .glassEffect(
+                .regular.tint(Color.white.opacity(isSelected || isHovered ? 0.16 : 0.06)).interactive(),
+                in: shape
+            )
+            .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .help(filterFacetTitle(for: facet))
+        .onHover { hovering in
+            updateFilterOptionHover(id: optionID, hovering: hovering)
+        }
+    }
+
+    private func selectedFilterCount(for facet: AssetFilterFacet) -> Int {
+        switch facet {
+        case .colors:
+            store.filterState.colorCategories.count
+        case .tags:
+            store.filterState.tagIDs.count
+        case .fileTypes:
+            store.filterState.fileExtensions.count
+        }
+    }
+
+    private func filterFacetTitle(for facet: AssetFilterFacet) -> String {
+        switch facet {
+        case .colors:
+            localization.string("Colors")
+        case .tags:
+            localization.string("Tags")
+        case .fileTypes:
+            localization.string("File Types")
         }
     }
 
@@ -555,32 +689,26 @@ struct ContentView: View {
         let optionID = "filter-color-\(category.id)"
         let isHovered = hoveredFilterOptionID == optionID
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-        let swatchShape = RoundedRectangle(cornerRadius: 5, style: .continuous)
+        let swatchShape = RoundedRectangle(cornerRadius: 7, style: .continuous)
 
         return Button {
             store.toggleFilterColorCategory(category)
         } label: {
-            HStack(spacing: 6) {
+            ZStack {
                 swatchShape
                     .fill(colorSwatch(for: category))
-                    .frame(width: 16, height: 16)
+                    .frame(width: 22, height: 22)
                     .overlay {
-                        swatchShape.strokeBorder(Color.white.opacity(0.24), lineWidth: 1)
+                        swatchShape.strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
                     }
-
-                Text(localization.title(for: category))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-
                 if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .bold))
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Color.white)
+                        .shadow(color: Color.black.opacity(0.32), radius: 2, x: 0, y: 1)
                 }
             }
-            .foregroundStyle(MomentoTheme.primaryText)
-            .padding(.horizontal, 8)
-            .frame(height: 30)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(width: 34, height: 34)
             .glassEffect(
                 .regular.tint(Color.white.opacity(isSelected || isHovered ? 0.16 : 0.06)).interactive(),
                 in: shape
