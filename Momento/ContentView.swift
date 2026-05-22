@@ -439,28 +439,26 @@ struct ContentView: View {
     }
 
     private var filterFacetPicker: some View {
-        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 13, style: .continuous)
 
-        return GlassEffectContainer(spacing: 6) {
-            HStack(spacing: 6) {
-                ForEach(AssetFilterFacet.allCases) { facet in
-                    filterFacetButton(facet)
-                }
+        return HStack(spacing: 6) {
+            ForEach(AssetFilterFacet.allCases) { facet in
+                filterFacetButton(facet)
             }
-            .padding(4)
-            .background {
-                MomentoGlassBackground(glass: .regular.tint(Color.white.opacity(0.05)), cornerRadius: 16)
-            }
-            .overlay {
-                shape.strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
-            }
+        }
+        .padding(5)
+        .background {
+            shape.fill(Color.white.opacity(0.08))
+        }
+        .overlay {
+            shape.strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
         }
     }
 
     private func filterFacetButton(_ facet: AssetFilterFacet) -> some View {
         let isSelected = selectedFilterFacet == facet
         let isHovered = hoveredFilterFacet == facet
-        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
 
         return Button {
             withAnimation(.smooth(duration: 0.16)) {
@@ -468,28 +466,24 @@ struct ContentView: View {
             }
         } label: {
             Text(filterFacetSegmentTitle(for: facet))
-                .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
-                .foregroundStyle(isSelected ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
+                .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                .foregroundStyle(Color.white.opacity(isSelected ? 0.98 : 0.74))
                 .lineLimit(1)
                 .minimumScaleFactor(0.86)
                 .frame(maxWidth: .infinity)
-                .frame(height: 30)
+                .frame(height: 34)
                 .contentShape(shape)
         }
         .buttonStyle(.plain)
         .pointerStyle(.link)
         .background {
             if isSelected || isHovered {
-                Color.clear
-                    .glassEffect(
-                        .regular.tint(Color.white.opacity(isSelected ? 0.16 : 0.10)).interactive(),
-                        in: shape
-                    )
+                shape.fill(Color.white.opacity(isSelected ? 0.18 : 0.08))
             }
         }
         .overlay {
             if isSelected {
-                shape.strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+                shape.strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
             }
         }
         .onHover { hovering in
