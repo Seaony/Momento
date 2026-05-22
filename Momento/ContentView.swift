@@ -16,6 +16,7 @@ struct ContentView: View {
     @State private var inspectorNotesByAssetID: [AssetItem.ID: String] = [:]
     @State private var importError: String?
     @State private var isToolbarSearchExpanded = false
+    @State private var shellToastRequest: MomentoToastRequest?
     @FocusState private var isToolbarSearchFocused: Bool
 
     private var sidebarSelection: Binding<String?> {
@@ -147,6 +148,7 @@ struct ContentView: View {
             inspectorAsset: store.selectedAsset.map { MomentoInspectorAsset(asset: $0, localization: localization) },
             inspectorTags: selectedTags,
             inspectorNotes: inspectorNotes,
+            toastRequest: $shellToastRequest,
             commands: commands,
             onCommandSelected: handleCommand
         ) {
@@ -157,7 +159,9 @@ struct ContentView: View {
                     viewMode: store.viewMode,
                     localization: localization,
                     onSelectionChange: selectAssets,
-                    onDoubleClick: preview,
+                    onDoubleClick: { asset in
+                        preview(asset)
+                    },
                     onSpacePreviewStart: previewWhileSpaceIsPressed,
                     onSpacePreviewEnd: endSpacePreview,
                     onContextMenuAction: handleAssetContextMenuAction
@@ -420,7 +424,8 @@ struct ContentView: View {
         }
     }
 
-    private func preview(_ asset: AssetItem) {
+    @discardableResult
+    private func preview(_ asset: AssetItem) -> Bool {
         showPreview(asset, closesOnSpaceKeyUp: false)
     }
 
@@ -432,9 +437,10 @@ struct ContentView: View {
         MomentoAssetPreviewPanelController.shared.close()
     }
 
-    private func showPreview(_ asset: AssetItem, closesOnSpaceKeyUp: Bool, sourceFrame: NSRect? = nil) {
+    @discardableResult
+    private func showPreview(_ asset: AssetItem, closesOnSpaceKeyUp: Bool, sourceFrame: NSRect? = nil) -> Bool {
         guard let previewURL = previewURL(for: asset) else {
-            return
+            return false
         }
 
         MomentoAssetPreviewPanelController.shared.show(
@@ -444,6 +450,7 @@ struct ContentView: View {
             closesOnSpaceKeyUp: closesOnSpaceKeyUp,
             sourceFrame: sourceFrame
         )
+        return true
     }
 
     private func previewURL(for asset: AssetItem) -> URL? {
@@ -480,52 +487,73 @@ struct ContentView: View {
     private func handleAssetContextMenuAction(_ asset: AssetItem, action: AssetContextMenuAction) {
         switch action {
         case .previewOriginal:
-            preview(asset)
+            if preview(asset) {
+                showAssetActionToast(action)
+            }
         case .refreshThumbnail:
-            refreshThumbnail(for: asset)
+            if refreshThumbnail(for: asset) {
+                showAssetActionToast(action)
+            }
         case .reanalyzeColors:
-            reanalyzeColors(for: asset)
+            if reanalyzeColors(for: asset) {
+                showAssetActionToast(action)
+            }
         case .revealInFinder:
-            revealInFinder(asset)
+            if revealInFinder(asset) {
+                showAssetActionToast(action)
+            }
         case .moveToTrash:
-            moveAssetToTrash(asset)
+            if moveAssetToTrash(asset) {
+                showAssetActionToast(action)
+            }
         }
     }
 
-    private func refreshThumbnail(for asset: AssetItem) {
+    private func refreshThumbnail(for asset: AssetItem) -> Bool {
         do {
             AssetCollectionGridView.invalidatePreviewCache(for: asset)
             if let updatedAsset = try store.refreshThumbnail(for: asset.id) {
                 AssetCollectionGridView.invalidatePreviewCache(for: updatedAsset)
             }
+            return true
         } catch {
             showImportError(error)
+            return false
         }
     }
 
-    private func reanalyzeColors(for asset: AssetItem) {
+    private func reanalyzeColors(for asset: AssetItem) -> Bool {
         do {
             try store.reanalyzeColors(for: asset.id)
+            return true
         } catch {
             showImportError(error)
+            return false
         }
     }
 
-    private func revealInFinder(_ asset: AssetItem) {
+    private func revealInFinder(_ asset: AssetItem) -> Bool {
         guard let fileURL = previewURL(for: asset) else {
-            return
+            return false
         }
 
         NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+        return true
     }
 
-    private func moveAssetToTrash(_ asset: AssetItem) {
+    private func moveAssetToTrash(_ asset: AssetItem) -> Bool {
         do {
             AssetCollectionGridView.invalidatePreviewCache(for: asset)
             try store.moveAssetToTrash(id: asset.id)
+            return true
         } catch {
             showImportError(error)
+            return false
         }
+    }
+
+    private func showAssetActionToast(_ action: AssetContextMenuAction) {
+        shellToastRequest = MomentoToastRequest(message: localization.string(action.titleKey))
     }
 
     private func createLibrary() {

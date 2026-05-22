@@ -1,5 +1,15 @@
 import SwiftUI
 
+struct MomentoToastRequest: Equatable {
+    let id: UUID
+    var message: String
+
+    init(message: String) {
+        id = UUID()
+        self.message = message
+    }
+}
+
 struct MomentoShellView<Content: View>: View {
     @Environment(\.appLocalization) private var localization
 
@@ -28,6 +38,7 @@ struct MomentoShellView<Content: View>: View {
     var inspectorAsset: MomentoInspectorAsset?
     @Binding var inspectorTags: [String]
     @Binding var inspectorNotes: String
+    @Binding var toastRequest: MomentoToastRequest?
     var commands: [MomentoCommand]
     var onCommandSelected: (MomentoCommand) -> Void
     var content: () -> Content
@@ -39,8 +50,9 @@ struct MomentoShellView<Content: View>: View {
     @State private var inspectorResizeStartWidth: CGFloat?
     @State private var isInspectorHovered = false
     @State private var isInspectorResizeHandleHovered = false
-    @State private var isColorCopyToastVisible = false
-    @State private var colorCopyToastToken = UUID()
+    @State private var activeToastMessage: String?
+    @State private var isToastVisible = false
+    @State private var toastToken = UUID()
 
     init(
         sidebarSelection: Binding<String?>,
@@ -67,6 +79,7 @@ struct MomentoShellView<Content: View>: View {
         inspectorAsset: MomentoInspectorAsset? = nil,
         inspectorTags: Binding<[String]> = .constant([]),
         inspectorNotes: Binding<String> = .constant(""),
+        toastRequest: Binding<MomentoToastRequest?> = .constant(nil),
         commands: [MomentoCommand] = .momentoDefaultCommands,
         onCommandSelected: @escaping (MomentoCommand) -> Void = { _ in },
         @ViewBuilder content: @escaping () -> Content
@@ -95,6 +108,7 @@ struct MomentoShellView<Content: View>: View {
         self.inspectorAsset = inspectorAsset
         self._inspectorTags = inspectorTags
         self._inspectorNotes = inspectorNotes
+        self._toastRequest = toastRequest
         self.commands = commands
         self.onCommandSelected = onCommandSelected
         self.content = content
@@ -135,9 +149,16 @@ struct MomentoShellView<Content: View>: View {
             onSelect: onCommandSelected
         )
         .overlay {
-            colorCopyToast
+            shellToast
         }
-        .animation(.smooth(duration: 0.18), value: isColorCopyToastVisible)
+        .animation(.smooth(duration: 0.18), value: isToastVisible)
+        .onChange(of: toastRequest) { _, request in
+            guard let request else {
+                return
+            }
+
+            showToast(request.message)
+        }
         .background {
             SidebarTitlebarToggleConfigurator(
                 isCollapsed: $isSidebarCollapsed,
@@ -309,9 +330,9 @@ struct MomentoShellView<Content: View>: View {
     }
 
     @ViewBuilder
-    private var colorCopyToast: some View {
-        if isColorCopyToastVisible {
-            Label(localization.string("Color copied"), systemImage: "checkmark")
+    private var shellToast: some View {
+        if isToastVisible, let activeToastMessage {
+            Label(activeToastMessage, systemImage: "checkmark")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.white)
                 .labelStyle(.titleAndIcon)
@@ -335,20 +356,25 @@ struct MomentoShellView<Content: View>: View {
     }
 
     private func showColorCopyToast() {
+        showToast(localization.string("Color copied"))
+    }
+
+    private func showToast(_ message: String) {
         let token = UUID()
-        colorCopyToastToken = token
+        activeToastMessage = message
+        toastToken = token
 
         withAnimation(.smooth(duration: 0.18)) {
-            isColorCopyToastVisible = true
+            isToastVisible = true
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.45) {
-            guard colorCopyToastToken == token else {
+            guard toastToken == token else {
                 return
             }
 
             withAnimation(.smooth(duration: 0.18)) {
-                isColorCopyToastVisible = false
+                isToastVisible = false
             }
         }
     }

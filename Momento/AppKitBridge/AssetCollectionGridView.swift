@@ -1483,6 +1483,7 @@ private final class AssetContextMenuRowView: NSView {
     private let imageView = NSImageView()
     private let label = NSTextField(labelWithString: "")
     private var trackingArea: NSTrackingArea?
+    private var didPushCursor = false
     private var isHovered = false {
         didSet {
             updateAppearance()
@@ -1516,6 +1517,14 @@ private final class AssetContextMenuRowView: NSView {
         true
     }
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+
+        if window == nil {
+            popPointingHandCursorIfNeeded()
+        }
+    }
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
 
@@ -1534,10 +1543,12 @@ private final class AssetContextMenuRowView: NSView {
 
     override func mouseEntered(with event: NSEvent) {
         isHovered = true
+        pushPointingHandCursorIfNeeded()
     }
 
     override func mouseExited(with event: NSEvent) {
         isHovered = false
+        popPointingHandCursorIfNeeded()
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -1545,6 +1556,7 @@ private final class AssetContextMenuRowView: NSView {
             return
         }
 
+        popPointingHandCursorIfNeeded()
         enclosingMenuItem?.menu?.cancelTracking()
         onSelect()
     }
@@ -1591,6 +1603,24 @@ private final class AssetContextMenuRowView: NSView {
         layer?.backgroundColor = isHovered
             ? NSColor.white.withAlphaComponent(AssetCollectionMetrics.hoverBackgroundAlpha).cgColor
             : NSColor.clear.cgColor
+    }
+
+    private func pushPointingHandCursorIfNeeded() {
+        guard !didPushCursor else {
+            return
+        }
+
+        NSCursor.pointingHand.push()
+        didPushCursor = true
+    }
+
+    private func popPointingHandCursorIfNeeded() {
+        guard didPushCursor else {
+            return
+        }
+
+        NSCursor.pop()
+        didPushCursor = false
     }
 }
 
