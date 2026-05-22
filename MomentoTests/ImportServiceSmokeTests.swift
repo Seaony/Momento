@@ -521,23 +521,41 @@ final class LibraryPackagePersistenceTests: XCTestCase {
             colorHex: "#00FF00",
             importedAt: Date(timeIntervalSince1970: 30)
         )
+        let darkPNG = toolbarFilterAsset(
+            id: "dark-png",
+            libraryID: library.id,
+            displayName: "Dark",
+            fileExtension: "png",
+            byteSize: 150,
+            tag: coolTag,
+            colorHex: "#101010",
+            importedAt: Date(timeIntervalSince1970: 40),
+            paletteColors: [
+                (hex: "#101010", coverage: 0.7),
+                (hex: "#FF0000", coverage: 0.05)
+            ]
+        )
         let store = LibraryStore(
             libraries: [library],
-            assets: [mediumPNG, largeJPG, smallPNG],
+            assets: [mediumPNG, largeJPG, smallPNG, darkPNG],
             loadRecentLibrary: false
         )
 
         XCTAssertEqual(store.availableFilterFileExtensions, ["jpg", "png"])
-        XCTAssertEqual(Set(store.availableFilterColorHexes), Set(["#0000FF", "#00FF00", "#FF0000"]))
+        XCTAssertEqual(store.availableFilterColorCategories, [.black, .red, .green, .blue])
 
         store.toggleFilterFileExtension("PNG")
-        XCTAssertEqual(store.visibleAssets.map(\.id), ["small-png", "medium-png"])
+        XCTAssertEqual(store.visibleAssets.map(\.id), ["dark-png", "medium-png", "small-png"])
 
         store.toggleFilterTag(id: warmTag.id)
-        XCTAssertEqual(store.visibleAssets.map(\.id), ["small-png", "medium-png"])
+        XCTAssertEqual(store.visibleAssets.map(\.id), ["medium-png", "small-png"])
 
-        store.toggleFilterColor("#00ff00")
+        store.toggleFilterColorCategory(.green)
         XCTAssertEqual(store.visibleAssets.map(\.id), ["medium-png"])
+
+        store.clearAssetFilters()
+        store.toggleFilterColorCategory(.red)
+        XCTAssertEqual(store.visibleAssets.map(\.id), ["small-png"])
 
         store.clearAssetFilters()
         store.selectAsset(id: smallPNG.id)
@@ -547,12 +565,16 @@ final class LibraryPackagePersistenceTests: XCTestCase {
 
         store.clearAssetFilters()
         store.setSortOption(.fileSize)
-        store.setSortDirection(.descending)
-        XCTAssertEqual(store.visibleAssets.map(\.id), ["large-jpg", "medium-png", "small-png"])
+        XCTAssertEqual(store.visibleAssets.map(\.id), ["large-jpg", "medium-png", "dark-png", "small-png"])
+
+        store.setSortOption(.fileSize)
+        XCTAssertEqual(store.visibleAssets.map(\.id), ["small-png", "dark-png", "medium-png", "large-jpg"])
 
         store.setSortOption(.name)
-        store.setSortDirection(.ascending)
-        XCTAssertEqual(store.visibleAssets.map(\.id), ["large-jpg", "small-png", "medium-png"])
+        XCTAssertEqual(store.visibleAssets.map(\.id), ["medium-png", "dark-png", "small-png", "large-jpg"])
+
+        store.setSortOption(.name)
+        XCTAssertEqual(store.visibleAssets.map(\.id), ["large-jpg", "small-png", "dark-png", "medium-png"])
     }
 
     @MainActor
@@ -820,9 +842,12 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         byteSize: Int64,
         tag: TagItem,
         colorHex: String,
-        importedAt: Date
+        importedAt: Date,
+        paletteColors: [(hex: String, coverage: Double)]? = nil
     ) -> AssetItem {
-        AssetItem(
+        let colors = paletteColors ?? [(hex: colorHex, coverage: 0.5)]
+
+        return AssetItem(
             id: id,
             libraryID: libraryID,
             displayName: displayName,
@@ -834,15 +859,16 @@ final class LibraryPackagePersistenceTests: XCTestCase {
             contentHash: id,
             dimensions: nil,
             tags: [tag],
-            paletteColors: [
+            paletteColors: colors.enumerated().map { index, color in
                 AssetColor(
+                    id: "\(id)-color-\(index)",
                     libraryID: libraryID,
                     assetID: id,
-                    hex: colorHex,
-                    coverage: 0.5,
-                    sortIndex: 0
+                    hex: color.hex,
+                    coverage: color.coverage,
+                    sortIndex: index
                 )
-            ],
+            },
             isFavorite: false,
             importedAt: importedAt
         )

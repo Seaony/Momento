@@ -260,13 +260,30 @@ nonisolated struct AssetItem: Identifiable, Hashable, Codable, Sendable {
     }
 }
 
+nonisolated enum AssetColorCategory: String, CaseIterable, Identifiable, Hashable, Codable, Sendable {
+    case black
+    case white
+    case gray
+    case red
+    case orange
+    case yellow
+    case green
+    case teal
+    case blue
+    case purple
+    case pink
+    case brown
+
+    var id: String { rawValue }
+}
+
 nonisolated struct AssetFilterState: Hashable, Codable, Sendable {
-    var colorHexes: Set<String> = []
+    var colorCategories: Set<AssetColorCategory> = []
     var tagIDs: Set<TagItem.ID> = []
     var fileExtensions: Set<String> = []
 
     var isActive: Bool {
-        !colorHexes.isEmpty || !tagIDs.isEmpty || !fileExtensions.isEmpty
+        !colorCategories.isEmpty || !tagIDs.isEmpty || !fileExtensions.isEmpty
     }
 }
 

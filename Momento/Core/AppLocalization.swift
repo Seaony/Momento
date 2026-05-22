@@ -65,6 +65,35 @@ struct AppLocalization: Equatable {
         }
     }
 
+    func title(for colorCategory: AssetColorCategory) -> String {
+        switch colorCategory {
+        case .black:
+            string("Black")
+        case .white:
+            string("White")
+        case .gray:
+            string("Gray")
+        case .red:
+            string("Red")
+        case .orange:
+            string("Orange")
+        case .yellow:
+            string("Yellow")
+        case .green:
+            string("Green")
+        case .teal:
+            string("Teal")
+        case .blue:
+            string("Blue")
+        case .purple:
+            string("Purple")
+        case .pink:
+            string("Pink")
+        case .brown:
+            string("Brown")
+        }
+    }
+
     func kindTitle(for kind: AssetKind) -> String {
         switch kind {
         case .image:

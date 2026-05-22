@@ -13,7 +13,7 @@ final class LibraryStore {
     var viewMode: AssetViewMode = .masonry
     var filterState = AssetFilterState()
     var sortOption: AssetSortOption = .addedTime
-    var sortDirection: AssetSortDirection = .ascending
+    var sortDirection: AssetSortDirection = .descending
     var sidebarSelection: SidebarSelection = .library("")
     var recentLibraries: [RecentLibraryReference]
     var libraryErrorMessage: String?
@@ -134,23 +134,9 @@ final class LibraryStore {
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
-    var availableFilterColorHexes: [String] {
-        var seen = Set<String>()
-        return currentLibraryAssets
-            .flatMap(\.paletteColors)
-            .sorted {
-                if $0.coverage == $1.coverage {
-                    return $0.hex.localizedStandardCompare($1.hex) == .orderedAscending
-                }
-                return $0.coverage > $1.coverage
-            }
-            .compactMap { color in
-                let normalized = Self.normalizedColorHex(color.hex)
-                guard seen.insert(normalized).inserted else {
-                    return nil
-                }
-                return normalized
-            }
+    var availableFilterColorCategories: [AssetColorCategory] {
+        let availableCategories = Set(currentLibraryAssets.flatMap { Self.colorCategories(for: $0) })
+        return AssetColorCategory.allCases.filter { availableCategories.contains($0) }
     }
 
     var availableFilterFileExtensions: [String] {
@@ -302,12 +288,11 @@ final class LibraryStore {
         viewMode = mode
     }
 
-    func toggleFilterColor(_ hex: String) {
-        let normalized = Self.normalizedColorHex(hex)
-        if filterState.colorHexes.contains(normalized) {
-            filterState.colorHexes.remove(normalized)
+    func toggleFilterColorCategory(_ category: AssetColorCategory) {
+        if filterState.colorCategories.contains(category) {
+            filterState.colorCategories.remove(category)
         } else {
-            filterState.colorHexes.insert(normalized)
+            filterState.colorCategories.insert(category)
         }
         pruneSelectedAssetIfNeeded()
     }
@@ -341,7 +326,12 @@ final class LibraryStore {
     }
 
     func setSortOption(_ option: AssetSortOption) {
-        sortOption = option
+        if sortOption == option {
+            sortDirection = sortDirection == .descending ? .ascending : .descending
+        } else {
+            sortOption = option
+            sortDirection = .descending
+        }
     }
 
     func setSortDirection(_ direction: AssetSortDirection) {
@@ -359,7 +349,7 @@ final class LibraryStore {
         searchQuery = ""
         filterState = AssetFilterState()
         sortOption = .addedTime
-        sortDirection = .ascending
+        sortDirection = .descending
         sidebarSelection = .library("")
         libraryErrorMessage = nil
     }
@@ -716,9 +706,9 @@ final class LibraryStore {
         }
 
         return assets.filter { asset in
-            let matchesColors = filterState.colorHexes.isEmpty || asset.paletteColors.contains { color in
-                filterState.colorHexes.contains(Self.normalizedColorHex(color.hex))
-            }
+            let colorCategories = Self.colorCategories(for: asset)
+            let matchesColors = filterState.colorCategories.isEmpty
+                || colorCategories.contains { filterState.colorCategories.contains($0) }
             let matchesTags = filterState.tagIDs.isEmpty || asset.tags.contains { tag in
                 filterState.tagIDs.contains(tag.id)
             }
@@ -777,7 +767,7 @@ final class LibraryStore {
         searchQuery = ""
         filterState = AssetFilterState()
         sortOption = .addedTime
-        sortDirection = .ascending
+        sortDirection = .descending
         sidebarSelection = .library(library.id)
         libraryErrorMessage = nil
     }
@@ -848,19 +838,105 @@ final class LibraryStore {
         }
     }
 
-    private static func normalizedColorHex(_ hex: String) -> String {
-        let trimmed = hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        if trimmed.hasPrefix("#") {
-            return trimmed
-        }
-
-        return "#\(trimmed)"
-    }
-
     private static func normalizedFileExtension(_ fileExtension: String) -> String {
         fileExtension
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
+    }
+
+    private static func colorCategories(for asset: AssetItem) -> [AssetColorCategory] {
+        let colors = asset.paletteColors.sorted {
+            if $0.coverage == $1.coverage {
+                return $0.hex.localizedStandardCompare($1.hex) == .orderedAscending
+            }
+            return $0.coverage > $1.coverage
+        }
+
+        guard let topCoverage = colors.first?.coverage else {
+            return []
+        }
+
+        var seen = Set<AssetColorCategory>()
+        return colors
+            .enumerated()
+            .filter { index, color in
+                index == 0 || color.coverage >= 0.18 || color.coverage >= topCoverage * 0.55
+            }
+            .prefix(3)
+            .compactMap { _, color in
+                guard let category = colorCategory(for: color.hex),
+                      seen.insert(category).inserted else {
+                    return nil
+                }
+                return category
+            }
+    }
+
+    private static func colorCategory(for hex: String) -> AssetColorCategory? {
+        let cleaned = hex
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        guard cleaned.count == 6,
+              let value = UInt64(cleaned, radix: 16) else {
+            return nil
+        }
+
+        let red = Double((value >> 16) & 0xFF) / 255
+        let green = Double((value >> 8) & 0xFF) / 255
+        let blue = Double(value & 0xFF) / 255
+        let maximum = max(red, green, blue)
+        let minimum = min(red, green, blue)
+        let delta = maximum - minimum
+        let saturation = maximum == 0 ? 0 : delta / maximum
+        let brightness = maximum
+
+        if brightness <= 0.18 {
+            return .black
+        }
+
+        if saturation <= 0.14 {
+            if brightness >= 0.82 {
+                return .white
+            }
+            return brightness <= 0.28 ? .black : .gray
+        }
+
+        let hue: Double
+        if delta == 0 {
+            hue = 0
+        } else if maximum == red {
+            hue = 60 * ((green - blue) / delta).truncatingRemainder(dividingBy: 6)
+        } else if maximum == green {
+            hue = 60 * ((blue - red) / delta + 2)
+        } else {
+            hue = 60 * ((red - green) / delta + 4)
+        }
+
+        let normalizedHue = hue < 0 ? hue + 360 : hue
+        if normalizedHue >= 15, normalizedHue < 50, brightness < 0.65, saturation > 0.22 {
+            return .brown
+        }
+
+        switch normalizedHue {
+        case 0..<15, 345..<360:
+            return .red
+        case 15..<45:
+            return .orange
+        case 45..<70:
+            return .yellow
+        case 70..<165:
+            return .green
+        case 165..<195:
+            return .teal
+        case 195..<255:
+            return .blue
+        case 255..<285:
+            return .purple
+        case 285..<345:
+            return .pink
+        default:
+            return .red
+        }
     }
 
     private func nextFolderName(parentID: AssetFolder.ID?) -> String {

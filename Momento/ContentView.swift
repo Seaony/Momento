@@ -198,10 +198,10 @@ struct ContentView: View {
             if !isModalOverlayVisible {
                 ToolbarSpacer(.flexible)
                 ToolbarItemGroup(placement: .automatic) {
-                    toolbarViewModeSwitcher
-                        .padding(.trailing, 6)
                     toolbarFilterButton
                     toolbarSortButton
+                        .padding(.trailing, 6)
+                    toolbarViewModeSwitcher
                         .padding(.trailing, 6)
                     toolbarSearchControl
                 }
@@ -429,18 +429,6 @@ struct ContentView: View {
                         }
                     }
                 }
-
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(localization.string("Direction"))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(MomentoTheme.secondaryText)
-
-                    HStack(spacing: 7) {
-                        ForEach(AssetSortDirection.allCases) { direction in
-                            sortDirectionButton(direction)
-                        }
-                    }
-                }
             }
         }
         .padding(12)
@@ -451,19 +439,19 @@ struct ContentView: View {
     }
 
     private var filterColorsSection: some View {
-        let colors = store.availableFilterColorHexes
+        let colorCategories = store.availableFilterColorCategories
 
         return filterSection(title: localization.string("Colors")) {
-            if colors.isEmpty {
+            if colorCategories.isEmpty {
                 filterEmptyText(localization.string("No colors available"))
             } else {
                 LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 64), spacing: 7)],
+                    columns: [GridItem(.adaptive(minimum: 88), spacing: 7)],
                     alignment: .leading,
                     spacing: 7
                 ) {
-                    ForEach(colors, id: \.self) { hex in
-                        colorFilterButton(hex)
+                    ForEach(colorCategories) { category in
+                        colorCategoryFilterButton(category)
                     }
                 }
             }
@@ -567,22 +555,27 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func colorFilterButton(_ hex: String) -> some View {
-        let isSelected = store.filterState.colorHexes.contains(hex)
-        let isHovered = hoveredFilterOptionID == "filter-color-\(hex)"
+    private func colorCategoryFilterButton(_ category: AssetColorCategory) -> some View {
+        let isSelected = store.filterState.colorCategories.contains(category)
+        let optionID = "filter-color-\(category.id)"
+        let isHovered = hoveredFilterOptionID == optionID
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
         let swatchShape = RoundedRectangle(cornerRadius: 5, style: .continuous)
 
         return Button {
-            store.toggleFilterColor(hex)
+            store.toggleFilterColorCategory(category)
         } label: {
             HStack(spacing: 6) {
                 swatchShape
-                    .fill(Color(hex: hex) ?? .clear)
+                    .fill(colorSwatch(for: category))
                     .frame(width: 16, height: 16)
                     .overlay {
                         swatchShape.strokeBorder(Color.white.opacity(0.24), lineWidth: 1)
                     }
+
+                Text(localization.title(for: category))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
 
                 if isSelected {
                     Image(systemName: "checkmark")
@@ -592,7 +585,7 @@ struct ContentView: View {
             .foregroundStyle(MomentoTheme.primaryText)
             .padding(.horizontal, 8)
             .frame(height: 30)
-            .frame(maxWidth: .infinity, alignment: .center)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .glassEffect(
                 .regular.tint(Color.white.opacity(isSelected || isHovered ? 0.16 : 0.06)).interactive(),
                 in: shape
@@ -601,9 +594,9 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .pointerStyle(.link)
-        .help(hex)
+        .help(localization.title(for: category))
         .onHover { hovering in
-            updateFilterOptionHover(id: "filter-color-\(hex)", hovering: hovering)
+            updateFilterOptionHover(id: optionID, hovering: hovering)
         }
     }
 
@@ -655,7 +648,7 @@ struct ContentView: View {
 
         return Button(action: action) {
             HStack(spacing: 8) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : systemImage)
+                Image(systemName: isSelected ? sortDirectionSystemImage() : systemImage)
                     .font(.system(size: 12, weight: .semibold))
                     .frame(width: 16)
                 Text(title)
@@ -679,19 +672,6 @@ struct ContentView: View {
         }
     }
 
-    private func sortDirectionButton(_ direction: AssetSortDirection) -> some View {
-        let isSelected = store.sortDirection == direction
-
-        return sortChoiceButton(
-            id: "sort-direction-\(direction.id)",
-            title: localization.title(for: direction),
-            systemImage: direction == .ascending ? "arrow.up" : "arrow.down",
-            isSelected: isSelected
-        ) {
-            store.setSortDirection(direction)
-        }
-    }
-
     private func updateFilterOptionHover(id: String, hovering: Bool) {
         withAnimation(.smooth(duration: 0.12)) {
             if hovering {
@@ -712,6 +692,15 @@ struct ContentView: View {
         }
     }
 
+    private func sortDirectionSystemImage() -> String {
+        switch store.sortDirection {
+        case .ascending:
+            "arrow.up.circle.fill"
+        case .descending:
+            "arrow.down.circle.fill"
+        }
+    }
+
     private func sortSystemImage(for option: AssetSortOption) -> String {
         switch option {
         case .addedTime:
@@ -720,6 +709,35 @@ struct ContentView: View {
             "textformat"
         case .fileSize:
             "externaldrive"
+        }
+    }
+
+    private func colorSwatch(for category: AssetColorCategory) -> Color {
+        switch category {
+        case .black:
+            Color(red: 0.05, green: 0.05, blue: 0.06)
+        case .white:
+            Color(red: 0.94, green: 0.94, blue: 0.9)
+        case .gray:
+            Color(red: 0.5, green: 0.5, blue: 0.5)
+        case .red:
+            Color(red: 0.92, green: 0.16, blue: 0.16)
+        case .orange:
+            Color(red: 0.95, green: 0.45, blue: 0.12)
+        case .yellow:
+            Color(red: 0.95, green: 0.78, blue: 0.16)
+        case .green:
+            Color(red: 0.22, green: 0.66, blue: 0.32)
+        case .teal:
+            Color(red: 0.1, green: 0.64, blue: 0.68)
+        case .blue:
+            Color(red: 0.16, green: 0.42, blue: 0.86)
+        case .purple:
+            Color(red: 0.5, green: 0.28, blue: 0.82)
+        case .pink:
+            Color(red: 0.88, green: 0.28, blue: 0.58)
+        case .brown:
+            Color(red: 0.48, green: 0.28, blue: 0.13)
         }
     }
 
