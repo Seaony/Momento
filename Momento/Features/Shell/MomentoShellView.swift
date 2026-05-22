@@ -134,7 +134,7 @@ struct MomentoShellView<Content: View>: View {
     }
 
     private var shellContent: some View {
-        HStack(spacing: 0) {
+        HStack(alignment: .top, spacing: 0) {
             if !isSidebarCollapsed {
                 floatingSidebar
                     .transition(.move(edge: .leading).combined(with: .opacity))
@@ -242,6 +242,7 @@ struct MomentoShellView<Content: View>: View {
             onColorCopied: showColorCopyToast
         )
         .frame(width: effectiveInspectorWidth)
+        .frame(maxHeight: .infinity, alignment: .top)
         .fixedSize(horizontal: true, vertical: false)
         .layoutPriority(1)
         .overlay(alignment: .leading) {
@@ -252,7 +253,6 @@ struct MomentoShellView<Content: View>: View {
                 isInspectorHovered = hovering
             }
         }
-        .padding(.top, MomentoTheme.inspectorContentTopInset)
         .transition(
             .asymmetric(
                 insertion: .move(edge: .trailing).combined(with: .opacity),

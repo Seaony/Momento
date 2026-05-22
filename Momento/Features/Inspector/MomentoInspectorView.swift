@@ -111,8 +111,17 @@ struct MomentoInspectorView: View {
                         notesEditor
                         fileSection(asset)
                     }
-                    .padding(16)
+                    .padding(
+                        EdgeInsets(
+                            top: MomentoTheme.inspectorContentTopInset + 16,
+                            leading: 16,
+                            bottom: 16,
+                            trailing: 16
+                        )
+                    )
                 }
+                .contentMargins(.top, 0, for: .scrollContent)
+                .ignoresSafeArea(.container, edges: .top)
                 .scrollIndicators(.never)
             } else {
                 emptyState
@@ -121,7 +130,9 @@ struct MomentoInspectorView: View {
         .frame(
             minWidth: MomentoTheme.inspectorMinWidth,
             idealWidth: MomentoTheme.inspectorWidth,
-            maxWidth: MomentoTheme.inspectorMaxWidth
+            maxWidth: MomentoTheme.inspectorMaxWidth,
+            maxHeight: .infinity,
+            alignment: .top
         )
         .onChange(of: asset?.id) { _, _ in
             cancelTitleEditing()
