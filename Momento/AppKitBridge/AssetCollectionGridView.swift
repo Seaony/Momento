@@ -28,7 +28,6 @@ private enum AssetCollectionMetrics {
     static let sectionVerticalInset: CGFloat = 14
     static let listItemHeight: CGFloat = 68
     static let listThumbnailSize: CGFloat = 52
-    static let listDateColumnWidth: CGFloat = 122
     static let listSeparatorHorizontalInset: CGFloat = 18
     static let listSeparatorAlpha: CGFloat = 0.055
     static let selectionBackgroundAnimationDuration: CFTimeInterval = 0.12
@@ -641,9 +640,9 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         subtitleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         subtitleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
-        dateLabel.lineBreakMode = .byTruncatingTail
+        dateLabel.lineBreakMode = .byClipping
         dateLabel.maximumNumberOfLines = 1
-        dateLabel.cell?.truncatesLastVisibleLine = true
+        dateLabel.cell?.truncatesLastVisibleLine = false
         dateLabel.alignment = .center
         dateLabel.font = .systemFont(ofSize: 12, weight: .medium)
         dateLabel.textColor = AssetCollectionMetrics.listDateTextColor
@@ -726,12 +725,11 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
             subtitleLabel.leadingAnchor.constraint(equalTo: fileNameLabel.leadingAnchor),
             subtitleLabel.trailingAnchor.constraint(equalTo: fileNameLabel.trailingAnchor),
-            subtitleLabel.topAnchor.constraint(equalTo: fileNameLabel.bottomAnchor, constant: 2),
+            subtitleLabel.topAnchor.constraint(equalTo: fileNameLabel.bottomAnchor, constant: 4),
             subtitleLabel.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -8),
 
             dateLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -14),
-            dateLabel.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
-            dateLabel.widthAnchor.constraint(equalToConstant: AssetCollectionMetrics.listDateColumnWidth)
+            dateLabel.centerYAnchor.constraint(equalTo: contentView.centerYAnchor)
         ]
     }
 
@@ -758,9 +756,9 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         mode = viewMode
         contentView.viewMode = viewMode
         fileNameLabel.stringValue = asset.displayName
-        subtitleLabel.stringValue = subtitle(for: asset)
-        dateLabel.stringValue = localization.dateTime(asset.importedAt)
-        dimensionBadgeView.stringValue = subtitle(for: asset)
+        subtitleLabel.stringValue = subtitle(for: asset, viewMode: viewMode, localization: localization)
+        dateLabel.stringValue = viewMode == .list ? localization.relativeOrDateTime(asset.importedAt) : ""
+        dimensionBadgeView.stringValue = dimensionsSubtitle(for: asset)
         previewImageView.image = previewImage(for: asset)
         previewImageView.contentMode = imageContentMode(for: asset, viewMode: viewMode)
         applyModeLayout()
@@ -829,12 +827,25 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
             : AssetCollectionMetrics.listDateTextColor
     }
 
-    private func subtitle(for asset: AssetItem) -> String {
+    private func subtitle(for asset: AssetItem, viewMode: AssetViewMode, localization: AppLocalization) -> String {
+        var parts: [String] = []
         if let dimensions = asset.dimensions {
-            return "\(dimensions.width) x \(dimensions.height)"
+            parts.append("\(dimensions.width) x \(dimensions.height)")
         }
 
-        return ""
+        if viewMode == .list {
+            parts.append(localization.fileSize(asset.byteSize))
+        }
+
+        return parts.joined(separator: " • ")
+    }
+
+    private func dimensionsSubtitle(for asset: AssetItem) -> String {
+        guard let dimensions = asset.dimensions else {
+            return ""
+        }
+
+        return "\(dimensions.width) x \(dimensions.height)"
     }
 
     private func imageContentMode(for asset: AssetItem, viewMode: AssetViewMode) -> AssetPreviewImageView.ContentMode {

@@ -100,6 +100,19 @@ struct AppLocalization: Equatable {
         )
     }
 
+    func relativeOrDateTime(_ date: Date, relativeTo referenceDate: Date = .now) -> String {
+        let elapsedYears = Calendar.current.dateComponents([.year], from: date, to: referenceDate).year ?? 0
+        if elapsedYears >= 1 {
+            return dateTime(date)
+        }
+
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = locale
+        formatter.unitsStyle = .full
+        formatter.dateTimeStyle = .numeric
+        return formatter.localizedString(for: date, relativeTo: referenceDate)
+    }
+
     func fileSize(_ byteSize: Int64) -> String {
         byteSize.formatted(
             ByteCountFormatStyle(style: .file)

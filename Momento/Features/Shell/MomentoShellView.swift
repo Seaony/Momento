@@ -115,7 +115,12 @@ struct MomentoShellView<Content: View>: View {
                 content()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(minWidth: MomentoTheme.contentMinWidth, maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, MomentoTheme.contentSidebarGap)
+            .frame(
+                minWidth: MomentoTheme.contentMinWidth + MomentoTheme.contentSidebarGap * 2,
+                maxWidth: .infinity,
+                maxHeight: .infinity
+            )
 
             if isInspectorPresented {
                 trailingInspector
