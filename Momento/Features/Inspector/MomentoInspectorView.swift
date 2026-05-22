@@ -335,7 +335,10 @@ struct MomentoInspectorView: View {
     private func tagChip(_ tag: String) -> some View {
         let isHovered = hoveredTag == tag
 
-        return HStack(spacing: isHovered ? 5 : 0) {
+        return HStack(spacing: 5) {
+            Image(systemName: "number")
+                .font(.system(size: 10, weight: .semibold))
+
             Text(tag)
                 .lineLimit(1)
 
@@ -491,6 +494,7 @@ struct MomentoInspectorView: View {
     private func tagChoiceButton(_ tag: String) -> some View {
         let isSelected = containsTag(tag)
         let isHovered = hoveredTagChoice == tag
+        let tagShape = RoundedRectangle(cornerRadius: 9, style: .continuous)
 
         return Button {
             guard !isSelected else {
@@ -500,23 +504,25 @@ struct MomentoInspectorView: View {
             addTag(tag)
         } label: {
             HStack(spacing: 6) {
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "tag")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(isSelected ? Color.accentColor : MomentoTheme.secondaryText)
+                Image(systemName: "number")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(isSelected ? MomentoTheme.secondaryText : MomentoTheme.primaryText)
                 Text(tag)
                     .lineLimit(1)
             }
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(isSelected ? MomentoTheme.secondaryText : MomentoTheme.primaryText)
-            .padding(.horizontal, 10)
-            .frame(height: 28)
+            .padding(.horizontal, 9)
+            .frame(height: 26)
             .glassEffect(
-                .regular.tint(Color.white.opacity(isHovered || isSelected ? 0.14 : 0.06)),
-                in: Capsule()
+                .regular.tint(Color.white.opacity(isHovered || isSelected ? 0.12 : 0.04)),
+                in: tagShape
             )
+            .contentShape(tagShape)
         }
         .buttonStyle(.plain)
         .disabled(isSelected)
+        .contentShape(tagShape)
         .pointerStyle(.link)
         .onHover { hovering in
             withAnimation(.smooth(duration: 0.12)) {
