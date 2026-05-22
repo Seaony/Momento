@@ -23,6 +23,8 @@ private enum MomentoSidebarMenuMetrics {
     static let separatorHeight: CGFloat = 1
     static let separatorHorizontalInset: CGFloat = 10
     static let separatorVerticalPadding: CGFloat = 3
+    static let folderDisclosureHitWidth: CGFloat = 24
+    static let folderDisclosureHitHeight: CGFloat = 30
     static let libraryMoreMenuWidth: CGFloat = 176
 }
 
@@ -414,7 +416,7 @@ struct MomentoSidebarView: View {
         let isHovered = hoveredFolderID == folder.id
         let foregroundStyle = sidebarNavigationForeground(isSelected: isSelected, isHovered: isHovered)
 
-        return HStack(spacing: 8) {
+        return HStack(spacing: 0) {
             Button {
                 withAnimation(.smooth(duration: 0.16)) {
                     if expandedFolderIDs.contains(folder.id) {
@@ -427,7 +429,11 @@ struct MomentoSidebarView: View {
                 Image(systemName: disclosureIcon(for: folder.id))
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(foregroundStyle)
-                    .frame(width: 12, height: 24)
+                    .frame(
+                        width: MomentoSidebarMenuMetrics.folderDisclosureHitWidth,
+                        height: MomentoSidebarMenuMetrics.folderDisclosureHitHeight
+                    )
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
