@@ -120,7 +120,9 @@ struct ContentView: View {
     }
 
     private var libraryBody: some View {
-        MomentoShellView(
+        let visibleAssets = store.visibleAssets
+
+        return MomentoShellView(
             sidebarSelection: sidebarSelection,
             searchQuery: $store.searchQuery,
             isCommandPalettePresented: $isCommandPalettePresented,
@@ -140,7 +142,7 @@ struct ContentView: View {
             onCreateFolder: createFolder,
             onDeleteFolder: deleteFolder,
             title: title,
-            subtitle: localization.itemCount(store.visibleAssets.count),
+            subtitle: localization.itemCount(visibleAssets.count),
             showsChromeControls: !isModalOverlayVisible,
             inspectorAsset: store.selectedAsset.map { MomentoInspectorAsset(asset: $0, localization: localization) },
             inspectorTags: selectedTags,
@@ -150,7 +152,7 @@ struct ContentView: View {
         ) {
             ZStack {
                 AssetCollectionGridView(
-                    assets: store.visibleAssets,
+                    assets: visibleAssets,
                     selectedAssetIDs: selectedAssetIDs,
                     viewMode: store.viewMode,
                     localization: localization,
@@ -160,7 +162,7 @@ struct ContentView: View {
                     onSpacePreviewEnd: endSpacePreview
                 )
 
-                if store.visibleAssets.isEmpty {
+                if visibleAssets.isEmpty {
                     emptyGridState
                 }
             }

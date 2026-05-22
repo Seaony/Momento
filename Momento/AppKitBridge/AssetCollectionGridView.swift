@@ -11,6 +11,9 @@ import UniformTypeIdentifiers
 private enum AssetCollectionMetrics {
     static let masonryItemWidth: CGFloat = 164
     static let masonryImageInset: CGFloat = 3
+    static let masonryFallbackItemHeight: CGFloat = 214
+    static let masonryMinimumItemHeight: CGFloat = 132
+    static let masonryMaximumItemHeight: CGFloat = 278
     static let gridItemWidth: CGFloat = 160
     static let gridItemHeight: CGFloat = 190
     static let gridInteritemSpacing: CGFloat = 8
@@ -122,6 +125,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
             collectionView.collectionViewLayout = makeLayout(for: viewMode, assets: assets)
             context.coordinator.currentViewMode = viewMode
             context.coordinator.currentAssets = assets
+            context.coordinator.rebuildAssetIndex(for: assets)
             context.coordinator.currentLocalization = localization
             collectionView.reloadData()
             context.coordinator.syncSelection()
@@ -131,6 +135,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
 
         if context.coordinator.currentAssets != assets {
             context.coordinator.currentAssets = assets
+            context.coordinator.rebuildAssetIndex(for: assets)
             if let masonryLayout = collectionView.collectionViewLayout as? AssetMasonryCollectionViewLayout {
                 masonryLayout.assets = assets
             } else if collectionView.collectionViewLayout is AssetGridCollectionViewLayout {
@@ -192,12 +197,14 @@ extension AssetCollectionGridView {
         var currentLocalization: AppLocalization
         private var isSyncingSelection = false
         private var hoveredPreviewAssetID: AssetItem.ID?
+        private var assetIndexByID: [AssetItem.ID: Int]
 
         init(_ parent: AssetCollectionGridView) {
             self.parent = parent
             self.currentViewMode = parent.viewMode
             self.currentAssets = parent.assets
             self.currentLocalization = parent.localization
+            self.assetIndexByID = Self.assetIndexByID(for: parent.assets)
         }
 
         func collectionView(
@@ -269,8 +276,8 @@ extension AssetCollectionGridView {
 
             isSyncingSelection = true
             collectionView.selectionIndexPaths = Set(
-                parent.assets.enumerated().compactMap { index, asset in
-                    parent.selectedAssetIDs.contains(asset.id) ? IndexPath(item: index, section: 0) : nil
+                parent.selectedAssetIDs.compactMap { assetID in
+                    assetIndexByID[assetID].map { IndexPath(item: $0, section: 0) }
                 }
             )
             isSyncingSelection = false
@@ -278,10 +285,14 @@ extension AssetCollectionGridView {
 
         func syncHoveredPreviewAsset() {
             guard let hoveredPreviewAssetID,
-                  parent.assets.contains(where: { $0.id == hoveredPreviewAssetID }) else {
+                  assetIndexByID[hoveredPreviewAssetID] != nil else {
                 self.hoveredPreviewAssetID = nil
                 return
             }
+        }
+
+        func rebuildAssetIndex(for assets: [AssetItem]) {
+            assetIndexByID = Self.assetIndexByID(for: assets)
         }
 
         @objc func handleDoubleClick(_ sender: NSClickGestureRecognizer) {
@@ -324,7 +335,7 @@ extension AssetCollectionGridView {
 
         private func previewIndexPath(in collectionView: NSCollectionView) -> IndexPath? {
             if let hoveredPreviewAssetID,
-               let index = parent.assets.firstIndex(where: { $0.id == hoveredPreviewAssetID }) {
+               let index = assetIndexByID[hoveredPreviewAssetID] {
                 return IndexPath(item: index, section: 0)
             }
 
@@ -349,6 +360,10 @@ extension AssetCollectionGridView {
             }
 
             return item.previewSourceFrameInScreen()
+        }
+
+        private static func assetIndexByID(for assets: [AssetItem]) -> [AssetItem.ID: Int] {
+            Dictionary(uniqueKeysWithValues: assets.enumerated().map { ($0.element.id, $0.offset) })
         }
     }
 }
@@ -384,8 +399,11 @@ private final class AssetPreviewCollectionView: NSCollectionView {
 
 private final class AssetGridCollectionViewLayout: NSCollectionViewLayout {
     private var cachedAttributes: [IndexPath: NSCollectionViewLayoutAttributes] = [:]
+    private var cachedAttributesList: [NSCollectionViewLayoutAttributes] = []
     private var contentSize: NSSize = .zero
     private var preparedBoundsSize: NSSize = .zero
+    private var preparedColumnCount = 1
+    private var preparedItemCount = 0
 
     private let itemSize = NSSize(
         width: AssetCollectionMetrics.gridItemWidth,
@@ -405,18 +423,24 @@ private final class AssetGridCollectionViewLayout: NSCollectionViewLayout {
 
         guard let collectionView else {
             cachedAttributes = [:]
+            cachedAttributesList = []
             contentSize = .zero
+            preparedItemCount = 0
             return
         }
 
         let itemCount = collectionView.numberOfItems(inSection: 0)
+        preparedItemCount = itemCount
         preparedBoundsSize = collectionView.bounds.size
         let contentWidth = max(collectionView.bounds.width, itemSize.width + sectionInset.left + sectionInset.right)
         let availableWidth = max(contentWidth - sectionInset.left - sectionInset.right, itemSize.width)
         let columnCount = max(Int((availableWidth + interitemSpacing) / (itemSize.width + interitemSpacing)), 1)
+        preparedColumnCount = columnCount
         let columnsWidth = CGFloat(columnCount) * itemSize.width + CGFloat(columnCount - 1) * interitemSpacing
         let startX = sectionInset.left + max((availableWidth - columnsWidth) / 2, 0)
         var attributesByIndexPath: [IndexPath: NSCollectionViewLayoutAttributes] = [:]
+        var attributesList: [NSCollectionViewLayoutAttributes] = []
+        attributesList.reserveCapacity(itemCount)
 
         for item in 0..<itemCount {
             let indexPath = IndexPath(item: item, section: 0)
@@ -432,9 +456,11 @@ private final class AssetGridCollectionViewLayout: NSCollectionViewLayout {
             let attributes = NSCollectionViewLayoutAttributes(forItemWith: indexPath)
             attributes.frame = frame
             attributesByIndexPath[indexPath] = attributes
+            attributesList.append(attributes)
         }
 
         cachedAttributes = attributesByIndexPath
+        cachedAttributesList = attributesList
 
         let rowCount = itemCount == 0 ? 0 : Int(ceil(CGFloat(itemCount) / CGFloat(columnCount)))
         let itemsHeight = CGFloat(rowCount) * itemSize.height + CGFloat(max(rowCount - 1, 0)) * lineSpacing
@@ -450,7 +476,22 @@ private final class AssetGridCollectionViewLayout: NSCollectionViewLayout {
     }
 
     override func layoutAttributesForElements(in rect: NSRect) -> [NSCollectionViewLayoutAttributes] {
-        cachedAttributes.values.filter { $0.frame.intersects(rect) }
+        guard preparedItemCount > 0, !cachedAttributesList.isEmpty else {
+            return []
+        }
+
+        let rowStride = itemSize.height + lineSpacing
+        let firstRow = max(Int(floor((rect.minY - sectionInset.top) / rowStride)), 0)
+        let maximumRow = max((preparedItemCount - 1) / preparedColumnCount, 0)
+        let lastRow = min(max(Int(floor((rect.maxY - sectionInset.top) / rowStride)), 0), maximumRow)
+        let firstItem = min(firstRow * preparedColumnCount, preparedItemCount)
+        let lastItem = min((lastRow + 1) * preparedColumnCount, preparedItemCount)
+
+        guard firstItem < lastItem else {
+            return []
+        }
+
+        return cachedAttributesList[firstItem..<lastItem].filter { $0.frame.intersects(rect) }
     }
 
     override func layoutAttributesForItem(at indexPath: IndexPath) -> NSCollectionViewLayoutAttributes? {
@@ -470,6 +511,7 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
     }
 
     private var cachedAttributes: [IndexPath: NSCollectionViewLayoutAttributes] = [:]
+    private var cachedAttributesList: [NSCollectionViewLayoutAttributes] = []
     private var contentSize: NSSize = .zero
     private var preparedBoundsSize: NSSize = .zero
 
@@ -498,6 +540,7 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
 
         guard let collectionView else {
             cachedAttributes = [:]
+            cachedAttributesList = []
             contentSize = .zero
             return
         }
@@ -511,6 +554,8 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
         let startX = sectionInset.left + max((availableWidth - columnsWidth) / 2, 0)
         var columnHeights = Array(repeating: sectionInset.top, count: columnCount)
         var attributesByIndexPath: [IndexPath: NSCollectionViewLayoutAttributes] = [:]
+        var attributesList: [NSCollectionViewLayoutAttributes] = []
+        attributesList.reserveCapacity(itemCount)
 
         for item in 0..<itemCount {
             let indexPath = IndexPath(item: item, section: 0)
@@ -526,10 +571,12 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
             let attributes = NSCollectionViewLayoutAttributes(forItemWith: indexPath)
             attributes.frame = frame
             attributesByIndexPath[indexPath] = attributes
+            attributesList.append(attributes)
             columnHeights[columnIndex] = frame.maxY + lineSpacing
         }
 
         cachedAttributes = attributesByIndexPath
+        cachedAttributesList = attributesList
 
         let tallestColumn = columnHeights.max() ?? sectionInset.top
         let contentHeight = max(
@@ -544,7 +591,25 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
     }
 
     override func layoutAttributesForElements(in rect: NSRect) -> [NSCollectionViewLayoutAttributes] {
-        cachedAttributes.values.filter { $0.frame.intersects(rect) }
+        guard !cachedAttributesList.isEmpty else {
+            return []
+        }
+
+        let earliestPossibleMinY = rect.minY - AssetCollectionMetrics.masonryMaximumItemHeight
+        var visibleAttributes: [NSCollectionViewLayoutAttributes] = []
+        let startIndex = firstAttributeIndex(withMinYAtLeast: earliestPossibleMinY)
+
+        for attributes in cachedAttributesList[startIndex...] {
+            if attributes.frame.minY > rect.maxY {
+                break
+            }
+
+            if attributes.frame.intersects(rect) {
+                visibleAttributes.append(attributes)
+            }
+        }
+
+        return visibleAttributes
     }
 
     override func layoutAttributesForItem(at indexPath: IndexPath) -> NSCollectionViewLayoutAttributes? {
@@ -559,20 +624,38 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
         guard assets.indices.contains(item),
               let dimensions = assets[item].dimensions,
               dimensions.width > 0 else {
-            return 214
+            return AssetCollectionMetrics.masonryFallbackItemHeight
         }
 
         let imageHorizontalInset = AssetCollectionMetrics.masonryImageInset * 2
         let imageVerticalInset = AssetCollectionMetrics.masonryImageInset * 2
         let imageWidth = max(width - imageHorizontalInset, 1)
         let ratio = CGFloat(dimensions.height) / CGFloat(dimensions.width)
-        return (imageWidth * ratio + imageVerticalInset).clamped(to: 132...278)
+        return (imageWidth * ratio + imageVerticalInset).clamped(
+            to: AssetCollectionMetrics.masonryMinimumItemHeight...AssetCollectionMetrics.masonryMaximumItemHeight
+        )
     }
 
     private func shortestColumnIndex(in columnHeights: [CGFloat]) -> Int {
         columnHeights.enumerated().min { left, right in
             left.element < right.element
         }?.offset ?? 0
+    }
+
+    private func firstAttributeIndex(withMinYAtLeast minY: CGFloat) -> Int {
+        var lowerBound = 0
+        var upperBound = cachedAttributesList.count
+
+        while lowerBound < upperBound {
+            let middle = (lowerBound + upperBound) / 2
+            if cachedAttributesList[middle].frame.minY < minY {
+                lowerBound = middle + 1
+            } else {
+                upperBound = middle
+            }
+        }
+
+        return lowerBound
     }
 }
 
