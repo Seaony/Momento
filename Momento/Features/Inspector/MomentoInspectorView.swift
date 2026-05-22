@@ -82,18 +82,6 @@ struct MomentoInspectorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text(localization.string("Inspector"))
-                    .font(.system(size: 14, weight: .semibold))
-                Spacer()
-                Image(systemName: "sidebar.right")
-                    .foregroundStyle(MomentoTheme.secondaryText)
-            }
-            .padding(.horizontal, 16)
-            .frame(height: MomentoTheme.toolbarHeight)
-
-            Divider()
-
             if let asset {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {

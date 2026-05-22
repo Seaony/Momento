@@ -134,8 +134,10 @@ struct MomentoShellView<Content: View>: View {
         }
         .background {
             InspectorTitlebarSpacerConfigurator(
-                isVisible: showsChromeControls && isInspectorPresented,
-                width: MomentoTheme.inspectorWidth
+                isInspectorPresented: $isInspectorPresented,
+                isVisible: showsChromeControls,
+                inspectorWidth: MomentoTheme.inspectorWidth,
+                label: localization.string("Toggle Inspector")
             )
             .frame(width: 0, height: 0)
         }

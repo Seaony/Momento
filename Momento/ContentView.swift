@@ -175,12 +175,6 @@ struct ContentView: View {
                     .labelsHidden()
                     .pickerStyle(.segmented)
 
-                    Toggle(isOn: $isInspectorPresented) {
-                        Label(localization.string("Toggle Inspector"), systemImage: "sidebar.right")
-                    }
-                    .toggleStyle(.button)
-                    .help(localization.string("Toggle Inspector"))
-
                     Button {
                         withAnimation(.smooth(duration: 0.18)) {
                             isCommandPalettePresented = true
