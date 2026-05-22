@@ -65,8 +65,8 @@ Add tests that import one image, reload the library, and assert:
 Run:
 
 ```bash
-xcodebuild test -scheme Momento -only-testing:MomentoTests/ImportServiceSmokeTests/testImportedAssetPersistsCoreMetadata
-xcodebuild test -scheme Momento -only-testing:MomentoTests/ImportServiceSmokeTests/testOpeningPreV3LibraryMigratesMetadata
+xcodebuild test -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' -only-testing:MomentoTests/ImportServiceSmokeTests/testImportedAssetPersistsCoreMetadata
+xcodebuild test -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' -only-testing:MomentoTests/ImportServiceSmokeTests/testOpeningPreV3LibraryMigratesMetadata
 ```
 
 Expected before implementation: FAIL because fields do not exist.
@@ -126,7 +126,7 @@ Because this adds optional fields, new entities, and nonoptional fields with def
 Run:
 
 ```bash
-xcodebuild test -scheme Momento -only-testing:MomentoTests/ImportServiceSmokeTests/testImportPersistsAndDeduplicatesAssets
+xcodebuild test -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' -only-testing:MomentoTests/ImportServiceSmokeTests/testImportPersistsAndDeduplicatesAssets
 ```
 
 Expected after v3 model wiring: PASS.
@@ -190,11 +190,12 @@ Add tests for:
 - Deleting a tag removes links but does not delete assets.
 - Two tags that normalize to the same lowercase trimmed name cannot coexist.
 - Tests resolve tag IDs from `store.tags`/`tagSummaries`; do not assume `name.lowercased()` is the ID for newly created tags.
+- Removing the last asset link from a tag keeps the `TagRecord` with `assetCount == 0`.
 
 Run:
 
 ```bash
-xcodebuild test -scheme Momento -only-testing:MomentoTests/ImportServiceSmokeTests/testTagRecordsRenameAndDeleteAcrossAssets
+xcodebuild test -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' -only-testing:MomentoTests/ImportServiceSmokeTests/testTagRecordsRenameAndDeleteAcrossAssets
 ```
 
 Expected before implementation: FAIL.
@@ -209,6 +210,12 @@ ID rules:
 - New tags get generated stable string IDs; do not derive new IDs from tag names.
 - Renaming a tag changes `name`, `normalizedName`, and `updatedAt`, but never changes `id`.
 - `TagItem.init(name:)` can keep its current default for sample/in-memory compatibility, but persistent tag creation must go through `LibraryMetadataStore`.
+
+Lifecycle rules:
+
+- `TagRecord` is a first-class user-managed object. Removing the last `AssetTagRecord` link does not delete the tag.
+- `deleteTag(id:)` is the only P1 operation that deletes a `TagRecord`; it also removes all `AssetTagRecord` links for that tag.
+- `tagSummaries` and the tag management page should show zero-count tags. The Add Tag picker should also be able to show zero-count tags.
 
 - [ ] **Step 3: Add tag APIs in `LibraryMetadataStore`**
 
@@ -245,6 +252,7 @@ Rules:
 - Create missing `TagRecord`s by normalized name.
 - If multiple legacy blobs contain the same normalized name with different IDs, pick the first stable ID deterministically and rewrite links to that one `TagRecord`.
 - Keep `tagsData` untouched for one model version but stop writing new values.
+- Backfilled tags remain even if later all links are removed; do not treat zero linked rows as orphan cleanup.
 
 - [ ] **Step 5: Update `LibraryStore` tag state**
 
@@ -281,13 +289,13 @@ Replace `testMovingImportedAssetToTrashRemovesMetadataAndStoredFile` with tests 
 - Trash sidebar shows trashed assets.
 - Restore clears `isTrashed`/`trashedAt`.
 - Folder membership survives trash/restore.
-- Empty trash removes metadata, tag links, colors, memberships, asset file, thumbnail.
+- Empty trash removes metadata, tag links, colors, memberships, asset file, thumbnail, and preview cache files.
 - Re-importing the same file while its asset is in Trash restores the existing asset instead of silently skipping it.
 
 Run:
 
 ```bash
-xcodebuild test -scheme Momento -only-testing:MomentoTests/ImportServiceSmokeTests/testMovingAssetToTrashSoftDeletesAndRestores
+xcodebuild test -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' -only-testing:MomentoTests/ImportServiceSmokeTests/testMovingAssetToTrashSoftDeletesAndRestores
 ```
 
 Expected before implementation: FAIL because metadata/file are deleted immediately.
@@ -300,14 +308,23 @@ In `LibraryMetadataStore`:
 func moveAssetToTrash(id assetID: AssetItem.ID) throws -> AssetItem
 func restoreAssets(ids: Set<AssetItem.ID>) throws -> [AssetItem]
 func emptyTrash() throws -> [AssetItem.ID]
-func assetIDsByContentHash(_ hashes: Set<String>, includeTrashed: Bool) throws -> [String: AssetItem.ID]
+func duplicateAssetReferences(forContentHashes hashes: Set<String>, includeTrashed: Bool) throws -> [String: DuplicateAssetReference]
+```
+
+Add a small value type:
+
+```swift
+struct DuplicateAssetReference: Hashable {
+    var assetID: AssetItem.ID
+    var isTrashed: Bool
+}
 ```
 
 Rules:
 
 - Moving to trash does not delete the asset file.
 - Moving to trash does not delete folder memberships.
-- Empty trash performs the destructive cleanup.
+- Empty trash performs the destructive cleanup, including `assets/`, `thumbnails/`, and any preview files under `previews/` for each deleted content hash.
 - `trashedAt` is set once per move-to-trash action.
 - Duplicate import resolution must be metadata-driven, not hidden inside `AssetImportService`'s current `existingContentHashes` skip.
 - If a duplicate hash maps to a trashed asset, restore that asset, merge any requested folder membership, and return the restored asset through `mergeAssets`.
@@ -348,6 +365,7 @@ git commit -m "feat: soft delete trashed assets"
 - Modify: `Momento/Core/LibraryStore.swift`
 - Modify: `Momento/ContentView.swift` only if stale local notes state is still wired
 - Test: `MomentoTests/ImportServiceSmokeTests.swift`
+- Test: `MomentoTests/ArchitectureGuardTests.swift`
 
 - [ ] **Step 1: Add failing note tests**
 
@@ -356,15 +374,17 @@ Add tests for:
 - Update selected asset note.
 - Reload library and verify note persists.
 - Switch between two selected assets through store APIs and verify each asset keeps its own note.
-- No inspector Notes section is added back.
 
 Run:
 
 ```bash
-xcodebuild test -scheme Momento -only-testing:MomentoTests/ImportServiceSmokeTests/testUpdatingAssetNotePersistsAcrossReloads
+xcodebuild test -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' -only-testing:MomentoTests/ImportServiceSmokeTests/testUpdatingAssetNotePersistsAcrossReloads
+xcodebuild test -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' -only-testing:MomentoTests/ArchitectureGuardTests/testInspectorDoesNotExposeNotesEditor
 ```
 
 Expected before implementation: FAIL because notes are local UI state or missing from persistent metadata.
+
+Add `testInspectorDoesNotExposeNotesEditor` as a source-level guard in `MomentoTests/ArchitectureGuardTests.swift`; it asserts no inspector Notes section/editor is reintroduced. Do not put UI source checks in `ImportServiceSmokeTests`.
 
 - [ ] **Step 2: Add metadata write API**
 
@@ -396,7 +416,7 @@ Do not add `notesEditor` back into `MomentoInspectorView`. The only UI-related w
 - [ ] **Step 6: Commit**
 
 ```bash
-git add Momento/Core/AssetModels.swift Momento/Storage/LibraryMetadataStore.swift Momento/Core/LibraryStore.swift Momento/ContentView.swift MomentoTests/ImportServiceSmokeTests.swift
+git add Momento/Core/AssetModels.swift Momento/Storage/LibraryMetadataStore.swift Momento/Core/LibraryStore.swift Momento/ContentView.swift MomentoTests/ImportServiceSmokeTests.swift MomentoTests/ArchitectureGuardTests.swift
 git commit -m "feat: persist asset notes"
 ```
 
@@ -438,7 +458,7 @@ Add a source-level test asserting the behavior has a native AppKit drag path wit
 Run:
 
 ```bash
-xcodebuild test -scheme Momento -only-testing:MomentoTests/ArchitectureGuardTests/testAssetGridSupportsDraggingAndFilePromises
+xcodebuild test -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' -only-testing:MomentoTests/ArchitectureGuardTests/testAssetGridSupportsDraggingAndFilePromises
 ```
 
 Expected before implementation: FAIL.
@@ -534,7 +554,7 @@ Add tests for:
 Run:
 
 ```bash
-xcodebuild test -scheme Momento -only-testing:MomentoTests/ImportServiceSmokeTests/testAssigningMultipleDraggedAssetsToFolderIsIdempotent
+xcodebuild test -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' -only-testing:MomentoTests/ImportServiceSmokeTests/testAssigningMultipleDraggedAssetsToFolderIsIdempotent
 ```
 
 - [ ] **Step 2: Add store bulk APIs**
@@ -619,7 +639,7 @@ Import `Source/`, then assert:
 Run:
 
 ```bash
-xcodebuild test -scheme Momento -only-testing:MomentoTests/ImportServiceSmokeTests/testImportingFolderPreservesHierarchyAsVirtualFolders
+xcodebuild test -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' -only-testing:MomentoTests/ImportServiceSmokeTests/testImportingFolderPreservesHierarchyAsVirtualFolders
 ```
 
 Expected before implementation: FAIL because import flattens directory trees.
@@ -709,7 +729,7 @@ Add tests for:
 Run:
 
 ```bash
-xcodebuild test -scheme Momento -only-testing:MomentoTests/ImportServiceSmokeTests/testExportingAndImportingLibraryPackages
+xcodebuild test -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' -only-testing:MomentoTests/ImportServiceSmokeTests/testExportingAndImportingLibraryPackages
 ```
 
 - [ ] **Step 2: Add storage APIs**
@@ -777,7 +797,7 @@ Expected: no output.
 - [ ] **Step 2: Focused persistence tests**
 
 ```bash
-xcodebuild test -scheme Momento -only-testing:MomentoTests/ImportServiceSmokeTests
+xcodebuild test -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' -only-testing:MomentoTests/ImportServiceSmokeTests
 ```
 
 Expected: `TEST SUCCEEDED`.
@@ -785,7 +805,7 @@ Expected: `TEST SUCCEEDED`.
 - [ ] **Step 3: Architecture guard tests**
 
 ```bash
-xcodebuild test -scheme Momento -only-testing:MomentoTests/ArchitectureGuardTests
+xcodebuild test -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' -only-testing:MomentoTests/ArchitectureGuardTests
 ```
 
 Expected: `TEST SUCCEEDED`.
@@ -793,7 +813,7 @@ Expected: `TEST SUCCEEDED`.
 - [ ] **Step 4: Full build**
 
 ```bash
-xcodebuild build -scheme Momento
+xcodebuild build -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS'
 ```
 
 Expected: `BUILD SUCCEEDED`.
@@ -832,7 +852,9 @@ Only commit if there are actual follow-up fixes.
 | Core Data migration failure | Keep v3 additions lightweight where possible; add migration tests before UI work. |
 | Tag backfill duplicates tags | Normalize by trimmed lowercase name and enforce `libraryID + normalizedName` uniqueness. |
 | Tag IDs change unexpectedly | Preserve legacy IDs during backfill and make new code use actual returned IDs instead of name-derived IDs. |
+| Zero-count tags disappear unexpectedly | Treat `TagRecord` as user-managed; only explicit delete removes it. |
 | Trash empty deletes files that restore still needs | Only delete physical files in `emptyTrash`; soft trash never moves/removes asset files. |
+| Trash empty leaves preview cache files | Delete thumbnails and preview files for each permanently deleted content hash. |
 | Re-import of trashed duplicate appears to do nothing | Resolve duplicates in metadata and restore trashed duplicate assets on import. |
 | Notes cause grid flash | Merge single updated asset into memory; do not reload library on note writes; do not add a visible inspector editor. |
 | Multi-select gets lost before drag/drop | Add real selection-set state before file promise and sidebar drop work. |
