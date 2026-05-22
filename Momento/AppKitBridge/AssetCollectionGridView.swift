@@ -33,9 +33,11 @@ private enum AssetCollectionMetrics {
     static let listThumbnailSize: CGFloat = 78
     static let listSeparatorHorizontalInset: CGFloat = 18
     static let listSeparatorAlpha: CGFloat = 0.055
-    static let favoriteButtonSize: CGFloat = 16
-    static let favoriteButtonInset: CGFloat = 10
-    static let favoriteButtonCornerRadius: CGFloat = 8
+    static let favoriteButtonWidth: CGFloat = 24
+    static let favoriteButtonHeight: CGFloat = 15
+    static let favoriteButtonLeadingInset: CGFloat = 6
+    static let favoriteButtonTopInset: CGFloat = 10.5
+    static let favoriteButtonCornerRadius: CGFloat = favoriteButtonHeight / 2
     static let favoriteButtonBackgroundAlpha: CGFloat = 0.3
     static let selectionBackgroundAnimationDuration: CFTimeInterval = 0.12
     static let titleTextColor = NSColor.labelColor.withAlphaComponent(0.5)
@@ -1087,14 +1089,14 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
             favoriteButton.leadingAnchor.constraint(
                 equalTo: previewImageView.leadingAnchor,
-                constant: AssetCollectionMetrics.favoriteButtonInset
+                constant: AssetCollectionMetrics.favoriteButtonLeadingInset
             ),
             favoriteButton.topAnchor.constraint(
                 equalTo: previewImageView.topAnchor,
-                constant: AssetCollectionMetrics.favoriteButtonInset
+                constant: AssetCollectionMetrics.favoriteButtonTopInset
             ),
-            favoriteButton.widthAnchor.constraint(equalToConstant: AssetCollectionMetrics.favoriteButtonSize),
-            favoriteButton.heightAnchor.constraint(equalToConstant: AssetCollectionMetrics.favoriteButtonSize)
+            favoriteButton.widthAnchor.constraint(equalToConstant: AssetCollectionMetrics.favoriteButtonWidth),
+            favoriteButton.heightAnchor.constraint(equalToConstant: AssetCollectionMetrics.favoriteButtonHeight)
         ])
 
         gridConstraints = [
