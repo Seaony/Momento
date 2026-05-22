@@ -74,9 +74,9 @@ enum MomentoTheme {
     static let contentMinWidth: CGFloat = 520
     static let contentSidebarGap: CGFloat = 12
     static let toolbarHeight: CGFloat = 56
-    static let mainWindowMinWidth: CGFloat = 900
+    static let mainWindowMinWidth: CGFloat = 1000
     static let mainWindowMinHeight: CGFloat = 640
-    static let defaultWindowWidth: CGFloat = 900
+    static let defaultWindowWidth: CGFloat = 1000
     static let defaultWindowHeight: CGFloat = 800
     static let assetImageCornerRadius: CGFloat = 12
     static let panelRadius: CGFloat = 14
