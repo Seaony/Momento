@@ -47,6 +47,7 @@ private enum AssetCollectionMetrics {
     static let contextMenuRowSpacing: CGFloat = 2
     static let contextMenuRowCornerRadius: CGFloat = 8
     static let contextMenuPanelCornerRadius: CGFloat = 12
+    static let zeroEdgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
 }
 
 enum AssetContextMenuAction: CaseIterable {
@@ -160,7 +161,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
         doubleClickRecognizer.delaysPrimaryMouseButtonEvents = false
         collectionView.addGestureRecognizer(doubleClickRecognizer)
 
-        let scrollView = NSScrollView()
+        let scrollView = AssetCollectionScrollView()
         configureScrollView(scrollView)
         scrollView.documentView = collectionView
 
@@ -240,6 +241,9 @@ struct AssetCollectionGridView: NSViewRepresentable {
         scrollView.horizontalScroller = nil
         scrollView.autohidesScrollers = true
         scrollView.scrollerStyle = .overlay
+        scrollView.automaticallyAdjustsContentInsets = false
+        scrollView.contentInsets = AssetCollectionMetrics.zeroEdgeInsets
+        scrollView.scrollerInsets = AssetCollectionMetrics.zeroEdgeInsets
     }
 }
 
@@ -477,6 +481,29 @@ private final class AssetPreviewCollectionView: NSCollectionView {
         }
 
         super.keyUp(with: event)
+    }
+}
+
+private final class AssetCollectionScrollView: NSScrollView {
+    override func tile() {
+        hideScrollIndicators()
+        super.tile()
+        hideScrollIndicators()
+    }
+
+    override func reflectScrolledClipView(_ clipView: NSClipView) {
+        hideScrollIndicators()
+        super.reflectScrolledClipView(clipView)
+        hideScrollIndicators()
+    }
+
+    private func hideScrollIndicators() {
+        hasVerticalScroller = false
+        hasHorizontalScroller = false
+        verticalScroller = nil
+        horizontalScroller = nil
+        contentInsets = AssetCollectionMetrics.zeroEdgeInsets
+        scrollerInsets = AssetCollectionMetrics.zeroEdgeInsets
     }
 }
 
