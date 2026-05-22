@@ -36,6 +36,8 @@ private enum AssetCollectionMetrics {
     static let listDateTextColor = NSColor.labelColor.withAlphaComponent(0.72)
     static let selectedTitleTextColor = NSColor.white.withAlphaComponent(0.95)
     static let selectedSubtitleTextColor = NSColor.white.withAlphaComponent(0.72)
+    static let imageEntranceAnimationDuration: CFTimeInterval = 0.18
+    static let imageEntranceScale: CGFloat = 0.985
 }
 
 struct AssetCollectionGridView: NSViewRepresentable {
@@ -574,6 +576,60 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
     }
 }
 
+private final class AssetPreviewImageProvider {
+    static let shared = AssetPreviewImageProvider()
+
+    private let cache = NSCache<NSString, NSImage>()
+
+    private init() {
+        cache.countLimit = 512
+    }
+
+    func identity(for asset: AssetItem) -> String {
+        let sourcePath = asset.thumbnailURL?.path ?? asset.storageURL.path
+        return [
+            asset.kind.rawValue,
+            asset.contentHash,
+            sourcePath,
+            asset.fileExtension.lowercased()
+        ].joined(separator: ":")
+    }
+
+    func image(for asset: AssetItem) -> NSImage {
+        let key = identity(for: asset) as NSString
+        if let cachedImage = cache.object(forKey: key) {
+            return cachedImage
+        }
+
+        let image = loadImage(for: asset)
+        cache.setObject(image, forKey: key)
+        return image
+    }
+
+    private func loadImage(for asset: AssetItem) -> NSImage {
+        if asset.kind == .image || asset.kind == .gif {
+            if let thumbnailURL = asset.thumbnailURL,
+               let image = NSImage(contentsOf: thumbnailURL) {
+                return image
+            }
+        }
+
+        if FileManager.default.fileExists(atPath: asset.storageURL.path) {
+            return NSWorkspace.shared.icon(forFile: asset.storageURL.path)
+        }
+
+        if let originalURL = asset.originalURL {
+            return NSWorkspace.shared.icon(forFile: originalURL.path)
+        }
+
+        if let type = UTType(filenameExtension: asset.fileExtension) {
+            return NSWorkspace.shared.icon(for: type)
+        }
+
+        return NSWorkspace.shared.icon(for: .data)
+    }
+}
+
 private final class AssetCollectionViewItem: NSCollectionViewItem {
     static let reuseIdentifier = NSUserInterfaceItemIdentifier("AssetCollectionViewItem")
 
@@ -735,7 +791,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
     override func prepareForReuse() {
         super.prepareForReuse()
-        previewImageView.image = nil
+        previewImageView.resetImage()
         fileNameLabel.stringValue = ""
         subtitleLabel.stringValue = ""
         dateLabel.stringValue = ""
@@ -759,7 +815,13 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         subtitleLabel.stringValue = subtitle(for: asset, viewMode: viewMode, localization: localization)
         dateLabel.stringValue = viewMode == .list ? localization.relativeOrDateTime(asset.importedAt) : ""
         dimensionBadgeView.stringValue = dimensionsSubtitle(for: asset)
-        previewImageView.image = previewImage(for: asset)
+        let previewProvider = AssetPreviewImageProvider.shared
+        let previewIdentity = previewProvider.identity(for: asset)
+        previewImageView.setImage(
+            previewProvider.image(for: asset),
+            identity: "\(viewMode.rawValue):\(previewIdentity)",
+            animated: true
+        )
         previewImageView.contentMode = imageContentMode(for: asset, viewMode: viewMode)
         applyModeLayout()
         containerView.synchronizeHoverStateWithPointer()
@@ -852,29 +914,6 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         return .aspectFit
     }
 
-    private func previewImage(for asset: AssetItem) -> NSImage {
-        if asset.kind == .image || asset.kind == .gif {
-            if let thumbnailURL = asset.thumbnailURL,
-               let image = NSImage(contentsOf: thumbnailURL) {
-                return image
-            }
-        }
-
-        if FileManager.default.fileExists(atPath: asset.storageURL.path) {
-            return NSWorkspace.shared.icon(forFile: asset.storageURL.path)
-        }
-
-        if let originalURL = asset.originalURL {
-            return NSWorkspace.shared.icon(forFile: originalURL.path)
-        }
-
-        if let type = UTType(filenameExtension: asset.fileExtension) {
-            return NSWorkspace.shared.icon(for: type)
-        }
-
-        return NSWorkspace.shared.icon(for: .data)
-    }
-
     func previewSourceFrameInScreen() -> NSRect? {
         guard let window = previewImageView.window else {
             return nil
@@ -886,16 +925,19 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 }
 
 private final class AssetPreviewImageView: NSView {
+    private static let imageEntranceAnimationKey = "assetImageEntrance"
+
     enum ContentMode {
         case aspectFit
         case aspectFill
     }
 
-    var image: NSImage? {
+    private var image: NSImage? {
         didSet {
             needsDisplay = true
         }
     }
+    private var imageIdentity: String?
 
     var contentMode: ContentMode = .aspectFit {
         didSet {
@@ -911,6 +953,32 @@ private final class AssetPreviewImageView: NSView {
 
     override var isFlipped: Bool {
         true
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setUpLayer()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setUpLayer()
+    }
+
+    func setImage(_ newImage: NSImage, identity: String, animated: Bool) {
+        let shouldAnimate = animated && imageIdentity != identity
+        imageIdentity = identity
+        image = newImage
+
+        if shouldAnimate {
+            animateImageEntrance()
+        }
+    }
+
+    func resetImage() {
+        imageIdentity = nil
+        image = nil
+        layer?.removeAnimation(forKey: Self.imageEntranceAnimationKey)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -961,6 +1029,35 @@ private final class AssetPreviewImageView: NSView {
             width: drawSize.width,
             height: drawSize.height
         )
+    }
+
+    private func setUpLayer() {
+        wantsLayer = true
+        layer?.opacity = 1
+    }
+
+    private func animateImageEntrance() {
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+              let layer else {
+            return
+        }
+
+        layer.removeAnimation(forKey: Self.imageEntranceAnimationKey)
+
+        let opacity = CABasicAnimation(keyPath: "opacity")
+        opacity.fromValue = 0
+        opacity.toValue = 1
+
+        let scale = CABasicAnimation(keyPath: "transform.scale")
+        scale.fromValue = AssetCollectionMetrics.imageEntranceScale
+        scale.toValue = 1
+
+        let group = CAAnimationGroup()
+        group.animations = [opacity, scale]
+        group.duration = AssetCollectionMetrics.imageEntranceAnimationDuration
+        group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+
+        layer.add(group, forKey: Self.imageEntranceAnimationKey)
     }
 }
 
