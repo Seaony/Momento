@@ -270,24 +270,10 @@ struct AssetCollectionGridView: NSViewRepresentable {
     }
 
     private func applyAssetChanges(to collectionView: NSCollectionView, coordinator: Coordinator) {
-        let previousAssets = coordinator.currentAssets
-        let deletedIndexPaths = coordinator.deletedIndexPaths(from: previousAssets, to: assets)
-
         coordinator.currentAssets = assets
         coordinator.rebuildAssetIndex(for: assets)
         prepareLayout(for: collectionView)
-
-        guard let deletedIndexPaths else {
-            collectionView.reloadData()
-            return
-        }
-
-        collectionView.performBatchUpdates {
-            collectionView.deleteItems(at: deletedIndexPaths)
-        } completionHandler: { _ in
-            coordinator.syncSelection()
-            coordinator.syncHoveredPreviewAsset()
-        }
+        collectionView.reloadData()
     }
 
     private func prepareLayout(for collectionView: NSCollectionView) {
@@ -410,28 +396,6 @@ extension AssetCollectionGridView {
 
         func rebuildAssetIndex(for assets: [AssetItem]) {
             assetIndexByID = Self.assetIndexByID(for: assets)
-        }
-
-        func deletedIndexPaths(from oldAssets: [AssetItem], to newAssets: [AssetItem]) -> Set<IndexPath>? {
-            guard oldAssets.count > newAssets.count else {
-                return nil
-            }
-
-            let newIDs = Set(newAssets.map(\.id))
-            let deletedIndexPaths = Set(oldAssets.enumerated().compactMap { index, asset in
-                newIDs.contains(asset.id) ? nil : IndexPath(item: index, section: 0)
-            })
-
-            guard !deletedIndexPaths.isEmpty else {
-                return nil
-            }
-
-            let remainingOldAssets = oldAssets.filter { newIDs.contains($0.id) }
-            guard remainingOldAssets == newAssets else {
-                return nil
-            }
-
-            return deletedIndexPaths
         }
 
         @objc func handleDoubleClick(_ sender: NSClickGestureRecognizer) {
