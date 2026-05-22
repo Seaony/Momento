@@ -33,9 +33,9 @@ private enum AssetCollectionMetrics {
     static let listThumbnailSize: CGFloat = 78
     static let listSeparatorHorizontalInset: CGFloat = 18
     static let listSeparatorAlpha: CGFloat = 0.055
-    static let favoriteButtonWidth: CGFloat = 24
+    static let favoriteButtonWidth: CGFloat = 22
     static let favoriteButtonHeight: CGFloat = 15
-    static let favoriteButtonLeadingInset: CGFloat = 6
+    static let favoriteButtonLeadingInset: CGFloat = 7
     static let favoriteButtonTopInset: CGFloat = 10.5
     static let favoriteButtonCornerRadius: CGFloat = favoriteButtonHeight / 2
     static let favoriteButtonBackgroundAlpha: CGFloat = 0.3
