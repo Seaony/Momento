@@ -327,6 +327,22 @@
         }
       }
     },
+    "Color copied" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Color copied"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "颜色已复制"
+          }
+        }
+      }
+    },
     "Colors" : {
       "extractionState" : "stale",
       "localizations" : {

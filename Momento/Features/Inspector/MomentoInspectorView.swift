@@ -12,11 +12,20 @@ struct MomentoInspectorColor: Identifiable, Hashable {
         return hex
     }
 
+    var normalizedHex: String {
+        let trimmedHex = hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if trimmedHex.hasPrefix("#") {
+            return trimmedHex
+        }
+
+        return "#\(trimmedHex)"
+    }
+
     var helpText: String {
         guard let coverage else {
-            return hex
+            return normalizedHex
         }
-        return "\(hex) (\((coverage * 100).formatted(.number.precision(.fractionLength(1))))%)"
+        return "\(normalizedHex) (\((coverage * 100).formatted(.number.precision(.fractionLength(1))))%)"
     }
 }
 
@@ -67,6 +76,9 @@ struct MomentoInspectorView: View {
     var onRevealInFinder: (() -> Void)?
 
     @State private var pendingTag = ""
+    @State private var hoveredColorID: String?
+    @State private var isColorCopyToastVisible = false
+    @State private var colorCopyToastToken = UUID()
 
     init(
         asset: MomentoInspectorAsset?,
@@ -86,9 +98,9 @@ struct MomentoInspectorView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         preview(asset)
+                        colorSection(asset.colors)
                         metadata(asset)
                         tagEditor
-                        colorSection(asset.colors)
                         notesEditor
                         fileSection(asset)
                     }
@@ -104,39 +116,40 @@ struct MomentoInspectorView: View {
             idealWidth: MomentoTheme.inspectorWidth,
             maxWidth: MomentoTheme.inspectorMaxWidth
         )
+        .overlay(alignment: .bottom) {
+            colorCopyToast
+        }
+        .animation(.smooth(duration: 0.16), value: isColorCopyToastVisible)
     }
 
     private func preview(_ asset: MomentoInspectorAsset) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ZStack {
-                MomentoGlassBackground(cornerRadius: MomentoTheme.panelRadius)
-
+        VStack(alignment: .leading, spacing: 8) {
+            Group {
                 if let image = asset.previewImage {
                     Image(nsImage: image)
                         .resizable()
                         .scaledToFit()
-                        .padding(12)
                 } else {
-                    VStack(spacing: 8) {
-                        Image(systemName: "photo")
-                            .font(.system(size: 32))
-                            .foregroundStyle(MomentoTheme.tertiaryText)
-                        Text(asset.fileName)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(MomentoTheme.secondaryText)
-                            .lineLimit(1)
+                    ZStack {
+                        MomentoGlassBackground(cornerRadius: MomentoTheme.panelRadius)
+
+                        VStack(spacing: 8) {
+                            Image(systemName: "photo")
+                                .font(.system(size: 32))
+                                .foregroundStyle(MomentoTheme.tertiaryText)
+                            Text(asset.fileName)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(MomentoTheme.secondaryText)
+                                .lineLimit(1)
+                        }
+                        .padding()
                     }
-                    .padding()
                 }
             }
             .aspectRatio(1.25, contentMode: .fit)
-            .overlay {
-                RoundedRectangle(cornerRadius: MomentoTheme.panelRadius, style: .continuous)
-                    .strokeBorder(MomentoTheme.subtleStroke, lineWidth: 1)
-            }
 
             Text(asset.title)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .lineLimit(2)
         }
     }
@@ -210,28 +223,64 @@ struct MomentoInspectorView: View {
         }
     }
 
+    @ViewBuilder
     private func colorSection(_ colors: [MomentoInspectorColor]) -> some View {
-        inspectorSection(localization.string("Colors")) {
-            if colors.isEmpty {
-                Text(localization.string("No colors extracted"))
-                    .font(.system(size: 12))
-                    .foregroundStyle(MomentoTheme.secondaryText)
-            } else {
-                HStack(spacing: 7) {
+        if !colors.isEmpty {
+            VStack(alignment: .leading, spacing: 7) {
+                FlowLayout(spacing: 6) {
                     ForEach(colors) { color in
-                        Circle()
-                            .fill(Color(hex: color.hex) ?? .clear)
-                            .frame(width: 22, height: 22)
-                            .overlay {
-                                Circle()
-                                    .strokeBorder(MomentoTheme.subtleStroke, lineWidth: 1)
-                            }
-                            .help(color.helpText)
+                        colorSwatchButton(color)
                     }
-                    Spacer()
+                }
+
+                if let hoveredColor = colors.first(where: { $0.id == hoveredColorID }) {
+                    Text(hoveredColor.helpText)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(MomentoTheme.primaryText)
+                        .lineLimit(1)
+                        .padding(.horizontal, 8)
+                        .frame(height: 24)
+                        .background {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(MomentoTheme.sidebarIconHoverBackground)
+                        }
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
         }
+    }
+
+    private func colorSwatchButton(_ color: MomentoInspectorColor) -> some View {
+        let isHovered = hoveredColorID == color.id
+        let swatchShape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+        let hoverShape = RoundedRectangle(cornerRadius: 9, style: .continuous)
+
+        return Button {
+            copyColor(color)
+        } label: {
+            swatchShape
+                .fill(Color(hex: color.hex) ?? .clear)
+                .frame(width: 24, height: 24)
+                .overlay {
+                    swatchShape.strokeBorder(MomentoTheme.subtleStroke, lineWidth: 1)
+                }
+                .padding(5)
+                .background {
+                    if isHovered {
+                        hoverShape.fill(MomentoTheme.sidebarIconHoverBackground)
+                    } else {
+                        Color.clear
+                    }
+                }
+                .contentShape(hoverShape)
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .onHover { hovering in
+            updateColorHover(id: color.id, isHovering: hovering)
+        }
+        .help(color.helpText)
+        .accessibilityLabel(color.helpText)
     }
 
     private var notesEditor: some View {
@@ -317,6 +366,63 @@ struct MomentoInspectorView: View {
         guard !tag.isEmpty, !tags.contains(tag) else { return }
         tags.append(tag)
         pendingTag = ""
+    }
+
+    @ViewBuilder
+    private var colorCopyToast: some View {
+        if isColorCopyToastVisible {
+            Text(localization.string("Color copied"))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(MomentoTheme.primaryText)
+                .padding(.horizontal, 12)
+                .frame(height: 30)
+                .background {
+                    MomentoGlassBackground(cornerRadius: 10)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .strokeBorder(MomentoTheme.subtleStroke, lineWidth: 1)
+                        }
+                }
+                .padding(.bottom, 14)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .allowsHitTesting(false)
+        }
+    }
+
+    private func updateColorHover(id: String, isHovering: Bool) {
+        withAnimation(.smooth(duration: 0.14)) {
+            if isHovering {
+                hoveredColorID = id
+            } else if hoveredColorID == id {
+                hoveredColorID = nil
+            }
+        }
+    }
+
+    private func copyColor(_ color: MomentoInspectorColor) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+
+        guard pasteboard.setString(color.normalizedHex, forType: .string) else {
+            return
+        }
+
+        let token = UUID()
+        colorCopyToastToken = token
+
+        withAnimation(.smooth(duration: 0.16)) {
+            isColorCopyToastVisible = true
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
+            guard colorCopyToastToken == token else {
+                return
+            }
+
+            withAnimation(.smooth(duration: 0.16)) {
+                isColorCopyToastVisible = false
+            }
+        }
     }
 }
 
