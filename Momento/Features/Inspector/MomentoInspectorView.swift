@@ -92,7 +92,7 @@ struct MomentoInspectorView: View {
     private static let tagPickerCreateRowHeight: CGFloat = 34
     private static let tagPickerCreateBottomPadding: CGFloat = 8
     private static let inspectorSectionSpacing: CGFloat = 12
-    private static let inspectorSectionSeparatorOpacity = 0.1
+    private static let inspectorSectionSeparatorOpacity = 0.06
 
     @Environment(\.appLocalization) private var localization
 
