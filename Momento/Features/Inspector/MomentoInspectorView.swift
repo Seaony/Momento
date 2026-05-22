@@ -91,6 +91,8 @@ struct MomentoInspectorView: View {
     private static let tagPickerEmptyMessageHeight: CGFloat = 23
     private static let tagPickerCreateRowHeight: CGFloat = 34
     private static let tagPickerCreateBottomPadding: CGFloat = 8
+    private static let inspectorSectionSeparatorWidth: CGFloat = 54
+    private static let inspectorSectionSeparatorOpacity = 0.1
 
     @Environment(\.appLocalization) private var localization
 
@@ -699,6 +701,10 @@ struct MomentoInspectorView: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
+            Rectangle()
+                .fill(Color.white.opacity(Self.inspectorSectionSeparatorOpacity))
+                .frame(width: Self.inspectorSectionSeparatorWidth, height: 1)
+
             Text(title.uppercased())
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(MomentoTheme.tertiaryText)
