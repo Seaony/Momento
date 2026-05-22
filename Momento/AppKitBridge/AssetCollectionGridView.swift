@@ -287,17 +287,21 @@ struct AssetCollectionGridView: NSViewRepresentable {
     }
 
     private func applyAssetChanges(to collectionView: NSCollectionView, coordinator: Coordinator) {
-        if let favoriteChangeIndexPaths = favoriteOnlyChangeIndexPaths(from: coordinator.currentAssets, to: assets) {
+        if let itemUpdateIndexPaths = itemUpdateIndexPaths(from: coordinator.currentAssets, to: assets) {
             coordinator.currentAssets = assets
             coordinator.rebuildAssetIndex(for: assets)
 
-            for indexPath in favoriteChangeIndexPaths {
+            for indexPath in itemUpdateIndexPaths {
                 guard let item = collectionView.item(at: indexPath) as? AssetCollectionViewItem,
                       assets.indices.contains(indexPath.item) else {
                     continue
                 }
 
-                item.updateFavoriteState(with: assets[indexPath.item])
+                item.updateVisibleState(
+                    with: assets[indexPath.item],
+                    viewMode: viewMode,
+                    localization: localization
+                )
             }
             return
         }
@@ -308,7 +312,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
         collectionView.reloadData()
     }
 
-    private func favoriteOnlyChangeIndexPaths(from oldAssets: [AssetItem], to newAssets: [AssetItem]) -> Set<IndexPath>? {
+    private func itemUpdateIndexPaths(from oldAssets: [AssetItem], to newAssets: [AssetItem]) -> Set<IndexPath>? {
         guard oldAssets.count == newAssets.count else {
             return nil
         }
@@ -316,24 +320,37 @@ struct AssetCollectionGridView: NSViewRepresentable {
         var changedIndexPaths: Set<IndexPath> = []
 
         for index in oldAssets.indices {
-            var oldAsset = oldAssets[index]
+            let oldAsset = oldAssets[index]
             let newAsset = newAssets[index]
             guard oldAsset.id == newAsset.id else {
                 return nil
             }
 
-            let oldIsFavorite = oldAsset.isFavorite
-            oldAsset.isFavorite = newAsset.isFavorite
-            guard oldAsset == newAsset else {
+            if oldAsset == newAsset {
+                continue
+            }
+
+            guard canUpdateItemInPlace(from: oldAsset, to: newAsset) else {
                 return nil
             }
 
-            if oldIsFavorite != newAsset.isFavorite {
-                changedIndexPaths.insert(IndexPath(item: index, section: 0))
-            }
+            changedIndexPaths.insert(IndexPath(item: index, section: 0))
         }
 
         return changedIndexPaths
+    }
+
+    private func canUpdateItemInPlace(from oldAsset: AssetItem, to newAsset: AssetItem) -> Bool {
+        var comparableOldAsset = oldAsset
+        comparableOldAsset.displayName = newAsset.displayName
+        comparableOldAsset.byteSize = newAsset.byteSize
+        comparableOldAsset.exifMetadata = newAsset.exifMetadata
+        comparableOldAsset.tags = newAsset.tags
+        comparableOldAsset.folderIDs = newAsset.folderIDs
+        comparableOldAsset.paletteColors = newAsset.paletteColors
+        comparableOldAsset.isFavorite = newAsset.isFavorite
+        comparableOldAsset.importedAt = newAsset.importedAt
+        return comparableOldAsset == newAsset
     }
 
     private func prepareLayout(for collectionView: NSCollectionView) {
@@ -1226,13 +1243,20 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         favoriteButton.synchronizeHoverStateWithPointer()
     }
 
-    func updateFavoriteState(with asset: AssetItem) {
+    func updateVisibleState(with asset: AssetItem, viewMode: AssetViewMode, localization: AppLocalization) {
         guard self.asset?.id == asset.id else {
             return
         }
 
         self.asset = asset
+        self.localization = localization
+        fileNameLabel.stringValue = asset.displayName
+        subtitleLabel.stringValue = subtitle(for: asset, viewMode: viewMode, localization: localization)
+        dateLabel.stringValue = viewMode == .list ? localization.relativeOrDateTime(asset.importedAt) : ""
+        dimensionBadgeView.stringValue = dimensionsSubtitle(for: asset)
+        dimensionBadgeView.isHidden = viewMode != .masonry || dimensionBadgeView.stringValue.isEmpty
         updateFavoriteButton(animated: true)
+        updateTextColors()
     }
 
     @objc private func handleFavoriteClick(_ sender: NSButton) {
