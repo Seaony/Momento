@@ -240,7 +240,7 @@ struct MomentoTagManagementView: View {
                     Color.clear
                         .glassEffect(
                             isProminent
-                                ? .regular.tint(Color.accentColor.opacity(0.28)).interactive(true)
+                                ? .regular.tint(Color.accentColor).interactive(true)
                                 : .regular.interactive(true),
                             in: shape
                         )
