@@ -249,7 +249,7 @@ struct MomentoDeleteLibraryDialog: View {
                         Button(role: .destructive) {
                             confirmDelete()
                         } label: {
-                            Text(localization.string("Move to Trash"))
+                            Text(localization.string("Delete"))
                                 .font(.system(size: 14, weight: .semibold))
                                 .padding(.horizontal, 18)
                                 .padding(.vertical, 6)

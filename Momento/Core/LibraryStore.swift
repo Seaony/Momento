@@ -213,7 +213,7 @@ final class LibraryStore {
         }
 
         let resolved = try recentStore.resolve(reference)
-        try storage.trashLibraryPackage(at: resolved.url)
+        try storage.deleteLibraryPackage(at: resolved.url)
 
         if currentLibrary?.id == id {
             closeCurrentLibrary()

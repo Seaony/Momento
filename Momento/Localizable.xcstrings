@@ -867,6 +867,23 @@
         }
       }
     },
+    "Delete" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除"
+          }
+        }
+      }
+    },
     "Delete Library" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -890,13 +907,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“%@” will be moved to the Trash. It will be removed from Momento’s recent libraries, and you can restore the package from the Trash before it is emptied."
+            "value" : "“%@” will be deleted permanently and removed from Momento’s recent libraries."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "“%@” 将被移动到废纸篓，并从 Momento 的最近资源库列表中移除。在废纸篓清空之前，你仍然可以从废纸篓中恢复这个资源库包。"
+            "value" : "“%@” 将被永久删除，并从 Momento 的最近资源库列表中移除。"
           }
         }
       }

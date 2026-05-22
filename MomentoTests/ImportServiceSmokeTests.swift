@@ -690,7 +690,7 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
-    func testDeletingRecentLibraryMovesPackageToTrashAndClosesCurrentLibrary() throws {
+    func testDeletingRecentLibraryRemovesPackageAndClosesCurrentLibrary() throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }
 
@@ -709,7 +709,7 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         XCTAssertNil(store.currentLibrary)
         XCTAssertTrue(store.recentLibraries.isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: environment.packageURL.path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: environment.trashURL.appendingPathComponent("Test.momento").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: environment.trashURL.appendingPathComponent("Test.momento").path))
     }
 
     @MainActor

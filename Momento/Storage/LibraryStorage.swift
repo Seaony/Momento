@@ -139,14 +139,8 @@ nonisolated struct LibraryStorage: Sendable {
         return renamedLibrary
     }
 
-    nonisolated func trashLibraryPackage(at packageURL: URL) throws {
-        guard let trashURL = trashURLs.first else {
-            try FileManager.default.trashItem(at: packageURL, resultingItemURL: nil)
-            return
-        }
-
-        try FileManager.default.createDirectory(at: trashURL, withIntermediateDirectories: true)
-        try FileManager.default.moveItem(at: packageURL, to: availableTrashURL(for: packageURL, in: trashURL))
+    nonisolated func deleteLibraryPackage(at packageURL: URL) throws {
+        try FileManager.default.removeItem(at: packageURL)
     }
 
     nonisolated func trashAssetFile(at fileURL: URL) throws {
