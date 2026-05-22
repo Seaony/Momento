@@ -455,7 +455,7 @@ struct MomentoSidebarView: View {
                 }
                 onCreateFolder(folder.id)
             } label: {
-                Label(localization.string("New Folder"), systemImage: "folder.badge.plus")
+                Label(localization.string("New Subfolder"), systemImage: "folder.badge.plus")
             }
 
             Button {
@@ -469,7 +469,13 @@ struct MomentoSidebarView: View {
             Button(role: .destructive) {
                 onDeleteFolder(folder.id)
             } label: {
-                Label(localization.string("Delete Folder"), systemImage: "trash")
+                Label {
+                    Text(localization.string("Delete Folder"))
+                        .foregroundStyle(.red)
+                } icon: {
+                    Image(systemName: "trash")
+                        .foregroundStyle(.red)
+                }
             }
         } label: {
             Image(systemName: "ellipsis")

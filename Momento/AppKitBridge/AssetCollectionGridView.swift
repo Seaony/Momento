@@ -29,8 +29,8 @@ private enum AssetCollectionMetrics {
     static let dimensionBadgeHorizontalPadding: CGFloat = 3
     static let sectionHorizontalInset: CGFloat = 8
     static let sectionVerticalInset: CGFloat = 14
-    static let listItemHeight: CGFloat = 68
-    static let listThumbnailSize: CGFloat = 52
+    static let listItemHeight: CGFloat = 96
+    static let listThumbnailSize: CGFloat = 78
     static let listSeparatorHorizontalInset: CGFloat = 18
     static let listSeparatorAlpha: CGFloat = 0.055
     static let selectionBackgroundAnimationDuration: CFTimeInterval = 0.12

@@ -176,9 +176,8 @@ struct ContentView: View {
         }
         .toolbar {
             if !isModalOverlayVisible {
-                ToolbarItemGroup(placement: .primaryAction) {
-                    toolbarViewModeSwitcher
-                    toolbarSearchControl
+                ToolbarItem(placement: .primaryAction) {
+                    toolbarControls
                 }
             }
         }
@@ -197,8 +196,17 @@ struct ContentView: View {
         }
     }
 
+    private var toolbarControls: some View {
+        GlassEffectContainer(spacing: 8) {
+            HStack(spacing: 8) {
+                toolbarViewModeSwitcher
+                toolbarSearchControl
+            }
+        }
+    }
+
     private var toolbarViewModeSwitcher: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 3) {
             ForEach(AssetViewMode.allCases) { viewMode in
                 let isSelected = store.viewMode == viewMode
                 let isHovered = hoveredToolbarViewMode == viewMode
@@ -209,11 +217,11 @@ struct ContentView: View {
                     Image(systemName: systemImage(for: viewMode))
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(isSelected ? Color.white : MomentoTheme.secondaryText)
-                        .frame(width: 30, height: 24)
+                        .frame(width: 32, height: 26)
                         .background {
                             toolbarSegmentBackground(isSelected: isSelected, isHovered: isHovered)
                         }
-                        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .pointerStyle(.link)
@@ -231,9 +239,9 @@ struct ContentView: View {
             }
         }
         .padding(3)
-        .frame(height: 30)
+        .frame(height: 32)
         .background {
-            toolbarControlBackground(cornerRadius: 10)
+            toolbarControlBackground(cornerRadius: 11)
         }
     }
 
@@ -250,9 +258,9 @@ struct ContentView: View {
                     .frame(width: 260)
             }
             .padding(.horizontal, 10)
-            .frame(height: 28)
+            .frame(height: 30)
             .background {
-                toolbarControlBackground(cornerRadius: 10)
+                toolbarControlBackground(cornerRadius: 11)
             }
             .onAppear {
                 isToolbarSearchFocused = true
@@ -267,11 +275,11 @@ struct ContentView: View {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(MomentoTheme.secondaryText)
-                    .frame(width: 34, height: 28)
+                    .frame(width: 36, height: 30)
                     .background {
-                        toolbarControlBackground(cornerRadius: 10)
+                        toolbarControlBackground(cornerRadius: 11)
                     }
-                    .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
             }
             .buttonStyle(.plain)
             .pointerStyle(.link)
@@ -281,11 +289,11 @@ struct ContentView: View {
 
     @ViewBuilder
     private func toolbarSegmentBackground(isSelected: Bool, isHovered: Bool) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
 
         if isSelected {
             Color.clear
-                .glassEffect(.regular.tint(Color.accentColor), in: shape)
+                .glassEffect(.regular.tint(Color.accentColor).interactive(true), in: shape)
         } else if isHovered {
             shape.fill(MomentoTheme.sidebarIconHoverBackground)
         } else {
@@ -294,13 +302,7 @@ struct ContentView: View {
     }
 
     private func toolbarControlBackground(cornerRadius: CGFloat) -> some View {
-        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-
-        return shape
-            .fill(Color.white.opacity(0.08))
-            .overlay {
-                shape.stroke(MomentoTheme.subtleStroke.opacity(0.38), lineWidth: 1)
-            }
+        MomentoGlassBackground(glass: .regular.interactive(true), cornerRadius: cornerRadius)
     }
 
     @ViewBuilder

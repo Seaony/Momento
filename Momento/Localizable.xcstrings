@@ -1193,6 +1193,23 @@
         }
       }
     },
+    "New Subfolder" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New Subfolder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建子文件夹"
+          }
+        }
+      }
+    },
     "No asset selected" : {
       "extractionState" : "stale",
       "localizations" : {

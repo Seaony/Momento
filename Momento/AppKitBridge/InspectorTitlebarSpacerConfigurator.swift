@@ -102,7 +102,10 @@ extension InspectorTitlebarSpacerConfigurator {
                 installAccessoryView(configuration: configuration)
             }
 
-            accessoryController?.isHidden = !configuration.isVisible
+            let isHidden = !configuration.isVisible
+            accessoryController?.isHidden = isHidden
+            accessoryController?.view.isHidden = isHidden
+            containerView?.isHidden = isHidden
 
             guard configuration.isVisible else {
                 return
