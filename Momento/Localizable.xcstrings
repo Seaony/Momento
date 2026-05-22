@@ -109,6 +109,23 @@
         }
       }
     },
+    "Added to Favorites" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Added to Favorites"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已收藏"
+          }
+        }
+      }
+    },
     "All" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1567,6 +1584,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "从资源库移除所选资源"
+          }
+        }
+      }
+    },
+    "Removed from Favorites" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Removed from Favorites"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已取消收藏"
           }
         }
       }

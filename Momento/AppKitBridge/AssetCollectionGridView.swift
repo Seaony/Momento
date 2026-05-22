@@ -196,6 +196,9 @@ struct AssetCollectionGridView: NSViewRepresentable {
         collectionView.onSpacePreviewEnd = { [weak coordinator = context.coordinator] in
             coordinator?.endSpacePreview()
         }
+        collectionView.onFavoriteShortcut = { [weak coordinator = context.coordinator] in
+            coordinator?.toggleHoveredFavorite() ?? false
+        }
 
         let doubleClickRecognizer = NSClickGestureRecognizer(
             target: context.coordinator,
@@ -491,6 +494,7 @@ extension AssetCollectionGridView {
         private func updateHoveredPreviewAsset(assetID: AssetItem.ID, isHovered: Bool) {
             if isHovered {
                 hoveredPreviewAssetID = assetID
+                collectionView?.window?.makeFirstResponder(collectionView)
             } else if hoveredPreviewAssetID == assetID {
                 hoveredPreviewAssetID = nil
             }
@@ -525,6 +529,17 @@ extension AssetCollectionGridView {
             }
 
             parent.onFavoriteToggle(parent.assets[index])
+        }
+
+        func toggleHoveredFavorite() -> Bool {
+            guard let hoveredPreviewAssetID,
+                  let index = assetIndexByID[hoveredPreviewAssetID],
+                  parent.assets.indices.contains(index) else {
+                return false
+            }
+
+            parent.onFavoriteToggle(parent.assets[index])
+            return true
         }
 
         private func previewIndexPath(in collectionView: NSCollectionView) -> IndexPath? {
@@ -565,6 +580,7 @@ extension AssetCollectionGridView {
 private final class AssetPreviewCollectionView: NSCollectionView {
     var onSpacePreviewStart: (() -> Void)?
     var onSpacePreviewEnd: (() -> Void)?
+    var onFavoriteShortcut: (() -> Bool)?
 
     override var acceptsFirstResponder: Bool {
         true
@@ -575,6 +591,13 @@ private final class AssetPreviewCollectionView: NSCollectionView {
             if !event.isARepeat {
                 onSpacePreviewStart?()
             }
+            return
+        }
+
+        if event.charactersIgnoringModifiers?.lowercased() == "f",
+           event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
+           !event.isARepeat,
+           onFavoriteShortcut?() == true {
             return
         }
 

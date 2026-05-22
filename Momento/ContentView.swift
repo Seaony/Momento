@@ -632,8 +632,13 @@ struct ContentView: View {
     }
 
     private func toggleFavorite(_ asset: AssetItem) {
+        let isAddingFavorite = !asset.isFavorite
+
         do {
             try store.toggleFavorite(for: asset.id)
+            shellToastRequest = MomentoToastRequest(
+                message: localization.string(isAddingFavorite ? "Added to Favorites" : "Removed from Favorites")
+            )
         } catch {
             showImportError(error)
         }
