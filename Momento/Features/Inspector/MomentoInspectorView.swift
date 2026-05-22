@@ -101,8 +101,8 @@ struct MomentoInspectorView: View {
     private static let tagPickerCreateBottomPadding: CGFloat = 8
     private static let folderPickerMinimumContentHeight: CGFloat = 108
     private static let folderPickerMaximumContentHeight: CGFloat = 260
-    private static let folderPickerRowHeight: CGFloat = 32
-    private static let folderPickerRowSpacing: CGFloat = 6
+    private static let folderPickerRowHeight: CGFloat = 28
+    private static let folderPickerRowSpacing: CGFloat = 3
     private static let folderPickerEmptyMessageHeight: CGFloat = 26
     private static let inspectorSectionSpacing: CGFloat = 12
     private static let inspectorSectionSeparatorOpacity = 0.06
@@ -709,23 +709,20 @@ struct MomentoInspectorView: View {
         let folder = row.folder
         let isSelected = containsFolder(folder.id)
         let rowShape = RoundedRectangle(cornerRadius: 11, style: .continuous)
-        let checkboxShape = RoundedRectangle(cornerRadius: 6, style: .continuous)
+        let checkboxShape = RoundedRectangle(cornerRadius: 5, style: .continuous)
         let foreground = Color.white.opacity(0.94)
         let secondaryForeground = Color.white.opacity(0.72)
         let checkboxFill = Color.white.opacity(isSelected ? 0.22 : 0.08)
 
-        return HStack(spacing: 7) {
+        return HStack(spacing: 5) {
             Button {
-                guard row.hasChildren else {
-                    return
-                }
-
                 toggleFolderExpansion(folder.id)
             } label: {
                 Image(systemName: expandedFolderIDs.contains(folder.id) ? "chevron.down" : "chevron.right")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 8, weight: .bold))
                     .foregroundStyle(secondaryForeground)
-                    .frame(width: 14, height: 22)
+                    .frame(width: 24, height: Self.folderPickerRowHeight)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .contentShape(Rectangle())
@@ -744,11 +741,11 @@ struct MomentoInspectorView: View {
 
                         if isSelected {
                             Image(systemName: "checkmark")
-                                .font(.system(size: 10, weight: .bold))
+                                .font(.system(size: 9, weight: .bold))
                                 .foregroundStyle(foreground)
                         }
                     }
-                    .frame(width: 20, height: 20)
+                    .frame(width: 18, height: 18)
 
                     Text(folder.name)
                         .font(.system(size: 12, weight: .semibold))
@@ -757,7 +754,6 @@ struct MomentoInspectorView: View {
 
                     Spacer(minLength: 0)
                 }
-                .padding(.leading, CGFloat(row.depth) * 14)
                 .padding(.trailing, 9)
                 .frame(height: Self.folderPickerRowHeight)
                 .contentShape(rowShape)
@@ -766,6 +762,7 @@ struct MomentoInspectorView: View {
             .contentShape(rowShape)
             .pointerStyle(.link)
         }
+        .padding(.leading, CGFloat(row.depth) * 26)
         .frame(maxWidth: .infinity, alignment: .leading)
         .onHover { hovering in
             withAnimation(.smooth(duration: 0.12)) {
