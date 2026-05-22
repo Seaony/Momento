@@ -1112,6 +1112,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
             }
         )
         menuView.frame = NSRect(origin: .zero, size: menuView.intrinsicContentSize)
+        menuView.autoresizingMask = [.width]
         menuItem.view = menuView
         menu.addItem(menuItem)
         menu.popUp(positioning: nil, at: location, in: containerView)
