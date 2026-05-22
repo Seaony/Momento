@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Close Momento's P0/P1 product gaps without turning the app into a broad Eagle clone: soft trash, persistent notes, drag organization, first-class tags, folder hierarchy import, SVG/PDF/video import, and library import/export.
+**Goal:** Close Momento's P0/P1 product gaps without turning the app into a broad Eagle clone: soft trash, persistent notes, drag organization, first-class tags, folder hierarchy import, and library import/export.
 
 **Architecture:** Make Core Data the single source of truth before expanding UI workflows. Land model changes first, then wire user workflows on top of stable APIs. Keep derived data rebuildable and postpone P2 systems such as persistent SearchIndex and ThumbnailRecord until the model is stable.
 
-**Tech Stack:** Swift 6, SwiftUI, AppKit `NSCollectionView`, Core Data lightweight migration, UniformTypeIdentifiers, QuickLookThumbnailing, AVFoundation, PDFKit, ImageIO.
+**Tech Stack:** Swift 6, SwiftUI, AppKit `NSCollectionView`, Core Data lightweight migration, UniformTypeIdentifiers, ImageIO.
 
 ---
 
@@ -17,17 +17,13 @@ The plan below is implementable as written, but these product choices should be 
 1. **Notes UI:** Notes were previously removed from the inspector UI. This plan persists `Asset.note` and reintroduces a compact editable Notes section only if review approves it. If not approved, land the data/API layer and keep the UI hidden.
 2. **Tag migration:** Keep `tagsData` as a temporary legacy field in the next model version, backfill `TagRecord`/`AssetTagRecord`, and ignore `tagsData` afterward. Removing `tagsData` can be a later cleanup after the new model is proven.
 3. **Library import semantics:** "Open Library" references a package in place. "Import Library" copies an existing `.momento`/legacy `.momentolibrary` package into a chosen destination or app-managed location, validates it, and adds it to Recent Libraries.
-4. **SVG rendering:** Use QuickLookThumbnailing for SVG thumbnails first. Do not add a custom SVG parser in P1.
-5. **Video scope:** P1 supports local video import, metadata duration, poster thumbnail, QuickLook preview, sorting/filtering by extension. It does not add video playback controls in the grid or inspector.
+4. **Multi-format import:** SVG/PDF/video import is explicitly out of scope for P0/P1. Keep the current image/GIF scope and do not add placeholder model or thumbnail work just for future formats.
 
 ## References Checked
 
 - Apple Core Data automatic migration: lightweight migration can infer common model changes; nonoptional additions need defaults, and larger changes should be staged.
 - Apple AppKit collection view drag/drop: `NSCollectionViewDelegate` provides `canDragItemsAt`, `pasteboardWriterForItemAt`, `validateDrop`, and `acceptDrop`.
 - Apple `NSFilePromiseProvider`: use file promises when dragging files from the app to Finder or other apps.
-- Apple AVFoundation `AVAssetImageGenerator`: generate a poster frame from video assets with async `image(at:)`; old synchronous `copyCGImage` is deprecated.
-- Apple PDFKit `PDFPage.thumbnail(of:for:)`: render a PDF page thumbnail as `NSImage` on macOS.
-- Apple QuickLookThumbnailing `QLThumbnailGenerator`: generate thumbnails for common file types including images, PDFs, audio/video, and installed custom file types.
 - Apple UniformTypeIdentifiers: use UTTypes to classify importable files and pasteboard/file-promise content.
 - Eagle API references confirm folders, tags, extension filtering, rating, annotation, URL/bookmark, and trash are core comparison dimensions, but this plan only covers P0/P1.
 
@@ -36,6 +32,7 @@ The plan below is implementable as written, but these product choices should be 
 - No scoring/rating in this plan.
 - No smart folders or saved searches.
 - No perceptual duplicate detection.
+- No SVG/PDF/video multi-format import in this pass.
 - No browser extension, screenshot capture, Finder Sync, watched folders, cloud sync, or image annotation.
 - No persistent `SearchIndex` or `ThumbnailRecord` yet.
 - No major visual redesign beyond UI needed to expose the new behavior.
@@ -78,7 +75,6 @@ Add to `AssetRecord`:
 
 - `originalFileName: String`, nonoptional, default `""`
 - `utiIdentifier: String`, nonoptional, default `public.data`
-- `duration: Double`, optional
 - `orientation: Integer 64`, optional
 - `colorProfileName: String`, optional
 - `note: String`, optional
@@ -110,7 +106,6 @@ Add fields to `AssetItem`:
 ```swift
 var originalFileName: String
 var utiIdentifier: String
-var duration: Double?
 var orientation: Int?
 var colorProfileName: String?
 var note: String?
@@ -519,7 +514,7 @@ git commit -m "feat: organize dragged assets"
 
 ---
 
-## Chunk 4: P1 Import Model
+## Chunk 4: P1 Folder Import Model
 
 ### Task 7: Preserve folder hierarchy during folder import
 
@@ -611,92 +606,9 @@ git add Momento/Services/AssetImportService.swift Momento/Core/LibraryStore.swif
 git commit -m "feat: preserve imported folder hierarchy"
 ```
 
-### Task 8: Support SVG, PDF, and video assets
-
-**Files:**
-- Modify: `Momento/Services/AssetImportService.swift`
-- Modify: `Momento/Services/AssetThumbnailService.swift`
-- Create: `Momento/Services/AssetMediaMetadataService.swift`
-- Modify: `Momento/Core/AssetModels.swift`
-- Modify: `Momento/Storage/LibraryMetadataStore.swift`
-- Modify: `Momento/Features/Inspector/MomentoInspectorView.swift`
-- Test: `MomentoTests/ImportServiceSmokeTests.swift`
-
-- [ ] **Step 1: Add file type tests**
-
-Add tests for:
-
-- SVG text file imports as `.svg`.
-- Generated PDF imports as `.pdf`, stores dimensions when available, and creates a thumbnail.
-- Generated 1-frame MP4 imports as `.video`, stores duration, and creates a thumbnail.
-- File type filter options include imported SVG/PDF/video extensions.
-
-Run:
-
-```bash
-xcodebuild test -scheme Momento -only-testing:MomentoTests/ImportServiceSmokeTests/testImportsSvgPdfAndVideoAssets
-```
-
-- [ ] **Step 2: Classify supported UTTypes**
-
-Update `assetKind(for:)`:
-
-- `.gif` remains explicit.
-- `.pdf` if `type.conforms(to: .pdf)`.
-- `.video` if `type.conforms(to: .movie)` or known video extensions map to movie UTTypes.
-- `.svg` for `svg` and `svgz` extensions, using UTType when available but not relying on a platform-specific static property.
-- `.image` for other `type.conforms(to: .image)`.
-
-- [ ] **Step 3: Add media metadata service**
-
-`AssetMediaMetadataService` should extract:
-
-- Image/GIF: existing ImageIO dimensions and EXIF path.
-- PDF: first page bounds using PDFKit.
-- Video: duration and natural size using AVFoundation async loading.
-- SVG: store kind and UTI; dimensions optional in P1.
-
-Do not fake missing metadata with empty dictionaries.
-
-- [ ] **Step 4: Extend thumbnail generation**
-
-Keep `AssetThumbnailService` as the single thumbnail entry point.
-
-Implementation order:
-
-1. Image/GIF: existing ImageIO thumbnail path.
-2. PDF: use `PDFDocument`, first `PDFPage`, `thumbnail(of:for:)`, then write PNG.
-3. Video: use `AVAssetImageGenerator.image(at:)`, `appliesPreferredTrackTransform = true`, write PNG.
-4. SVG and fallback: use `QLThumbnailGenerator.generateBestRepresentation(for:)` or `saveBestRepresentation`.
-
-Rules:
-
-- Output remains one deterministic PNG thumbnail per asset for P1.
-- Multi-size thumbnails stay P2.
-- Palette analysis uses the generated thumbnail when present.
-
-- [ ] **Step 5: Update inspector display**
-
-Show kind-specific metadata without overbuilding:
-
-- PDF: kind and dimensions/page-derived size if known.
-- Video: kind, dimensions if known, duration.
-- SVG: kind and file extension/UTI.
-
-QuickLook preview should use the stored asset URL; do not implement a custom video/PDF viewer in this task.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add Momento/Services/AssetImportService.swift Momento/Services/AssetThumbnailService.swift Momento/Services/AssetMediaMetadataService.swift Momento/Core/AssetModels.swift Momento/Storage/LibraryMetadataStore.swift Momento/Features/Inspector/MomentoInspectorView.swift MomentoTests/ImportServiceSmokeTests.swift
-git commit -m "feat: import svg pdf and video assets"
-```
-
----
-
 ## Chunk 5: P1 Library Portability
 
-### Task 9: Add library import and export
+### Task 8: Add library import and export
 
 **Files:**
 - Modify: `Momento/Storage/LibraryStorage.swift`
@@ -767,7 +679,7 @@ git commit -m "feat: import and export libraries"
 
 ## Chunk 6: Final Validation And Cleanup
 
-### Task 10: Full regression pass
+### Task 9: Full regression pass
 
 **Files:**
 - Modify only if validation exposes defects.
@@ -812,7 +724,6 @@ The agent must not launch the app. User should manually check:
 - Notes: edit, switch selection, restart app.
 - Drag: grid to Finder, grid to folder, grid to tag, multi-select.
 - Folder import hierarchy.
-- SVG/PDF/video import thumbnails and inspector metadata.
 - Library import/export.
 
 - [ ] **Step 6: Final commit if fixes were needed**
@@ -841,8 +752,6 @@ Only commit if there are actual follow-up fixes.
 | Trash empty deletes files that restore still needs | Only delete physical files in `emptyTrash`; soft trash never moves/removes asset files. |
 | Notes cause grid flash | Merge single updated asset into memory; do not reload library on note writes. |
 | Drag/drop hard to unit test | Add source-level guard tests and explicit manual checklist. |
-| SVG thumbnails vary by OS | Use QuickLookThumbnailing first and allow generic fallback; do not block import if thumbnail fails. |
-| Video test fixture bloat | Generate a tiny video in the test helper with AVAssetWriter instead of committing binary fixtures. |
 | Library export accidentally overwrites | Refuse existing destination in P1. |
 
 ## Review Checklist
@@ -850,5 +759,4 @@ Only commit if there are actual follow-up fixes.
 - [ ] Approve whether Notes section should return to the inspector UI.
 - [ ] Approve keeping `tagsData` as a temporary legacy field for one model version.
 - [ ] Approve "Import Library" as copy-in rather than open-in-place.
-- [ ] Approve SVG thumbnail fallback via QuickLookThumbnailing.
 - [ ] Approve not doing P2 features in this pass.
