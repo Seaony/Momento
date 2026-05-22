@@ -13,7 +13,7 @@ private enum AssetCollectionMetrics {
     static let masonryImageInset: CGFloat = 3
     static let selectionCornerRadius: CGFloat = 12
     static let masonryHoverBackgroundAlpha: CGFloat = 0.08
-    static let imageCornerRadius: CGFloat = 10
+    static let imageCornerRadius = MomentoTheme.assetImageCornerRadius
     static let dimensionBadgeCornerRadius: CGFloat = 5
     static let dimensionBadgeHeight: CGFloat = 16
     static let dimensionBadgeHorizontalPadding: CGFloat = 3

@@ -140,10 +140,10 @@ struct MomentoInspectorView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(maxWidth: .infinity, alignment: .center)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: MomentoTheme.assetImageCornerRadius, style: .continuous))
         } else {
             ZStack {
-                MomentoGlassBackground(cornerRadius: 16)
+                MomentoGlassBackground(cornerRadius: MomentoTheme.assetImageCornerRadius)
 
                 VStack(spacing: 8) {
                     Image(systemName: "photo")
@@ -158,7 +158,7 @@ struct MomentoInspectorView: View {
             }
             .frame(maxWidth: .infinity)
             .aspectRatio(1.25, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: MomentoTheme.assetImageCornerRadius, style: .continuous))
         }
     }
 

@@ -3,7 +3,6 @@ import SwiftUI
 
 private enum MomentoAssetPreviewMetrics {
     static let imagePanelCornerRadius: CGFloat = 30
-    static let imageCornerRadius: CGFloat = 24
     static let imagePanelPadding: CGFloat = 14
     static let imagePanelTintOpacity = 0.5
 }
@@ -66,7 +65,7 @@ struct MomentoAssetPreviewOverlay: View {
                     )
                     .clipShape(
                         RoundedRectangle(
-                            cornerRadius: MomentoAssetPreviewMetrics.imageCornerRadius,
+                            cornerRadius: MomentoTheme.assetImageCornerRadius,
                             style: .continuous
                         )
                     )
