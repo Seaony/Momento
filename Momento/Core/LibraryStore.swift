@@ -311,13 +311,18 @@ final class LibraryStore {
         }
     }
 
-    func updateSelectedTags(_ names: [String]) {
+    func updateSelectedTags(_ names: [String]) throws {
         guard let selectedAssetID,
               let index = assets.firstIndex(where: { $0.id == selectedAssetID }) else {
             return
         }
 
-        assets[index].tags = names.map { TagItem(name: $0) }
+        let updatedTags = normalizedTags(from: names)
+        if let metadataStore {
+            mergeAssets([try metadataStore.updateTags(updatedTags, forAssetID: selectedAssetID)])
+        } else {
+            assets[index].tags = updatedTags
+        }
     }
 
     func createFolder(name: String? = nil, parentID: AssetFolder.ID? = nil) throws {
@@ -618,6 +623,28 @@ final class LibraryStore {
         }
 
         return error.localizedDescription
+    }
+
+    private func normalizedTags(from names: [String]) -> [TagItem] {
+        let existingTags = Dictionary(
+            tags.map { ($0.name.lowercased(), $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var seen = Set<String>()
+
+        return names.compactMap { name in
+            let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedName.isEmpty else {
+                return nil
+            }
+
+            let key = trimmedName.lowercased()
+            guard seen.insert(key).inserted else {
+                return nil
+            }
+
+            return existingTags[key] ?? TagItem(name: trimmedName)
+        }
     }
 
     private static func sampleAssets(for library: AssetLibrary) -> [AssetItem] {

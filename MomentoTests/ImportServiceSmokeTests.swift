@@ -199,6 +199,41 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testUpdatingImportedAssetTagsPersistsAcrossReloads() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        let source = try environment.writeOnePixelPNG(named: "tagged.png")
+        try await store.importItems(from: [source])
+        let asset = try XCTUnwrap(store.assets.first)
+
+        store.selectAsset(id: asset.id)
+        try store.updateSelectedTags(["Reference", "Mood"])
+
+        XCTAssertEqual(store.assets.first?.tags.map(\.name), ["Reference", "Mood"])
+        store.selectSidebarItem(id: "tag-mood")
+        XCTAssertEqual(store.visibleAssets.map(\.id), [asset.id])
+
+        let reopened = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try reopened.openLibrary(at: environment.packageURL)
+        XCTAssertEqual(reopened.assets.first?.tags.map(\.name), ["Reference", "Mood"])
+
+        reopened.selectSidebarItem(id: "tag-reference")
+        XCTAssertEqual(reopened.visibleAssets.map(\.id), [asset.id])
+    }
+
+    @MainActor
     func testImportPersistsExifMetadataAcrossReloads() async throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }

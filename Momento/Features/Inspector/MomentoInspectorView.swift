@@ -82,21 +82,28 @@ struct MomentoInspectorView: View {
 
     var asset: MomentoInspectorAsset?
     @Binding var tags: [String]
+    var availableTags: [String]
     @Binding var notes: String
     var onRevealInFinder: (() -> Void)?
     var onTitleCommit: ((MomentoInspectorAsset.ID, String) -> Void)?
     var onColorCopied: (() -> Void)?
 
-    @State private var pendingTag = ""
     @State private var hoveredColorID: String?
+    @State private var hoveredTag: String?
+    @State private var hoveredTagChoice: String?
+    @State private var isCreateTagRowHovered = false
+    @State private var isTagPickerPresented = false
+    @State private var tagSearchQuery = ""
     @State private var hoveredTitleID: MomentoInspectorAsset.ID?
     @State private var editingTitleID: MomentoInspectorAsset.ID?
     @State private var draftTitle = ""
     @FocusState private var isTitleFieldFocused: Bool
+    @FocusState private var isTagSearchFocused: Bool
 
     init(
         asset: MomentoInspectorAsset?,
         tags: Binding<[String]> = .constant([]),
+        availableTags: [String] = [],
         notes: Binding<String> = .constant(""),
         onRevealInFinder: (() -> Void)? = nil,
         onTitleCommit: ((MomentoInspectorAsset.ID, String) -> Void)? = nil,
@@ -104,6 +111,7 @@ struct MomentoInspectorView: View {
     ) {
         self.asset = asset
         self._tags = tags
+        self.availableTags = availableTags
         self._notes = notes
         self.onRevealInFinder = onRevealInFinder
         self.onTitleCommit = onTitleCommit
@@ -146,6 +154,13 @@ struct MomentoInspectorView: View {
         .onChange(of: asset?.id) { _, _ in
             cancelTitleEditing()
             hoveredTitleID = nil
+            hoveredTag = nil
+            closeTagPicker()
+        }
+        .onChange(of: isTagPickerPresented) { _, isPresented in
+            if !isPresented {
+                resetTagPicker()
+            }
         }
     }
 
@@ -303,52 +318,188 @@ struct MomentoInspectorView: View {
 
     private var tagEditor: some View {
         inspectorSection(localization.string("Tags")) {
-            if tags.isEmpty {
-                Text(localization.string("No tags"))
-                    .font(.system(size: 12))
-                    .foregroundStyle(MomentoTheme.secondaryText)
-            } else {
-                FlowLayout(spacing: 6) {
-                    ForEach(tags, id: \.self) { tag in
-                        HStack(spacing: 5) {
-                            Text(tag)
-                            Button {
-                                tags.removeAll { $0 == tag }
-                            } label: {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 9, weight: .bold))
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(localization.format("Remove %@", tag))
-                        }
-                        .font(.system(size: 12, weight: .medium))
-                        .padding(.horizontal, 8)
-                        .frame(height: 24)
-                        .glassEffect(.regular.tint(Color.accentColor), in: Capsule())
-                    }
+            FlowLayout(spacing: 6) {
+                ForEach(tags, id: \.self) { tag in
+                    tagChip(tag)
                 }
+
+                addTagChip
             }
+        }
+    }
 
-            HStack(spacing: 8) {
-                TextField(localization.string("Add tag"), text: $pendingTag)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12))
-                    .onSubmit(addPendingTag)
+    private func tagChip(_ tag: String) -> some View {
+        let isHovered = hoveredTag == tag
 
-                Button(action: addPendingTag) {
-                    Image(systemName: "plus")
+        return HStack(spacing: isHovered ? 5 : 0) {
+            Text(tag)
+                .lineLimit(1)
+
+            if isHovered {
+                Button {
+                    removeTag(tag)
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8, weight: .bold))
+                        .frame(width: 14, height: 14)
                 }
                 .buttonStyle(.plain)
-                .disabled(pendingTag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .foregroundStyle(MomentoTheme.primaryText)
+                .transition(.opacity.combined(with: .scale(scale: 0.82)))
+                .accessibilityLabel(localization.format("Remove %@", tag))
             }
-            .padding(.horizontal, 9)
-            .frame(height: 30)
-            .background {
-                MomentoGlassBackground(cornerRadius: 8)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(MomentoTheme.subtleStroke, lineWidth: 1)
+        }
+        .font(.system(size: 12, weight: .medium))
+        .foregroundStyle(MomentoTheme.primaryText)
+        .padding(.leading, 9)
+        .padding(.trailing, isHovered ? 5 : 9)
+        .frame(height: 26)
+        .glassEffect(.regular.tint(Color.accentColor.opacity(isHovered ? 0.36 : 0.22)), in: Capsule())
+        .contentShape(Capsule())
+        .animation(.smooth(duration: 0.14), value: isHovered)
+        .onHover { hovering in
+            withAnimation(.smooth(duration: 0.14)) {
+                hoveredTag = hovering ? tag : nil
+            }
+        }
+    }
+
+    private var addTagChip: some View {
+        Button {
+            withAnimation(.smooth(duration: 0.16)) {
+                isTagPickerPresented = true
+            }
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 28, height: 26)
+                .glassEffect(.regular, in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .accessibilityLabel(localization.string("Add tag"))
+        .popover(isPresented: $isTagPickerPresented, arrowEdge: .bottom) {
+            tagPicker
+        }
+    }
+
+    private var tagPicker: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(MomentoTheme.primaryText)
+
+                TextField(localization.string("Search tags"), text: $tagSearchQuery)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13, weight: .medium))
+                    .focused($isTagSearchFocused)
+                    .onSubmit(submitTagSearch)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 34)
+            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    if !filteredTagChoices.isEmpty {
+                        Text("\(localization.string("All Tags")) (\(filteredTagChoices.count))")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(MomentoTheme.secondaryText)
+                            .padding(.horizontal, 2)
+
+                        FlowLayout(spacing: 6) {
+                            ForEach(filteredTagChoices, id: \.self) { tag in
+                                tagChoiceButton(tag)
+                            }
+                        }
+                    } else {
+                        Text(localization.string("No matching tags"))
+                            .font(.system(size: 12))
+                            .foregroundStyle(MomentoTheme.secondaryText)
+                            .padding(.vertical, 4)
                     }
+
+                    if shouldShowCreateTag {
+                        Button {
+                            addTag(trimmedTagSearchQuery)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 12, weight: .bold))
+                                Text(localization.format("Create %@", trimmedTagSearchQuery))
+                                    .lineLimit(1)
+                                Spacer(minLength: 0)
+                            }
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(MomentoTheme.primaryText)
+                            .padding(.horizontal, 10)
+                            .frame(height: 30)
+                            .glassEffect(
+                                .regular.tint(Color.accentColor.opacity(isCreateTagRowHovered ? 0.32 : 0.18)),
+                                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                        .pointerStyle(.link)
+                        .onHover { hovering in
+                            withAnimation(.smooth(duration: 0.12)) {
+                                isCreateTagRowHovered = hovering
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 220)
+            .scrollIndicators(.never)
+        }
+        .padding(10)
+        .frame(width: 292)
+        .background {
+            MomentoGlassBackground(
+                glass: .regular.tint(Color.black.opacity(0.16)),
+                cornerRadius: 16
+            )
+        }
+        .task {
+            isTagSearchFocused = true
+        }
+    }
+
+    private func tagChoiceButton(_ tag: String) -> some View {
+        let isSelected = containsTag(tag)
+        let isHovered = hoveredTagChoice == tag
+
+        return Button {
+            guard !isSelected else {
+                return
+            }
+
+            addTag(tag)
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "tag")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(isSelected ? Color.accentColor : MomentoTheme.secondaryText)
+                Text(tag)
+                    .lineLimit(1)
+            }
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(isSelected ? MomentoTheme.secondaryText : MomentoTheme.primaryText)
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .glassEffect(
+                .regular.tint(Color.white.opacity(isHovered || isSelected ? 0.14 : 0.06)),
+                in: Capsule()
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(isSelected)
+        .pointerStyle(.link)
+        .onHover { hovering in
+            withAnimation(.smooth(duration: 0.12)) {
+                hoveredTagChoice = hovering ? tag : nil
             }
         }
     }
@@ -535,11 +686,101 @@ struct MomentoInspectorView: View {
         }
     }
 
-    private func addPendingTag() {
-        let tag = pendingTag.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !tag.isEmpty, !tags.contains(tag) else { return }
-        tags.append(tag)
-        pendingTag = ""
+    private var trimmedTagSearchQuery: String {
+        tagSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var availableTagChoices: [String] {
+        var seen = Set<String>()
+        return (availableTags + tags)
+            .compactMap { tag in
+                let trimmedTag = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmedTag.isEmpty else {
+                    return nil
+                }
+
+                let key = trimmedTag.lowercased()
+                guard seen.insert(key).inserted else {
+                    return nil
+                }
+                return trimmedTag
+            }
+            .sorted { lhs, rhs in
+                lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+            }
+    }
+
+    private var filteredTagChoices: [String] {
+        let query = trimmedTagSearchQuery
+        guard !query.isEmpty else {
+            return availableTagChoices
+        }
+
+        return availableTagChoices.filter {
+            $0.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    private var shouldShowCreateTag: Bool {
+        let query = trimmedTagSearchQuery
+        guard !query.isEmpty else {
+            return false
+        }
+
+        return !availableTagChoices.contains {
+            $0.caseInsensitiveCompare(query) == .orderedSame
+        }
+    }
+
+    private func submitTagSearch() {
+        let query = trimmedTagSearchQuery
+        guard !query.isEmpty else {
+            return
+        }
+
+        if let exactMatch = availableTagChoices.first(where: { $0.caseInsensitiveCompare(query) == .orderedSame }) {
+            addTag(exactMatch)
+        } else if let firstMatch = filteredTagChoices.first(where: { !containsTag($0) }) {
+            addTag(firstMatch)
+        } else if shouldShowCreateTag {
+            addTag(query)
+        }
+    }
+
+    private func addTag(_ tag: String) {
+        let trimmedTag = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedTag.isEmpty else {
+            return
+        }
+
+        if !containsTag(trimmedTag) {
+            tags.append(trimmedTag)
+        }
+        closeTagPicker()
+    }
+
+    private func removeTag(_ tag: String) {
+        tags.removeAll {
+            $0.caseInsensitiveCompare(tag) == .orderedSame
+        }
+    }
+
+    private func containsTag(_ tag: String) -> Bool {
+        tags.contains {
+            $0.caseInsensitiveCompare(tag) == .orderedSame
+        }
+    }
+
+    private func closeTagPicker() {
+        isTagPickerPresented = false
+        resetTagPicker()
+    }
+
+    private func resetTagPicker() {
+        tagSearchQuery = ""
+        hoveredTagChoice = nil
+        isCreateTagRowHovered = false
+        isTagSearchFocused = false
     }
 
     private func updateColorHover(id: String, isHovering: Bool) {

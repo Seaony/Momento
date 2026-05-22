@@ -14,6 +14,7 @@
         <attribute name="pixelHeight" optional="YES" attributeType="Integer 64" usesScalarValueType="YES"/>
         <attribute name="pixelWidth" optional="YES" attributeType="Integer 64" usesScalarValueType="YES"/>
         <attribute name="storageRelativePath" optional="NO" attributeType="String"/>
+        <attribute name="tagsData" optional="YES" attributeType="Binary"/>
         <uniquenessConstraints>
             <uniquenessConstraint>
                 <constraint value="libraryID"/>
@@ -66,7 +67,7 @@
         </uniquenessConstraints>
     </entity>
     <elements>
-        <element name="AssetRecord" positionX="-63" positionY="-18" width="128" height="254"/>
+        <element name="AssetRecord" positionX="-63" positionY="-18" width="128" height="269"/>
         <element name="AssetColorRecord" positionX="108" positionY="-18" width="128" height="149"/>
         <element name="AssetFolderMembershipRecord" positionX="279" positionY="-18" width="128" height="134"/>
         <element name="FolderRecord" positionX="450" positionY="-18" width="128" height="164"/>

@@ -92,6 +92,23 @@
         }
       }
     },
+    "All Tags" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All Tags"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所有标签"
+          }
+        }
+      }
+    },
     "Added" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -802,6 +819,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "内容创建时间"
+          }
+        }
+      }
+    },
+    "Create %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Create %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建 %@"
           }
         }
       }
@@ -2047,6 +2081,23 @@
         }
       }
     },
+    "No matching tags" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No matching tags"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有匹配的标签"
+          }
+        }
+      }
+    },
     "Notes" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2400,6 +2451,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "搜索图片名称"
+          }
+        }
+      }
+    },
+    "Search tags" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search tags"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索标签"
           }
         }
       }

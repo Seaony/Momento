@@ -49,8 +49,16 @@ struct ContentView: View {
         Binding {
             store.selectedAsset?.tags.map(\.name) ?? []
         } set: { names in
-            store.updateSelectedTags(names)
+            do {
+                try store.updateSelectedTags(names)
+            } catch {
+                showImportError(error)
+            }
         }
+    }
+
+    private var availableTagNames: [String] {
+        store.tags.map(\.name)
     }
 
     private var inspectorNotes: Binding<String> {
@@ -154,6 +162,7 @@ struct ContentView: View {
             showsChromeControls: !isModalOverlayVisible,
             inspectorAsset: store.selectedAsset.map { MomentoInspectorAsset(asset: $0, localization: localization) },
             inspectorTags: selectedTags,
+            inspectorAvailableTags: availableTagNames,
             inspectorNotes: inspectorNotes,
             toastRequest: $shellToastRequest,
             onRenameInspectorAsset: renameAssetTitle,

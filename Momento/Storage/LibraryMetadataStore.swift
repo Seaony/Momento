@@ -87,11 +87,16 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
                 record.setValue(asset.contentHash, forKey: "contentHash")
                 record.setValue(asset.dimensions?.width, forKey: "pixelWidth")
                 record.setValue(asset.dimensions?.height, forKey: "pixelHeight")
-                record.setValue(exifMetadataData(asset.exifMetadata), forKey: "exifMetadataData")
+                let storedExifMetadataData = exifMetadataData(asset.exifMetadata)
+                record.setValue(storedExifMetadataData, forKey: "exifMetadataData")
                 record.setValue(asset.isFavorite, forKey: "isFavorite")
                 record.setValue(asset.importedAt, forKey: "importedAt")
+                record.setValue(tagsData(asset.tags), forKey: "tagsData")
                 saveColors(asset.paletteColors, forAssetID: asset.id)
-                savedAssets.append(asset)
+
+                var savedAsset = asset
+                savedAsset.exifMetadata = exifMetadata(from: storedExifMetadataData)
+                savedAssets.append(savedAsset)
             }
 
             if context.hasChanges {
@@ -266,6 +271,24 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         }
     }
 
+    func updateTags(_ tags: [TagItem], forAssetID assetID: AssetItem.ID) throws -> AssetItem {
+        try context.performAndWait {
+            guard let record = try assetRecord(id: assetID) else {
+                throw LibraryMetadataError.missingAsset
+            }
+
+            record.setValue(tagsData(tags), forKey: "tagsData")
+            if context.hasChanges {
+                try context.save()
+            }
+
+            guard let asset = try assets(ids: [assetID]).first else {
+                throw LibraryMetadataError.missingAsset
+            }
+            return asset
+        }
+    }
+
     func replaceColors(_ colors: [AssetColor], forAssetID assetID: AssetItem.ID) throws -> AssetItem {
         try context.performAndWait {
             guard try assetRecord(id: assetID) != nil else {
@@ -401,7 +424,7 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
             contentHash: contentHash,
             dimensions: dimensions,
             exifMetadata: exifMetadata(from: record.value(forKey: "exifMetadataData")),
-            tags: [],
+            tags: tags(from: record.value(forKey: "tagsData")),
             folderIDs: folderIDs,
             paletteColors: paletteColors,
             thumbnailURL: resolvedThumbnailURL,
@@ -668,6 +691,23 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         }
 
         return try? JSONDecoder.momento.decode(AssetExifMetadata.self, from: data)
+    }
+
+    private func tagsData(_ tags: [TagItem]) -> Data? {
+        guard !tags.isEmpty else {
+            return nil
+        }
+
+        return try? JSONEncoder.momento.encode(tags)
+    }
+
+    private func tags(from value: Any?) -> [TagItem] {
+        guard let data = value as? Data,
+              let tags = try? JSONDecoder.momento.decode([TagItem].self, from: data) else {
+            return []
+        }
+
+        return tags
     }
 
     private func int64Value(_ value: Any?) -> Int64? {

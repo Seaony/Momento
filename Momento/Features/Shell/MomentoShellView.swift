@@ -41,6 +41,7 @@ struct MomentoShellView<Content: View>: View {
     var showsChromeControls: Bool
     var inspectorAsset: MomentoInspectorAsset?
     @Binding var inspectorTags: [String]
+    var inspectorAvailableTags: [String]
     @Binding var inspectorNotes: String
     @Binding var toastRequest: MomentoToastRequest?
     var onRenameInspectorAsset: (MomentoInspectorAsset.ID, String) -> Void
@@ -87,6 +88,7 @@ struct MomentoShellView<Content: View>: View {
         showsChromeControls: Bool = true,
         inspectorAsset: MomentoInspectorAsset? = nil,
         inspectorTags: Binding<[String]> = .constant([]),
+        inspectorAvailableTags: [String] = [],
         inspectorNotes: Binding<String> = .constant(""),
         toastRequest: Binding<MomentoToastRequest?> = .constant(nil),
         onRenameInspectorAsset: @escaping (MomentoInspectorAsset.ID, String) -> Void = { _, _ in },
@@ -121,6 +123,7 @@ struct MomentoShellView<Content: View>: View {
         self.showsChromeControls = showsChromeControls
         self.inspectorAsset = inspectorAsset
         self._inspectorTags = inspectorTags
+        self.inspectorAvailableTags = inspectorAvailableTags
         self._inspectorNotes = inspectorNotes
         self._toastRequest = toastRequest
         self.onRenameInspectorAsset = onRenameInspectorAsset
@@ -237,6 +240,7 @@ struct MomentoShellView<Content: View>: View {
         MomentoInspectorView(
             asset: inspectorAsset,
             tags: $inspectorTags,
+            availableTags: inspectorAvailableTags,
             notes: $inspectorNotes,
             onTitleCommit: onRenameInspectorAsset,
             onColorCopied: showColorCopyToast
