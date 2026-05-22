@@ -178,10 +178,16 @@ struct ContentView: View {
         }
         .toolbar {
             if !isModalOverlayVisible {
-                ToolbarItemGroup(placement: .primaryAction) {
+                ToolbarItem(placement: .primaryAction) {
                     toolbarViewModeSwitcher
+                        .padding(.trailing, 8)
+                }
+                .sharedBackgroundVisibility(.hidden)
+
+                ToolbarItem(placement: .primaryAction) {
                     toolbarSearchControl
                 }
+                .sharedBackgroundVisibility(.hidden)
             }
         }
         .navigationTitle("")
@@ -200,7 +206,7 @@ struct ContentView: View {
     }
 
     private var toolbarViewModeSwitcher: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: 3) {
             ForEach(AssetViewMode.allCases) { viewMode in
                 let isSelected = store.viewMode == viewMode
                 let isHovered = hoveredToolbarViewMode == viewMode
@@ -209,13 +215,13 @@ struct ContentView: View {
                     store.setViewMode(viewMode)
                 } label: {
                     Image(systemName: systemImage(for: viewMode))
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(isSelected ? Color.white : MomentoTheme.secondaryText)
-                        .frame(width: 30, height: 24)
+                        .frame(width: 38, height: 30)
                         .background {
                             toolbarSegmentBackground(isSelected: isSelected, isHovered: isHovered)
                         }
-                        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .pointerStyle(.link)
@@ -232,29 +238,30 @@ struct ContentView: View {
                 }
             }
         }
-        .padding(3)
-        .frame(height: 30)
+        .padding(4)
+        .frame(height: 38)
         .background {
-            toolbarControlBackground(cornerRadius: 10)
+            toolbarControlBackground(cornerRadius: 12)
         }
     }
 
     @ViewBuilder
     private var toolbarSearchControl: some View {
         if isToolbarSearchExpanded || !store.searchQuery.isEmpty {
-            HStack(spacing: 7) {
+            HStack(spacing: 9) {
                 Image(systemName: "magnifyingglass")
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(MomentoTheme.secondaryText)
 
                 TextField(localization.string("Search assets, tags, colors..."), text: $store.searchQuery)
                     .textFieldStyle(.plain)
                     .focused($isToolbarSearchFocused)
-                    .frame(width: 260)
+                    .frame(width: 280)
             }
-            .padding(.horizontal, 10)
-            .frame(height: 28)
+            .padding(.horizontal, 13)
+            .frame(height: 38)
             .background {
-                toolbarControlBackground(cornerRadius: 10)
+                toolbarControlBackground(cornerRadius: 12)
             }
             .onAppear {
                 isToolbarSearchFocused = true
@@ -267,13 +274,13 @@ struct ContentView: View {
                 isToolbarSearchFocused = true
             } label: {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(MomentoTheme.secondaryText)
-                    .frame(width: 34, height: 28)
+                    .frame(width: 44, height: 38)
                     .background {
-                        toolbarControlBackground(cornerRadius: 10)
+                        toolbarControlBackground(cornerRadius: 12)
                     }
-                    .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             .buttonStyle(.plain)
             .pointerStyle(.link)
@@ -283,7 +290,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private func toolbarSegmentBackground(isSelected: Bool, isHovered: Bool) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
 
         if isSelected {
             shape.fill(Color.accentColor)
