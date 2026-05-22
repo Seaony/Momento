@@ -53,6 +53,27 @@ private enum AssetCollectionMetrics {
     static let contextMenuSeparatorVerticalPadding: CGFloat = 3
     static let contextMenuSeparatorAlpha: CGFloat = 0.1
     static let zeroEdgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+
+    static func columnLayout(
+        availableWidth: CGFloat,
+        minimumItemWidth: CGFloat,
+        interitemSpacing: CGFloat
+    ) -> AssetColumnLayout {
+        let columnCount = max(Int((availableWidth + interitemSpacing) / (minimumItemWidth + interitemSpacing)), 1)
+        let spacingWidth = CGFloat(max(columnCount - 1, 0)) * interitemSpacing
+        let itemWidth = max((availableWidth - spacingWidth) / CGFloat(columnCount), minimumItemWidth)
+
+        return AssetColumnLayout(columnCount: columnCount, itemWidth: itemWidth)
+    }
+
+    static func gridItemHeight(for itemWidth: CGFloat) -> CGFloat {
+        max(gridItemHeight, itemWidth * gridItemHeight / gridItemWidth)
+    }
+}
+
+private struct AssetColumnLayout {
+    let columnCount: Int
+    let itemWidth: CGFloat
 }
 
 enum AssetContextMenuAction: CaseIterable {
@@ -568,7 +589,11 @@ private final class AssetGridCollectionViewLayout: NSCollectionViewLayout {
     private var preparedColumnCount = 1
     private var preparedItemCount = 0
 
-    private let itemSize = NSSize(
+    private let minimumItemSize = NSSize(
+        width: AssetCollectionMetrics.gridItemWidth,
+        height: AssetCollectionMetrics.gridItemHeight
+    )
+    private var preparedItemSize = NSSize(
         width: AssetCollectionMetrics.gridItemWidth,
         height: AssetCollectionMetrics.gridItemHeight
     )
@@ -595,12 +620,21 @@ private final class AssetGridCollectionViewLayout: NSCollectionViewLayout {
         let itemCount = collectionView.numberOfItems(inSection: 0)
         preparedItemCount = itemCount
         preparedBoundsSize = collectionView.bounds.size
-        let contentWidth = max(collectionView.bounds.width, itemSize.width + sectionInset.left + sectionInset.right)
-        let availableWidth = max(contentWidth - sectionInset.left - sectionInset.right, itemSize.width)
-        let columnCount = max(Int((availableWidth + interitemSpacing) / (itemSize.width + interitemSpacing)), 1)
+        let contentWidth = max(collectionView.bounds.width, minimumItemSize.width + sectionInset.left + sectionInset.right)
+        let availableWidth = max(contentWidth - sectionInset.left - sectionInset.right, minimumItemSize.width)
+        let columnLayout = AssetCollectionMetrics.columnLayout(
+            availableWidth: availableWidth,
+            minimumItemWidth: minimumItemSize.width,
+            interitemSpacing: interitemSpacing
+        )
+        let columnCount = columnLayout.columnCount
+        let itemSize = NSSize(
+            width: columnLayout.itemWidth,
+            height: AssetCollectionMetrics.gridItemHeight(for: columnLayout.itemWidth)
+        )
+        preparedItemSize = itemSize
         preparedColumnCount = columnCount
-        let columnsWidth = CGFloat(columnCount) * itemSize.width + CGFloat(columnCount - 1) * interitemSpacing
-        let startX = sectionInset.left + max((availableWidth - columnsWidth) / 2, 0)
+        let startX = sectionInset.left
         var attributesByIndexPath: [IndexPath: NSCollectionViewLayoutAttributes] = [:]
         var attributesList: [NSCollectionViewLayoutAttributes] = []
         attributesList.reserveCapacity(itemCount)
@@ -643,7 +677,7 @@ private final class AssetGridCollectionViewLayout: NSCollectionViewLayout {
             return []
         }
 
-        let rowStride = itemSize.height + lineSpacing
+        let rowStride = preparedItemSize.height + lineSpacing
         let firstRow = max(Int(floor((rect.minY - sectionInset.top) / rowStride)), 0)
         let maximumRow = max((preparedItemCount - 1) / preparedColumnCount, 0)
         let lastRow = min(max(Int(floor((rect.maxY - sectionInset.top) / rowStride)), 0), maximumRow)
@@ -678,7 +712,7 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
     private var contentSize: NSSize = .zero
     private var preparedBoundsSize: NSSize = .zero
 
-    private let itemWidth = AssetCollectionMetrics.masonryItemWidth
+    private let minimumItemWidth = AssetCollectionMetrics.masonryItemWidth
     private let interitemSpacing: CGFloat = 4
     private let lineSpacing: CGFloat = 4
     private let sectionInset = NSEdgeInsets(
@@ -710,11 +744,16 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
 
         let itemCount = collectionView.numberOfItems(inSection: 0)
         preparedBoundsSize = collectionView.bounds.size
-        let contentWidth = max(collectionView.bounds.width, itemWidth + sectionInset.left + sectionInset.right)
-        let availableWidth = max(contentWidth - sectionInset.left - sectionInset.right, itemWidth)
-        let columnCount = max(Int((availableWidth + interitemSpacing) / (itemWidth + interitemSpacing)), 1)
-        let columnsWidth = CGFloat(columnCount) * itemWidth + CGFloat(columnCount - 1) * interitemSpacing
-        let startX = sectionInset.left + max((availableWidth - columnsWidth) / 2, 0)
+        let contentWidth = max(collectionView.bounds.width, minimumItemWidth + sectionInset.left + sectionInset.right)
+        let availableWidth = max(contentWidth - sectionInset.left - sectionInset.right, minimumItemWidth)
+        let columnLayout = AssetCollectionMetrics.columnLayout(
+            availableWidth: availableWidth,
+            minimumItemWidth: minimumItemWidth,
+            interitemSpacing: interitemSpacing
+        )
+        let columnCount = columnLayout.columnCount
+        let itemWidth = columnLayout.itemWidth
+        let startX = sectionInset.left
         var columnHeights = Array(repeating: sectionInset.top, count: columnCount)
         var attributesByIndexPath: [IndexPath: NSCollectionViewLayoutAttributes] = [:]
         var attributesList: [NSCollectionViewLayoutAttributes] = []
@@ -1203,7 +1242,12 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     }
 
     private func imageContentMode(for asset: AssetItem, viewMode: AssetViewMode) -> AssetPreviewImageView.ContentMode {
-        return .aspectFit
+        switch viewMode {
+        case .grid, .masonry:
+            return .aspectFill
+        case .list:
+            return .aspectFit
+        }
     }
 
     func previewSourceFrameInScreen() -> NSRect? {
