@@ -521,9 +521,9 @@ struct ContentView: View {
     private var commands: [MomentoCommand] {
         [
             MomentoCommand(id: "import", title: localization.string("Import Assets"), subtitle: localization.string("Choose files or folders"), systemImage: "square.and.arrow.down", shortcut: "I"),
-            MomentoCommand(id: "view-masonry", title: localization.string("Masonry View"), subtitle: localization.string("Show adaptive visual grid"), systemImage: "rectangle.grid.2x2", shortcut: "1"),
-            MomentoCommand(id: "view-grid", title: localization.string("Grid View"), subtitle: localization.string("Show uniform thumbnails"), systemImage: "square.grid.3x3", shortcut: "2"),
-            MomentoCommand(id: "view-list", title: localization.string("List View"), subtitle: localization.string("Show compact rows"), systemImage: "list.bullet", shortcut: "3"),
+            MomentoCommand(id: "view-masonry", title: localization.string("Masonry View"), subtitle: localization.string("Show adaptive visual grid"), systemImage: "circle.hexagongrid", shortcut: "1"),
+            MomentoCommand(id: "view-grid", title: localization.string("Grid View"), subtitle: localization.string("Show uniform thumbnails"), systemImage: "square.grid.2x2", shortcut: "2"),
+            MomentoCommand(id: "view-list", title: localization.string("List View"), subtitle: localization.string("Show compact rows"), systemImage: "rectangle.grid.1x2", shortcut: "3"),
             MomentoCommand(id: "toggle-inspector", title: localization.string("Toggle Inspector"), subtitle: localization.string("Show or hide asset details"), systemImage: "sidebar.right", shortcut: "⌥⌘I"),
             MomentoCommand(id: "quick-preview", title: localization.string("Quick Preview"), subtitle: localization.string("Preview the selected asset"), systemImage: "eye", shortcut: "Space")
         ]
@@ -596,11 +596,11 @@ struct ContentView: View {
     private func systemImage(for viewMode: AssetViewMode) -> String {
         switch viewMode {
         case .masonry:
-            "rectangle.grid.1x2"
+            "circle.hexagongrid"
         case .grid:
-            "square.grid.3x3"
+            "square.grid.2x2"
         case .list:
-            "list.bullet"
+            "rectangle.grid.1x2"
         }
     }
 
