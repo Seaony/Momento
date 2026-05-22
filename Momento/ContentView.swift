@@ -176,7 +176,7 @@ struct ContentView: View {
             }
         }
         .toolbar {
-            if !isModalOverlayVisible && !isTagManagementSelected {
+            if !isModalOverlayVisible {
                 ToolbarSpacer(.flexible)
                 ToolbarItemGroup(placement: .automatic) {
                     toolbarViewModeSwitcher

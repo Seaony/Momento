@@ -12,6 +12,7 @@ struct MomentoTagManagementView: View {
     @State private var deletingTag: TagSummary?
     @State private var hoveredRowID: TagItem.ID?
     @State private var hoveredActionID: String?
+    @State private var hoveredMenuID: TagItem.ID?
     @FocusState private var isNameFieldFocused: Bool
 
     var body: some View {
@@ -47,29 +48,25 @@ struct MomentoTagManagementView: View {
     }
 
     private var tagList: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            headerRow
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                headerRow
 
-            ForEach(tags) { tag in
-                tagRow(tag)
+                ForEach(tags) { tag in
+                    tagRow(tag)
 
-                if tag.id != tags.last?.id {
-                    Rectangle()
-                        .fill(Color.white.opacity(0.08))
-                        .frame(height: 1)
-                        .padding(.leading, 42)
+                    if tag.id != tags.last?.id {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.08))
+                            .frame(height: 1)
+                            .padding(.leading, 42)
+                    }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .background {
-            MomentoGlassBackground(
-                glass: .regular.tint(Color.black.opacity(0.12)),
-                cornerRadius: 16
-            )
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .frame(maxWidth: 720, alignment: .topLeading)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .scrollIndicators(.never)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var headerRow: some View {
@@ -81,12 +78,13 @@ struct MomentoTagManagementView: View {
                 .frame(width: 112, alignment: .trailing)
 
             Color.clear
-                .frame(width: 70)
+                .frame(width: 44)
         }
         .font(.system(size: 11, weight: .semibold))
         .foregroundStyle(MomentoTheme.tertiaryText)
         .padding(.horizontal, 14)
         .frame(height: 38)
+        .frame(maxWidth: .infinity)
     }
 
     private func tagRow(_ summary: TagSummary) -> some View {
@@ -148,29 +146,15 @@ struct MomentoTagManagementView: View {
                         cancelEditing()
                     }
                 } else {
-                    actionButton(
-                        id: "\(summary.id)-edit",
-                        systemImage: "pencil",
-                        accessibilityLabel: localization.string("Edit Tag")
-                    ) {
-                        beginEditing(summary)
-                    }
-
-                    actionButton(
-                        id: "\(summary.id)-delete",
-                        systemImage: "trash",
-                        accessibilityLabel: localization.string("Delete Tag"),
-                        role: .destructive
-                    ) {
-                        deletingTag = summary
-                    }
+                    tagMenu(summary)
                 }
             }
-            .frame(width: 70, alignment: .trailing)
+            .frame(width: 44, alignment: .trailing)
         }
         .foregroundStyle(MomentoTheme.primaryText)
         .padding(.horizontal, 14)
         .frame(height: 52)
+        .frame(maxWidth: .infinity)
         .background {
             if isHovered {
                 Rectangle().fill(Color.white.opacity(0.05))
@@ -185,6 +169,46 @@ struct MomentoTagManagementView: View {
         .task(id: editingTagID) {
             if editingTagID == summary.id {
                 isNameFieldFocused = true
+            }
+        }
+    }
+
+    private func tagMenu(_ summary: TagSummary) -> some View {
+        let isHovered = hoveredMenuID == summary.id
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+
+        return Menu {
+            Button {
+                beginEditing(summary)
+            } label: {
+                Label(localization.string("Edit Tag"), systemImage: "pencil")
+            }
+
+            Button(role: .destructive) {
+                deletingTag = summary
+            } label: {
+                Label(localization.string("Delete Tag"), systemImage: "trash")
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 14, weight: .semibold))
+                .frame(width: 30, height: 28)
+                .background {
+                    if isHovered {
+                        shape.fill(MomentoTheme.sidebarIconHoverBackground)
+                    }
+                }
+                .contentShape(shape)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .foregroundStyle(MomentoTheme.primaryText)
+        .contentShape(shape)
+        .pointerStyle(.link)
+        .accessibilityLabel(localization.string("More Actions"))
+        .onHover { hovering in
+            withAnimation(.smooth(duration: 0.12)) {
+                hoveredMenuID = hovering ? summary.id : nil
             }
         }
     }
