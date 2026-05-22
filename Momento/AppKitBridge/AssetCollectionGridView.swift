@@ -39,6 +39,9 @@ private enum AssetCollectionMetrics {
     static let favoriteButtonTopInset: CGFloat = 10.5
     static let favoriteButtonCornerRadius: CGFloat = favoriteButtonHeight / 2
     static let favoriteButtonBackgroundAlpha: CGFloat = 0.3
+    static let favoriteButtonAppearanceAnimationDuration: CFTimeInterval = 0.14
+    static let favoriteButtonBackgroundAnimationDuration: CFTimeInterval = 0.12
+    static let favoriteButtonEntranceScale: CGFloat = 0.9
     static let selectionBackgroundAnimationDuration: CFTimeInterval = 0.12
     static let titleTextColor = NSColor.labelColor.withAlphaComponent(0.5)
     static let subtitleTextColor = NSColor.labelColor.withAlphaComponent(0.3)
@@ -984,7 +987,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         containerView.translatesAutoresizingMaskIntoConstraints = false
         containerView.hoverChanged = { [weak self] isHovered in
             self?.contentView.isHovered = isHovered
-            self?.updateFavoriteButton()
+            self?.updateFavoriteButton(animated: true)
             self?.favoriteButton.synchronizeHoverStateWithPointer()
             if isHovered {
                 self?.onHoverPreviewChange?(true)
@@ -1015,7 +1018,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         favoriteButton.layer?.cornerRadius = AssetCollectionMetrics.favoriteButtonCornerRadius
         favoriteButton.layer?.cornerCurve = .continuous
         favoriteButton.hoverChanged = { [weak self] _ in
-            self?.updateFavoriteButton()
+            self?.updateFavoriteButton(animated: true)
         }
         favoriteButton.toolTip = localization.string("Favorites")
         favoriteButton.isHidden = true
@@ -1157,13 +1160,13 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         dimensionBadgeView.isHidden = true
         separatorView.isHidden = true
         containerView.resetHoverState()
-        favoriteButton.resetHoverState()
+        favoriteButton.resetAppearance()
         onHoverPreviewChange = nil
         onContextMenuOpen = nil
         onContextMenuAction = nil
         onFavoriteToggle = nil
         asset = nil
-        updateFavoriteButton()
+        updateFavoriteButton(animated: false)
         contentView.isHovered = false
         contentView.isSelected = false
         contentView.viewMode = .grid
@@ -1190,7 +1193,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         )
         previewImageView.contentMode = imageContentMode(for: asset, viewMode: viewMode)
         applyModeLayout()
-        updateFavoriteButton()
+        updateFavoriteButton(animated: false)
         containerView.synchronizeHoverStateWithPointer()
         favoriteButton.synchronizeHoverStateWithPointer()
     }
@@ -1201,7 +1204,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         }
 
         self.asset = asset
-        updateFavoriteButton()
+        updateFavoriteButton(animated: true)
     }
 
     @objc private func handleFavoriteClick(_ sender: NSButton) {
@@ -1297,17 +1300,14 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
             : AssetCollectionMetrics.listDateTextColor
     }
 
-    private func updateFavoriteButton() {
+    private func updateFavoriteButton(animated: Bool = true) {
         guard let asset else {
-            favoriteButton.isHidden = true
             favoriteButton.image = nil
-            favoriteButton.resetHoverState()
-            favoriteButton.layer?.backgroundColor = NSColor.clear.cgColor
+            favoriteButton.resetAppearance()
             return
         }
 
         let isVisible = asset.isFavorite || contentView.isHovered
-        favoriteButton.isHidden = !isVisible
         if !isVisible {
             favoriteButton.resetHoverState()
         }
@@ -1315,9 +1315,8 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         favoriteButton.contentTintColor = asset.isFavorite
             ? .systemRed
             : NSColor.white.withAlphaComponent(0.92)
-        favoriteButton.layer?.backgroundColor = favoriteButton.isPointerInside
-            ? NSColor.black.withAlphaComponent(AssetCollectionMetrics.favoriteButtonBackgroundAlpha).cgColor
-            : NSColor.clear.cgColor
+        favoriteButton.setHoverBackgroundVisible(isVisible && favoriteButton.isPointerInside, animated: animated)
+        favoriteButton.setVisible(isVisible, animated: animated)
         favoriteButton.toolTip = localization.string(asset.isFavorite ? "Favorited" : "Favorites")
     }
 
@@ -1842,8 +1841,13 @@ private final class AssetContextMenuRowView: NSView {
 }
 
 private final class FavoriteButton: NSButton {
+    private static let backgroundAnimationKey = "favoriteButtonBackground"
+    private static let scaleAnimationKey = "favoriteButtonScale"
+
     var hoverChanged: ((Bool) -> Void)?
     private var trackingArea: NSTrackingArea?
+    private var visibilityAnimationGeneration = 0
+    private var showsHoverBackground = false
     private(set) var isPointerInside = false
 
     override func updateTrackingAreas() {
@@ -1887,6 +1891,17 @@ private final class FavoriteButton: NSButton {
         setHovered(false, notify: false)
     }
 
+    func resetAppearance() {
+        visibilityAnimationGeneration += 1
+        isEnabled = false
+        isHidden = true
+        alphaValue = 1
+        resetHoverState()
+        resetLayerAnimations()
+        setHoverBackgroundVisible(false, animated: false)
+        layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
     func synchronizeHoverStateWithPointer() {
         guard let window,
               !isHidden,
@@ -1899,6 +1914,89 @@ private final class FavoriteButton: NSButton {
         setHovered(bounds.contains(pointerLocation) && visibleRect.contains(pointerLocation))
     }
 
+    func setVisible(_ isVisible: Bool, animated: Bool) {
+        visibilityAnimationGeneration += 1
+        let generation = visibilityAnimationGeneration
+
+        guard animated && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            resetLayerAnimations()
+            alphaValue = 1
+            isEnabled = isVisible
+            isHidden = !isVisible
+            return
+        }
+
+        if isVisible {
+            let shouldAnimateEntrance = isHidden
+            isHidden = false
+            isEnabled = true
+
+            if shouldAnimateEntrance {
+                alphaValue = 0
+                animateEntrance()
+            } else {
+                alphaValue = 1
+            }
+        } else {
+            guard !isHidden else {
+                isEnabled = false
+                alphaValue = 1
+                return
+            }
+
+            isEnabled = false
+            resetLayerAnimations()
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = AssetCollectionMetrics.favoriteButtonAppearanceAnimationDuration * 0.75
+                context.timingFunction = Self.favoriteTimingFunction()
+                animator().alphaValue = 0
+            } completionHandler: { [weak self] in
+                Task { @MainActor [weak self] in
+                    guard let self,
+                          self.visibilityAnimationGeneration == generation else {
+                        return
+                    }
+
+                    self.isHidden = true
+                    self.alphaValue = 1
+                }
+            }
+        }
+    }
+
+    func setHoverBackgroundVisible(_ isVisible: Bool, animated: Bool) {
+        guard showsHoverBackground != isVisible else {
+            return
+        }
+
+        showsHoverBackground = isVisible
+        guard let layer else {
+            return
+        }
+
+        let targetColor = isVisible
+            ? NSColor.black.withAlphaComponent(AssetCollectionMetrics.favoriteButtonBackgroundAlpha).cgColor
+            : NSColor.clear.cgColor
+        let startColor = layer.presentation()?.backgroundColor ?? layer.backgroundColor ?? NSColor.clear.cgColor
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer.backgroundColor = targetColor
+        CATransaction.commit()
+
+        guard animated && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            layer.removeAnimation(forKey: Self.backgroundAnimationKey)
+            return
+        }
+
+        let animation = CABasicAnimation(keyPath: "backgroundColor")
+        animation.fromValue = startColor
+        animation.toValue = targetColor
+        animation.duration = AssetCollectionMetrics.favoriteButtonBackgroundAnimationDuration
+        animation.timingFunction = Self.favoriteTimingFunction()
+        layer.add(animation, forKey: Self.backgroundAnimationKey)
+    }
+
     private func setHovered(_ isHovered: Bool, notify: Bool = true) {
         guard isPointerInside != isHovered else {
             return
@@ -1908,6 +2006,36 @@ private final class FavoriteButton: NSButton {
         if notify {
             hoverChanged?(isHovered)
         }
+    }
+
+    private func animateEntrance() {
+        guard let layer else {
+            alphaValue = 1
+            return
+        }
+
+        resetLayerAnimations()
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = AssetCollectionMetrics.favoriteButtonAppearanceAnimationDuration
+            context.timingFunction = Self.favoriteTimingFunction()
+            animator().alphaValue = 1
+        }
+
+        let scaleAnimation = CABasicAnimation(keyPath: "transform.scale")
+        scaleAnimation.fromValue = AssetCollectionMetrics.favoriteButtonEntranceScale
+        scaleAnimation.toValue = 1
+        scaleAnimation.duration = AssetCollectionMetrics.favoriteButtonAppearanceAnimationDuration
+        scaleAnimation.timingFunction = Self.favoriteTimingFunction()
+        layer.add(scaleAnimation, forKey: Self.scaleAnimationKey)
+    }
+
+    private func resetLayerAnimations() {
+        layer?.removeAnimation(forKey: Self.scaleAnimationKey)
+        layer?.removeAnimation(forKey: Self.backgroundAnimationKey)
+    }
+
+    private static func favoriteTimingFunction() -> CAMediaTimingFunction {
+        CAMediaTimingFunction(controlPoints: 0.22, 1, 0.36, 1)
     }
 }
 
