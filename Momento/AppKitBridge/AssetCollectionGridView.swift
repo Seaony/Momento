@@ -15,7 +15,9 @@ private enum AssetCollectionMetrics {
     static let gridItemHeight: CGFloat = 190
     static let selectionCornerRadius = MomentoTheme.assetImageCornerRadius
     static let hoverBackgroundAlpha: CGFloat = 0.08
-    static let imageCornerRadius = MomentoTheme.assetImageCornerRadius
+    static let masonryImageCornerRadius = MomentoTheme.assetImageCornerRadius
+    static let gridImageCornerRadius: CGFloat = 10
+    static let listImageCornerRadius: CGFloat = 6
     static let dimensionBadgeCornerRadius: CGFloat = 5
     static let dimensionBadgeHeight: CGFloat = 16
     static let dimensionBadgeHorizontalPadding: CGFloat = 3
@@ -25,8 +27,8 @@ private enum AssetCollectionMetrics {
     static let listThumbnailSize: CGFloat = 52
     static let listSeparatorAlpha: CGFloat = 0.1
     static let selectionBackgroundAnimationDuration: CFTimeInterval = 0.12
-    static let titleTextColor = NSColor.labelColor.withAlphaComponent(0.82)
-    static let subtitleTextColor = NSColor.labelColor.withAlphaComponent(0.58)
+    static let titleTextColor = NSColor.labelColor.withAlphaComponent(0.72)
+    static let subtitleTextColor = NSColor.labelColor.withAlphaComponent(0.46)
 }
 
 struct AssetCollectionGridView: NSViewRepresentable {
@@ -89,10 +91,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
         collectionView.addGestureRecognizer(doubleClickRecognizer)
 
         let scrollView = NSScrollView()
-        scrollView.drawsBackground = false
-        scrollView.hasVerticalScroller = false
-        scrollView.hasHorizontalScroller = false
-        scrollView.autohidesScrollers = true
+        configureScrollView(scrollView)
         scrollView.documentView = collectionView
 
         context.coordinator.collectionView = collectionView
@@ -101,6 +100,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         context.coordinator.parent = self
+        configureScrollView(scrollView)
 
         guard let collectionView = scrollView.documentView as? NSCollectionView else {
             return
@@ -158,6 +158,16 @@ struct AssetCollectionGridView: NSViewRepresentable {
         }
 
         return layout
+    }
+
+    private func configureScrollView(_ scrollView: NSScrollView) {
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = false
+        scrollView.hasHorizontalScroller = false
+        scrollView.verticalScroller = nil
+        scrollView.horizontalScroller = nil
+        scrollView.autohidesScrollers = true
+        scrollView.scrollerStyle = .overlay
     }
 }
 
@@ -512,7 +522,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         contentView.layer?.masksToBounds = false
 
         previewImageView.translatesAutoresizingMaskIntoConstraints = false
-        previewImageView.cornerRadius = AssetCollectionMetrics.imageCornerRadius
+        previewImageView.cornerRadius = AssetCollectionMetrics.gridImageCornerRadius
 
         fileNameLabel.lineBreakMode = .byTruncatingTail
         fileNameLabel.maximumNumberOfLines = 1
@@ -600,7 +610,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
             fileNameLabel.leadingAnchor.constraint(equalTo: previewImageView.trailingAnchor, constant: 10),
             fileNameLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
-            fileNameLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 14),
+            fileNameLabel.bottomAnchor.constraint(equalTo: contentView.centerYAnchor, constant: -1),
 
             subtitleLabel.leadingAnchor.constraint(equalTo: fileNameLabel.leadingAnchor),
             subtitleLabel.trailingAnchor.constraint(equalTo: fileNameLabel.trailingAnchor),
@@ -654,12 +664,14 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
             subtitleLabel.font = .systemFont(ofSize: 11, weight: .regular)
             subtitleLabel.textColor = AssetCollectionMetrics.subtitleTextColor
             separatorView.isHidden = true
+            previewImageView.cornerRadius = AssetCollectionMetrics.gridImageCornerRadius
             NSLayoutConstraint.activate(gridConstraints)
         case .masonry:
             fileNameLabel.isHidden = true
             subtitleLabel.isHidden = true
             dimensionBadgeView.isHidden = dimensionBadgeView.stringValue.isEmpty
             separatorView.isHidden = true
+            previewImageView.cornerRadius = AssetCollectionMetrics.masonryImageCornerRadius
             NSLayoutConstraint.activate(masonryConstraints)
         case .list:
             fileNameLabel.isHidden = false
@@ -676,6 +688,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
             subtitleLabel.font = .systemFont(ofSize: 11, weight: .regular)
             subtitleLabel.textColor = AssetCollectionMetrics.subtitleTextColor
             separatorView.isHidden = false
+            previewImageView.cornerRadius = AssetCollectionMetrics.listImageCornerRadius
             NSLayoutConstraint.activate(listConstraints)
         }
     }
@@ -689,10 +702,6 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     }
 
     private func imageContentMode(for asset: AssetItem, viewMode: AssetViewMode) -> AssetPreviewImageView.ContentMode {
-        if (asset.kind == .image || asset.kind == .gif), viewMode != .masonry {
-            return .aspectFill
-        }
-
         return .aspectFit
     }
 
@@ -724,7 +733,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
             return nil
         }
 
-        let rectInWindow = previewImageView.convert(previewImageView.bounds, to: nil)
+        let rectInWindow = previewImageView.convert(previewImageView.visibleImageBounds, to: nil)
         return window.convertToScreen(rectInWindow)
     }
 }
@@ -764,12 +773,26 @@ private final class AssetPreviewImageView: NSView {
             return
         }
 
-        let clipPath = NSBezierPath(roundedRect: bounds, xRadius: cornerRadius, yRadius: cornerRadius)
+        let drawRect = imageDrawRect(for: image.size)
+        let clipPath = NSBezierPath(roundedRect: visibleImageBounds, xRadius: cornerRadius, yRadius: cornerRadius)
         NSGraphicsContext.saveGraphicsState()
         clipPath.addClip()
         NSGraphicsContext.current?.imageInterpolation = .high
-        image.draw(in: imageDrawRect(for: image.size))
+        image.draw(in: drawRect)
         NSGraphicsContext.restoreGraphicsState()
+    }
+
+    var visibleImageBounds: NSRect {
+        guard let image, image.size.width > 0, image.size.height > 0, bounds.width > 0, bounds.height > 0 else {
+            return bounds
+        }
+
+        switch contentMode {
+        case .aspectFit:
+            return imageDrawRect(for: image.size).intersection(bounds)
+        case .aspectFill:
+            return bounds
+        }
     }
 
     private func imageDrawRect(for imageSize: NSSize) -> NSRect {
