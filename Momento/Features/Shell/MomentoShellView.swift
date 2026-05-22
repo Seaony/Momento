@@ -54,11 +54,6 @@ struct MomentoShellView<Content: View>: View {
     @State private var sidebarWidth = MomentoTheme.sidebarWidth
     @State private var sidebarResizeStartWidth: CGFloat?
     @State private var isSidebarCollapsed = false
-    @State private var inspectorWidth = MomentoTheme.inspectorMinWidth
-    @State private var inspectorResizeStartWidth: CGFloat?
-    @State private var availableShellWidth = MomentoTheme.defaultWindowWidth
-    @State private var isInspectorHovered = false
-    @State private var isInspectorResizeHandleHovered = false
     @State private var activeToastMessage: String?
     @State private var isToastVisible = false
     @State private var toastToken = UUID()
@@ -141,17 +136,6 @@ struct MomentoShellView<Content: View>: View {
 
     var body: some View {
         shellContent
-            .background {
-                GeometryReader { proxy in
-                    Color.clear
-                        .onAppear {
-                            updateAvailableShellWidth(proxy.size.width)
-                        }
-                        .onChange(of: proxy.size.width) { _, width in
-                            updateAvailableShellWidth(width)
-                        }
-                }
-            }
     }
 
     private var shellContent: some View {
@@ -166,11 +150,7 @@ struct MomentoShellView<Content: View>: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .padding(.horizontal, MomentoTheme.contentSidebarGap)
-            .frame(
-                minWidth: effectiveContentMinWidth + MomentoTheme.contentSidebarGap * 2,
-                maxWidth: .infinity,
-                maxHeight: .infinity
-            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             if isInspectorPresented {
                 trailingInspector
@@ -265,18 +245,10 @@ struct MomentoShellView<Content: View>: View {
             onTitleCommit: onRenameInspectorAsset,
             onColorCopied: showColorCopyToast
         )
-        .frame(width: effectiveInspectorWidth)
+        .frame(width: MomentoTheme.inspectorWidth)
         .frame(maxHeight: .infinity, alignment: .top)
         .fixedSize(horizontal: true, vertical: false)
         .layoutPriority(1)
-        .overlay(alignment: .leading) {
-            inspectorResizeHandle()
-        }
-        .onHover { hovering in
-            withAnimation(.smooth(duration: 0.14)) {
-                isInspectorHovered = hovering
-            }
-        }
         .transition(
             .asymmetric(
                 insertion: .move(edge: .trailing).combined(with: .opacity),
@@ -309,111 +281,12 @@ struct MomentoShellView<Content: View>: View {
             )
     }
 
-    private func inspectorResizeHandle() -> some View {
-        VStack {
-            Spacer()
-
-            Capsule()
-                .fill(inspectorResizeHandleColor)
-                .frame(width: 7, height: 76)
-                .opacity(isInspectorResizeHandleVisible ? 1 : 0)
-                .contentShape(Capsule())
-                .pointerStyle(.columnResize(directions: .all))
-                .onHover { hovering in
-                    withAnimation(.smooth(duration: 0.14)) {
-                        isInspectorResizeHandleHovered = hovering
-                    }
-                }
-                .gesture(
-                    DragGesture(minimumDistance: 0, coordinateSpace: .global)
-                        .onChanged { value in
-                            let startWidth = inspectorResizeStartWidth ?? effectiveInspectorWidth
-                            let widthRange = inspectorWidthRange
-                            let proposedWidth = startWidth - value.translation.width
-
-                            inspectorResizeStartWidth = startWidth
-
-                            inspectorWidth = proposedWidth.clamped(to: widthRange)
-                        }
-                        .onEnded { _ in
-                            inspectorResizeStartWidth = nil
-                        }
-                )
-
-            Spacer()
-        }
-        .frame(width: 7)
-        .frame(maxHeight: .infinity)
-    }
-
     private var effectiveSidebarWidth: CGFloat {
         sidebarWidth.clamped(to: sidebarWidthRange)
     }
 
     private var sidebarWidthRange: ClosedRange<CGFloat> {
-        let reservedInspectorWidth = isInspectorPresented ? MomentoTheme.inspectorMinWidth : 0
-        let maximumWidth = availableShellWidth
-            - MomentoTheme.floatingSidebarInset * 2
-            - reservedInspectorWidth
-            - MomentoTheme.contentSidebarGap * 2
-            - MomentoTheme.compactContentMinWidth
-        let upperBound = min(
-            MomentoTheme.sidebarMaxWidth,
-            max(MomentoTheme.sidebarMinWidth, maximumWidth)
-        )
-
-        return MomentoTheme.sidebarMinWidth...upperBound
-    }
-
-    private var effectiveInspectorWidth: CGFloat {
-        inspectorWidth.clamped(to: inspectorWidthRange)
-    }
-
-    private var inspectorWidthRange: ClosedRange<CGFloat> {
-        let reservedSidebarWidth = isSidebarCollapsed ? 0 : MomentoTheme.sidebarMinWidth + MomentoTheme.floatingSidebarInset * 2
-        let maximumWidth = availableShellWidth
-            - reservedSidebarWidth
-            - MomentoTheme.contentSidebarGap * 2
-            - MomentoTheme.compactContentMinWidth
-        let upperBound = min(
-            MomentoTheme.inspectorMaxWidth,
-            max(MomentoTheme.inspectorMinWidth, maximumWidth)
-        )
-
-        return MomentoTheme.inspectorMinWidth...upperBound
-    }
-
-    private var effectiveContentMinWidth: CGFloat {
-        let reservedSidebarWidth = isSidebarCollapsed ? 0 : effectiveSidebarWidth + MomentoTheme.floatingSidebarInset * 2
-        let reservedInspectorWidth = isInspectorPresented ? effectiveInspectorWidth : 0
-        let availableContentWidth = availableShellWidth
-            - reservedSidebarWidth
-            - reservedInspectorWidth
-            - MomentoTheme.contentSidebarGap * 2
-
-        return availableContentWidth.clamped(
-            to: MomentoTheme.compactContentMinWidth...MomentoTheme.contentMinWidth
-        )
-    }
-
-    private func updateAvailableShellWidth(_ width: CGFloat) {
-        guard width > 0 else {
-            return
-        }
-
-        availableShellWidth = width
-    }
-
-    private var isInspectorResizeHandleVisible: Bool {
-        isInspectorHovered || isInspectorResizeHandleHovered || inspectorResizeStartWidth != nil
-    }
-
-    private var inspectorResizeHandleColor: Color {
-        if isInspectorResizeHandleHovered || inspectorResizeStartWidth != nil {
-            return .white.opacity(0.34)
-        }
-
-        return .white.opacity(0.14)
+        MomentoTheme.sidebarMinWidth...MomentoTheme.sidebarMaxWidth
     }
 
     @ViewBuilder

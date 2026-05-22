@@ -23,18 +23,19 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(windowSource.contains("window.titleVisibility = .hidden"))
     }
 
-    func testMainWindowMinimumSizeUsesAdaptiveShellBounds() throws {
+    func testMainWindowMinimumSizeUsesFixedSidebarsAndFlexibleContent() throws {
         let appSource = try String(contentsOf: appURL(), encoding: .utf8)
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
         let themeSource = try String(contentsOf: designSystemURL(), encoding: .utf8)
         let shellSource = try String(contentsOf: shellURL(), encoding: .utf8)
 
         XCTAssertTrue(themeSource.contains("static let mainWindowMinWidth: CGFloat = 800"))
-        XCTAssertTrue(themeSource.contains("static let compactContentMinWidth: CGFloat = 300"))
         XCTAssertTrue(contentSource.contains(".frame(minWidth: MomentoTheme.mainWindowMinWidth, minHeight: MomentoTheme.mainWindowMinHeight)"))
         XCTAssertTrue(appSource.contains(".windowResizability(.contentMinSize)"))
-        XCTAssertTrue(shellSource.contains("availableShellWidth"))
-        XCTAssertTrue(shellSource.contains("MomentoTheme.compactContentMinWidth"))
+        XCTAssertTrue(shellSource.contains(".frame(width: MomentoTheme.inspectorWidth)"))
+        XCTAssertTrue(shellSource.contains("MomentoTheme.sidebarMinWidth...MomentoTheme.sidebarMaxWidth"))
+        XCTAssertFalse(shellSource.contains("effectiveContentMinWidth"))
+        XCTAssertFalse(shellSource.contains("inspectorResizeHandle()"))
     }
 
     func testContentViewValidatesCurrentLibraryWhenWindowAppears() throws {
