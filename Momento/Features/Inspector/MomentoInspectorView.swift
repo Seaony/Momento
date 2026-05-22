@@ -708,7 +708,6 @@ struct MomentoInspectorView: View {
     private func folderChoiceRow(_ row: MomentoInspectorFolderRow) -> some View {
         let folder = row.folder
         let isSelected = containsFolder(folder.id)
-        let isHovered = hoveredFolderChoiceID == folder.id
         let rowShape = RoundedRectangle(cornerRadius: 11, style: .continuous)
         let checkboxShape = RoundedRectangle(cornerRadius: 6, style: .continuous)
         let foreground = Color.white.opacity(0.94)
@@ -724,48 +723,42 @@ struct MomentoInspectorView: View {
                 toggleFolderExpansion(folder.id)
             } label: {
                 Image(systemName: expandedFolderIDs.contains(folder.id) ? "chevron.down" : "chevron.right")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(secondaryForeground)
                     .frame(width: 14, height: 22)
             }
             .buttonStyle(.plain)
             .contentShape(Rectangle())
+            .pointerStyle(.link)
 
             Button {
                 toggleFolderSelection(folder.id)
             } label: {
-                ZStack {
-                    if isHovered {
-                        rowShape
-                            .fill(MomentoTheme.sidebarIconHoverBackground)
-                        }
-
-                    HStack(spacing: 8) {
-                        ZStack {
-                            checkboxShape
-                                .fill(checkboxFill)
-                                .overlay {
-                                    checkboxShape.strokeBorder(Color.white.opacity(isSelected ? 0.42 : 0.26), lineWidth: 1)
-                                }
-
-                            if isSelected {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(foreground)
+                HStack(spacing: 8) {
+                    ZStack {
+                        checkboxShape
+                            .fill(checkboxFill)
+                            .overlay {
+                                checkboxShape.strokeBorder(Color.white.opacity(isSelected ? 0.42 : 0.26), lineWidth: 1)
                             }
+
+                        if isSelected {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(foreground)
                         }
-                        .frame(width: 20, height: 20)
-
-                        Text(folder.name)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(foreground)
-                            .lineLimit(1)
-
-                        Spacer(minLength: 0)
                     }
-                    .padding(.leading, CGFloat(row.depth) * 14)
-                    .padding(.trailing, 9)
+                    .frame(width: 20, height: 20)
+
+                    Text(folder.name)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(foreground)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 0)
                 }
+                .padding(.leading, CGFloat(row.depth) * 14)
+                .padding(.trailing, 9)
                 .frame(height: Self.folderPickerRowHeight)
                 .contentShape(rowShape)
             }
