@@ -133,6 +133,13 @@ struct MomentoShellView<Content: View>: View {
             .frame(width: 0, height: 0)
         }
         .background {
+            InspectorTitlebarSpacerConfigurator(
+                isVisible: showsChromeControls && isInspectorPresented,
+                width: MomentoTheme.inspectorWidth
+            )
+            .frame(width: 0, height: 0)
+        }
+        .background {
             MomentoGlassBackground(cornerRadius: 0)
                 .ignoresSafeArea()
         }
