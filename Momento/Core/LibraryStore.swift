@@ -215,8 +215,9 @@ final class LibraryStore {
             throw LibraryStoreError.missingRecentLibrary
         }
 
-        let resolved = try recentStore.resolve(reference)
-        let library = try storage.renameLibraryPackage(at: resolved.url, to: trimmedName)
+        let library = try withSecurityScopedRecentLibraryURL(reference) { resolvedURL in
+            try storage.renameLibraryPackage(at: resolvedURL, to: trimmedName)
+        }
         try recentStore.updateName(id: id, name: trimmedName)
         recentLibraries = recentStore.load()
 
@@ -231,8 +232,9 @@ final class LibraryStore {
             throw LibraryStoreError.missingRecentLibrary
         }
 
-        let resolved = try recentStore.resolve(reference)
-        try storage.deleteLibraryPackage(at: resolved.url)
+        try withSecurityScopedRecentLibraryURL(reference) { resolvedURL in
+            try storage.deleteLibraryPackage(at: resolvedURL)
+        }
 
         if currentLibrary?.id == id {
             closeCurrentLibrary()
@@ -689,6 +691,17 @@ final class LibraryStore {
     private func removeRecentLibrary(_ reference: RecentLibraryReference) throws {
         try recentStore.remove(id: reference.id)
         recentLibraries = recentStore.load()
+    }
+
+    private func withSecurityScopedRecentLibraryURL<T>(
+        _ reference: RecentLibraryReference,
+        perform action: (URL) throws -> T
+    ) throws -> T {
+        let resolved = try recentStore.resolve(reference)
+        let accessScope = LibraryAccessScope(url: resolved.url)
+        return try withExtendedLifetime(accessScope) {
+            try action(resolved.url)
+        }
     }
 
     private var currentLibraryAssets: [AssetItem] {

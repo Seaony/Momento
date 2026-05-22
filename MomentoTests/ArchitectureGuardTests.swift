@@ -46,6 +46,18 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("store.validateCurrentLibraryAvailability()"))
     }
 
+    func testRecentLibraryMutationsUseSecurityScopedAccess() throws {
+        let source = try String(contentsOf: libraryStoreURL(), encoding: .utf8)
+
+        XCTAssertTrue(source.contains("private func withSecurityScopedRecentLibraryURL"))
+        XCTAssertTrue(source.contains("let accessScope = LibraryAccessScope(url: resolved.url)"))
+        XCTAssertTrue(source.contains("withExtendedLifetime(accessScope)"))
+        XCTAssertTrue(source.contains("let library = try withSecurityScopedRecentLibraryURL(reference) { resolvedURL in"))
+        XCTAssertTrue(source.contains("try storage.renameLibraryPackage(at: resolvedURL, to: trimmedName)"))
+        XCTAssertTrue(source.contains("try withSecurityScopedRecentLibraryURL(reference) { resolvedURL in"))
+        XCTAssertTrue(source.contains("try storage.deleteLibraryPackage(at: resolvedURL)"))
+    }
+
     private func repositoryRoot() -> URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -66,6 +78,10 @@ final class ArchitectureGuardTests: XCTestCase {
 
     private func shellURL() -> URL {
         repositoryRoot().appendingPathComponent("Momento/Features/Shell/MomentoShellView.swift")
+    }
+
+    private func libraryStoreURL() -> URL {
+        repositoryRoot().appendingPathComponent("Momento/Core/LibraryStore.swift")
     }
 
     private func windowTransparencyURL() -> URL {
