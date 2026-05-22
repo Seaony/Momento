@@ -27,10 +27,8 @@ struct ContentView: View {
     @State private var isInspectorPresented = false
     @State private var inspectorNotesByAssetID: [AssetItem.ID: String] = [:]
     @State private var importError: String?
-    @State private var isToolbarSearchExpanded = false
     @State private var hoveredToolbarViewMode: AssetViewMode?
     @State private var shellToastRequest: MomentoToastRequest?
-    @FocusState private var isToolbarSearchFocused: Bool
 
     private var sidebarSelection: Binding<String?> {
         Binding {
@@ -184,32 +182,15 @@ struct ContentView: View {
         }
         .toolbar {
             if !isModalOverlayVisible {
-                ToolbarItem(placement: .principal) {
-                    toolbarSearchControl
-                }
-                .sharedBackgroundVisibility(.hidden)
-
-                ToolbarItem(placement: .confirmationAction) {
+                ToolbarItemGroup(placement: .confirmationAction) {
                     toolbarViewModeSwitcher
                         .padding(.trailing, 6)
+                    toolbarSearchControl
                 }
                 .sharedBackgroundVisibility(.hidden)
             }
         }
         .navigationTitle("")
-        .onChange(of: isToolbarSearchFocused) { _, isFocused in
-            if !isFocused {
-                collapseEmptyToolbarSearch()
-            }
-        }
-        .onChange(of: store.searchQuery) { _, _ in
-            collapseEmptyToolbarSearch()
-        }
-        .onChange(of: isModalOverlayVisible) { _, isVisible in
-            if isVisible {
-                collapseToolbarSearch(ignoresQuery: true)
-            }
-        }
     }
 
     private var toolbarViewModeSwitcher: some View {
@@ -256,81 +237,23 @@ struct ContentView: View {
     private var toolbarSearchControl: some View {
         let placeholder = localization.string("Search image name")
 
-        if isToolbarSearchExpanded {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: MomentoTheme.toolbarIconSize, weight: .semibold))
-                    .foregroundStyle(MomentoTheme.primaryText)
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: MomentoTheme.toolbarIconSize, weight: .semibold))
+                .foregroundStyle(MomentoTheme.primaryText)
 
-                TextField(placeholder, text: $store.searchQuery)
-                    .textFieldStyle(.plain)
-                    .focused($isToolbarSearchFocused)
-                    .frame(width: ContentToolbarMetrics.searchFieldWidth)
-            }
-            .padding(.horizontal, 11)
-            .frame(height: MomentoTheme.toolbarControlHeight)
-            .background {
-                toolbarControlBackground(cornerRadius: MomentoTheme.toolbarControlRadius)
-            }
-            .background {
-                ToolbarSearchOutsideClickMonitor(
-                    isActive: isToolbarSearchExpanded,
-                    shouldDismiss: store.searchQuery.isEmpty,
-                    onDismiss: collapseEmptyToolbarSearchAfterOutsideClick
-                )
-            }
-            .fixedSize(horizontal: true, vertical: false)
-            .layoutPriority(10)
-            .onAppear {
-                isToolbarSearchFocused = true
-            }
-        } else {
-            Button {
-                withAnimation(.smooth(duration: 0.16)) {
-                    isToolbarSearchExpanded = true
-                }
-                isToolbarSearchFocused = true
-            } label: {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: MomentoTheme.toolbarIconSize, weight: .semibold))
-                    .foregroundStyle(MomentoTheme.primaryText)
-                    .frame(width: MomentoTheme.toolbarIconButtonWidth, height: MomentoTheme.toolbarControlHeight)
-                    .background {
-                        toolbarControlBackground(cornerRadius: MomentoTheme.toolbarControlRadius)
-                    }
-                    .contentShape(RoundedRectangle(cornerRadius: MomentoTheme.toolbarControlRadius, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .pointerStyle(.link)
-            .help(placeholder)
+            TextField(placeholder, text: $store.searchQuery)
+                .textFieldStyle(.plain)
+                .frame(width: ContentToolbarMetrics.searchFieldWidth)
         }
-    }
-
-    private func collapseEmptyToolbarSearch() {
-        guard !isToolbarSearchFocused, store.searchQuery.isEmpty else {
-            return
+        .padding(.horizontal, 11)
+        .frame(height: MomentoTheme.toolbarControlHeight)
+        .background {
+            toolbarControlBackground(cornerRadius: MomentoTheme.toolbarControlRadius)
         }
-
-        collapseToolbarSearch(ignoresQuery: true)
-    }
-
-    private func collapseToolbarSearch(ignoresQuery: Bool = false) {
-        guard isToolbarSearchExpanded else {
-            return
-        }
-        guard ignoresQuery || store.searchQuery.isEmpty else {
-            return
-        }
-
-        withAnimation(.smooth(duration: 0.16)) {
-            isToolbarSearchExpanded = false
-            isToolbarSearchFocused = false
-        }
-    }
-
-    private func collapseEmptyToolbarSearchAfterOutsideClick() {
-        isToolbarSearchFocused = false
-        collapseEmptyToolbarSearch()
+        .fixedSize(horizontal: true, vertical: false)
+        .layoutPriority(10)
+        .help(placeholder)
     }
 
     @ViewBuilder
@@ -979,99 +902,6 @@ struct ContentView: View {
     private func showImportError(_ error: Error) {
         withAnimation(.smooth(duration: 0.16)) {
             importError = localization.errorMessage(error)
-        }
-    }
-}
-
-private struct ToolbarSearchOutsideClickMonitor: NSViewRepresentable {
-    var isActive: Bool
-    var shouldDismiss: Bool
-    var onDismiss: () -> Void
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onDismiss: onDismiss)
-    }
-
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        context.coordinator.view = view
-        context.coordinator.update(
-            isActive: isActive,
-            shouldDismiss: shouldDismiss,
-            onDismiss: onDismiss
-        )
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        context.coordinator.view = nsView
-        context.coordinator.update(
-            isActive: isActive,
-            shouldDismiss: shouldDismiss,
-            onDismiss: onDismiss
-        )
-    }
-
-    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
-        coordinator.remove()
-    }
-
-    final class Coordinator {
-        weak var view: NSView?
-        private var isActive = false
-        private var shouldDismiss = false
-        private var onDismiss: () -> Void
-        private var monitor: Any?
-
-        init(onDismiss: @escaping () -> Void) {
-            self.onDismiss = onDismiss
-        }
-
-        func update(isActive: Bool, shouldDismiss: Bool, onDismiss: @escaping () -> Void) {
-            self.isActive = isActive
-            self.shouldDismiss = shouldDismiss
-            self.onDismiss = onDismiss
-
-            if isActive {
-                install()
-            } else {
-                remove()
-            }
-        }
-
-        func remove() {
-            if let monitor {
-                NSEvent.removeMonitor(monitor)
-                self.monitor = nil
-            }
-        }
-
-        private func install() {
-            guard monitor == nil else {
-                return
-            }
-
-            monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-                self?.handle(event) ?? event
-            }
-        }
-
-        private func handle(_ event: NSEvent) -> NSEvent {
-            guard isActive, shouldDismiss else {
-                return event
-            }
-
-            if let view, event.window === view.window {
-                let location = view.convert(event.locationInWindow, from: nil)
-                if view.bounds.contains(location) {
-                    return event
-                }
-            }
-
-            DispatchQueue.main.async { [weak self] in
-                self?.onDismiss()
-            }
-            return event
         }
     }
 }
