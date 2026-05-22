@@ -223,6 +223,7 @@ struct ContentView: View {
                 .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
+        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .pointerStyle(.link)
         .help(localization.string("Import Assets"))
         .accessibilityLabel(localization.string("Import Assets"))
@@ -335,7 +336,7 @@ struct ContentView: View {
     }
 
     private func toolbarControlBackground(cornerRadius: CGFloat) -> some View {
-        MomentoGlassBackground(glass: .regular, cornerRadius: cornerRadius)
+        MomentoGlassBackground(glass: .regular.interactive(true), cornerRadius: cornerRadius)
     }
 
     @ViewBuilder
