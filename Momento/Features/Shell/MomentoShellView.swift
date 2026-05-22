@@ -37,6 +37,8 @@ struct MomentoShellView<Content: View>: View {
     @State private var isSidebarCollapsed = false
     @State private var inspectorWidth = MomentoTheme.inspectorWidth
     @State private var inspectorResizeStartWidth: CGFloat?
+    @State private var isInspectorHovered = false
+    @State private var isInspectorResizeHandleHovered = false
 
     init(
         sidebarSelection: Binding<String?>,
@@ -191,6 +193,11 @@ struct MomentoShellView<Content: View>: View {
         .overlay(alignment: .leading) {
             inspectorResizeHandle()
         }
+        .onHover { hovering in
+            withAnimation(.smooth(duration: 0.14)) {
+                isInspectorHovered = hovering
+            }
+        }
         .ignoresSafeArea(.container, edges: .top)
         .transition(
             .asymmetric(
@@ -225,26 +232,40 @@ struct MomentoShellView<Content: View>: View {
     }
 
     private func inspectorResizeHandle() -> some View {
-        Rectangle()
-            .fill(Color.clear)
-            .frame(width: 14)
-            .contentShape(Rectangle())
-            .pointerStyle(.columnResize(directions: .all))
-            .gesture(
-                DragGesture(minimumDistance: 0, coordinateSpace: .global)
-                    .onChanged { value in
-                        let startWidth = inspectorResizeStartWidth ?? effectiveInspectorWidth
-                        let widthRange = inspectorWidthRange
-                        let proposedWidth = startWidth - value.translation.width
+        VStack {
+            Spacer()
 
-                        inspectorResizeStartWidth = startWidth
+            Capsule()
+                .fill(inspectorResizeHandleColor)
+                .frame(width: 4, height: 132)
+                .opacity(isInspectorResizeHandleVisible ? 1 : 0)
+                .contentShape(Capsule())
+                .pointerStyle(.columnResize(directions: .all))
+                .onHover { hovering in
+                    withAnimation(.smooth(duration: 0.14)) {
+                        isInspectorResizeHandleHovered = hovering
+                    }
+                }
+                .gesture(
+                    DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                        .onChanged { value in
+                            let startWidth = inspectorResizeStartWidth ?? effectiveInspectorWidth
+                            let widthRange = inspectorWidthRange
+                            let proposedWidth = startWidth - value.translation.width
 
-                        inspectorWidth = proposedWidth.clamped(to: widthRange)
-                    }
-                    .onEnded { _ in
-                        inspectorResizeStartWidth = nil
-                    }
-            )
+                            inspectorResizeStartWidth = startWidth
+
+                            inspectorWidth = proposedWidth.clamped(to: widthRange)
+                        }
+                        .onEnded { _ in
+                            inspectorResizeStartWidth = nil
+                        }
+                )
+
+            Spacer()
+        }
+        .frame(width: 4)
+        .frame(maxHeight: .infinity)
     }
 
     private var effectiveSidebarWidth: CGFloat {
@@ -261,6 +282,18 @@ struct MomentoShellView<Content: View>: View {
 
     private var inspectorWidthRange: ClosedRange<CGFloat> {
         MomentoTheme.inspectorMinWidth...MomentoTheme.inspectorMaxWidth
+    }
+
+    private var isInspectorResizeHandleVisible: Bool {
+        isInspectorHovered || isInspectorResizeHandleHovered || inspectorResizeStartWidth != nil
+    }
+
+    private var inspectorResizeHandleColor: Color {
+        if isInspectorResizeHandleHovered || inspectorResizeStartWidth != nil {
+            return .white.opacity(0.68)
+        }
+
+        return .white.opacity(0.34)
     }
 
     private var sidebarToggleLabel: String {
