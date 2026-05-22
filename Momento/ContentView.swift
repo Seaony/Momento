@@ -42,7 +42,6 @@ struct ContentView: View {
     @State private var editingFolder: AssetFolder?
     @State private var deletingFolder: AssetFolder?
     @State private var isInspectorPresented = false
-    @State private var inspectorNotesByAssetID: [AssetItem.ID: String] = [:]
     @State private var importError: String?
     @State private var hoveredToolbarViewMode: AssetViewMode?
     @State private var hoveredToolbarActionID: String?
@@ -91,20 +90,6 @@ struct ContentView: View {
             store.selectedAsset?.folderIDs ?? []
         } set: { folderIDs in
             updateSelectedFolders(folderIDs)
-        }
-    }
-
-    private var inspectorNotes: Binding<String> {
-        Binding {
-            guard let selectedAssetID = store.selectedAssetID else {
-                return ""
-            }
-            return inspectorNotesByAssetID[selectedAssetID, default: ""]
-        } set: { value in
-            guard let selectedAssetID = store.selectedAssetID else {
-                return
-            }
-            inspectorNotesByAssetID[selectedAssetID] = value
         }
     }
 
@@ -195,7 +180,6 @@ struct ContentView: View {
             inspectorAvailableTags: availableTagNames,
             inspectorFolderIDs: selectedFolderIDs,
             inspectorFolders: store.folders,
-            inspectorNotes: inspectorNotes,
             toastRequest: $shellToastRequest,
             onRenameInspectorAsset: renameAssetTitle,
             commands: commands,

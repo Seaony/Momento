@@ -311,6 +311,32 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         }
     }
 
+    func updateNote(_ note: String?, forAssetID assetID: AssetItem.ID) throws -> AssetItem {
+        try context.performAndWait {
+            guard let record = try assetRecord(id: assetID) else {
+                throw LibraryMetadataError.missingAsset
+            }
+
+            let storedNote = note.flatMap { value in
+                value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : value
+            }
+
+            if (record.value(forKey: "note") as? String) != storedNote {
+                record.setValue(storedNote, forKey: "note")
+                record.setValue(Date(), forKey: "updatedAt")
+            }
+
+            if context.hasChanges {
+                try context.save()
+            }
+
+            guard let asset = try assets(ids: [assetID]).first else {
+                throw LibraryMetadataError.missingAsset
+            }
+            return asset
+        }
+    }
+
     func resolveOrCreateTags(named names: [String]) throws -> [TagItem] {
         try context.performAndWait {
             let records = try resolveOrCreateTagRecords(named: names)

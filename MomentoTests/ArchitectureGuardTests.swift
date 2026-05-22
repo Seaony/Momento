@@ -81,6 +81,19 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertFalse(source.contains(".blur(radius: isModalOverlayVisible"))
     }
 
+    func testInspectorDoesNotExposeNotesEditor() throws {
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+        let shellSource = try String(contentsOf: shellURL(), encoding: .utf8)
+        let inspectorSource = try String(contentsOf: inspectorURL(), encoding: .utf8)
+
+        XCTAssertFalse(contentSource.contains("inspectorNotesByAssetID"))
+        XCTAssertFalse(contentSource.contains("private var inspectorNotes"))
+        XCTAssertFalse(shellSource.contains("inspectorNotes"))
+        XCTAssertFalse(inspectorSource.contains("notesEditor"))
+        XCTAssertFalse(inspectorSource.contains("TextEditor(text: $notes)"))
+        XCTAssertFalse(inspectorSource.contains("localization.string(\"Notes\")"))
+    }
+
     private func repositoryRoot() -> URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -105,6 +118,10 @@ final class ArchitectureGuardTests: XCTestCase {
 
     private func libraryStoreURL() -> URL {
         repositoryRoot().appendingPathComponent("Momento/Core/LibraryStore.swift")
+    }
+
+    private func inspectorURL() -> URL {
+        repositoryRoot().appendingPathComponent("Momento/Features/Inspector/MomentoInspectorView.swift")
     }
 
     private func windowTransparencyURL() -> URL {

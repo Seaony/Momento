@@ -320,6 +320,50 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testUpdatingAssetNotePersistsAcrossReloads() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        let firstSource = try environment.writeOnePixelPNG(named: "note-a.png")
+        let secondSource = try environment.writeOnePixelJPEGWithExif(named: "note-b.jpg")
+        try await store.importItems(from: [firstSource, secondSource])
+        let firstAsset = try XCTUnwrap(store.assets.first { $0.displayName == "note-a" })
+        let secondAsset = try XCTUnwrap(store.assets.first { $0.displayName == "note-b" })
+
+        try store.updateNote("First note", forAssetID: firstAsset.id)
+        store.selectAsset(id: secondAsset.id)
+        try store.updateSelectedNote("Second note")
+
+        XCTAssertEqual(store.assets.first { $0.id == firstAsset.id }?.note, "First note")
+        XCTAssertEqual(store.assets.first { $0.id == secondAsset.id }?.note, "Second note")
+
+        store.selectAsset(id: firstAsset.id)
+        XCTAssertEqual(store.selectedAsset?.note, "First note")
+        store.selectAsset(id: secondAsset.id)
+        XCTAssertEqual(store.selectedAsset?.note, "Second note")
+
+        try store.updateNote("   ", forAssetID: firstAsset.id)
+        XCTAssertNil(store.assets.first { $0.id == firstAsset.id }?.note)
+
+        let reopened = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try reopened.openLibrary(at: environment.packageURL)
+
+        XCTAssertNil(reopened.assets.first { $0.id == firstAsset.id }?.note)
+        XCTAssertEqual(reopened.assets.first { $0.id == secondAsset.id }?.note, "Second note")
+    }
+
+    @MainActor
     func testTagRecordsRenameAndDeleteAcrossAssets() async throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }

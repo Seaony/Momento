@@ -115,7 +115,6 @@ struct MomentoInspectorView: View {
     var availableTags: [String]
     @Binding var folderIDs: [AssetFolder.ID]
     var folders: [AssetFolder]
-    @Binding var notes: String
     var onRevealInFinder: (() -> Void)?
     var onTitleCommit: ((MomentoInspectorAsset.ID, String) -> Void)?
     var onColorCopied: (() -> Void)?
@@ -144,7 +143,6 @@ struct MomentoInspectorView: View {
         availableTags: [String] = [],
         folderIDs: Binding<[AssetFolder.ID]> = .constant([]),
         folders: [AssetFolder] = [],
-        notes: Binding<String> = .constant(""),
         onRevealInFinder: (() -> Void)? = nil,
         onTitleCommit: ((MomentoInspectorAsset.ID, String) -> Void)? = nil,
         onColorCopied: (() -> Void)? = nil
@@ -154,7 +152,6 @@ struct MomentoInspectorView: View {
         self.availableTags = availableTags
         self._folderIDs = folderIDs
         self.folders = folders
-        self._notes = notes
         self.onRevealInFinder = onRevealInFinder
         self.onTitleCommit = onTitleCommit
         self.onColorCopied = onColorCopied
@@ -873,23 +870,6 @@ struct MomentoInspectorView: View {
             .allowsHitTesting(false)
     }
 
-    private var notesEditor: some View {
-        inspectorSection(localization.string("Notes")) {
-            TextEditor(text: $notes)
-                .font(.system(size: 12))
-                .scrollContentBackground(.hidden)
-                .frame(minHeight: 86)
-                .padding(6)
-                .background {
-                    MomentoGlassBackground(cornerRadius: 8)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .strokeBorder(MomentoTheme.subtleStroke, lineWidth: 1)
-                        }
-                }
-        }
-    }
-
     private func fileSection(_ asset: MomentoInspectorAsset) -> some View {
         inspectorSection(localization.string("File")) {
             infoRow(localization.string("Name"), asset.fileName)
@@ -1380,8 +1360,7 @@ private extension Color {
         folders: [
             AssetFolder(id: "folder-reference", libraryID: "sample-library", name: "Reference", sortIndex: 0),
             AssetFolder(id: "folder-ui", libraryID: "sample-library", name: "UI", parentID: "folder-reference", sortIndex: 0)
-        ],
-        notes: .constant("Strong card rhythm and useful spacing reference.")
+        ]
     )
     .frame(width: 308, height: 720)
 }

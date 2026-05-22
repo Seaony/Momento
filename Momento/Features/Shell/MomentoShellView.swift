@@ -44,7 +44,6 @@ struct MomentoShellView<Content: View>: View {
     var inspectorAvailableTags: [String]
     @Binding var inspectorFolderIDs: [AssetFolder.ID]
     var inspectorFolders: [AssetFolder]
-    @Binding var inspectorNotes: String
     @Binding var toastRequest: MomentoToastRequest?
     var onRenameInspectorAsset: (MomentoInspectorAsset.ID, String) -> Void
     var commands: [MomentoCommand]
@@ -89,7 +88,6 @@ struct MomentoShellView<Content: View>: View {
         inspectorAvailableTags: [String] = [],
         inspectorFolderIDs: Binding<[AssetFolder.ID]> = .constant([]),
         inspectorFolders: [AssetFolder] = [],
-        inspectorNotes: Binding<String> = .constant(""),
         toastRequest: Binding<MomentoToastRequest?> = .constant(nil),
         onRenameInspectorAsset: @escaping (MomentoInspectorAsset.ID, String) -> Void = { _, _ in },
         commands: [MomentoCommand] = .momentoDefaultCommands,
@@ -126,7 +124,6 @@ struct MomentoShellView<Content: View>: View {
         self.inspectorAvailableTags = inspectorAvailableTags
         self._inspectorFolderIDs = inspectorFolderIDs
         self.inspectorFolders = inspectorFolders
-        self._inspectorNotes = inspectorNotes
         self._toastRequest = toastRequest
         self.onRenameInspectorAsset = onRenameInspectorAsset
         self.commands = commands
@@ -241,7 +238,6 @@ struct MomentoShellView<Content: View>: View {
             availableTags: inspectorAvailableTags,
             folderIDs: $inspectorFolderIDs,
             folders: inspectorFolders,
-            notes: $inspectorNotes,
             onTitleCommit: onRenameInspectorAsset,
             onColorCopied: showColorCopyToast
         )
@@ -381,7 +377,6 @@ private struct MomentoShellPreview: View {
     @State private var isCommandPalettePresented = false
     @State private var isInspectorPresented = true
     @State private var tags = ["UI", "Reference"]
-    @State private var notes = "A calm shell foundation for the first milestone."
 
     var body: some View {
         MomentoShellView(
@@ -400,8 +395,7 @@ private struct MomentoShellPreview: View {
                 addedDate: .now,
                 kind: "PNG Image"
             ),
-            inspectorTags: $tags,
-            inspectorNotes: $notes
+            inspectorTags: $tags
         ) {
             ZStack {
                 MomentoGlassBackground(cornerRadius: 0)

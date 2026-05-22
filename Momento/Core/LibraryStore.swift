@@ -589,6 +589,28 @@ final class LibraryStore {
         }
     }
 
+    func updateSelectedNote(_ note: String) throws {
+        guard let selectedAssetID else {
+            return
+        }
+
+        try updateNote(note, forAssetID: selectedAssetID)
+    }
+
+    func updateNote(_ note: String, forAssetID assetID: AssetItem.ID) throws {
+        guard let metadataStore,
+              let currentLibrary else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        guard assets.contains(where: { $0.id == assetID && $0.libraryID == currentLibrary.id }) else {
+            throw LibraryStoreError.missingAsset
+        }
+
+        mergeAssets([try metadataStore.updateNote(note, forAssetID: assetID)])
+        pruneSelectedAssetIfNeeded()
+    }
+
     func refreshThumbnail(for assetID: AssetItem.ID) throws -> AssetItem? {
         guard let currentLibrary else {
             throw LibraryStoreError.noCurrentLibrary
