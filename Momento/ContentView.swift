@@ -439,7 +439,7 @@ struct ContentView: View {
     }
 
     private var filterFacetPicker: some View {
-        let shape = RoundedRectangle(cornerRadius: 13, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
 
         return HStack(spacing: 6) {
             ForEach(AssetFilterFacet.allCases) { facet in
@@ -453,20 +453,21 @@ struct ContentView: View {
         .overlay {
             shape.strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
         }
+        .transaction(value: selectedFilterFacet) { transaction in
+            transaction.disablesAnimations = true
+        }
     }
 
     private func filterFacetButton(_ facet: AssetFilterFacet) -> some View {
         let isSelected = selectedFilterFacet == facet
         let isHovered = hoveredFilterFacet == facet
-        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 13, style: .continuous)
 
         return Button {
-            withAnimation(.smooth(duration: 0.16)) {
-                selectedFilterFacet = facet
-            }
+            selectedFilterFacet = facet
         } label: {
             Text(filterFacetSegmentTitle(for: facet))
-                .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Color.white.opacity(isSelected ? 0.98 : 0.74))
                 .lineLimit(1)
                 .minimumScaleFactor(0.86)
