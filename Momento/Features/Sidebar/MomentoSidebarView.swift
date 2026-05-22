@@ -2,6 +2,22 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+struct MomentoSidebarAssetCounts: Equatable {
+    var all: Int
+    var favorites: Int
+    var uncategorized: Int
+    var untagged: Int
+    var folders: [AssetFolder.ID: Int]
+
+    static let empty = MomentoSidebarAssetCounts(
+        all: 0,
+        favorites: 0,
+        uncategorized: 0,
+        untagged: 0,
+        folders: [:]
+    )
+}
+
 struct MomentoSidebarView: View {
     @Environment(\.appLocalization) private var localization
     @Environment(\.openSettings) private var openSettings
@@ -11,6 +27,7 @@ struct MomentoSidebarView: View {
     var currentLibraryID: RecentLibraryReference.ID?
     var recentLibraries: [RecentLibraryReference]
     var folders: [AssetFolder]
+    var counts: MomentoSidebarAssetCounts
     var onCreateLibrary: () -> Void
     var onOpenLibrary: () -> Void
     var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
@@ -39,6 +56,7 @@ struct MomentoSidebarView: View {
         currentLibraryID: RecentLibraryReference.ID? = nil,
         recentLibraries: [RecentLibraryReference] = [],
         folders: [AssetFolder] = [],
+        counts: MomentoSidebarAssetCounts = .empty,
         onCreateLibrary: @escaping () -> Void = {},
         onOpenLibrary: @escaping () -> Void = {},
         onSwitchLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
@@ -56,6 +74,7 @@ struct MomentoSidebarView: View {
         self.currentLibraryID = currentLibraryID
         self.recentLibraries = recentLibraries
         self.folders = folders
+        self.counts = counts
         self.onCreateLibrary = onCreateLibrary
         self.onOpenLibrary = onOpenLibrary
         self.onSwitchLibrary = onSwitchLibrary
@@ -160,7 +179,8 @@ struct MomentoSidebarView: View {
                 sidebarNavigationItem(
                     id: "all-assets",
                     title: localization.string("All"),
-                    systemImage: "square.3.layers.3d"
+                    systemImage: "square.3.layers.3d",
+                    count: counts.all
                 )
 
                 sidebarNavigationDivider
@@ -168,19 +188,22 @@ struct MomentoSidebarView: View {
                 sidebarNavigationItem(
                     id: "favorites",
                     title: localization.string("Favorited"),
-                    systemImage: "heart"
+                    systemImage: "heart",
+                    count: counts.favorites
                 )
 
                 sidebarNavigationItem(
                     id: "uncategorized",
                     title: localization.string("Uncategorized"),
-                    systemImage: "folder.fill.badge.questionmark"
+                    systemImage: "folder.badge.questionmark",
+                    count: counts.uncategorized
                 )
 
                 sidebarNavigationItem(
                     id: "untagged",
                     title: localization.string("Untagged"),
-                    systemImage: "xmark.triangle.circle.square"
+                    systemImage: "xmark.triangle.circle.square",
+                    count: counts.untagged
                 )
 
                 sidebarNavigationItem(
@@ -208,7 +231,8 @@ struct MomentoSidebarView: View {
     private func sidebarNavigationItem(
         id: String,
         title: String,
-        systemImage: String
+        systemImage: String,
+        count: Int? = nil
     ) -> some View {
         let isSelected = selection == id
         let isHovered = hoveredNavigationItemID == id
@@ -232,6 +256,8 @@ struct MomentoSidebarView: View {
                     .truncationMode(.tail)
 
                 Spacer(minLength: 0)
+
+                countBadge(count, foregroundStyle: foregroundStyle)
             }
             .padding(.horizontal, 8)
             .frame(height: 30)
@@ -398,9 +424,7 @@ struct MomentoSidebarView: View {
 
             Spacer(minLength: 6)
 
-            if isHovered {
-                folderRowMenu(for: folder)
-            }
+            countBadge(counts.folders[folder.id], foregroundStyle: foregroundStyle)
         }
         .padding(.leading, CGFloat(row.depth) * 18 + 8)
         .padding(.trailing, 7)
@@ -422,9 +446,11 @@ struct MomentoSidebarView: View {
                     hoveredFolderID = folder.id
                 } else if hoveredFolderID == folder.id {
                     hoveredFolderID = nil
-                    hoveredFolderControlID = nil
                 }
             }
+        }
+        .contextMenu {
+            folderContextMenuItems(for: folder)
         }
         .help(folder.name)
         .accessibilityLabel(folder.name)
@@ -445,55 +471,48 @@ struct MomentoSidebarView: View {
         expandedFolderIDs.contains(folderID) ? "chevron.down" : "chevron.right"
     }
 
-    private func folderRowMenu(for folder: AssetFolder) -> some View {
-        let id = "\(folder.id)-more"
-
-        return Menu {
-            Button {
-                withAnimation(.smooth(duration: 0.16)) {
-                    _ = expandedFolderIDs.insert(folder.id)
-                }
-                onCreateFolder(folder.id)
-            } label: {
-                Label(localization.string("New Subfolder"), systemImage: "folder.badge.plus")
+    @ViewBuilder
+    private func folderContextMenuItems(for folder: AssetFolder) -> some View {
+        Button {
+            withAnimation(.smooth(duration: 0.16)) {
+                _ = expandedFolderIDs.insert(folder.id)
             }
-
-            Button {
-                onRenameFolder(folder.id)
-            } label: {
-                Label(localization.string("Edit Folder"), systemImage: "pencil")
-            }
-
-            Divider()
-
-            Button(role: .destructive) {
-                onDeleteFolder(folder.id)
-            } label: {
-                Label {
-                    Text(localization.string("Delete Folder"))
-                        .foregroundStyle(.red)
-                } icon: {
-                    Image(systemName: "trash")
-                        .foregroundStyle(.red)
-                }
-            }
+            onCreateFolder(folder.id)
         } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(hoveredFolderControlID == id ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
-                .frame(width: 22, height: 22)
-                .background {
-                    folderSectionButtonBackground(id: id)
-                }
-                .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            Label(localization.string("New Subfolder"), systemImage: "folder.badge.plus")
         }
-        .buttonStyle(.plain)
-        .pointerStyle(.link)
-        .onHover { hovering in
-            updateFolderControlHover(id: id, isHovering: hovering)
+
+        Button {
+            onRenameFolder(folder.id)
+        } label: {
+            Label(localization.string("Edit Folder"), systemImage: "pencil")
         }
-        .help(localization.string("More Actions"))
-        .accessibilityLabel(localization.string("More Actions"))
+
+        Divider()
+
+        Button(role: .destructive) {
+            onDeleteFolder(folder.id)
+        } label: {
+            Label {
+                Text(localization.string("Delete Folder"))
+                    .foregroundStyle(.red)
+            } icon: {
+                Image(systemName: "trash")
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func countBadge(_ count: Int?, foregroundStyle: Color) -> some View {
+        if let count, count > 0 {
+            Text("\(count)")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(foregroundStyle.opacity(0.58))
+                .monospacedDigit()
+                .lineLimit(1)
+                .frame(minWidth: 16, alignment: .trailing)
+        }
     }
 
     private func folderSectionButton(

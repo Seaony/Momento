@@ -22,6 +22,7 @@ struct MomentoShellView<Content: View>: View {
     var currentLibraryID: RecentLibraryReference.ID?
     var recentLibraries: [RecentLibraryReference]
     var folders: [AssetFolder]
+    var sidebarCounts: MomentoSidebarAssetCounts
     var onCreateLibrary: () -> Void
     var onOpenLibrary: () -> Void
     var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
@@ -64,6 +65,7 @@ struct MomentoShellView<Content: View>: View {
         currentLibraryID: RecentLibraryReference.ID? = nil,
         recentLibraries: [RecentLibraryReference] = [],
         folders: [AssetFolder] = [],
+        sidebarCounts: MomentoSidebarAssetCounts = .empty,
         onCreateLibrary: @escaping () -> Void = {},
         onOpenLibrary: @escaping () -> Void = {},
         onSwitchLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
@@ -94,6 +96,7 @@ struct MomentoShellView<Content: View>: View {
         self.currentLibraryID = currentLibraryID
         self.recentLibraries = recentLibraries
         self.folders = folders
+        self.sidebarCounts = sidebarCounts
         self.onCreateLibrary = onCreateLibrary
         self.onOpenLibrary = onOpenLibrary
         self.onSwitchLibrary = onSwitchLibrary
@@ -193,6 +196,7 @@ struct MomentoShellView<Content: View>: View {
             currentLibraryID: currentLibraryID,
             recentLibraries: recentLibraries,
             folders: folders,
+            counts: sidebarCounts,
             onCreateLibrary: onCreateLibrary,
             onOpenLibrary: onOpenLibrary,
             onSwitchLibrary: onSwitchLibrary,

@@ -133,6 +133,7 @@ struct ContentView: View {
             currentLibraryID: store.currentLibrary?.id,
             recentLibraries: store.recentLibraries,
             folders: store.folders,
+            sidebarCounts: sidebarAssetCounts,
             onCreateLibrary: createLibrary,
             onOpenLibrary: openLibrary,
             onSwitchLibrary: switchLibrary,
@@ -467,6 +468,29 @@ struct ContentView: View {
         case .trash:
             localization.string("Trash")
         }
+    }
+
+    private var sidebarAssetCounts: MomentoSidebarAssetCounts {
+        guard let currentLibrary = store.currentLibrary else {
+            return .empty
+        }
+
+        let libraryAssets = store.assets.filter { $0.libraryID == currentLibrary.id }
+        var folderCounts: [AssetFolder.ID: Int] = [:]
+
+        for asset in libraryAssets {
+            for folderID in asset.folderIDs {
+                folderCounts[folderID, default: 0] += 1
+            }
+        }
+
+        return MomentoSidebarAssetCounts(
+            all: libraryAssets.count,
+            favorites: libraryAssets.filter(\.isFavorite).count,
+            uncategorized: libraryAssets.filter(\.folderIDs.isEmpty).count,
+            untagged: libraryAssets.filter(\.tags.isEmpty).count,
+            folders: folderCounts
+        )
     }
 
     private var commands: [MomentoCommand] {
