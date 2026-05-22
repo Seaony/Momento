@@ -448,10 +448,10 @@ struct ContentView: View {
         }
         .padding(5)
         .background {
-            shape.fill(Color.black.opacity(0.58))
+            MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.10)), cornerRadius: 19)
         }
         .overlay {
-            shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+            shape.strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
         }
         .transaction(value: selectedFilterFacet) { transaction in
             transaction.disablesAnimations = true
@@ -468,7 +468,7 @@ struct ContentView: View {
         } label: {
             Text(filterFacetSegmentTitle(for: facet))
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(isSelected ? Color.black.opacity(0.88) : Color.white.opacity(0.78))
+                .foregroundStyle(Color.white.opacity(isSelected ? 0.96 : 0.72))
                 .lineLimit(1)
                 .minimumScaleFactor(0.86)
                 .frame(maxWidth: .infinity)
@@ -479,12 +479,12 @@ struct ContentView: View {
         .pointerStyle(.link)
         .background {
             if isSelected || isHovered {
-                shape.fill(isSelected ? Color.white.opacity(0.94) : Color.white.opacity(0.10))
+                shape.fill(Color.white.opacity(isSelected ? 0.15 : 0.07))
             }
         }
         .overlay {
             if isSelected {
-                shape.strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+                shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
             }
         }
         .onHover { hovering in
