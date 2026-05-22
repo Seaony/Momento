@@ -176,6 +176,7 @@ struct MomentoShellView<Content: View>: View {
                 isCollapsed: $isSidebarCollapsed,
                 isVisible: showsChromeControls,
                 buttonMinX: sidebarToggleButtonMinX,
+                importButtonMinX: titlebarImportButtonMinX,
                 label: sidebarToggleLabel,
                 importAction: onImportAssets,
                 importLabel: localization.string("Import Assets")
@@ -406,6 +407,17 @@ struct MomentoShellView<Content: View>: View {
         }
 
         return MomentoTheme.floatingSidebarInset + effectiveSidebarWidth - MomentoTheme.sidebarTitlebarButtonTrailingInset - MomentoTheme.sidebarTitlebarButtonSize
+    }
+
+    private var titlebarImportButtonMinX: CGFloat {
+        let contentStartX = if isSidebarCollapsed {
+            MomentoTheme.contentSidebarGap
+        } else {
+            MomentoTheme.floatingSidebarInset * 2 + effectiveSidebarWidth + MomentoTheme.contentSidebarGap
+        }
+        let minimumAfterSidebarToggle = sidebarToggleButtonMinX + MomentoTheme.sidebarTitlebarButtonSize + 10
+
+        return max(contentStartX, minimumAfterSidebarToggle)
     }
 
 }

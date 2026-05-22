@@ -5,6 +5,7 @@ struct SidebarTitlebarToggleConfigurator: NSViewRepresentable {
     @Binding var isCollapsed: Bool
     var isVisible: Bool
     var buttonMinX: CGFloat
+    var importButtonMinX: CGFloat?
     var label: String
     var importAction: (() -> Void)?
     var importLabel: String?
@@ -30,6 +31,7 @@ struct SidebarTitlebarToggleConfigurator: NSViewRepresentable {
                 isCollapsed: $isCollapsed,
                 isVisible: isVisible,
                 buttonMinX: buttonMinX,
+                importButtonMinX: importButtonMinX,
                 label: label,
                 importAction: importAction,
                 importLabel: importLabel
@@ -47,6 +49,7 @@ struct SidebarTitlebarToggleConfigurator: NSViewRepresentable {
         var isCollapsed: Binding<Bool>
         var isVisible: Bool
         var buttonMinX: CGFloat
+        var importButtonMinX: CGFloat?
         var label: String
         var importAction: (() -> Void)?
         var importLabel: String?
@@ -126,7 +129,8 @@ extension SidebarTitlebarToggleConfigurator {
                 isCollapsed: configuration.isCollapsed,
                 label: configuration.label,
                 importAction: configuration.importAction,
-                importLabel: configuration.importLabel
+                importLabel: configuration.importLabel,
+                importButtonOffset: importButtonOffset(configuration: configuration)
             )
             let controlsWidth = titlebarControlsWidth(configuration: configuration)
             let size = accessorySize(buttonMinX: configuration.buttonMinX, controlsWidth: controlsWidth)
@@ -149,7 +153,8 @@ extension SidebarTitlebarToggleConfigurator {
                 isCollapsed: configuration.isCollapsed,
                 label: configuration.label,
                 importAction: configuration.importAction,
-                importLabel: configuration.importLabel
+                importLabel: configuration.importLabel,
+                importButtonOffset: importButtonOffset(configuration: configuration)
             )
             let controlsWidth = titlebarControlsWidth(configuration: configuration)
             let hostingView = SidebarTitlebarToggleHostingView(rootView: rootView)
@@ -178,7 +183,19 @@ extension SidebarTitlebarToggleConfigurator {
                 return MomentoTheme.sidebarTitlebarButtonSize
             }
 
-            return MomentoTheme.sidebarTitlebarButtonSize * 2 + 6
+            return importButtonOffset(configuration: configuration) + MomentoTheme.toolbarIconButtonWidth
+        }
+
+        private func importButtonOffset(configuration: Configuration) -> CGFloat {
+            guard configuration.importAction != nil else {
+                return 0
+            }
+
+            let requestedMinX = configuration.importButtonMinX ?? configuration.buttonMinX + MomentoTheme.sidebarTitlebarButtonSize + 10
+            return max(
+                MomentoTheme.sidebarTitlebarButtonSize + 10,
+                requestedMinX - configuration.buttonMinX
+            )
         }
 
         private func accessorySize(buttonMinX: CGFloat, controlsWidth: CGFloat) -> NSSize {
@@ -195,19 +212,20 @@ private struct SidebarTitlebarToggleAccessoryView: View {
     var label: String
     var importAction: (() -> Void)?
     var importLabel: String?
+    var importButtonOffset: CGFloat
 
     @State private var isToggleHovered = false
-    @State private var isImportHovered = false
 
     var body: some View {
-        HStack(spacing: 6) {
+        ZStack(alignment: .leading) {
             sidebarToggleButton
 
             if let importAction, let importLabel {
                 importButton(action: importAction, label: importLabel)
+                    .offset(x: importButtonOffset)
             }
         }
-        .frame(width: titlebarControlsWidth, height: MomentoTheme.sidebarTitlebarButtonSize, alignment: .leading)
+        .frame(width: titlebarControlsWidth, height: titlebarControlsHeight, alignment: .leading)
     }
 
     private var sidebarToggleButton: some View {
@@ -219,7 +237,7 @@ private struct SidebarTitlebarToggleAccessoryView: View {
             }
         } label: {
             Image(systemName: "sidebar.left")
-                .font(.system(size: 15, weight: .medium))
+                .font(.system(size: MomentoTheme.toolbarIconSize, weight: .medium))
                 .foregroundStyle(MomentoTheme.primaryText)
                 .frame(width: MomentoTheme.sidebarTitlebarButtonSize, height: MomentoTheme.sidebarTitlebarButtonSize)
                 .background {
@@ -244,30 +262,22 @@ private struct SidebarTitlebarToggleAccessoryView: View {
     }
 
     private func importButton(action: @escaping () -> Void, label: String) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
-
         return Button(action: action) {
             Image(systemName: "square.and.arrow.down")
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: MomentoTheme.toolbarIconSize, weight: .semibold))
                 .foregroundStyle(MomentoTheme.primaryText)
-                .frame(width: MomentoTheme.sidebarTitlebarButtonSize, height: MomentoTheme.sidebarTitlebarButtonSize)
+                .frame(width: MomentoTheme.toolbarIconButtonWidth, height: MomentoTheme.toolbarControlHeight)
                 .background {
-                    if isImportHovered {
-                        shape.fill(MomentoTheme.sidebarIconHoverBackground)
-                    } else {
-                        Color.clear
-                    }
+                    MomentoGlassBackground(
+                        glass: .regular.interactive(true),
+                        cornerRadius: MomentoTheme.toolbarControlRadius
+                    )
                 }
         }
         .buttonStyle(.plain)
-        .frame(width: MomentoTheme.sidebarTitlebarButtonSize, height: MomentoTheme.sidebarTitlebarButtonSize)
-        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .frame(width: MomentoTheme.toolbarIconButtonWidth, height: MomentoTheme.toolbarControlHeight)
+        .contentShape(RoundedRectangle(cornerRadius: MomentoTheme.toolbarControlRadius, style: .continuous))
         .pointerStyle(.link)
-        .onHover { hovering in
-            withAnimation(.smooth(duration: 0.14)) {
-                isImportHovered = hovering
-            }
-        }
         .help(label)
         .accessibilityLabel(label)
     }
@@ -277,7 +287,15 @@ private struct SidebarTitlebarToggleAccessoryView: View {
             return MomentoTheme.sidebarTitlebarButtonSize
         }
 
-        return MomentoTheme.sidebarTitlebarButtonSize * 2 + 6
+        return importButtonOffset + MomentoTheme.toolbarIconButtonWidth
+    }
+
+    private var titlebarControlsHeight: CGFloat {
+        if importAction == nil {
+            return MomentoTheme.sidebarTitlebarButtonSize
+        }
+
+        return MomentoTheme.toolbarControlHeight
     }
 }
 
@@ -285,6 +303,8 @@ private final class SidebarTitlebarToggleContainerView: NSView {
     private let hostingView: SidebarTitlebarToggleHostingView
     private var buttonMinX: CGFloat = 0
     private var controlsWidth: CGFloat = MomentoTheme.sidebarTitlebarButtonSize
+    private var controlsHeight: CGFloat = MomentoTheme.sidebarTitlebarButtonSize
+    private var importButtonOffset: CGFloat?
 
     override var isFlipped: Bool {
         true
@@ -305,6 +325,8 @@ private final class SidebarTitlebarToggleContainerView: NSView {
         hostingView.rootView = rootView
         self.buttonMinX = buttonMinX
         self.controlsWidth = controlsWidth
+        self.controlsHeight = rootView.importAction == nil ? MomentoTheme.sidebarTitlebarButtonSize : MomentoTheme.toolbarControlHeight
+        self.importButtonOffset = rootView.importAction == nil ? nil : rootView.importButtonOffset
         needsLayout = true
     }
 
@@ -316,11 +338,12 @@ private final class SidebarTitlebarToggleContainerView: NSView {
         // 才能保证按钮展开/收起时始终和左侧玻璃侧边栏的右上角对齐。
         let titlebarOriginX = convert(.zero, to: nil).x
         let buttonX = max(0, buttonMinX - titlebarOriginX)
+        let buttonY = (MomentoTheme.floatingSidebarTitlebarContentInset - controlsHeight) / 2
         let nextFrame = NSRect(
             x: buttonX,
-            y: MomentoTheme.sidebarTitlebarButtonTopInset,
+            y: buttonY,
             width: controlsWidth,
-            height: MomentoTheme.sidebarTitlebarButtonSize
+            height: controlsHeight
         )
 
         if hostingView.frame != nextFrame {
@@ -330,7 +353,22 @@ private final class SidebarTitlebarToggleContainerView: NSView {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard hostingView.frame.contains(point) else {
+        let toggleFrame = NSRect(
+            x: hostingView.frame.minX,
+            y: hostingView.frame.minY + (controlsHeight - MomentoTheme.sidebarTitlebarButtonSize) / 2,
+            width: MomentoTheme.sidebarTitlebarButtonSize,
+            height: MomentoTheme.sidebarTitlebarButtonSize
+        )
+        let importFrame = importButtonOffset.map { offset in
+            NSRect(
+                x: hostingView.frame.minX + offset,
+                y: hostingView.frame.minY,
+                width: MomentoTheme.toolbarIconButtonWidth,
+                height: MomentoTheme.toolbarControlHeight
+            )
+        }
+
+        guard toggleFrame.contains(point) || importFrame?.contains(point) == true else {
             return nil
         }
 

@@ -194,12 +194,15 @@ struct ContentView: View {
         .navigationTitle("")
         .onChange(of: isToolbarSearchFocused) { _, isFocused in
             if !isFocused {
-                collapseToolbarSearch()
+                collapseEmptyToolbarSearch()
             }
+        }
+        .onChange(of: store.searchQuery) { _, _ in
+            collapseEmptyToolbarSearch()
         }
         .onChange(of: isModalOverlayVisible) { _, isVisible in
             if isVisible {
-                collapseToolbarSearch()
+                collapseToolbarSearch(ignoresQuery: true)
             }
         }
     }
@@ -249,7 +252,7 @@ struct ContentView: View {
         if isToolbarSearchExpanded {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: MomentoTheme.toolbarIconSize, weight: .semibold))
                     .foregroundStyle(MomentoTheme.primaryText)
 
                 TextField(localization.string("Search assets, tags, colors..."), text: $store.searchQuery)
@@ -258,9 +261,9 @@ struct ContentView: View {
                     .frame(width: 260)
             }
             .padding(.horizontal, 11)
-            .frame(height: 34)
+            .frame(height: MomentoTheme.toolbarControlHeight)
             .background {
-                toolbarControlBackground(cornerRadius: 10)
+                toolbarControlBackground(cornerRadius: MomentoTheme.toolbarControlRadius)
             }
             .onAppear {
                 isToolbarSearchFocused = true
@@ -273,13 +276,13 @@ struct ContentView: View {
                 isToolbarSearchFocused = true
             } label: {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: MomentoTheme.toolbarIconSize, weight: .semibold))
                     .foregroundStyle(MomentoTheme.primaryText)
-                    .frame(width: 38, height: 34)
+                    .frame(width: MomentoTheme.toolbarIconButtonWidth, height: MomentoTheme.toolbarControlHeight)
                     .background {
-                        toolbarControlBackground(cornerRadius: 10)
+                        toolbarControlBackground(cornerRadius: MomentoTheme.toolbarControlRadius)
                     }
-                    .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: MomentoTheme.toolbarControlRadius, style: .continuous))
             }
             .buttonStyle(.plain)
             .pointerStyle(.link)
@@ -287,13 +290,25 @@ struct ContentView: View {
         }
     }
 
-    private func collapseToolbarSearch() {
+    private func collapseEmptyToolbarSearch() {
+        guard !isToolbarSearchFocused, store.searchQuery.isEmpty else {
+            return
+        }
+
+        collapseToolbarSearch(ignoresQuery: true)
+    }
+
+    private func collapseToolbarSearch(ignoresQuery: Bool = false) {
         guard isToolbarSearchExpanded else {
+            return
+        }
+        guard ignoresQuery || store.searchQuery.isEmpty else {
             return
         }
 
         withAnimation(.smooth(duration: 0.16)) {
             isToolbarSearchExpanded = false
+            isToolbarSearchFocused = false
         }
     }
 
