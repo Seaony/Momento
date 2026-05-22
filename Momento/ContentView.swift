@@ -116,8 +116,6 @@ struct ContentView: View {
                 libraryBody
             }
         }
-        .blur(radius: isModalOverlayVisible ? 8 : 0, opaque: false)
-        .animation(.smooth(duration: 0.16), value: isModalOverlayVisible)
         .overlay(alignment: .bottom) {
             if let errorMessage {
                 importErrorBanner(errorMessage)
@@ -188,7 +186,6 @@ struct ContentView: View {
             onDeleteFolder: presentDeleteFolderDialog,
             title: title,
             subtitle: localization.itemCount(visibleAssets.count),
-            showsChromeControls: !isModalOverlayVisible,
             inspectorAsset: store.selectedAsset.map { MomentoInspectorAsset(asset: $0, localization: localization) },
             inspectorTags: selectedTags,
             inspectorAvailableTags: availableTagNames,
@@ -207,18 +204,16 @@ struct ContentView: View {
             }
         }
         .toolbar {
-            if !isModalOverlayVisible {
-                ToolbarSpacer(.flexible)
-                ToolbarItemGroup(placement: .automatic) {
-                    toolbarFilterButton
-                    toolbarSortButton
-                        .padding(.trailing, 6)
-                    toolbarViewModeSwitcher
-                        .padding(.trailing, 6)
-                    toolbarSearchControl
-                }
-                .sharedBackgroundVisibility(.hidden)
+            ToolbarSpacer(.flexible)
+            ToolbarItemGroup(placement: .automatic) {
+                toolbarFilterButton
+                toolbarSortButton
+                    .padding(.trailing, 6)
+                toolbarViewModeSwitcher
+                    .padding(.trailing, 6)
+                toolbarSearchControl
             }
+            .sharedBackgroundVisibility(.hidden)
         }
         .navigationTitle("")
     }
@@ -1000,18 +995,6 @@ struct ContentView: View {
 
     private var defaultViewMode: AssetViewMode {
         AssetViewMode(rawValue: defaultViewModeRawValue) ?? .masonry
-    }
-
-    private var isLibraryDialogVisible: Bool {
-        isCreateLibraryDialogPresented || editingLibrary != nil || deletingLibrary != nil
-    }
-
-    private var isFolderDialogVisible: Bool {
-        creatingFolder != nil || editingFolder != nil || deletingFolder != nil
-    }
-
-    private var isModalOverlayVisible: Bool {
-        isLibraryDialogVisible || isFolderDialogVisible
     }
 
     private var errorMessage: String? {

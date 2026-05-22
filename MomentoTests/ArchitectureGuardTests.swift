@@ -58,6 +58,14 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("try storage.deleteLibraryPackage(at: resolvedURL)"))
     }
 
+    func testCustomDialogsDoNotHideToolbarChrome() throws {
+        let source = try String(contentsOf: contentViewURL(), encoding: .utf8)
+
+        XCTAssertFalse(source.contains("showsChromeControls: !isModalOverlayVisible"))
+        XCTAssertFalse(source.contains("if !isModalOverlayVisible {"))
+        XCTAssertFalse(source.contains(".blur(radius: isModalOverlayVisible"))
+    }
+
     private func repositoryRoot() -> URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
