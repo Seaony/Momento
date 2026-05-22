@@ -15,6 +15,8 @@ struct ContentView: View {
     @State private var isInspectorPresented = true
     @State private var inspectorNotesByAssetID: [AssetItem.ID: String] = [:]
     @State private var importError: String?
+    @State private var isToolbarSearchExpanded = false
+    @FocusState private var isToolbarSearchFocused: Bool
 
     private var sidebarSelection: Binding<String?> {
         Binding {
@@ -175,11 +177,63 @@ struct ContentView: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.segmented)
+
+                    toolbarSearchControl
                 }
             }
         }
-        .libraryToolbarSearch(isVisible: !isModalOverlayVisible, text: $store.searchQuery, prompt: Text(localization.string("Search assets, tags, colors...")))
         .navigationTitle("")
+        .onChange(of: isToolbarSearchFocused) { _, isFocused in
+            if !isFocused && store.searchQuery.isEmpty {
+                withAnimation(.smooth(duration: 0.16)) {
+                    isToolbarSearchExpanded = false
+                }
+            }
+        }
+        .onChange(of: isModalOverlayVisible) { _, isVisible in
+            if isVisible && store.searchQuery.isEmpty {
+                isToolbarSearchExpanded = false
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var toolbarSearchControl: some View {
+        if isToolbarSearchExpanded || !store.searchQuery.isEmpty {
+            HStack(spacing: 7) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(MomentoTheme.secondaryText)
+
+                TextField(localization.string("Search assets, tags, colors..."), text: $store.searchQuery)
+                    .textFieldStyle(.plain)
+                    .focused($isToolbarSearchFocused)
+                    .frame(width: 260)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 28)
+            .background {
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(0.08))
+            }
+            .overlay {
+                Capsule(style: .continuous)
+                    .stroke(MomentoTheme.subtleStroke.opacity(0.38), lineWidth: 1)
+            }
+            .onAppear {
+                isToolbarSearchFocused = true
+            }
+        } else {
+            Button {
+                withAnimation(.smooth(duration: 0.16)) {
+                    isToolbarSearchExpanded = true
+                }
+                isToolbarSearchFocused = true
+            } label: {
+                Label(localization.string("Search assets, tags, colors..."), systemImage: "magnifyingglass")
+                    .labelStyle(.iconOnly)
+            }
+            .help(localization.string("Search assets, tags, colors..."))
+        }
     }
 
     @ViewBuilder
@@ -620,17 +674,6 @@ private extension MomentoInspectorAsset {
             addedDate: asset.importedAt,
             kind: localization.kindTitle(for: asset.kind)
         )
-    }
-}
-
-private extension View {
-    @ViewBuilder
-    func libraryToolbarSearch(isVisible: Bool, text: Binding<String>, prompt: Text) -> some View {
-        if isVisible {
-            searchable(text: text, placement: .toolbar, prompt: prompt)
-        } else {
-            self
-        }
     }
 }
 
