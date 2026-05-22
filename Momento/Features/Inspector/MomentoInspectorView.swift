@@ -91,7 +91,7 @@ struct MomentoInspectorView: View {
     private static let tagPickerEmptyMessageHeight: CGFloat = 23
     private static let tagPickerCreateRowHeight: CGFloat = 34
     private static let tagPickerCreateBottomPadding: CGFloat = 8
-    private static let inspectorSectionSeparatorWidth: CGFloat = 54
+    private static let inspectorSectionSpacing: CGFloat = 12
     private static let inspectorSectionSeparatorOpacity = 0.1
 
     @Environment(\.appLocalization) private var localization
@@ -138,7 +138,7 @@ struct MomentoInspectorView: View {
         VStack(spacing: 0) {
             if let asset {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: Self.inspectorSectionSpacing) {
                         preview(asset)
                         metadata(asset)
                         tagEditor
@@ -700,16 +700,18 @@ struct MomentoInspectorView: View {
         _ title: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Self.inspectorSectionSpacing) {
             Rectangle()
                 .fill(Color.white.opacity(Self.inspectorSectionSeparatorOpacity))
-                .frame(width: Self.inspectorSectionSeparatorWidth, height: 1)
+                .frame(maxWidth: .infinity)
+                .frame(height: 1)
 
             Text(title.uppercased())
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(MomentoTheme.tertiaryText)
             content()
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func infoRow(_ label: String, _ value: String) -> some View {
