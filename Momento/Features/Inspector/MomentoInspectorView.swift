@@ -356,12 +356,15 @@ struct MomentoInspectorView: View {
                 Button {
                     removeTag(tag)
                 } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 8, weight: .bold))
-                        .frame(width: 14, height: 14)
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .frame(width: 20, height: 20)
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(MomentoTheme.primaryText)
+                .contentShape(Circle())
+                .pointerStyle(.link)
                 .transition(.opacity.combined(with: .scale(scale: 0.82)))
                 .accessibilityLabel(localization.format("Remove %@", tag))
             }
