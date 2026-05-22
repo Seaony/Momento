@@ -20,11 +20,6 @@ private enum ContentToolbarMetrics {
     static let searchControlWidth: CGFloat = 214
     static let iconButtonWidth: CGFloat = 38
     static let viewModeSwitcherWidth: CGFloat = 112
-    static let controlSpacing: CGFloat = 6
-    static let controlClusterWidth: CGFloat = (iconButtonWidth * 2)
-        + viewModeSwitcherWidth
-        + searchControlWidth
-        + (controlSpacing * 3)
     static let filterPopoverWidth: CGFloat = 340
     static let filterScrollableContentMaxHeight: CGFloat = 220
     static let sortPopoverWidth: CGFloat = 156
@@ -212,8 +207,13 @@ struct ContentView: View {
         }
         .toolbar {
             ToolbarSpacer(.flexible)
-            ToolbarItem(placement: .automatic) {
-                toolbarControlCluster
+            ToolbarItemGroup(placement: .automatic) {
+                toolbarFilterButton
+                toolbarSortButton
+                    .padding(.trailing, 6)
+                toolbarViewModeSwitcher
+                    .padding(.trailing, 6)
+                toolbarSearchControl
             }
             .sharedBackgroundVisibility(.hidden)
         }
@@ -257,18 +257,6 @@ struct ContentView: View {
             onRenameTag: renameTag,
             onDeleteTag: deleteTag
         )
-    }
-
-    private var toolbarControlCluster: some View {
-        HStack(spacing: ContentToolbarMetrics.controlSpacing) {
-            toolbarFilterButton
-            toolbarSortButton
-            toolbarViewModeSwitcher
-            toolbarSearchControl
-        }
-        .frame(width: ContentToolbarMetrics.controlClusterWidth, height: MomentoTheme.toolbarControlHeight, alignment: .trailing)
-        .fixedSize(horizontal: true, vertical: false)
-        .layoutPriority(100)
     }
 
     private var toolbarViewModeSwitcher: some View {

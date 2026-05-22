@@ -40,14 +40,15 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertFalse(shellSource.contains("inspectorResizeHandle()"))
     }
 
-    func testToolbarSearchUsesFixedWidthCluster() throws {
+    func testToolbarSearchUsesFixedWidthControlWithoutCollapsingToolbarItems() throws {
         let source = try String(contentsOf: contentViewURL(), encoding: .utf8)
 
         XCTAssertTrue(source.contains("static let searchControlWidth: CGFloat = 214"))
-        XCTAssertTrue(source.contains("static let controlClusterWidth: CGFloat"))
-        XCTAssertTrue(source.contains("ToolbarItem(placement: .automatic)"))
-        XCTAssertTrue(source.contains("toolbarControlCluster"))
-        XCTAssertFalse(source.contains("ToolbarItemGroup(placement: .automatic)"))
+        XCTAssertTrue(source.contains("ToolbarItemGroup(placement: .automatic)"))
+        XCTAssertTrue(source.contains(".frame(width: ContentToolbarMetrics.searchControlWidth, height: MomentoTheme.toolbarControlHeight)"))
+        XCTAssertTrue(source.contains(".fixedSize(horizontal: true, vertical: false)"))
+        XCTAssertFalse(source.contains("toolbarControlCluster"))
+        XCTAssertFalse(source.contains("static let controlClusterWidth"))
     }
 
     func testContentViewValidatesCurrentLibraryWhenWindowAppears() throws {
