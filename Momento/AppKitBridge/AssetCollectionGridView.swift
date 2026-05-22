@@ -47,6 +47,9 @@ private enum AssetCollectionMetrics {
     static let contextMenuRowSpacing: CGFloat = 2
     static let contextMenuRowCornerRadius: CGFloat = 8
     static let contextMenuPanelCornerRadius: CGFloat = 12
+    static let contextMenuSeparatorHeight: CGFloat = 1
+    static let contextMenuSeparatorVerticalPadding: CGFloat = 1
+    static let contextMenuSeparatorAlpha: CGFloat = 0.65
     static let zeroEdgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
 }
 
@@ -89,6 +92,10 @@ enum AssetContextMenuAction: CaseIterable {
 
     var isDestructive: Bool {
         self == .moveToTrash
+    }
+
+    var showsSeparatorAfter: Bool {
+        self == .previewOriginal || self == .revealInFinder
     }
 }
 
@@ -1346,6 +1353,7 @@ private final class DimensionBadgeView: NSView {
 
 private final class AssetContextMenuView: NSView {
     private let rowViews: [AssetContextMenuRowView]
+    private let separatorViewsByRowIndex: [Int: AssetContextMenuSeparatorView]
 
     override var isFlipped: Bool {
         true
@@ -1364,12 +1372,18 @@ private final class AssetContextMenuView: NSView {
                 onSelect: { onSelect(action) }
             )
         }
+        separatorViewsByRowIndex = Dictionary(
+            uniqueKeysWithValues: actions.enumerated().compactMap { index, action in
+                action.showsSeparatorAfter ? (index, AssetContextMenuSeparatorView()) : nil
+            }
+        )
         super.init(frame: .zero)
         setUpView()
     }
 
     required init?(coder: NSCoder) {
         rowViews = []
+        separatorViewsByRowIndex = [:]
         super.init(coder: coder)
         setUpView()
     }
@@ -1381,6 +1395,10 @@ private final class AssetContextMenuView: NSView {
             height: AssetCollectionMetrics.contextMenuPadding * 2
                 + rowCount * AssetCollectionMetrics.contextMenuRowHeight
                 + max(rowCount - 1, 0) * AssetCollectionMetrics.contextMenuRowSpacing
+                + CGFloat(separatorViewsByRowIndex.count) * (
+                    AssetCollectionMetrics.contextMenuSeparatorHeight
+                        + AssetCollectionMetrics.contextMenuSeparatorVerticalPadding * 2
+                )
         )
     }
 
@@ -1389,14 +1407,30 @@ private final class AssetContextMenuView: NSView {
 
         let rowWidth = max(bounds.width - AssetCollectionMetrics.contextMenuPadding * 2, 0)
         var y = AssetCollectionMetrics.contextMenuPadding
-        for rowView in rowViews {
+        for (index, rowView) in rowViews.enumerated() {
             rowView.frame = NSRect(
                 x: AssetCollectionMetrics.contextMenuPadding,
                 y: y,
                 width: rowWidth,
                 height: AssetCollectionMetrics.contextMenuRowHeight
             )
-            y += AssetCollectionMetrics.contextMenuRowHeight + AssetCollectionMetrics.contextMenuRowSpacing
+            y += AssetCollectionMetrics.contextMenuRowHeight
+
+            if let separatorView = separatorViewsByRowIndex[index] {
+                y += AssetCollectionMetrics.contextMenuSeparatorVerticalPadding
+                separatorView.frame = NSRect(
+                    x: AssetCollectionMetrics.contextMenuPadding,
+                    y: y,
+                    width: rowWidth,
+                    height: AssetCollectionMetrics.contextMenuSeparatorHeight
+                )
+                y += AssetCollectionMetrics.contextMenuSeparatorHeight
+                    + AssetCollectionMetrics.contextMenuSeparatorVerticalPadding
+            }
+
+            if index < rowViews.count - 1 {
+                y += AssetCollectionMetrics.contextMenuRowSpacing
+            }
         }
     }
 
@@ -1411,6 +1445,28 @@ private final class AssetContextMenuView: NSView {
         for rowView in rowViews {
             addSubview(rowView)
         }
+        for separatorView in separatorViewsByRowIndex.values {
+            addSubview(separatorView)
+        }
+    }
+}
+
+private final class AssetContextMenuSeparatorView: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setUpView()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setUpView()
+    }
+
+    private func setUpView() {
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.separatorColor
+            .withAlphaComponent(AssetCollectionMetrics.contextMenuSeparatorAlpha)
+            .cgColor
     }
 }
 
