@@ -439,7 +439,7 @@ struct ContentView: View {
     }
 
     private var filterFacetPicker: some View {
-        let shape = RoundedRectangle(cornerRadius: 19, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
 
         return HStack(spacing: 6) {
             ForEach(AssetFilterFacet.allCases) { facet in
@@ -448,7 +448,10 @@ struct ContentView: View {
         }
         .padding(5)
         .background {
-            MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.10)), cornerRadius: 19)
+            ZStack {
+                shape.fill(.regularMaterial)
+                shape.fill(Color.black.opacity(0.14))
+            }
         }
         .overlay {
             shape.strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
@@ -461,7 +464,7 @@ struct ContentView: View {
     private func filterFacetButton(_ facet: AssetFilterFacet) -> some View {
         let isSelected = selectedFilterFacet == facet
         let isHovered = hoveredFilterFacet == facet
-        let shape = RoundedRectangle(cornerRadius: 15, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
 
         return Button {
             selectedFilterFacet = facet
