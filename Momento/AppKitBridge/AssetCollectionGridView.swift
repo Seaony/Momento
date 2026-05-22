@@ -48,8 +48,9 @@ private enum AssetCollectionMetrics {
     static let contextMenuRowCornerRadius: CGFloat = 8
     static let contextMenuPanelCornerRadius: CGFloat = 12
     static let contextMenuSeparatorHeight: CGFloat = 1
+    static let contextMenuSeparatorHorizontalInset: CGFloat = 10
     static let contextMenuSeparatorVerticalPadding: CGFloat = 1
-    static let contextMenuSeparatorAlpha: CGFloat = 0.65
+    static let contextMenuSeparatorAlpha: CGFloat = 0.18
     static let zeroEdgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
 }
 
@@ -1419,9 +1420,13 @@ private final class AssetContextMenuView: NSView {
             if let separatorView = separatorViewsByRowIndex[index] {
                 y += AssetCollectionMetrics.contextMenuSeparatorVerticalPadding
                 separatorView.frame = NSRect(
-                    x: AssetCollectionMetrics.contextMenuPadding,
+                    x: AssetCollectionMetrics.contextMenuPadding
+                        + AssetCollectionMetrics.contextMenuSeparatorHorizontalInset,
                     y: y,
-                    width: rowWidth,
+                    width: max(
+                        rowWidth - AssetCollectionMetrics.contextMenuSeparatorHorizontalInset * 2,
+                        0
+                    ),
                     height: AssetCollectionMetrics.contextMenuSeparatorHeight
                 )
                 y += AssetCollectionMetrics.contextMenuSeparatorHeight
