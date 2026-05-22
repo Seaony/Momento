@@ -21,6 +21,9 @@
         }
       }
     },
+    "%lld" : {
+
+    },
     "1 item" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -208,6 +211,23 @@
         }
       }
     },
+    "Change this folder name. Assets stay in the same folder." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Change this folder name. Assets stay in the same folder."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "修改这个文件夹名称，素材仍会保留在同一个文件夹中。"
+          }
+        }
+      }
+    },
     "Change this library name. Assets and files stay in the same library package." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -255,23 +275,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择文件或文件夹"
-          }
-        }
-      }
-    },
-    "Change this folder name. Assets stay in the same folder." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Change this folder name. Assets stay in the same folder."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "修改这个文件夹名称，素材仍会保留在同一个文件夹中。"
           }
         }
       }
@@ -345,6 +348,7 @@
       }
     },
     "Color copied" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -513,23 +517,6 @@
         }
       }
     },
-    "Delete Library" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Delete Library"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "删除资源库"
-          }
-        }
-      }
-    },
     "Delete folder warning: %@" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -543,6 +530,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“%@” 及其子文件夹将被删除。文件夹中的素材仍会保留在资源库中，但会从这个文件夹移除。"
+          }
+        }
+      }
+    },
+    "Delete Library" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete Library"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除资源库"
           }
         }
       }
@@ -1516,6 +1520,23 @@
         }
       }
     },
+    "Refresh Thumbnail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh Thumbnail"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刷新缩略图"
+          }
+        }
+      }
+    },
     "Remove %@" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1563,23 +1584,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重命名资源库"
-          }
-        }
-      }
-    },
-    "Refresh Thumbnail" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Refresh Thumbnail"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "刷新缩略图"
           }
         }
       }
