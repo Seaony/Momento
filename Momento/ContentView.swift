@@ -174,15 +174,6 @@ struct ContentView: View {
                     }
                     .labelsHidden()
                     .pickerStyle(.segmented)
-
-                    Button {
-                        withAnimation(.smooth(duration: 0.18)) {
-                            isCommandPalettePresented = true
-                        }
-                    } label: {
-                        Label(localization.string("Open command palette"), systemImage: "command")
-                    }
-                    .help(localization.string("Open command palette"))
                 }
             }
         }

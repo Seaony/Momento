@@ -244,7 +244,7 @@ struct MomentoShellView<Content: View>: View {
 
             Capsule()
                 .fill(inspectorResizeHandleColor)
-                .frame(width: 4, height: 132)
+                .frame(width: 7, height: 76)
                 .opacity(isInspectorResizeHandleVisible ? 1 : 0)
                 .contentShape(Capsule())
                 .pointerStyle(.columnResize(directions: .all))
@@ -271,7 +271,7 @@ struct MomentoShellView<Content: View>: View {
 
             Spacer()
         }
-        .frame(width: 4)
+        .frame(width: 7)
         .frame(maxHeight: .infinity)
     }
 
@@ -297,10 +297,10 @@ struct MomentoShellView<Content: View>: View {
 
     private var inspectorResizeHandleColor: Color {
         if isInspectorResizeHandleHovered || inspectorResizeStartWidth != nil {
-            return .white.opacity(0.68)
+            return .white.opacity(0.48)
         }
 
-        return .white.opacity(0.34)
+        return .white.opacity(0.24)
     }
 
     @ViewBuilder
