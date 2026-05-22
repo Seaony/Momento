@@ -178,19 +178,19 @@ struct ContentView: View {
         }
         .toolbar {
             if !isModalOverlayVisible {
-                ToolbarItem(placement: .primaryAction) {
+                ToolbarItem(placement: .topBarLeading) {
                     toolbarImportButton
                         .padding(.trailing, 8)
                 }
                 .sharedBackgroundVisibility(.hidden)
 
-                ToolbarItem(placement: .primaryAction) {
+                ToolbarItem(placement: .topBarTrailing) {
                     toolbarViewModeSwitcher
                         .padding(.trailing, 8)
                 }
                 .sharedBackgroundVisibility(.hidden)
 
-                ToolbarItem(placement: .primaryAction) {
+                ToolbarItem(placement: .topBarTrailing) {
                     toolbarSearchControl
                 }
                 .sharedBackgroundVisibility(.hidden)
@@ -198,15 +198,13 @@ struct ContentView: View {
         }
         .navigationTitle("")
         .onChange(of: isToolbarSearchFocused) { _, isFocused in
-            if !isFocused && store.searchQuery.isEmpty {
-                withAnimation(.smooth(duration: 0.16)) {
-                    isToolbarSearchExpanded = false
-                }
+            if !isFocused {
+                collapseToolbarSearch()
             }
         }
         .onChange(of: isModalOverlayVisible) { _, isVisible in
-            if isVisible && store.searchQuery.isEmpty {
-                isToolbarSearchExpanded = false
+            if isVisible {
+                collapseToolbarSearch()
             }
         }
     }
@@ -272,7 +270,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private var toolbarSearchControl: some View {
-        if isToolbarSearchExpanded || !store.searchQuery.isEmpty {
+        if isToolbarSearchExpanded {
             HStack(spacing: 9) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 16, weight: .semibold))
@@ -310,6 +308,16 @@ struct ContentView: View {
             .buttonStyle(.plain)
             .pointerStyle(.link)
             .help(localization.string("Search assets, tags, colors..."))
+        }
+    }
+
+    private func collapseToolbarSearch() {
+        guard isToolbarSearchExpanded else {
+            return
+        }
+
+        withAnimation(.smooth(duration: 0.16)) {
+            isToolbarSearchExpanded = false
         }
     }
 
