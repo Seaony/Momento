@@ -26,11 +26,11 @@ private enum AssetCollectionMetrics {
     static let dimensionBadgeHorizontalPadding: CGFloat = 3
     static let sectionHorizontalInset: CGFloat = 8
     static let sectionVerticalInset: CGFloat = 14
-    static let listItemHeight: CGFloat = 76
+    static let listItemHeight: CGFloat = 68
     static let listThumbnailSize: CGFloat = 52
     static let listDateColumnWidth: CGFloat = 122
-    static let listSeparatorHorizontalOutset: CGFloat = 8
-    static let listSeparatorAlpha: CGFloat = 0.1
+    static let listSeparatorHorizontalInset: CGFloat = 18
+    static let listSeparatorAlpha: CGFloat = 0.055
     static let selectionBackgroundAnimationDuration: CFTimeInterval = 0.12
     static let titleTextColor = NSColor.labelColor.withAlphaComponent(0.5)
     static let subtitleTextColor = NSColor.labelColor.withAlphaComponent(0.3)
@@ -676,11 +676,11 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
             separatorView.leadingAnchor.constraint(
                 equalTo: contentView.leadingAnchor,
-                constant: -AssetCollectionMetrics.listSeparatorHorizontalOutset
+                constant: AssetCollectionMetrics.listSeparatorHorizontalInset
             ),
             separatorView.trailingAnchor.constraint(
                 equalTo: contentView.trailingAnchor,
-                constant: AssetCollectionMetrics.listSeparatorHorizontalOutset
+                constant: -AssetCollectionMetrics.listSeparatorHorizontalInset
             ),
             separatorView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
             separatorView.heightAnchor.constraint(equalToConstant: 1)
