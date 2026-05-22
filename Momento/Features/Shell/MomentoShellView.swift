@@ -56,6 +56,7 @@ struct MomentoShellView<Content: View>: View {
     @State private var isSidebarCollapsed = false
     @State private var inspectorWidth = MomentoTheme.inspectorMinWidth
     @State private var inspectorResizeStartWidth: CGFloat?
+    @State private var availableShellWidth = MomentoTheme.defaultWindowWidth
     @State private var isInspectorHovered = false
     @State private var isInspectorResizeHandleHovered = false
     @State private var activeToastMessage: String?
@@ -140,6 +141,17 @@ struct MomentoShellView<Content: View>: View {
 
     var body: some View {
         shellContent
+            .background {
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear {
+                            updateAvailableShellWidth(proxy.size.width)
+                        }
+                        .onChange(of: proxy.size.width) { _, width in
+                            updateAvailableShellWidth(width)
+                        }
+                }
+            }
     }
 
     private var shellContent: some View {
@@ -155,7 +167,7 @@ struct MomentoShellView<Content: View>: View {
             }
             .padding(.horizontal, MomentoTheme.contentSidebarGap)
             .frame(
-                minWidth: MomentoTheme.contentMinWidth + MomentoTheme.contentSidebarGap * 2,
+                minWidth: effectiveContentMinWidth + MomentoTheme.contentSidebarGap * 2,
                 maxWidth: .infinity,
                 maxHeight: .infinity
             )
@@ -339,7 +351,18 @@ struct MomentoShellView<Content: View>: View {
     }
 
     private var sidebarWidthRange: ClosedRange<CGFloat> {
-        MomentoTheme.sidebarMinWidth...MomentoTheme.sidebarMaxWidth
+        let reservedInspectorWidth = isInspectorPresented ? MomentoTheme.inspectorMinWidth : 0
+        let maximumWidth = availableShellWidth
+            - MomentoTheme.floatingSidebarInset * 2
+            - reservedInspectorWidth
+            - MomentoTheme.contentSidebarGap * 2
+            - MomentoTheme.compactContentMinWidth
+        let upperBound = min(
+            MomentoTheme.sidebarMaxWidth,
+            max(MomentoTheme.sidebarMinWidth, maximumWidth)
+        )
+
+        return MomentoTheme.sidebarMinWidth...upperBound
     }
 
     private var effectiveInspectorWidth: CGFloat {
@@ -347,7 +370,38 @@ struct MomentoShellView<Content: View>: View {
     }
 
     private var inspectorWidthRange: ClosedRange<CGFloat> {
-        MomentoTheme.inspectorMinWidth...MomentoTheme.inspectorMaxWidth
+        let reservedSidebarWidth = isSidebarCollapsed ? 0 : MomentoTheme.sidebarMinWidth + MomentoTheme.floatingSidebarInset * 2
+        let maximumWidth = availableShellWidth
+            - reservedSidebarWidth
+            - MomentoTheme.contentSidebarGap * 2
+            - MomentoTheme.compactContentMinWidth
+        let upperBound = min(
+            MomentoTheme.inspectorMaxWidth,
+            max(MomentoTheme.inspectorMinWidth, maximumWidth)
+        )
+
+        return MomentoTheme.inspectorMinWidth...upperBound
+    }
+
+    private var effectiveContentMinWidth: CGFloat {
+        let reservedSidebarWidth = isSidebarCollapsed ? 0 : effectiveSidebarWidth + MomentoTheme.floatingSidebarInset * 2
+        let reservedInspectorWidth = isInspectorPresented ? effectiveInspectorWidth : 0
+        let availableContentWidth = availableShellWidth
+            - reservedSidebarWidth
+            - reservedInspectorWidth
+            - MomentoTheme.contentSidebarGap * 2
+
+        return availableContentWidth.clamped(
+            to: MomentoTheme.compactContentMinWidth...MomentoTheme.contentMinWidth
+        )
+    }
+
+    private func updateAvailableShellWidth(_ width: CGFloat) {
+        guard width > 0 else {
+            return
+        }
+
+        availableShellWidth = width
     }
 
     private var isInspectorResizeHandleVisible: Bool {

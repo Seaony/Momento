@@ -71,6 +71,7 @@ enum MomentoTheme {
     static let inspectorMinWidth: CGFloat = 260
     static let inspectorWidth: CGFloat = inspectorMinWidth
     static let inspectorMaxWidth: CGFloat = 460
+    static let compactContentMinWidth: CGFloat = 300
     static let contentMinWidth: CGFloat = 520
     static let contentSidebarGap: CGFloat = 12
     static let toolbarHeight: CGFloat = 56

@@ -23,14 +23,18 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(windowSource.contains("window.titleVisibility = .hidden"))
     }
 
-    func testMainWindowMinimumSizeAccountsForMaxSidebar() throws {
+    func testMainWindowMinimumSizeUsesAdaptiveShellBounds() throws {
         let appSource = try String(contentsOf: appURL(), encoding: .utf8)
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
         let themeSource = try String(contentsOf: designSystemURL(), encoding: .utf8)
+        let shellSource = try String(contentsOf: shellURL(), encoding: .utf8)
 
-        XCTAssertTrue(themeSource.contains("static let mainWindowMinWidth = sidebarMaxWidth + floatingSidebarInset * 2 + contentMinWidth + contentSidebarGap * 2 + inspectorWidth"))
+        XCTAssertTrue(themeSource.contains("static let mainWindowMinWidth: CGFloat = 800"))
+        XCTAssertTrue(themeSource.contains("static let compactContentMinWidth: CGFloat = 300"))
         XCTAssertTrue(contentSource.contains(".frame(minWidth: MomentoTheme.mainWindowMinWidth, minHeight: MomentoTheme.mainWindowMinHeight)"))
         XCTAssertTrue(appSource.contains(".windowResizability(.contentMinSize)"))
+        XCTAssertTrue(shellSource.contains("availableShellWidth"))
+        XCTAssertTrue(shellSource.contains("MomentoTheme.compactContentMinWidth"))
     }
 
     func testContentViewValidatesCurrentLibraryWhenWindowAppears() throws {
@@ -55,6 +59,10 @@ final class ArchitectureGuardTests: XCTestCase {
 
     private func designSystemURL() -> URL {
         repositoryRoot().appendingPathComponent("Momento/DesignSystem/MomentoGlass.swift")
+    }
+
+    private func shellURL() -> URL {
+        repositoryRoot().appendingPathComponent("Momento/Features/Shell/MomentoShellView.swift")
     }
 
     private func windowTransparencyURL() -> URL {
