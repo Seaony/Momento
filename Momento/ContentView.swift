@@ -90,7 +90,7 @@ struct ContentView: View {
         }
         .fileImporter(
             isPresented: $isImporterPresented,
-            allowedContentTypes: [.item],
+            allowedContentTypes: [.image, .folder],
             allowsMultipleSelection: true,
             onCompletion: handleImportResult
         )
@@ -179,6 +179,12 @@ struct ContentView: View {
         .toolbar {
             if !isModalOverlayVisible {
                 ToolbarItem(placement: .primaryAction) {
+                    toolbarImportButton
+                        .padding(.trailing, 8)
+                }
+                .sharedBackgroundVisibility(.hidden)
+
+                ToolbarItem(placement: .primaryAction) {
                     toolbarViewModeSwitcher
                         .padding(.trailing, 8)
                 }
@@ -203,6 +209,25 @@ struct ContentView: View {
                 isToolbarSearchExpanded = false
             }
         }
+    }
+
+    private var toolbarImportButton: some View {
+        Button {
+            isImporterPresented = true
+        } label: {
+            Image(systemName: "square.and.arrow.down")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(MomentoTheme.secondaryText)
+                .frame(width: 44, height: 38)
+                .background {
+                    toolbarControlBackground(cornerRadius: 12)
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .help(localization.string("Import Assets"))
+        .accessibilityLabel(localization.string("Import Assets"))
     }
 
     private var toolbarViewModeSwitcher: some View {
@@ -302,13 +327,7 @@ struct ContentView: View {
     }
 
     private func toolbarControlBackground(cornerRadius: CGFloat) -> some View {
-        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-
-        return shape
-            .fill(Color.white.opacity(0.08))
-            .overlay {
-                shape.stroke(MomentoTheme.subtleStroke.opacity(0.38), lineWidth: 1)
-            }
+        MomentoGlassBackground(glass: .regular, cornerRadius: cornerRadius)
     }
 
     @ViewBuilder
