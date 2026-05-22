@@ -26,18 +26,24 @@ private enum AssetCollectionMetrics {
     static let dimensionBadgeHorizontalPadding: CGFloat = 3
     static let sectionHorizontalInset: CGFloat = 8
     static let sectionVerticalInset: CGFloat = 14
-    static let listItemHeight: CGFloat = 68
+    static let listItemHeight: CGFloat = 76
     static let listThumbnailSize: CGFloat = 52
+    static let listDateColumnWidth: CGFloat = 122
+    static let listSeparatorHorizontalOutset: CGFloat = 8
     static let listSeparatorAlpha: CGFloat = 0.1
     static let selectionBackgroundAnimationDuration: CFTimeInterval = 0.12
     static let titleTextColor = NSColor.labelColor.withAlphaComponent(0.5)
     static let subtitleTextColor = NSColor.labelColor.withAlphaComponent(0.3)
+    static let listDateTextColor = NSColor.labelColor.withAlphaComponent(0.72)
+    static let selectedTitleTextColor = NSColor.white.withAlphaComponent(0.95)
+    static let selectedSubtitleTextColor = NSColor.white.withAlphaComponent(0.72)
 }
 
 struct AssetCollectionGridView: NSViewRepresentable {
     var assets: [AssetItem]
     var selectedAssetIDs: Set<AssetItem.ID>
     var viewMode: AssetViewMode
+    var localization: AppLocalization
     var onSelectionChange: (Set<AssetItem.ID>) -> Void
     var onDoubleClick: (AssetItem) -> Void
     var onSpacePreviewStart: (AssetItem, NSRect?) -> Void
@@ -47,6 +53,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
         assets: [AssetItem],
         selectedAssetIDs: Set<AssetItem.ID> = [],
         viewMode: AssetViewMode = .grid,
+        localization: AppLocalization = AppLocalization(language: .system),
         onSelectionChange: @escaping (Set<AssetItem.ID>) -> Void = { _ in },
         onDoubleClick: @escaping (AssetItem) -> Void = { _ in },
         onSpacePreviewStart: @escaping (AssetItem, NSRect?) -> Void = { _, _ in },
@@ -55,6 +62,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
         self.assets = assets
         self.selectedAssetIDs = selectedAssetIDs
         self.viewMode = viewMode
+        self.localization = localization
         self.onSelectionChange = onSelectionChange
         self.onDoubleClick = onDoubleClick
         self.onSpacePreviewStart = onSpacePreviewStart
@@ -113,6 +121,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
             collectionView.collectionViewLayout = makeLayout(for: viewMode, assets: assets)
             context.coordinator.currentViewMode = viewMode
             context.coordinator.currentAssets = assets
+            context.coordinator.currentLocalization = localization
             collectionView.reloadData()
             context.coordinator.syncSelection()
             context.coordinator.syncHoveredPreviewAsset()
@@ -126,6 +135,11 @@ struct AssetCollectionGridView: NSViewRepresentable {
             } else if collectionView.collectionViewLayout is AssetGridCollectionViewLayout {
                 collectionView.collectionViewLayout?.invalidateLayout()
             }
+            collectionView.reloadData()
+        }
+
+        if context.coordinator.currentLocalization != localization {
+            context.coordinator.currentLocalization = localization
             collectionView.reloadData()
         }
 
@@ -174,6 +188,7 @@ extension AssetCollectionGridView {
         weak var collectionView: NSCollectionView?
         var currentViewMode: AssetViewMode
         var currentAssets: [AssetItem]
+        var currentLocalization: AppLocalization
         private var isSyncingSelection = false
         private var hoveredPreviewAssetID: AssetItem.ID?
 
@@ -181,6 +196,7 @@ extension AssetCollectionGridView {
             self.parent = parent
             self.currentViewMode = parent.viewMode
             self.currentAssets = parent.assets
+            self.currentLocalization = parent.localization
         }
 
         func collectionView(
@@ -204,10 +220,10 @@ extension AssetCollectionGridView {
             }
 
             let asset = parent.assets[indexPath.item]
-            assetItem.configure(with: asset, viewMode: parent.viewMode)
             assetItem.onHoverPreviewChange = { [weak self, assetID = asset.id] isHovered in
                 self?.updateHoveredPreviewAsset(assetID: assetID, isHovered: isHovered)
             }
+            assetItem.configure(with: asset, viewMode: parent.viewMode, localization: parent.localization)
             return assetItem
         }
 
@@ -569,6 +585,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     private let previewImageView = AssetPreviewImageView()
     private let fileNameLabel = NSTextField(labelWithString: "")
     private let subtitleLabel = NSTextField(labelWithString: "")
+    private let dateLabel = NSTextField(labelWithString: "")
     private let dimensionBadgeView = DimensionBadgeView()
     private let separatorView = NSView()
     private var gridConstraints: [NSLayoutConstraint] = []
@@ -581,6 +598,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     override var isSelected: Bool {
         didSet {
             contentView.isSelected = isSelected
+            updateTextColors()
         }
     }
 
@@ -623,6 +641,16 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         subtitleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         subtitleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
+        dateLabel.lineBreakMode = .byTruncatingTail
+        dateLabel.maximumNumberOfLines = 1
+        dateLabel.cell?.truncatesLastVisibleLine = true
+        dateLabel.alignment = .center
+        dateLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        dateLabel.textColor = AssetCollectionMetrics.listDateTextColor
+        dateLabel.translatesAutoresizingMaskIntoConstraints = false
+        dateLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        dateLabel.setContentHuggingPriority(.required, for: .horizontal)
+
         dimensionBadgeView.translatesAutoresizingMaskIntoConstraints = false
         dimensionBadgeView.isHidden = true
 
@@ -634,6 +662,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         contentView.addSubview(previewImageView)
         contentView.addSubview(fileNameLabel)
         contentView.addSubview(subtitleLabel)
+        contentView.addSubview(dateLabel)
         contentView.addSubview(dimensionBadgeView)
         contentView.addSubview(separatorView)
         containerView.addSubview(contentView)
@@ -645,8 +674,14 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
             contentView.topAnchor.constraint(equalTo: containerView.topAnchor),
             contentView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor),
 
-            separatorView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            separatorView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            separatorView.leadingAnchor.constraint(
+                equalTo: contentView.leadingAnchor,
+                constant: -AssetCollectionMetrics.listSeparatorHorizontalOutset
+            ),
+            separatorView.trailingAnchor.constraint(
+                equalTo: contentView.trailingAnchor,
+                constant: AssetCollectionMetrics.listSeparatorHorizontalOutset
+            ),
             separatorView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
             separatorView.heightAnchor.constraint(equalToConstant: 1)
         ])
@@ -686,13 +721,17 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
             previewImageView.heightAnchor.constraint(equalToConstant: AssetCollectionMetrics.listThumbnailSize),
 
             fileNameLabel.leadingAnchor.constraint(equalTo: previewImageView.trailingAnchor, constant: 10),
-            fileNameLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -12),
+            fileNameLabel.trailingAnchor.constraint(equalTo: dateLabel.leadingAnchor, constant: -12),
             fileNameLabel.bottomAnchor.constraint(equalTo: contentView.centerYAnchor, constant: -1),
 
             subtitleLabel.leadingAnchor.constraint(equalTo: fileNameLabel.leadingAnchor),
             subtitleLabel.trailingAnchor.constraint(equalTo: fileNameLabel.trailingAnchor),
             subtitleLabel.topAnchor.constraint(equalTo: fileNameLabel.bottomAnchor, constant: 2),
-            subtitleLabel.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -8)
+            subtitleLabel.bottomAnchor.constraint(lessThanOrEqualTo: contentView.bottomAnchor, constant: -8),
+
+            dateLabel.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -14),
+            dateLabel.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            dateLabel.widthAnchor.constraint(equalToConstant: AssetCollectionMetrics.listDateColumnWidth)
         ]
     }
 
@@ -701,25 +740,31 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         previewImageView.image = nil
         fileNameLabel.stringValue = ""
         subtitleLabel.stringValue = ""
+        dateLabel.stringValue = ""
         dimensionBadgeView.stringValue = ""
         dimensionBadgeView.isHidden = true
         separatorView.isHidden = true
+        containerView.resetHoverState()
         onHoverPreviewChange = nil
         contentView.isHovered = false
         contentView.isSelected = false
         contentView.viewMode = .grid
+        dateLabel.isHidden = true
         mode = .grid
+        updateTextColors()
     }
 
-    func configure(with asset: AssetItem, viewMode: AssetViewMode) {
+    func configure(with asset: AssetItem, viewMode: AssetViewMode, localization: AppLocalization) {
         mode = viewMode
         contentView.viewMode = viewMode
         fileNameLabel.stringValue = asset.displayName
         subtitleLabel.stringValue = subtitle(for: asset)
+        dateLabel.stringValue = localization.dateTime(asset.importedAt)
         dimensionBadgeView.stringValue = subtitle(for: asset)
         previewImageView.image = previewImage(for: asset)
         previewImageView.contentMode = imageContentMode(for: asset, viewMode: viewMode)
         applyModeLayout()
+        containerView.synchronizeHoverStateWithPointer()
     }
 
     private func applyModeLayout() {
@@ -729,23 +774,23 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         case .grid:
             fileNameLabel.isHidden = false
             subtitleLabel.isHidden = false
+            dateLabel.isHidden = true
             dimensionBadgeView.isHidden = true
             fileNameLabel.alignment = .center
             fileNameLabel.maximumNumberOfLines = 1
             fileNameLabel.lineBreakMode = .byTruncatingTail
             fileNameLabel.font = .systemFont(ofSize: 12, weight: .regular)
-            fileNameLabel.textColor = AssetCollectionMetrics.titleTextColor
             subtitleLabel.alignment = .center
             subtitleLabel.maximumNumberOfLines = 1
             subtitleLabel.lineBreakMode = .byTruncatingTail
             subtitleLabel.font = .systemFont(ofSize: 11, weight: .regular)
-            subtitleLabel.textColor = AssetCollectionMetrics.subtitleTextColor
             separatorView.isHidden = true
             previewImageView.cornerRadius = AssetCollectionMetrics.gridImageCornerRadius
             NSLayoutConstraint.activate(gridConstraints)
         case .masonry:
             fileNameLabel.isHidden = true
             subtitleLabel.isHidden = true
+            dateLabel.isHidden = true
             dimensionBadgeView.isHidden = dimensionBadgeView.stringValue.isEmpty
             separatorView.isHidden = true
             previewImageView.cornerRadius = AssetCollectionMetrics.masonryImageCornerRadius
@@ -753,21 +798,35 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         case .list:
             fileNameLabel.isHidden = false
             subtitleLabel.isHidden = false
+            dateLabel.isHidden = false
             dimensionBadgeView.isHidden = true
             fileNameLabel.alignment = .left
             fileNameLabel.maximumNumberOfLines = 1
             fileNameLabel.lineBreakMode = .byTruncatingTail
             fileNameLabel.font = .systemFont(ofSize: 13, weight: .regular)
-            fileNameLabel.textColor = AssetCollectionMetrics.titleTextColor
             subtitleLabel.alignment = .left
             subtitleLabel.maximumNumberOfLines = 1
             subtitleLabel.lineBreakMode = .byTruncatingTail
             subtitleLabel.font = .systemFont(ofSize: 11, weight: .regular)
-            subtitleLabel.textColor = AssetCollectionMetrics.subtitleTextColor
             separatorView.isHidden = false
             previewImageView.cornerRadius = AssetCollectionMetrics.listImageCornerRadius
             NSLayoutConstraint.activate(listConstraints)
         }
+
+        updateTextColors()
+    }
+
+    private func updateTextColors() {
+        let usesSelectedText = isSelected && (mode == .grid || mode == .list)
+        fileNameLabel.textColor = usesSelectedText
+            ? AssetCollectionMetrics.selectedTitleTextColor
+            : AssetCollectionMetrics.titleTextColor
+        subtitleLabel.textColor = usesSelectedText
+            ? AssetCollectionMetrics.selectedSubtitleTextColor
+            : AssetCollectionMetrics.subtitleTextColor
+        dateLabel.textColor = usesSelectedText
+            ? AssetCollectionMetrics.selectedTitleTextColor
+            : AssetCollectionMetrics.listDateTextColor
     }
 
     private func subtitle(for asset: AssetItem) -> String {
@@ -942,6 +1001,7 @@ private final class DimensionBadgeView: NSView {
 private final class HoverTrackingView: NSView {
     var hoverChanged: ((Bool) -> Void)?
     private var trackingArea: NSTrackingArea?
+    private var isPointerInside = false
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -954,6 +1014,17 @@ private final class HoverTrackingView: NSView {
         let newTrackingArea = NSTrackingArea(rect: bounds, options: options, owner: self)
         addTrackingArea(newTrackingArea)
         trackingArea = newTrackingArea
+        synchronizeHoverStateWithPointer()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+
+        if window == nil {
+            setHovered(false)
+        } else {
+            synchronizeHoverStateWithPointer()
+        }
     }
 
     override func resetCursorRects() {
@@ -962,11 +1033,36 @@ private final class HoverTrackingView: NSView {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        hoverChanged?(true)
+        setHovered(true)
     }
 
     override func mouseExited(with event: NSEvent) {
-        hoverChanged?(false)
+        setHovered(false)
+    }
+
+    func resetHoverState() {
+        setHovered(false)
+    }
+
+    func synchronizeHoverStateWithPointer() {
+        guard let window,
+              !isHidden,
+              !bounds.isEmpty else {
+            setHovered(false)
+            return
+        }
+
+        let pointerLocation = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        setHovered(bounds.contains(pointerLocation) && visibleRect.contains(pointerLocation))
+    }
+
+    private func setHovered(_ isHovered: Bool) {
+        guard isPointerInside != isHovered else {
+            return
+        }
+
+        isPointerInside = isHovered
+        hoverChanged?(isHovered)
     }
 }
 

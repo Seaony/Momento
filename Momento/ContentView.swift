@@ -151,6 +151,7 @@ struct ContentView: View {
                     assets: store.visibleAssets,
                     selectedAssetIDs: selectedAssetIDs,
                     viewMode: store.viewMode,
+                    localization: localization,
                     onSelectionChange: selectAssets,
                     onDoubleClick: preview,
                     onSpacePreviewStart: previewWhileSpaceIsPressed,
