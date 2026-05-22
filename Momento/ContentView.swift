@@ -710,14 +710,14 @@ struct ContentView: View {
 
         return Button(action: action) {
             HStack(spacing: 8) {
+                Text(title)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
                 if isSelected {
                     Image(systemName: sortDirectionSystemImage())
                         .font(.system(size: 12, weight: .semibold))
                         .frame(width: 16)
                 }
-                Text(title)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
             }
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(MomentoTheme.primaryText)
