@@ -119,6 +119,23 @@
         }
       }
     },
+    "Add folder" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加文件夹"
+          }
+        }
+      }
+    },
     "Add tag" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -132,22 +149,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "添加标签"
-          }
-        }
-      }
-    },
-    "Add folder" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add folder"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "添加文件夹"
           }
         }
       }
@@ -900,40 +901,6 @@
         }
       }
     },
-    "Details" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Details"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "详细信息"
-          }
-        }
-      }
-    },
-    "Dimensions" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dimensions"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "尺寸"
-          }
-        }
-      }
-    },
     "Delete Tag" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -964,6 +931,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "要删除“%@”吗？这会从所有关联图片中移除这个标签。"
+          }
+        }
+      }
+    },
+    "Details" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Details"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "详细信息"
+          }
+        }
+      }
+    },
+    "Dimensions" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dimensions"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尺寸"
           }
         }
       }
@@ -1937,22 +1938,6 @@
         }
       }
     },
-    "No matching folders" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No matching folders"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "没有匹配的文件夹"
-          }
-        }
-      }
-    },
     "No Library Open" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1983,6 +1968,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未选择资源库"
+          }
+        }
+      }
+    },
+    "No matching folders" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No matching folders"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有匹配的文件夹"
           }
         }
       }
@@ -2480,6 +2482,23 @@
         }
       }
     },
+    "Search folders" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search folders"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索文件夹"
+          }
+        }
+      }
+    },
     "Search image name" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2510,22 +2529,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "搜索标签"
-          }
-        }
-      }
-    },
-    "Search folders" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Search folders"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "搜索文件夹"
           }
         }
       }
