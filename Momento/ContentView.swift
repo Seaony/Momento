@@ -265,6 +265,8 @@ struct ContentView: View {
             .background {
                 toolbarControlBackground(cornerRadius: MomentoTheme.toolbarControlRadius)
             }
+            .fixedSize(horizontal: true, vertical: false)
+            .layoutPriority(1)
             .onAppear {
                 isToolbarSearchFocused = true
             }
