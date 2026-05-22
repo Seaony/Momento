@@ -709,7 +709,7 @@ struct MomentoInspectorView: View {
         let folder = row.folder
         let isSelected = containsFolder(folder.id)
         let rowShape = RoundedRectangle(cornerRadius: 11, style: .continuous)
-        let checkboxShape = RoundedRectangle(cornerRadius: 5, style: .continuous)
+        let checkboxShape = RoundedRectangle(cornerRadius: 4, style: .continuous)
         let foreground = Color.white.opacity(0.94)
         let secondaryForeground = Color.white.opacity(0.72)
         let checkboxFill = Color.white.opacity(isSelected ? 0.22 : 0.08)
@@ -741,11 +741,11 @@ struct MomentoInspectorView: View {
 
                         if isSelected {
                             Image(systemName: "checkmark")
-                                .font(.system(size: 9, weight: .bold))
+                                .font(.system(size: 7, weight: .bold))
                                 .foregroundStyle(foreground)
                         }
                     }
-                    .frame(width: 18, height: 18)
+                    .frame(width: 12, height: 12)
 
                     Text(folder.name)
                         .font(.system(size: 12, weight: .semibold))
