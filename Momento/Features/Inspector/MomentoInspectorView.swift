@@ -78,8 +78,19 @@ struct MomentoInspectorAsset: Identifiable, Hashable {
 }
 
 struct MomentoInspectorView: View {
+    private static let tagPickerWidth: CGFloat = 292
+    private static let tagPickerContentHorizontalPadding: CGFloat = 10
+    private static let tagPickerContentWidth = tagPickerWidth - tagPickerContentHorizontalPadding * 2
     private static let tagPickerMinimumContentHeight: CGFloat = 92
     private static let tagPickerMaximumContentHeight: CGFloat = 220
+    private static let tagPickerSectionTitleHeight: CGFloat = 14
+    private static let tagPickerSpacing: CGFloat = 8
+    private static let tagChoiceHeight: CGFloat = 26
+    private static let tagChoiceSpacing: CGFloat = 6
+    private static let tagChoiceHorizontalChrome: CGFloat = 38
+    private static let tagPickerEmptyMessageHeight: CGFloat = 23
+    private static let tagPickerCreateRowHeight: CGFloat = 34
+    private static let tagPickerCreateBottomPadding: CGFloat = 8
 
     @Environment(\.appLocalization) private var localization
 
@@ -97,7 +108,6 @@ struct MomentoInspectorView: View {
     @State private var isCreateTagRowHovered = false
     @State private var isTagPickerPresented = false
     @State private var tagSearchQuery = ""
-    @State private var tagPickerContentHeight: CGFloat = 0
     @State private var hoveredTitleID: MomentoInspectorAsset.ID?
     @State private var editingTitleID: MomentoInspectorAsset.ID?
     @State private var draftTitle = ""
@@ -467,24 +477,13 @@ struct MomentoInspectorView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, shouldShowCreateTag ? 8 : 0)
-                    .background {
-                        GeometryReader { proxy in
-                            Color.clear.preference(
-                                key: TagPickerContentHeightKey.self,
-                                value: proxy.size.height
-                            )
-                        }
-                    }
                 }
                 .frame(height: tagPickerScrollHeight)
                 .scrollIndicators(.never)
-                .onPreferenceChange(TagPickerContentHeightKey.self) { height in
-                    tagPickerContentHeight = height
-                }
             }
         }
-        .padding(10)
-        .frame(width: 292)
+        .padding(Self.tagPickerContentHorizontalPadding)
+        .frame(width: Self.tagPickerWidth)
         .background {
             MomentoGlassBackground(
                 glass: .regular.tint(Color.black.opacity(0.16)),
@@ -765,14 +764,63 @@ struct MomentoInspectorView: View {
     }
 
     private var tagPickerScrollHeight: CGFloat {
-        let measuredHeight = tagPickerContentHeight > 0
-            ? tagPickerContentHeight
-            : Self.tagPickerMinimumContentHeight
-
         return min(
-            max(measuredHeight, Self.tagPickerMinimumContentHeight),
+            max(estimatedTagPickerContentHeight, Self.tagPickerMinimumContentHeight),
             Self.tagPickerMaximumContentHeight
         )
+    }
+
+    private var estimatedTagPickerContentHeight: CGFloat {
+        var height: CGFloat
+
+        if filteredTagChoices.isEmpty {
+            height = Self.tagPickerEmptyMessageHeight
+        } else {
+            let tagRows = tagPickerRowCount(for: filteredTagChoices)
+            height = Self.tagPickerSectionTitleHeight
+                + Self.tagPickerSpacing
+                + CGFloat(tagRows) * Self.tagChoiceHeight
+                + CGFloat(max(tagRows - 1, 0)) * Self.tagChoiceSpacing
+        }
+
+        if shouldShowCreateTag {
+            height += Self.tagPickerSpacing
+                + Self.tagPickerCreateRowHeight
+                + Self.tagPickerCreateBottomPadding
+        }
+
+        return height
+    }
+
+    private func tagPickerRowCount(for tags: [String]) -> Int {
+        var rows = 0
+        var currentRowWidth: CGFloat = 0
+
+        for tag in tags {
+            let tagWidth = min(tagPickerTagWidth(tag), Self.tagPickerContentWidth)
+            let proposedWidth = currentRowWidth == 0
+                ? tagWidth
+                : currentRowWidth + Self.tagChoiceSpacing + tagWidth
+
+            if proposedWidth > Self.tagPickerContentWidth, currentRowWidth > 0 {
+                rows += 1
+                currentRowWidth = tagWidth
+            } else {
+                currentRowWidth = proposedWidth
+            }
+        }
+
+        if currentRowWidth > 0 {
+            rows += 1
+        }
+
+        return rows
+    }
+
+    private func tagPickerTagWidth(_ tag: String) -> CGFloat {
+        let font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        let textWidth = (tag as NSString).size(withAttributes: [.font: font]).width
+        return ceil(textWidth + Self.tagChoiceHorizontalChrome)
     }
 
     private func submitTagSearch() {
@@ -821,7 +869,6 @@ struct MomentoInspectorView: View {
 
     private func resetTagPicker() {
         tagSearchQuery = ""
-        tagPickerContentHeight = 0
         hoveredTagChoice = nil
         isCreateTagRowHovered = false
         isTagSearchFocused = false
@@ -854,14 +901,6 @@ private struct ColorSwatchBoundsKey: PreferenceKey {
 
     static func reduce(value: inout [String: Anchor<CGRect>], nextValue: () -> [String: Anchor<CGRect>]) {
         value.merge(nextValue(), uniquingKeysWith: { $1 })
-    }
-}
-
-private struct TagPickerContentHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
     }
 }
 
