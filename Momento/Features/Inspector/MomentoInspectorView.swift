@@ -713,31 +713,31 @@ struct MomentoInspectorView: View {
         let checkboxShape = RoundedRectangle(cornerRadius: 6, style: .continuous)
         let foreground = Color.white.opacity(0.94)
         let secondaryForeground = Color.white.opacity(0.72)
-        let rowFill = Color.white.opacity(isHovered || isSelected ? 0.1 : 0.035)
         let checkboxFill = Color.white.opacity(isSelected ? 0.22 : 0.08)
 
         return HStack(spacing: 7) {
             Button {
+                guard row.hasChildren else {
+                    return
+                }
+
                 toggleFolderExpansion(folder.id)
             } label: {
                 Image(systemName: expandedFolderIDs.contains(folder.id) ? "chevron.down" : "chevron.right")
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(secondaryForeground)
                     .frame(width: 14, height: 22)
-                    .opacity(row.hasChildren ? 1 : 0)
             }
             .buttonStyle(.plain)
-            .disabled(!row.hasChildren)
             .contentShape(Rectangle())
 
             Button {
                 toggleFolderSelection(folder.id)
             } label: {
                 ZStack {
-                    rowShape
-                        .fill(rowFill)
-                        .overlay {
-                            rowShape.strokeBorder(Color.white.opacity(isHovered || isSelected ? 0.16 : 0.07), lineWidth: 1)
+                    if isHovered {
+                        rowShape
+                            .fill(MomentoTheme.sidebarIconHoverBackground)
                         }
 
                     HStack(spacing: 8) {
@@ -755,10 +755,6 @@ struct MomentoInspectorView: View {
                             }
                         }
                         .frame(width: 20, height: 20)
-
-                        Image(systemName: "folder")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(secondaryForeground)
 
                         Text(folder.name)
                             .font(.system(size: 12, weight: .semibold))
