@@ -49,8 +49,8 @@ private enum AssetCollectionMetrics {
     static let contextMenuPanelCornerRadius: CGFloat = 12
     static let contextMenuSeparatorHeight: CGFloat = 1
     static let contextMenuSeparatorHorizontalInset: CGFloat = 10
-    static let contextMenuSeparatorVerticalPadding: CGFloat = 1
-    static let contextMenuSeparatorAlpha: CGFloat = 0.18
+    static let contextMenuSeparatorVerticalPadding: CGFloat = 3
+    static let contextMenuSeparatorAlpha: CGFloat = 0.1
     static let zeroEdgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
 }
 
