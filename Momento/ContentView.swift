@@ -452,14 +452,21 @@ struct ContentView: View {
     }
 
     private var filterFacetNavigation: some View {
-        VStack(alignment: .leading, spacing: 7) {
+        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+
+        return VStack(alignment: .leading, spacing: 7) {
             ForEach(AssetFilterFacet.allCases) { facet in
                 filterFacetButton(facet)
             }
             Spacer(minLength: 0)
         }
+        .padding(5)
         .frame(width: ContentToolbarMetrics.filterNavigationWidth)
         .frame(maxHeight: .infinity, alignment: .topLeading)
+        .glassEffect(
+            .regular.tint(Color.white.opacity(0.07)),
+            in: shape
+        )
     }
 
     @ViewBuilder
@@ -640,10 +647,14 @@ struct ContentView: View {
             .foregroundStyle(MomentoTheme.primaryText)
             .padding(.horizontal, 9)
             .frame(height: 32)
-            .glassEffect(
-                .regular.tint(Color.white.opacity(isSelected || isHovered ? 0.16 : 0.06)).interactive(),
-                in: shape
-            )
+            .background {
+                if isSelected || isHovered {
+                    MomentoGlassBackground(
+                        glass: .regular.tint(Color.white.opacity(isSelected ? 0.18 : 0.12)).interactive(true),
+                        cornerRadius: 10
+                    )
+                }
+            }
             .contentShape(shape)
         }
         .buttonStyle(.plain)
