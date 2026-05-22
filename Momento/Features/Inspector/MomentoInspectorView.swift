@@ -98,7 +98,6 @@ struct MomentoInspectorView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         preview(asset)
-                        colorSection(asset.colors)
                         metadata(asset)
                         tagEditor
                         notesEditor
@@ -124,33 +123,42 @@ struct MomentoInspectorView: View {
 
     private func preview(_ asset: MomentoInspectorAsset) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Group {
-                if let image = asset.previewImage {
-                    Image(nsImage: image)
-                        .resizable()
-                        .scaledToFit()
-                } else {
-                    ZStack {
-                        MomentoGlassBackground(cornerRadius: MomentoTheme.panelRadius)
+            previewImage(asset)
 
-                        VStack(spacing: 8) {
-                            Image(systemName: "photo")
-                                .font(.system(size: 32))
-                                .foregroundStyle(MomentoTheme.tertiaryText)
-                            Text(asset.fileName)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(MomentoTheme.secondaryText)
-                                .lineLimit(1)
-                        }
-                        .padding()
-                    }
-                }
-            }
-            .aspectRatio(1.25, contentMode: .fit)
+            colorSection(asset.colors)
 
             Text(asset.title)
                 .font(.system(size: 13, weight: .semibold))
                 .lineLimit(2)
+        }
+    }
+
+    @ViewBuilder
+    private func previewImage(_ asset: MomentoInspectorAsset) -> some View {
+        if let image = asset.previewImage {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: .infinity, alignment: .center)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        } else {
+            ZStack {
+                MomentoGlassBackground(cornerRadius: 16)
+
+                VStack(spacing: 8) {
+                    Image(systemName: "photo")
+                        .font(.system(size: 32))
+                        .foregroundStyle(MomentoTheme.tertiaryText)
+                    Text(asset.fileName)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(MomentoTheme.secondaryText)
+                        .lineLimit(1)
+                }
+                .padding()
+            }
+            .frame(maxWidth: .infinity)
+            .aspectRatio(1.25, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
     }
 
@@ -226,45 +234,47 @@ struct MomentoInspectorView: View {
     @ViewBuilder
     private func colorSection(_ colors: [MomentoInspectorColor]) -> some View {
         if !colors.isEmpty {
-            VStack(alignment: .leading, spacing: 7) {
-                FlowLayout(spacing: 6) {
-                    ForEach(colors) { color in
-                        colorSwatchButton(color)
+            GeometryReader { proxy in
+                ScrollView(.horizontal) {
+                    HStack(spacing: 4) {
+                        ForEach(colors) { color in
+                            colorSwatchButton(color)
+                                .zIndex(hoveredColorID == color.id ? 1 : 0)
+                        }
+                    }
+                    .frame(minWidth: proxy.size.width, alignment: .center)
+                }
+                .scrollIndicators(.never)
+                .overlay(alignment: .top) {
+                    if let hoveredColor = colors.first(where: { $0.id == hoveredColorID }) {
+                        colorTooltip(hoveredColor)
+                            .offset(y: -34)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                            .zIndex(2)
                     }
                 }
-
-                if let hoveredColor = colors.first(where: { $0.id == hoveredColorID }) {
-                    Text(hoveredColor.helpText)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(MomentoTheme.primaryText)
-                        .lineLimit(1)
-                        .padding(.horizontal, 8)
-                        .frame(height: 24)
-                        .background {
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(MomentoTheme.sidebarIconHoverBackground)
-                        }
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                }
             }
+            .frame(height: 24)
+            .frame(maxWidth: .infinity)
+            .zIndex(1)
         }
     }
 
     private func colorSwatchButton(_ color: MomentoInspectorColor) -> some View {
         let isHovered = hoveredColorID == color.id
-        let swatchShape = RoundedRectangle(cornerRadius: 7, style: .continuous)
-        let hoverShape = RoundedRectangle(cornerRadius: 9, style: .continuous)
+        let swatchShape = RoundedRectangle(cornerRadius: 6, style: .continuous)
+        let hoverShape = RoundedRectangle(cornerRadius: 8, style: .continuous)
 
         return Button {
             copyColor(color)
         } label: {
             swatchShape
                 .fill(Color(hex: color.hex) ?? .clear)
-                .frame(width: 24, height: 24)
+                .frame(width: 18, height: 18)
                 .overlay {
                     swatchShape.strokeBorder(MomentoTheme.subtleStroke, lineWidth: 1)
                 }
-                .padding(5)
+                .padding(3)
                 .background {
                     if isHovered {
                         hoverShape.fill(MomentoTheme.sidebarIconHoverBackground)
@@ -279,8 +289,27 @@ struct MomentoInspectorView: View {
         .onHover { hovering in
             updateColorHover(id: color.id, isHovering: hovering)
         }
-        .help(color.helpText)
         .accessibilityLabel(color.helpText)
+    }
+
+    private func colorTooltip(_ color: MomentoInspectorColor) -> some View {
+        Text(color.helpText)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 10)
+            .frame(height: 30)
+            .background {
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.black.opacity(0.82))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+                    }
+            }
+            .shadow(color: Color.black.opacity(0.32), radius: 8, y: 4)
+            .allowsHitTesting(false)
     }
 
     private var notesEditor: some View {
