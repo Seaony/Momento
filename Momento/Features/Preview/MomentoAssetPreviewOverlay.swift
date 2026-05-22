@@ -196,8 +196,10 @@ private struct MomentoPreviewKeyboardCapture: NSViewRepresentable {
                 return
             }
 
-            if event.charactersIgnoringModifiers == " ", !closesOnSpaceKeyUp {
-                onDismiss?()
+            if event.charactersIgnoringModifiers == " " {
+                if !closesOnSpaceKeyUp {
+                    onDismiss?()
+                }
                 return
             }
 
