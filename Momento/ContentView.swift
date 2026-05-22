@@ -7,7 +7,7 @@ private struct FolderCreationRequest: Identifiable {
     var parentID: AssetFolder.ID?
 }
 
-private enum AssetFilterFacet: String, CaseIterable, Identifiable {
+private enum AssetFilterFacet: String, CaseIterable, Hashable, Identifiable {
     case colors
     case tags
     case fileTypes
@@ -18,9 +18,8 @@ private enum AssetFilterFacet: String, CaseIterable, Identifiable {
 private enum ContentToolbarMetrics {
     static let searchFieldWidth: CGFloat = 168
     static let iconButtonWidth: CGFloat = 38
-    static let filterPopoverWidth: CGFloat = 392
+    static let filterPopoverWidth: CGFloat = 340
     static let filterPopoverHeight: CGFloat = 304
-    static let filterNavigationWidth: CGFloat = 108
     static let sortPopoverWidth: CGFloat = 156
     static let popoverSectionSpacing: CGFloat = 12
 }
@@ -401,12 +400,10 @@ struct ContentView: View {
 
     private var filterPopover: some View {
         GlassEffectContainer(spacing: 10) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .top, spacing: 10) {
-                    filterFacetNavigation
-                    filterFacetContent
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            VStack(alignment: .leading, spacing: 12) {
+                filterFacetPicker
+                filterFacetContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
                 if store.filterState.isActive {
                     HStack {
@@ -451,22 +448,17 @@ struct ContentView: View {
         }
     }
 
-    private var filterFacetNavigation: some View {
-        let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
-
-        return VStack(alignment: .leading, spacing: 7) {
+    private var filterFacetPicker: some View {
+        Picker("", selection: $selectedFilterFacet) {
             ForEach(AssetFilterFacet.allCases) { facet in
-                filterFacetButton(facet)
+                Text(filterFacetSegmentTitle(for: facet))
+                    .tag(facet)
             }
-            Spacer(minLength: 0)
         }
-        .padding(5)
-        .frame(width: ContentToolbarMetrics.filterNavigationWidth)
-        .frame(maxHeight: .infinity, alignment: .topLeading)
-        .glassEffect(
-            .regular.tint(Color.white.opacity(0.07)),
-            in: shape
-        )
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .controlSize(.regular)
+        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder
@@ -612,57 +604,10 @@ struct ContentView: View {
         }
     }
 
-    private func filterFacetButton(_ facet: AssetFilterFacet) -> some View {
-        let isSelected = selectedFilterFacet == facet
+    private func filterFacetSegmentTitle(for facet: AssetFilterFacet) -> String {
+        let title = filterFacetTitle(for: facet)
         let count = selectedFilterCount(for: facet)
-        let optionID = "filter-facet-\(facet.id)"
-        let isHovered = hoveredFilterOptionID == optionID
-        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-
-        return Button {
-            withAnimation(.smooth(duration: 0.14)) {
-                selectedFilterFacet = facet
-            }
-        } label: {
-            HStack(spacing: 6) {
-                Text(filterFacetTitle(for: facet))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-
-                Spacer(minLength: 0)
-
-                if count > 0 {
-                    Text("\(count)")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(MomentoTheme.primaryText)
-                        .padding(.horizontal, 5)
-                        .frame(minWidth: 18, minHeight: 18)
-                        .glassEffect(
-                            .regular.tint(Color.white.opacity(0.14)).interactive(),
-                            in: Capsule()
-                        )
-                }
-            }
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(MomentoTheme.primaryText)
-            .padding(.horizontal, 9)
-            .frame(height: 32)
-            .background {
-                if isSelected || isHovered {
-                    MomentoGlassBackground(
-                        glass: .regular.tint(Color.white.opacity(isSelected ? 0.18 : 0.12)).interactive(true),
-                        cornerRadius: 10
-                    )
-                }
-            }
-            .contentShape(shape)
-        }
-        .buttonStyle(.plain)
-        .pointerStyle(.link)
-        .help(filterFacetTitle(for: facet))
-        .onHover { hovering in
-            updateFilterOptionHover(id: optionID, hovering: hovering)
-        }
+        return count > 0 ? "\(title) \(count)" : title
     }
 
     private func selectedFilterCount(for facet: AssetFilterFacet) -> Int {
