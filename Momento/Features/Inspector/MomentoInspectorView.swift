@@ -396,86 +396,91 @@ struct MomentoInspectorView: View {
     }
 
     private var tagPicker: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(MomentoTheme.primaryText)
+        GlassEffectContainer(spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(MomentoTheme.primaryText)
 
-                TextField(localization.string("Search tags"), text: $tagSearchQuery)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13, weight: .medium))
-                    .focused($isTagSearchFocused)
-                    .onSubmit(submitTagSearch)
-            }
-            .padding(.horizontal, 10)
-            .frame(height: 34)
-            .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    TextField(localization.string("Search tags"), text: $tagSearchQuery)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 13, weight: .medium))
+                        .focused($isTagSearchFocused)
+                        .onSubmit(submitTagSearch)
+                }
+                .padding(.horizontal, 10)
+                .frame(height: 34)
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 8) {
-                    if !filteredTagChoices.isEmpty {
-                        Text("\(localization.string("All Tags")) (\(filteredTagChoices.count))")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(MomentoTheme.secondaryText)
-                            .padding(.horizontal, 2)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        if !filteredTagChoices.isEmpty {
+                            Text("\(localization.string("All Tags")) (\(filteredTagChoices.count))")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(MomentoTheme.secondaryText)
+                                .padding(.horizontal, 2)
 
-                        FlowLayout(spacing: 6) {
-                            ForEach(filteredTagChoices, id: \.self) { tag in
-                                tagChoiceButton(tag)
+                            FlowLayout(spacing: 6) {
+                                ForEach(filteredTagChoices, id: \.self) { tag in
+                                    tagChoiceButton(tag)
+                                }
+                            }
+                        } else {
+                            Text(localization.string("No matching tags"))
+                                .font(.system(size: 12))
+                                .foregroundStyle(MomentoTheme.secondaryText)
+                                .padding(.vertical, 4)
+                        }
+
+                        if shouldShowCreateTag {
+                            Button {
+                                addTag(trimmedTagSearchQuery)
+                            } label: {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 12, weight: .bold))
+                                    Text(localization.format("Create %@", trimmedTagSearchQuery))
+                                        .lineLimit(1)
+                                    Spacer(minLength: 0)
+                                }
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(MomentoTheme.primaryText)
+                                .padding(.horizontal, 10)
+                                .frame(height: 34)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .glassEffect(
+                                    .regular.tint(Color.white.opacity(isCreateTagRowHovered ? 0.16 : 0.08)).interactive(),
+                                    in: RoundedRectangle(cornerRadius: 11, style: .continuous)
+                                )
+                                .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
+                            .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                            .pointerStyle(.link)
+                            .onHover { hovering in
+                                withAnimation(.smooth(duration: 0.12)) {
+                                    isCreateTagRowHovered = hovering
+                                }
                             }
                         }
-                    } else {
-                        Text(localization.string("No matching tags"))
-                            .font(.system(size: 12))
-                            .foregroundStyle(MomentoTheme.secondaryText)
-                            .padding(.vertical, 4)
                     }
-
-                    if shouldShowCreateTag {
-                        Button {
-                            addTag(trimmedTagSearchQuery)
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 12, weight: .bold))
-                                Text(localization.format("Create %@", trimmedTagSearchQuery))
-                                    .lineLimit(1)
-                                Spacer(minLength: 0)
-                            }
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(MomentoTheme.primaryText)
-                            .padding(.horizontal, 10)
-                            .frame(height: 34)
-                            .glassEffect(
-                                .regular.tint(Color.accentColor.opacity(isCreateTagRowHovered ? 0.32 : 0.18)),
-                                in: RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, shouldShowCreateTag ? 8 : 0)
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(
+                                key: TagPickerContentHeightKey.self,
+                                value: proxy.size.height
                             )
                         }
-                        .buttonStyle(.plain)
-                        .pointerStyle(.link)
-                        .onHover { hovering in
-                            withAnimation(.smooth(duration: 0.12)) {
-                                isCreateTagRowHovered = hovering
-                            }
-                        }
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, shouldShowCreateTag ? 8 : 0)
-                .background {
-                    GeometryReader { proxy in
-                        Color.clear.preference(
-                            key: TagPickerContentHeightKey.self,
-                            value: proxy.size.height
-                        )
-                    }
+                .frame(height: tagPickerScrollHeight)
+                .scrollIndicators(.never)
+                .onPreferenceChange(TagPickerContentHeightKey.self) { height in
+                    tagPickerContentHeight = height
                 }
-            }
-            .frame(height: tagPickerScrollHeight)
-            .scrollIndicators(.never)
-            .onPreferenceChange(TagPickerContentHeightKey.self) { height in
-                tagPickerContentHeight = height
             }
         }
         .padding(10)
@@ -515,7 +520,7 @@ struct MomentoInspectorView: View {
             .padding(.horizontal, 9)
             .frame(height: 26)
             .glassEffect(
-                .regular.tint(Color.white.opacity(isHovered || isSelected ? 0.12 : 0.04)),
+                .regular.tint(Color.white.opacity(isHovered || isSelected ? 0.16 : 0.08)).interactive(),
                 in: tagShape
             )
             .contentShape(tagShape)
