@@ -184,6 +184,11 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         XCTAssertEqual(asset.tags.map(\.name), ["Legacy"])
         XCTAssertEqual(asset.folderIDs, [fixture.folderID])
         XCTAssertEqual(asset.paletteColors.map(\.hex), ["#123456"])
+
+        XCTAssertEqual(try metadataStore.loadTags().map(\.name), ["Legacy"])
+        let untagged = try metadataStore.setTagNames([], forAssetID: fixture.assetID)
+        XCTAssertTrue(untagged.tags.isEmpty)
+        XCTAssertEqual(try metadataStore.loadTags().map(\.name), ["Legacy"])
     }
 
     @MainActor
@@ -297,7 +302,8 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         try store.updateSelectedTags(["Reference", "Mood"])
 
         XCTAssertEqual(store.assets.first?.tags.map(\.name), ["Reference", "Mood"])
-        store.selectSidebarItem(id: "tag-mood")
+        let moodID = try XCTUnwrap(store.tagSummaries.first { $0.tag.name == "Mood" }?.tag.id)
+        store.selectSidebarItem(id: "tag-\(moodID)")
         XCTAssertEqual(store.visibleAssets.map(\.id), [asset.id])
 
         let reopened = LibraryStore(
@@ -308,12 +314,13 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         try reopened.openLibrary(at: environment.packageURL)
         XCTAssertEqual(reopened.assets.first?.tags.map(\.name), ["Reference", "Mood"])
 
-        reopened.selectSidebarItem(id: "tag-reference")
+        let referenceID = try XCTUnwrap(reopened.tagSummaries.first { $0.tag.name == "Reference" }?.tag.id)
+        reopened.selectSidebarItem(id: "tag-\(referenceID)")
         XCTAssertEqual(reopened.visibleAssets.map(\.id), [asset.id])
     }
 
     @MainActor
-    func testTagManagementRenamesAndDeletesTagsAcrossAssets() async throws {
+    func testTagRecordsRenameAndDeleteAcrossAssets() async throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }
 
@@ -341,7 +348,13 @@ final class LibraryPackagePersistenceTests: XCTestCase {
             "Travel:1"
         ])
 
-        try store.renameTag(id: "mood", to: "Vibe")
+        let moodID = try XCTUnwrap(store.tagSummaries.first { $0.tag.name == "Mood" }?.tag.id)
+        let travelID = try XCTUnwrap(store.tagSummaries.first { $0.tag.name == "Travel" }?.tag.id)
+
+        XCTAssertThrowsError(try store.renameTag(id: travelID, to: " mood "))
+
+        try store.renameTag(id: moodID, to: "Vibe")
+        let vibeID = try XCTUnwrap(store.tagSummaries.first { $0.tag.name == "Vibe" }?.tag.id)
 
         XCTAssertEqual(store.tagSummaries.map { "\($0.tag.name):\($0.assetCount)" }, [
             "Travel:1",
@@ -362,11 +375,30 @@ final class LibraryPackagePersistenceTests: XCTestCase {
             "Vibe:2"
         ])
 
-        try reopened.deleteTag(id: "mood")
+        reopened.selectAsset(id: secondAsset.id)
+        try reopened.updateSelectedTags(["Vibe"])
         XCTAssertEqual(reopened.tagSummaries.map { "\($0.tag.name):\($0.assetCount)" }, [
-            "Travel:1"
+            "Travel:0",
+            "Vibe:2"
         ])
-        XCTAssertTrue(reopened.assets.allSatisfy { asset in
+
+        let withZeroCountTag = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try withZeroCountTag.openLibrary(at: environment.packageURL)
+        XCTAssertEqual(withZeroCountTag.tagSummaries.map { "\($0.tag.name):\($0.assetCount)" }, [
+            "Travel:0",
+            "Vibe:2"
+        ])
+
+        try withZeroCountTag.deleteTag(id: vibeID)
+        XCTAssertEqual(withZeroCountTag.tagSummaries.map { "\($0.tag.name):\($0.assetCount)" }, [
+            "Travel:0"
+        ])
+        XCTAssertEqual(withZeroCountTag.assets.count, 2)
+        XCTAssertTrue(withZeroCountTag.assets.allSatisfy { asset in
             !asset.tags.contains { $0.name == "Vibe" }
         })
     }
@@ -621,7 +653,7 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         )
 
         XCTAssertEqual(store.availableFilterFileExtensions, ["jpg", "png"])
-        XCTAssertEqual(store.availableFilterColorCategories, [.black, .red, .green, .blue])
+        XCTAssertEqual(store.availableFilterColorCategories, AssetColorCategory.allCases)
 
         store.toggleFilterFileExtension("PNG")
         XCTAssertEqual(store.visibleAssets.map(\.id), ["dark-png", "medium-png", "small-png"])

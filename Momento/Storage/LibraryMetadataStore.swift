@@ -14,6 +14,7 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         // 封装在存储层内部，避免 managed object 泄漏到 SwiftUI 状态树里。
         self.context = try MomentoCoreDataStack(library: library, storage: storage).container.newBackgroundContext()
         self.context.mergePolicy = NSMergePolicy(merge: .mergeByPropertyStoreTrumpMergePolicyType)
+        try migrateLegacyTagsIfNeeded()
     }
 
     func loadAssets() throws -> [AssetItem] {
@@ -27,6 +28,7 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
             let assetIDs = records.compactMap { $0.value(forKey: "id") as? String }
             let folderIDsByAssetID = try folderIDsByAssetID(for: Set(assetIDs))
             let colorsByAssetID = try colorsByAssetID(for: Set(assetIDs))
+            let tagsByAssetID = try tagsByAssetID(for: Set(assetIDs))
 
             return records.compactMap { record in
                 guard let id = record.value(forKey: "id") as? String else {
@@ -35,8 +37,17 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
                 return asset(
                     from: record,
                     folderIDs: folderIDsByAssetID[id, default: []],
-                    paletteColors: colorsByAssetID[id, default: []]
+                    paletteColors: colorsByAssetID[id, default: []],
+                    tags: tagsByAssetID[id, default: []]
                 )
+            }
+        }
+    }
+
+    func loadTags() throws -> [TagItem] {
+        try context.performAndWait {
+            try loadTagRecords().compactMap(tag(from:)).sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
             }
         }
     }
@@ -99,7 +110,7 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
                 record.setValue(asset.trashedAt, forKey: "trashedAt")
                 record.setValue(asset.importedAt, forKey: "importedAt")
                 record.setValue(asset.updatedAt, forKey: "updatedAt")
-                record.setValue(tagsData(asset.tags), forKey: "tagsData")
+                record.setValue(nil, forKey: "tagsData")
                 saveColors(asset.paletteColors, forAssetID: asset.id)
 
                 var savedAsset = asset
@@ -285,13 +296,67 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         }
     }
 
-    func updateTags(_ tags: [TagItem], forAssetID assetID: AssetItem.ID) throws -> AssetItem {
+    func resolveOrCreateTags(named names: [String]) throws -> [TagItem] {
         try context.performAndWait {
-            guard let record = try assetRecord(id: assetID) else {
+            let records = try resolveOrCreateTagRecords(named: names)
+            if context.hasChanges {
+                try context.save()
+            }
+            return records.compactMap(tag(from:))
+        }
+    }
+
+    func setTagNames(_ names: [String], forAssetID assetID: AssetItem.ID) throws -> AssetItem {
+        try context.performAndWait {
+            guard let assetRecord = try assetRecord(id: assetID) else {
                 throw LibraryMetadataError.missingAsset
             }
 
-            record.setValue(tagsData(tags), forKey: "tagsData")
+            let tagRecords = try resolveOrCreateTagRecords(named: names)
+            let orderedTagIDs = tagRecords.compactMap { $0.value(forKey: "id") as? String }
+            let tagIDs = Set(orderedTagIDs)
+            let existingLinks = try tagLinkRecords(assetID: assetID)
+            let existingOrderedTagIDs = existingLinks.compactMap { $0.value(forKey: "tagID") as? String }
+            let existingTagIDs = Set(existingLinks.compactMap { $0.value(forKey: "tagID") as? String })
+            let existingLinksByTagID = Dictionary(
+                uniqueKeysWithValues: existingLinks.compactMap { link -> (String, NSManagedObject)? in
+                    guard let tagID = link.value(forKey: "tagID") as? String else {
+                        return nil
+                    }
+                    return (tagID, link)
+                }
+            )
+
+            for link in existingLinks {
+                guard let tagID = link.value(forKey: "tagID") as? String else {
+                    continue
+                }
+                if !tagIDs.contains(tagID) {
+                    context.delete(link)
+                }
+            }
+
+            let now = Date()
+            let shouldUpdateOrder = existingOrderedTagIDs != orderedTagIDs
+            for (index, tagID) in orderedTagIDs.enumerated() {
+                let link = existingLinksByTagID[tagID]
+                    ?? NSManagedObject(entity: entity(named: "AssetTagRecord"), insertInto: context)
+                if !existingTagIDs.contains(tagID) {
+                    link.setValue("\(assetID)-\(tagID)", forKey: "id")
+                    link.setValue(library.id, forKey: "libraryID")
+                    link.setValue(assetID, forKey: "assetID")
+                    link.setValue(tagID, forKey: "tagID")
+                }
+
+                if shouldUpdateOrder || !existingTagIDs.contains(tagID) {
+                    link.setValue(now.addingTimeInterval(TimeInterval(index) / 1_000), forKey: "createdAt")
+                }
+            }
+
+            if existingOrderedTagIDs != orderedTagIDs {
+                assetRecord.setValue(now, forKey: "updatedAt")
+            }
+
             if context.hasChanges {
                 try context.save()
             }
@@ -301,6 +366,68 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
             }
             return asset
         }
+    }
+
+    func renameTag(id tagID: TagItem.ID, to name: String) throws -> [AssetItem] {
+        try context.performAndWait {
+            let normalized = normalizedTagName(name)
+            guard let normalized else {
+                throw LibraryMetadataError.invalidTagName
+            }
+
+            guard let record = try tagRecord(id: tagID) else {
+                throw LibraryMetadataError.missingTag
+            }
+
+            if let existing = try tagRecord(normalizedName: normalized.key),
+               (existing.value(forKey: "id") as? String) != tagID {
+                throw LibraryMetadataError.duplicateTagName
+            }
+
+            let now = Date()
+            record.setValue(normalized.displayName, forKey: "name")
+            record.setValue(normalized.key, forKey: "normalizedName")
+            record.setValue(now, forKey: "updatedAt")
+
+            let linkedAssetIDs = try assetIDs(linkedToTagID: tagID)
+            for assetRecord in try assetRecords(ids: linkedAssetIDs) {
+                assetRecord.setValue(now, forKey: "updatedAt")
+            }
+
+            if context.hasChanges {
+                try context.save()
+            }
+
+            return try assets(ids: linkedAssetIDs)
+        }
+    }
+
+    func deleteTag(id tagID: TagItem.ID) throws -> [AssetItem] {
+        try context.performAndWait {
+            guard let tagRecord = try tagRecord(id: tagID) else {
+                throw LibraryMetadataError.missingTag
+            }
+
+            let linkedAssetIDs = try assetIDs(linkedToTagID: tagID)
+            let now = Date()
+            for link in try tagLinkRecords(tagID: tagID) {
+                context.delete(link)
+            }
+            for assetRecord in try assetRecords(ids: linkedAssetIDs) {
+                assetRecord.setValue(now, forKey: "updatedAt")
+            }
+            context.delete(tagRecord)
+
+            if context.hasChanges {
+                try context.save()
+            }
+
+            return try assets(ids: linkedAssetIDs)
+        }
+    }
+
+    func updateTags(_ tags: [TagItem], forAssetID assetID: AssetItem.ID) throws -> AssetItem {
+        try setTagNames(tags.map(\.name), forAssetID: assetID)
     }
 
     func replaceColors(_ colors: [AssetColor], forAssetID assetID: AssetItem.ID) throws -> AssetItem {
@@ -356,6 +483,7 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         let records = try context.fetch(request)
         let folderIDsByAssetID = try folderIDsByAssetID(for: ids)
         let colorsByAssetID = try colorsByAssetID(for: ids)
+        let tagsByAssetID = try tagsByAssetID(for: ids)
 
         return records.compactMap { record in
             guard let id = record.value(forKey: "id") as? String else {
@@ -364,7 +492,8 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
             return asset(
                 from: record,
                 folderIDs: folderIDsByAssetID[id, default: []],
-                paletteColors: colorsByAssetID[id, default: []]
+                paletteColors: colorsByAssetID[id, default: []],
+                tags: tagsByAssetID[id, default: []]
             )
         }
     }
@@ -386,7 +515,8 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         return asset(
             from: record,
             folderIDs: try folderIDsByAssetID(for: [id])[id, default: []],
-            paletteColors: try colorsByAssetID(for: [id])[id, default: []]
+            paletteColors: try colorsByAssetID(for: [id])[id, default: []],
+            tags: try tagsByAssetID(for: [id])[id, default: []]
         )
     }
 
@@ -397,10 +527,105 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         return try context.fetch(request).first
     }
 
+    private func migrateLegacyTagsIfNeeded() throws {
+        try context.performAndWait {
+            let request = NSFetchRequest<NSManagedObject>(entityName: "AssetRecord")
+            request.predicate = NSPredicate(format: "libraryID == %@", library.id)
+            request.sortDescriptors = [
+                NSSortDescriptor(key: "importedAt", ascending: true),
+                NSSortDescriptor(key: "id", ascending: true)
+            ]
+
+            let assetRecords = try context.fetch(request)
+            guard !assetRecords.isEmpty else {
+                return
+            }
+
+            var tagRecordsByNormalizedName = Dictionary(
+                uniqueKeysWithValues: try loadTagRecords().compactMap { record -> (String, NSManagedObject)? in
+                    guard let normalizedName = record.value(forKey: "normalizedName") as? String else {
+                        return nil
+                    }
+                    return (normalizedName, record)
+                }
+            )
+            var usedTagIDs = Set(
+                tagRecordsByNormalizedName.values.compactMap { $0.value(forKey: "id") as? String }
+            )
+            var existingLinkKeys = Set(
+                try allTagLinkRecords().compactMap { record -> String? in
+                    guard let assetID = record.value(forKey: "assetID") as? String,
+                          let tagID = record.value(forKey: "tagID") as? String else {
+                        return nil
+                    }
+                    return tagLinkKey(assetID: assetID, tagID: tagID)
+                }
+            )
+
+            for assetRecord in assetRecords {
+                guard let assetID = assetRecord.value(forKey: "id") as? String else {
+                    continue
+                }
+
+                for (legacyIndex, legacyTag) in tags(from: assetRecord.value(forKey: "tagsData")).enumerated() {
+                    guard let normalized = normalizedTagName(legacyTag.name) else {
+                        continue
+                    }
+
+                    let tagRecord: NSManagedObject
+                    if let existing = tagRecordsByNormalizedName[normalized.key] {
+                        tagRecord = existing
+                    } else {
+                        let record = NSManagedObject(entity: entity(named: "TagRecord"), insertInto: context)
+                        let legacyID = legacyTag.id.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let tagID = !legacyID.isEmpty && !usedTagIDs.contains(legacyID)
+                            ? legacyID
+                            : UUID().uuidString
+                        let now = assetRecord.value(forKey: "importedAt") as? Date ?? Date()
+
+                        record.setValue(tagID, forKey: "id")
+                        record.setValue(library.id, forKey: "libraryID")
+                        record.setValue(normalized.displayName, forKey: "name")
+                        record.setValue(normalized.key, forKey: "normalizedName")
+                        record.setValue(legacyTag.colorHex, forKey: "colorHex")
+                        record.setValue(now, forKey: "createdAt")
+                        record.setValue(now, forKey: "updatedAt")
+
+                        tagRecordsByNormalizedName[normalized.key] = record
+                        usedTagIDs.insert(tagID)
+                        tagRecord = record
+                    }
+
+                    guard let tagID = tagRecord.value(forKey: "id") as? String else {
+                        continue
+                    }
+
+                    let linkKey = tagLinkKey(assetID: assetID, tagID: tagID)
+                    guard existingLinkKeys.insert(linkKey).inserted else {
+                        continue
+                    }
+
+                    let link = NSManagedObject(entity: entity(named: "AssetTagRecord"), insertInto: context)
+                    link.setValue("\(assetID)-\(tagID)", forKey: "id")
+                    link.setValue(library.id, forKey: "libraryID")
+                    link.setValue(assetID, forKey: "assetID")
+                    link.setValue(tagID, forKey: "tagID")
+                    let importedAt = assetRecord.value(forKey: "importedAt") as? Date ?? Date()
+                    link.setValue(importedAt.addingTimeInterval(TimeInterval(legacyIndex) / 1_000), forKey: "createdAt")
+                }
+            }
+
+            if context.hasChanges {
+                try context.save()
+            }
+        }
+    }
+
     private func asset(
         from record: NSManagedObject,
         folderIDs: [String],
-        paletteColors: [AssetColor]
+        paletteColors: [AssetColor],
+        tags: [TagItem]
     ) -> AssetItem? {
         guard let id = record.value(forKey: "id") as? String,
               let libraryID = record.value(forKey: "libraryID") as? String,
@@ -451,7 +676,7 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
             orientation: intValue(record.value(forKey: "orientation")),
             colorProfileName: record.value(forKey: "colorProfileName") as? String ?? exifMetadata?.profileName,
             note: record.value(forKey: "note") as? String,
-            tags: tags(from: record.value(forKey: "tagsData")),
+            tags: tags,
             folderIDs: folderIDs,
             paletteColors: paletteColors,
             thumbnailURL: resolvedThumbnailURL,
@@ -491,7 +716,10 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
     private func loadMemberships() throws -> [NSManagedObject] {
         let request = NSFetchRequest<NSManagedObject>(entityName: "AssetFolderMembershipRecord")
         request.predicate = NSPredicate(format: "libraryID == %@", library.id)
-        request.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: true)]
+        request.sortDescriptors = [
+            NSSortDescriptor(key: "createdAt", ascending: true),
+            NSSortDescriptor(key: "id", ascending: true)
+        ]
         return try context.fetch(request)
     }
 
@@ -546,6 +774,160 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         return grouped
     }
 
+    private func tagsByAssetID(for assetIDs: Set<String>) throws -> [String: [TagItem]] {
+        guard !assetIDs.isEmpty else {
+            return [:]
+        }
+
+        let request = NSFetchRequest<NSManagedObject>(entityName: "AssetTagRecord")
+        request.predicate = NSPredicate(format: "libraryID == %@ AND assetID IN %@", library.id, Array(assetIDs))
+        request.sortDescriptors = [
+            NSSortDescriptor(key: "createdAt", ascending: true),
+            NSSortDescriptor(key: "id", ascending: true)
+        ]
+        let records = try context.fetch(request)
+        let tagIDs = Set(records.compactMap { $0.value(forKey: "tagID") as? String })
+        let tagsByID = try tagItemsByID(for: tagIDs)
+
+        var grouped: [String: [TagItem]] = [:]
+        for record in records {
+            guard let assetID = record.value(forKey: "assetID") as? String,
+                  let tagID = record.value(forKey: "tagID") as? String,
+                  let tag = tagsByID[tagID] else {
+                continue
+            }
+            grouped[assetID, default: []].append(tag)
+        }
+
+        return grouped.mapValues { tags in
+            var seen = Set<TagItem.ID>()
+            return tags.filter { seen.insert($0.id).inserted }
+        }
+    }
+
+    private func tagItemsByID(for tagIDs: Set<String>) throws -> [String: TagItem] {
+        guard !tagIDs.isEmpty else {
+            return [:]
+        }
+
+        let request = NSFetchRequest<NSManagedObject>(entityName: "TagRecord")
+        request.predicate = NSPredicate(format: "libraryID == %@ AND id IN %@", library.id, Array(tagIDs))
+        request.sortDescriptors = [NSSortDescriptor(key: "name", ascending: true)]
+
+        var result: [String: TagItem] = [:]
+        for record in try context.fetch(request) {
+            guard let tag = tag(from: record) else {
+                continue
+            }
+            result[tag.id] = tag
+        }
+        return result
+    }
+
+    private func loadTagRecords() throws -> [NSManagedObject] {
+        let request = NSFetchRequest<NSManagedObject>(entityName: "TagRecord")
+        request.predicate = NSPredicate(format: "libraryID == %@", library.id)
+        request.sortDescriptors = [
+            NSSortDescriptor(key: "name", ascending: true),
+            NSSortDescriptor(key: "id", ascending: true)
+        ]
+        return try context.fetch(request)
+    }
+
+    private func resolveOrCreateTagRecords(named names: [String]) throws -> [NSManagedObject] {
+        var recordsByNormalizedName = Dictionary(
+            uniqueKeysWithValues: try loadTagRecords().compactMap { record -> (String, NSManagedObject)? in
+                guard let normalizedName = record.value(forKey: "normalizedName") as? String else {
+                    return nil
+                }
+                return (normalizedName, record)
+            }
+        )
+
+        var resolved: [NSManagedObject] = []
+        var seen = Set<String>()
+        let now = Date()
+
+        for name in names {
+            guard let normalized = normalizedTagName(name),
+                  seen.insert(normalized.key).inserted else {
+                continue
+            }
+
+            if let existing = recordsByNormalizedName[normalized.key] {
+                resolved.append(existing)
+                continue
+            }
+
+            let record = NSManagedObject(entity: entity(named: "TagRecord"), insertInto: context)
+            record.setValue(UUID().uuidString, forKey: "id")
+            record.setValue(library.id, forKey: "libraryID")
+            record.setValue(normalized.displayName, forKey: "name")
+            record.setValue(normalized.key, forKey: "normalizedName")
+            record.setValue(now, forKey: "createdAt")
+            record.setValue(now, forKey: "updatedAt")
+            recordsByNormalizedName[normalized.key] = record
+            resolved.append(record)
+        }
+
+        return resolved
+    }
+
+    private func tagRecord(id tagID: TagItem.ID) throws -> NSManagedObject? {
+        let request = NSFetchRequest<NSManagedObject>(entityName: "TagRecord")
+        request.fetchLimit = 1
+        request.predicate = NSPredicate(format: "libraryID == %@ AND id == %@", library.id, tagID)
+        return try context.fetch(request).first
+    }
+
+    private func tagRecord(normalizedName: String) throws -> NSManagedObject? {
+        let request = NSFetchRequest<NSManagedObject>(entityName: "TagRecord")
+        request.fetchLimit = 1
+        request.predicate = NSPredicate(
+            format: "libraryID == %@ AND normalizedName == %@",
+            library.id,
+            normalizedName
+        )
+        return try context.fetch(request).first
+    }
+
+    private func tagLinkRecords(assetID: AssetItem.ID) throws -> [NSManagedObject] {
+        let request = NSFetchRequest<NSManagedObject>(entityName: "AssetTagRecord")
+        request.predicate = NSPredicate(format: "libraryID == %@ AND assetID == %@", library.id, assetID)
+        request.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: true)]
+        return try context.fetch(request)
+    }
+
+    private func allTagLinkRecords() throws -> [NSManagedObject] {
+        let request = NSFetchRequest<NSManagedObject>(entityName: "AssetTagRecord")
+        request.predicate = NSPredicate(format: "libraryID == %@", library.id)
+        return try context.fetch(request)
+    }
+
+    private func tagLinkRecords(tagID: TagItem.ID) throws -> [NSManagedObject] {
+        let request = NSFetchRequest<NSManagedObject>(entityName: "AssetTagRecord")
+        request.predicate = NSPredicate(format: "libraryID == %@ AND tagID == %@", library.id, tagID)
+        return try context.fetch(request)
+    }
+
+    private func assetIDs(linkedToTagID tagID: TagItem.ID) throws -> Set<AssetItem.ID> {
+        Set(try tagLinkRecords(tagID: tagID).compactMap { $0.value(forKey: "assetID") as? String })
+    }
+
+    private func assetRecords(ids: Set<AssetItem.ID>) throws -> [NSManagedObject] {
+        guard !ids.isEmpty else {
+            return []
+        }
+
+        let request = NSFetchRequest<NSManagedObject>(entityName: "AssetRecord")
+        request.predicate = NSPredicate(format: "libraryID == %@ AND id IN %@", library.id, Array(ids))
+        return try context.fetch(request)
+    }
+
+    private func tagLinkKey(assetID: AssetItem.ID, tagID: TagItem.ID) -> String {
+        "\(assetID)\u{0}\(tagID)"
+    }
+
     private func saveColors(_ colors: [AssetColor], forAssetID assetID: String) {
         for color in colors {
             let record = NSManagedObject(entity: entity(named: "AssetColorRecord"), insertInto: context)
@@ -576,6 +958,28 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
             coverage: coverage,
             sortIndex: sortIndex
         )
+    }
+
+    private func tag(from record: NSManagedObject) -> TagItem? {
+        guard let id = record.value(forKey: "id") as? String,
+              let name = record.value(forKey: "name") as? String else {
+            return nil
+        }
+
+        return TagItem(
+            id: id,
+            name: name,
+            colorHex: record.value(forKey: "colorHex") as? String
+        )
+    }
+
+    private func normalizedTagName(_ name: String) -> (displayName: String, key: String)? {
+        let displayName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !displayName.isEmpty else {
+            return nil
+        }
+
+        return (displayName, displayName.lowercased())
     }
 
     private func folder(from record: NSManagedObject) -> AssetFolder? {
@@ -789,8 +1193,11 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
 enum LibraryMetadataError: LocalizedError {
     case invalidFolderName
     case invalidAssetName
+    case invalidTagName
+    case duplicateTagName
     case missingFolder
     case missingAsset
+    case missingTag
 
     var errorDescription: String? {
         switch self {
@@ -798,10 +1205,16 @@ enum LibraryMetadataError: LocalizedError {
             "Enter a folder name."
         case .invalidAssetName:
             "Enter an asset title."
+        case .invalidTagName:
+            "Enter a tag name."
+        case .duplicateTagName:
+            "A tag with this name already exists."
         case .missingFolder:
             "This folder no longer exists."
         case .missingAsset:
             "This asset is no longer available."
+        case .missingTag:
+            "This tag no longer exists."
         }
     }
 }

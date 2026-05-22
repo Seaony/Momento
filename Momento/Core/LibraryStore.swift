@@ -8,6 +8,7 @@ final class LibraryStore {
     var currentLibrary: AssetLibrary?
     var assets: [AssetItem]
     var folders: [AssetFolder]
+    var tags: [TagItem]
     var selectedAssetID: AssetItem.ID?
     var searchQuery = ""
     var viewMode: AssetViewMode = .masonry
@@ -39,6 +40,7 @@ final class LibraryStore {
         self.currentLibrary = nil
         self.assets = []
         self.folders = []
+        self.tags = []
         self.selectedAssetID = nil
         self.viewMode = defaultViewMode
         self.importService = importService
@@ -56,6 +58,7 @@ final class LibraryStore {
             self.currentLibrary = currentLibrary
             self.assets = initialAssets
             self.folders = []
+            self.tags = Self.uniqueTags(from: initialAssets, libraryID: currentLibrary.id)
             self.selectedAssetID = nil
             self.sidebarSelection = .library(currentLibrary.id)
         } else if loadRecentLibrary, let reference = recentLibraries.first {
@@ -121,19 +124,6 @@ final class LibraryStore {
         folders.first { $0.id == id }
     }
 
-    var tags: [TagItem] {
-        guard let currentLibrary else {
-            return []
-        }
-
-        var seen = Set<String>()
-        return assets
-            .filter { $0.libraryID == currentLibrary.id }
-            .flatMap(\.tags)
-            .filter { seen.insert($0.id).inserted }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-    }
-
     var availableFilterColorCategories: [AssetColorCategory] {
         AssetColorCategory.allCases
     }
@@ -154,17 +144,17 @@ final class LibraryStore {
             return []
         }
 
-        var summariesByID: [TagItem.ID: TagSummary] = [:]
+        var countsByID: [TagItem.ID: Int] = [:]
         for asset in assets where asset.libraryID == currentLibrary.id {
             var seenTagIDs = Set<TagItem.ID>()
             for tag in asset.tags where seenTagIDs.insert(tag.id).inserted {
-                var summary = summariesByID[tag.id] ?? TagSummary(tag: tag, assetCount: 0)
-                summary.assetCount += 1
-                summariesByID[tag.id] = summary
+                countsByID[tag.id, default: 0] += 1
             }
         }
 
-        return summariesByID.values.sorted {
+        return tags.map { tag in
+            TagSummary(tag: tag, assetCount: countsByID[tag.id, default: 0])
+        }.sorted {
             $0.tag.name.localizedCaseInsensitiveCompare($1.tag.name) == .orderedAscending
         }
     }
@@ -346,6 +336,7 @@ final class LibraryStore {
         libraries = []
         assets = []
         folders = []
+        tags = []
         selectedAssetID = nil
         searchQuery = ""
         filterState = AssetFilterState()
@@ -411,11 +402,15 @@ final class LibraryStore {
             return
         }
 
-        let updatedTags = normalizedTags(from: names)
         if let metadataStore {
-            mergeAssets([try metadataStore.updateTags(updatedTags, forAssetID: selectedAssetID)])
+            mergeAssets([try metadataStore.setTagNames(names, forAssetID: selectedAssetID)])
+            tags = try metadataStore.loadTags()
         } else {
+            let updatedTags = normalizedTags(from: names)
             assets[index].tags = updatedTags
+            if let currentLibrary {
+                tags = Self.uniqueTags(from: assets, libraryID: currentLibrary.id)
+            }
         }
     }
 
@@ -427,6 +422,16 @@ final class LibraryStore {
 
         guard let currentLibrary else {
             throw LibraryStoreError.noCurrentLibrary
+        }
+
+        if let metadataStore {
+            mergeAssets(try metadataStore.renameTag(id: tagID, to: trimmedName))
+            tags = try metadataStore.loadTags()
+            if case .tag(let selectedTagID) = sidebarSelection, selectedTagID == tagID {
+                sidebarSelection = .tag(tagID)
+            }
+            pruneSelectedAssetIfNeeded()
+            return
         }
 
         let libraryAssets = assets.filter { $0.libraryID == currentLibrary.id }
@@ -452,11 +457,22 @@ final class LibraryStore {
         if case .tag(let selectedTagID) = sidebarSelection, selectedTagID == tagID {
             sidebarSelection = .tag(replacementTag.id)
         }
+        tags = Self.uniqueTags(from: assets, libraryID: currentLibrary.id)
     }
 
     func deleteTag(id tagID: TagItem.ID) throws {
         guard let currentLibrary else {
             throw LibraryStoreError.noCurrentLibrary
+        }
+
+        if let metadataStore {
+            mergeAssets(try metadataStore.deleteTag(id: tagID))
+            tags = try metadataStore.loadTags()
+            if case .tag(let selectedTagID) = sidebarSelection, selectedTagID == tagID {
+                sidebarSelection = .tagManagement
+            }
+            pruneSelectedAssetIfNeeded()
+            return
         }
 
         guard assets.contains(where: { asset in
@@ -473,6 +489,7 @@ final class LibraryStore {
         if case .tag(let selectedTagID) = sidebarSelection, selectedTagID == tagID {
             sidebarSelection = .tagManagement
         }
+        tags = Self.uniqueTags(from: assets, libraryID: currentLibrary.id)
     }
 
     func createFolder(name: String? = nil, parentID: AssetFolder.ID? = nil) throws {
@@ -768,6 +785,7 @@ final class LibraryStore {
         let metadataStore = try LibraryMetadataStore(library: library, storage: storage)
         let loadedAssets = try metadataStore.loadAssets()
         let loadedFolders = try metadataStore.loadFolders()
+        let loadedTags = try metadataStore.loadTags()
 
         libraryAccessScope = accessScope
         self.metadataStore = metadataStore
@@ -775,6 +793,7 @@ final class LibraryStore {
         libraries = [library]
         assets = loadedAssets
         folders = loadedFolders
+        tags = loadedTags
         selectedAssetID = nil
         searchQuery = ""
         filterState = AssetFilterState()
@@ -1053,6 +1072,15 @@ final class LibraryStore {
 
             return existingTags[key] ?? TagItem(name: trimmedName)
         }
+    }
+
+    private static func uniqueTags(from assets: [AssetItem], libraryID: AssetLibrary.ID) -> [TagItem] {
+        var seen = Set<TagItem.ID>()
+        return assets
+            .filter { $0.libraryID == libraryID }
+            .flatMap(\.tags)
+            .filter { seen.insert($0.id).inserted }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     private static func sampleAssets(for library: AssetLibrary) -> [AssetItem] {
