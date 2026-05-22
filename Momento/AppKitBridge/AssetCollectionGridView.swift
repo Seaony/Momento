@@ -1243,10 +1243,8 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
     private func imageContentMode(for asset: AssetItem, viewMode: AssetViewMode) -> AssetPreviewImageView.ContentMode {
         switch viewMode {
-        case .grid, .masonry:
+        case .grid, .masonry, .list:
             return .aspectFill
-        case .list:
-            return .aspectFit
         }
     }
 
