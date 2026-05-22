@@ -24,8 +24,7 @@ struct MomentoTagManagementView: View {
             }
         }
         .padding(.horizontal, 20)
-        .padding(.top, MomentoTheme.toolbarHeight + 16)
-        .padding(.bottom, 20)
+        .padding(.vertical, 14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .alert(
             localization.string("Delete Tag"),
