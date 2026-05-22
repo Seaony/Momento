@@ -1036,7 +1036,8 @@ struct ContentView: View {
             return .empty
         }
 
-        let libraryAssets = store.assets.filter { $0.libraryID == currentLibrary.id }
+        let allLibraryAssets = store.assets.filter { $0.libraryID == currentLibrary.id }
+        let libraryAssets = allLibraryAssets.filter { !$0.isTrashed }
         var folderCounts: [AssetFolder.ID: Int] = [:]
 
         for asset in libraryAssets {
@@ -1050,6 +1051,7 @@ struct ContentView: View {
             favorites: libraryAssets.filter(\.isFavorite).count,
             uncategorized: libraryAssets.filter(\.folderIDs.isEmpty).count,
             untagged: libraryAssets.filter(\.tags.isEmpty).count,
+            trash: allLibraryAssets.filter(\.isTrashed).count,
             folders: folderCounts
         )
     }
@@ -1222,6 +1224,14 @@ struct ContentView: View {
             if moveAssetToTrash(asset) {
                 showAssetActionToast(action)
             }
+        case .restore:
+            if restoreAsset(asset) {
+                showAssetActionToast(action)
+            }
+        case .deletePermanently:
+            if deleteAssetPermanently(asset) {
+                showAssetActionToast(action)
+            }
         }
     }
 
@@ -1319,6 +1329,27 @@ struct ContentView: View {
         do {
             AssetCollectionGridView.invalidatePreviewCache(for: asset)
             try store.moveAssetToTrash(id: asset.id)
+            return true
+        } catch {
+            showImportError(error)
+            return false
+        }
+    }
+
+    private func restoreAsset(_ asset: AssetItem) -> Bool {
+        do {
+            try store.restoreAssets(ids: [asset.id])
+            return true
+        } catch {
+            showImportError(error)
+            return false
+        }
+    }
+
+    private func deleteAssetPermanently(_ asset: AssetItem) -> Bool {
+        do {
+            AssetCollectionGridView.invalidatePreviewCache(for: asset)
+            try store.deleteAssetPermanently(id: asset.id)
             return true
         } catch {
             showImportError(error)

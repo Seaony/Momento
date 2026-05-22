@@ -1343,6 +1343,23 @@
         }
       }
     },
+    "Delete Permanently" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete Permanently"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "永久删除"
+          }
+        }
+      }
+    },
     "Delete Library" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1747,6 +1764,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "收藏"
+          }
+        }
+      }
+    },
+    "Empty Trash" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Empty Trash"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清空废纸篓"
           }
         }
       }
@@ -3039,6 +3073,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在 Finder 中显示"
+          }
+        }
+      }
+    },
+    "Restore" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restore"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复"
           }
         }
       }

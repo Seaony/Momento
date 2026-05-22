@@ -71,7 +71,7 @@ final class LibraryStore {
     }
 
     var visibleAssets: [AssetItem] {
-        guard let currentLibrary else {
+        guard currentLibrary != nil else {
             return []
         }
 
@@ -96,7 +96,7 @@ final class LibraryStore {
                 asset.tags.contains { $0.id == tagID }
             }
         case .trash:
-            scopedAssets = []
+            scopedAssets = allCurrentLibraryAssets.filter(\.isTrashed)
         }
 
         let filteredAssets = applyFilters(to: scopedAssets)
@@ -115,6 +115,9 @@ final class LibraryStore {
 
     var selectedAsset: AssetItem? {
         guard let selectedAssetID else {
+            return nil
+        }
+        guard visibleAssets.contains(where: { $0.id == selectedAssetID }) else {
             return nil
         }
         return assets.first { $0.id == selectedAssetID }
@@ -140,12 +143,12 @@ final class LibraryStore {
     }
 
     var tagSummaries: [TagSummary] {
-        guard let currentLibrary else {
+        guard currentLibrary != nil else {
             return []
         }
 
         var countsByID: [TagItem.ID: Int] = [:]
-        for asset in assets where asset.libraryID == currentLibrary.id {
+        for asset in currentLibraryAssets {
             var seenTagIDs = Set<TagItem.ID>()
             for tag in asset.tags where seenTagIDs.insert(tag.id).inserted {
                 countsByID[tag.id, default: 0] += 1
@@ -639,21 +642,49 @@ final class LibraryStore {
             throw LibraryStoreError.missingAsset
         }
 
+        mergeAssets([try metadataStore.moveAssetToTrash(id: asset.id)])
+        pruneSelectedAssetIfNeeded()
+    }
+
+    func restoreAssets(ids assetIDs: Set<AssetItem.ID>) throws {
+        guard let metadataStore else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        mergeAssets(try metadataStore.restoreAssets(ids: assetIDs))
+        pruneSelectedAssetIfNeeded()
+    }
+
+    func deleteAssetPermanently(id assetID: AssetItem.ID) throws {
+        guard let metadataStore,
+              let currentLibrary else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        guard let asset = allCurrentLibraryAssets.first(where: { $0.id == assetID }) else {
+            throw LibraryStoreError.missingAsset
+        }
+
+        try storage.removeStoredAssetFiles(for: asset, in: currentLibrary)
         try metadataStore.deleteAsset(id: assetID)
-
-        if FileManager.default.fileExists(atPath: asset.storageURL.path) {
-            try storage.trashAssetFile(at: asset.storageURL)
-        }
-
-        if let thumbnailURL = asset.thumbnailURL,
-           FileManager.default.fileExists(atPath: thumbnailURL.path) {
-            try? FileManager.default.removeItem(at: thumbnailURL)
-        }
-
         assets.removeAll { $0.id == assetID }
-        if selectedAssetID == assetID {
-            selectedAssetID = nil
+        pruneSelectedAssetIfNeeded()
+    }
+
+    func emptyTrash() throws {
+        guard let metadataStore,
+              let currentLibrary else {
+            throw LibraryStoreError.noCurrentLibrary
         }
+
+        let trashedAssets = allCurrentLibraryAssets.filter(\.isTrashed)
+        for asset in trashedAssets {
+            try storage.removeStoredAssetFiles(for: asset, in: currentLibrary)
+        }
+
+        let deletedIDs = Set(try metadataStore.emptyTrash())
+        assets.removeAll { deletedIDs.contains($0.id) }
+        pruneSelectedAssetIfNeeded()
     }
 
     func importItems(from urls: [URL]) async throws {
@@ -678,6 +709,7 @@ final class LibraryStore {
         }
 
         mergeAssets(savedAssets)
+        pruneSelectedAssetIfNeeded()
     }
 
     private func openRecentLibrary(_ reference: RecentLibraryReference) throws {
@@ -722,6 +754,10 @@ final class LibraryStore {
     }
 
     private var currentLibraryAssets: [AssetItem] {
+        allCurrentLibraryAssets.filter { !$0.isTrashed }
+    }
+
+    private var allCurrentLibraryAssets: [AssetItem] {
         guard let currentLibrary else {
             return []
         }

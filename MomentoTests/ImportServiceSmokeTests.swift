@@ -443,7 +443,7 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
-    func testMovingImportedAssetToTrashRemovesMetadataAndStoredFile() async throws {
+    func testMovingAssetToTrashSoftDeletesAndRestores() async throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }
 
@@ -459,20 +459,122 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         let source = try environment.writeOnePixelPNG(named: "trashed.png")
         try await store.importItems(from: [source])
         let asset = try XCTUnwrap(store.assets.first)
+        try store.createFolder(name: "References")
+        let folderID = try XCTUnwrap(store.folders.first?.id)
+        try store.assignAssets(ids: [asset.id], to: folderID)
+        store.selectSidebarItem(id: "all-assets")
+        store.selectAsset(id: asset.id)
+
+        let assignedAsset = try XCTUnwrap(store.assets.first)
         let storedAssetURL = asset.storageURL
-        let thumbnailURL = try XCTUnwrap(asset.thumbnailURL)
+        let thumbnailURL = try XCTUnwrap(assignedAsset.thumbnailURL)
 
         try store.moveAssetToTrash(id: asset.id)
 
-        XCTAssertTrue(store.assets.isEmpty)
+        let trashedAsset = try XCTUnwrap(store.assets.first)
+        XCTAssertTrue(trashedAsset.isTrashed)
+        XCTAssertNotNil(trashedAsset.trashedAt)
+        XCTAssertEqual(trashedAsset.folderIDs, [folderID])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: storedAssetURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: thumbnailURL.path))
+        XCTAssertTrue(store.visibleAssets.isEmpty)
         XCTAssertNil(store.selectedAssetID)
-        XCTAssertFalse(FileManager.default.fileExists(atPath: storedAssetURL.path))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: thumbnailURL.path))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: environment.trashURL.appendingPathComponent(storedAssetURL.lastPathComponent).path))
+
+        store.selectSidebarItem(id: "trash")
+        XCTAssertEqual(store.visibleAssets.map(\.id), [asset.id])
+
+        try store.restoreAssets(ids: [asset.id])
+        let restoredAsset = try XCTUnwrap(store.assets.first)
+        XCTAssertFalse(restoredAsset.isTrashed)
+        XCTAssertNil(restoredAsset.trashedAt)
+        XCTAssertEqual(restoredAsset.folderIDs, [folderID])
+        XCTAssertTrue(store.visibleAssets.isEmpty)
+
+        store.selectSidebarItem(id: "all-assets")
+        XCTAssertEqual(store.visibleAssets.map(\.id), [asset.id])
 
         let reopened = LibraryStore(
             defaultViewMode: .grid,
             storage: storage,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try reopened.openLibrary(at: environment.packageURL)
+        let reopenedAsset = try XCTUnwrap(reopened.assets.first)
+        XCTAssertFalse(reopenedAsset.isTrashed)
+        XCTAssertNil(reopenedAsset.trashedAt)
+        XCTAssertEqual(reopenedAsset.folderIDs, [folderID])
+    }
+
+    @MainActor
+    func testTrashedAssetReimportRestoresExistingRecord() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        let source = try environment.writeOnePixelPNG(named: "restore-duplicate.png")
+        try await store.importItems(from: [source])
+        let asset = try XCTUnwrap(store.assets.first)
+        try store.createFolder(name: "Duplicates")
+        let folderID = try XCTUnwrap(store.folders.first?.id)
+        try store.assignAssets(ids: [asset.id], to: folderID)
+
+        try store.moveAssetToTrash(id: asset.id)
+        XCTAssertEqual(store.assets.count, 1)
+        XCTAssertTrue(try XCTUnwrap(store.assets.first).isTrashed)
+
+        try await store.importItems(from: [source])
+
+        let restoredAsset = try XCTUnwrap(store.assets.first)
+        XCTAssertEqual(store.assets.count, 1)
+        XCTAssertEqual(restoredAsset.id, asset.id)
+        XCTAssertFalse(restoredAsset.isTrashed)
+        XCTAssertNil(restoredAsset.trashedAt)
+        XCTAssertEqual(restoredAsset.folderIDs, [folderID])
+        XCTAssertEqual(store.visibleAssets.map(\.id), [asset.id])
+    }
+
+    @MainActor
+    func testEmptyTrashPermanentlyDeletesMetadataAndStoredFiles() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        let source = try environment.writeOnePixelPNG(named: "empty-trash.png")
+        try await store.importItems(from: [source])
+        let asset = try XCTUnwrap(store.assets.first)
+        store.selectAsset(id: asset.id)
+        try store.updateSelectedTags(["Disposable"])
+        let storedAssetURL = asset.storageURL
+        let thumbnailURL = try XCTUnwrap(asset.thumbnailURL)
+        let previewURL = environment.packageURL
+            .appendingPathComponent("previews", isDirectory: true)
+            .appendingPathComponent("\(asset.contentHash)-preview.dat")
+        try Data("preview".utf8).write(to: previewURL)
+
+        try store.moveAssetToTrash(id: asset.id)
+        try store.emptyTrash()
+
+        XCTAssertTrue(store.assets.isEmpty)
+        XCTAssertTrue(store.tagSummaries.allSatisfy { $0.assetCount == 0 })
+        XCTAssertFalse(FileManager.default.fileExists(atPath: storedAssetURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: thumbnailURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: previewURL.path))
+
+        let reopened = LibraryStore(
+            defaultViewMode: .grid,
             recentStore: RecentLibraryStore(defaults: environment.defaults),
             loadRecentLibrary: false
         )

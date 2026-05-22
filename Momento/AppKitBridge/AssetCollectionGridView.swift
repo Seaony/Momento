@@ -93,6 +93,16 @@ enum AssetContextMenuAction: CaseIterable {
     case reanalyzeColors
     case revealInFinder
     case moveToTrash
+    case restore
+    case deletePermanently
+
+    static func actions(for asset: AssetItem) -> [AssetContextMenuAction] {
+        if asset.isTrashed {
+            return [.previewOriginal, .revealInFinder, .restore, .deletePermanently]
+        }
+
+        return [.previewOriginal, .refreshThumbnail, .reanalyzeColors, .revealInFinder, .moveToTrash]
+    }
 
     var titleKey: String {
         switch self {
@@ -106,6 +116,10 @@ enum AssetContextMenuAction: CaseIterable {
             "Reveal in Finder"
         case .moveToTrash:
             "Move to Trash"
+        case .restore:
+            "Restore"
+        case .deletePermanently:
+            "Delete Permanently"
         }
     }
 
@@ -121,11 +135,15 @@ enum AssetContextMenuAction: CaseIterable {
             "finder"
         case .moveToTrash:
             "trash"
+        case .restore:
+            "arrow.uturn.backward"
+        case .deletePermanently:
+            "trash.slash"
         }
     }
 
     var isDestructive: Bool {
-        self == .moveToTrash
+        self == .moveToTrash || self == .deletePermanently
     }
 
     var showsSeparatorAfter: Bool {
@@ -1268,7 +1286,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     }
 
     private func showContextMenu(at location: NSPoint) {
-        guard asset != nil else {
+        guard let asset else {
             return
         }
 
@@ -1278,7 +1296,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         let menuItem = NSMenuItem()
         let menuView = AssetContextMenuView(
             localization: localization,
-            actions: AssetContextMenuAction.allCases,
+            actions: AssetContextMenuAction.actions(for: asset),
             onSelect: { [weak self] action in
                 self?.onContextMenuAction?(action)
             }

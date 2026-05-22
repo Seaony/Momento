@@ -7,6 +7,7 @@ struct MomentoSidebarAssetCounts: Equatable {
     var favorites: Int
     var uncategorized: Int
     var untagged: Int
+    var trash: Int
     var folders: [AssetFolder.ID: Int]
 
     static let empty = MomentoSidebarAssetCounts(
@@ -14,6 +15,7 @@ struct MomentoSidebarAssetCounts: Equatable {
         favorites: 0,
         uncategorized: 0,
         untagged: 0,
+        trash: 0,
         folders: [:]
     )
 }
@@ -620,7 +622,8 @@ struct MomentoSidebarView: View {
                 id: "trash",
                 systemImage: "trash",
                 label: localization.string("Trash"),
-                isSelected: selection == "trash"
+                isSelected: selection == "trash",
+                count: counts.trash
             ) {
                 withAnimation(.smooth(duration: 0.16)) {
                     selection = "trash"
@@ -650,13 +653,15 @@ struct MomentoSidebarView: View {
         systemImage: String,
         label: String,
         isSelected: Bool = false,
+        count: Int? = nil,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             sidebarFooterIconContent(
                 id: id,
                 systemImage: systemImage,
-                isSelected: isSelected
+                isSelected: isSelected,
+                count: count
             )
         }
         .buttonStyle(.plain)
@@ -672,7 +677,8 @@ struct MomentoSidebarView: View {
         sidebarFooterIconContent(
             id: id,
             systemImage: systemImage,
-            isSelected: false
+            isSelected: false,
+            count: nil
         )
         .onHover { hovering in
             updateFooterHover(id: id, isHovering: hovering)
@@ -684,7 +690,8 @@ struct MomentoSidebarView: View {
     private func sidebarFooterIconContent(
         id: String,
         systemImage: String,
-        isSelected: Bool
+        isSelected: Bool,
+        count: Int?
     ) -> some View {
         Image(systemName: systemImage)
             .font(.system(size: 14, weight: .medium))
@@ -694,6 +701,18 @@ struct MomentoSidebarView: View {
                 sidebarFooterIconBackground(id: id, isSelected: isSelected)
             }
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(alignment: .topTrailing) {
+                if let count, count > 0 {
+                    Text("\(count)")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(MomentoTheme.primaryText)
+                        .monospacedDigit()
+                        .padding(.horizontal, 3)
+                        .frame(minWidth: 11, minHeight: 11)
+                        .background(Capsule().fill(MomentoTheme.sidebarIconHoverBackground))
+                        .offset(x: 5, y: -4)
+                }
+            }
     }
 
     @ViewBuilder

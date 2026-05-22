@@ -1,6 +1,11 @@
 import CoreData
 import Foundation
 
+nonisolated struct DuplicateAssetReference: Hashable {
+    var assetID: AssetItem.ID
+    var isTrashed: Bool
+}
+
 nonisolated final class LibraryMetadataStore: @unchecked Sendable {
     private let library: AssetLibrary
     private let storage: LibraryStorage
@@ -65,12 +70,14 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         }
     }
 
-    func existingContentHashes() throws -> Set<String> {
+    func existingContentHashes(includeTrashed: Bool = false) throws -> Set<String> {
         try context.performAndWait {
             let request = NSFetchRequest<NSDictionary>(entityName: "AssetRecord")
             request.resultType = .dictionaryResultType
             request.propertiesToFetch = ["contentHash"]
-            request.predicate = NSPredicate(format: "libraryID == %@", library.id)
+            request.predicate = includeTrashed
+                ? NSPredicate(format: "libraryID == %@", library.id)
+                : NSPredicate(format: "libraryID == %@ AND isTrashed == NO", library.id)
             return Set(try context.fetch(request).compactMap { $0["contentHash"] as? String })
         }
     }
@@ -79,41 +86,49 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         try context.performAndWait {
             var savedAssets: [AssetItem] = []
 
-            for asset in assets {
-                if let existing = try assetRecord(withContentHash: asset.contentHash) {
-                    savedAssets.append(existing)
+            for importedAsset in assets {
+                if let existingRecord = try assetRecord(contentHash: importedAsset.contentHash) {
+                    if (existingRecord.value(forKey: "isTrashed") as? Bool) == true {
+                        let now = Date()
+                        existingRecord.setValue(false, forKey: "isTrashed")
+                        existingRecord.setValue(nil, forKey: "trashedAt")
+                        existingRecord.setValue(now, forKey: "updatedAt")
+                    }
+                    if let existing = try asset(from: existingRecord) {
+                        savedAssets.append(existing)
+                    }
                     continue
                 }
 
                 let record = NSManagedObject(entity: entity(named: "AssetRecord"), insertInto: context)
-                record.setValue(asset.id, forKey: "id")
-                record.setValue(asset.libraryID, forKey: "libraryID")
-                record.setValue(asset.displayName, forKey: "displayName")
-                record.setValue(asset.originalFileName, forKey: "originalFileName")
+                record.setValue(importedAsset.id, forKey: "id")
+                record.setValue(importedAsset.libraryID, forKey: "libraryID")
+                record.setValue(importedAsset.displayName, forKey: "displayName")
+                record.setValue(importedAsset.originalFileName, forKey: "originalFileName")
                 // 数据库只保存库包内的相对路径。用户移动整个 .momento 包后，
                 // 只要 manifest 和 database 仍在同一个包里，资源路径仍可重新解析。
-                record.setValue(try storage.relativePath(for: asset.storageURL, in: library), forKey: "storageRelativePath")
-                record.setValue(asset.kind.rawValue, forKey: "kindRaw")
-                record.setValue(asset.fileExtension, forKey: "fileExtension")
-                record.setValue(asset.utiIdentifier, forKey: "utiIdentifier")
-                record.setValue(asset.byteSize, forKey: "byteSize")
-                record.setValue(asset.contentHash, forKey: "contentHash")
-                record.setValue(asset.dimensions?.width, forKey: "pixelWidth")
-                record.setValue(asset.dimensions?.height, forKey: "pixelHeight")
-                record.setValue(asset.orientation, forKey: "orientation")
-                record.setValue(asset.colorProfileName, forKey: "colorProfileName")
-                let storedExifMetadataData = exifMetadataData(asset.exifMetadata)
+                record.setValue(try storage.relativePath(for: importedAsset.storageURL, in: library), forKey: "storageRelativePath")
+                record.setValue(importedAsset.kind.rawValue, forKey: "kindRaw")
+                record.setValue(importedAsset.fileExtension, forKey: "fileExtension")
+                record.setValue(importedAsset.utiIdentifier, forKey: "utiIdentifier")
+                record.setValue(importedAsset.byteSize, forKey: "byteSize")
+                record.setValue(importedAsset.contentHash, forKey: "contentHash")
+                record.setValue(importedAsset.dimensions?.width, forKey: "pixelWidth")
+                record.setValue(importedAsset.dimensions?.height, forKey: "pixelHeight")
+                record.setValue(importedAsset.orientation, forKey: "orientation")
+                record.setValue(importedAsset.colorProfileName, forKey: "colorProfileName")
+                let storedExifMetadataData = exifMetadataData(importedAsset.exifMetadata)
                 record.setValue(storedExifMetadataData, forKey: "exifMetadataData")
-                record.setValue(asset.note, forKey: "note")
-                record.setValue(asset.isFavorite, forKey: "isFavorite")
-                record.setValue(asset.isTrashed, forKey: "isTrashed")
-                record.setValue(asset.trashedAt, forKey: "trashedAt")
-                record.setValue(asset.importedAt, forKey: "importedAt")
-                record.setValue(asset.updatedAt, forKey: "updatedAt")
+                record.setValue(importedAsset.note, forKey: "note")
+                record.setValue(importedAsset.isFavorite, forKey: "isFavorite")
+                record.setValue(importedAsset.isTrashed, forKey: "isTrashed")
+                record.setValue(importedAsset.trashedAt, forKey: "trashedAt")
+                record.setValue(importedAsset.importedAt, forKey: "importedAt")
+                record.setValue(importedAsset.updatedAt, forKey: "updatedAt")
                 record.setValue(nil, forKey: "tagsData")
-                saveColors(asset.paletteColors, forAssetID: asset.id)
+                saveColors(importedAsset.paletteColors, forAssetID: importedAsset.id)
 
-                var savedAsset = asset
+                var savedAsset = importedAsset
                 savedAsset.exifMetadata = exifMetadata(from: storedExifMetadataData)
                 savedAssets.append(savedAsset)
             }
@@ -464,11 +479,120 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
             for record in try membershipRecords(assetIDs: [assetID]) {
                 context.delete(record)
             }
+            for record in try tagLinkRecords(assetID: assetID) {
+                context.delete(record)
+            }
             context.delete(assetRecord)
 
             if context.hasChanges {
                 try context.save()
             }
+        }
+    }
+
+    func moveAssetToTrash(id assetID: AssetItem.ID) throws -> AssetItem {
+        try context.performAndWait {
+            guard let record = try assetRecord(id: assetID) else {
+                throw LibraryMetadataError.missingAsset
+            }
+
+            let now = Date()
+            if (record.value(forKey: "isTrashed") as? Bool) != true {
+                record.setValue(true, forKey: "isTrashed")
+                record.setValue(now, forKey: "trashedAt")
+                record.setValue(now, forKey: "updatedAt")
+            }
+
+            if context.hasChanges {
+                try context.save()
+            }
+
+            guard let asset = try asset(from: record) else {
+                throw LibraryMetadataError.missingAsset
+            }
+            return asset
+        }
+    }
+
+    func restoreAssets(ids assetIDs: Set<AssetItem.ID>) throws -> [AssetItem] {
+        try context.performAndWait {
+            let records = try assetRecords(ids: assetIDs)
+            let now = Date()
+
+            for record in records where (record.value(forKey: "isTrashed") as? Bool) == true {
+                record.setValue(false, forKey: "isTrashed")
+                record.setValue(nil, forKey: "trashedAt")
+                record.setValue(now, forKey: "updatedAt")
+            }
+
+            if context.hasChanges {
+                try context.save()
+            }
+
+            return try assets(ids: Set(records.compactMap { $0.value(forKey: "id") as? String }))
+        }
+    }
+
+    func emptyTrash() throws -> [AssetItem.ID] {
+        try context.performAndWait {
+            let request = NSFetchRequest<NSManagedObject>(entityName: "AssetRecord")
+            request.predicate = NSPredicate(format: "libraryID == %@ AND isTrashed == YES", library.id)
+            let records = try context.fetch(request)
+            let assetIDs = records.compactMap { $0.value(forKey: "id") as? String }
+
+            for assetID in assetIDs {
+                for record in try colorRecords(assetID: assetID) {
+                    context.delete(record)
+                }
+                for record in try membershipRecords(assetIDs: [assetID]) {
+                    context.delete(record)
+                }
+                for record in try tagLinkRecords(assetID: assetID) {
+                    context.delete(record)
+                }
+            }
+            for record in records {
+                context.delete(record)
+            }
+
+            if context.hasChanges {
+                try context.save()
+            }
+
+            return assetIDs
+        }
+    }
+
+    func duplicateAssetReferences(
+        forContentHashes hashes: Set<String>,
+        includeTrashed: Bool
+    ) throws -> [String: DuplicateAssetReference] {
+        try context.performAndWait {
+            guard !hashes.isEmpty else {
+                return [:]
+            }
+
+            let request = NSFetchRequest<NSManagedObject>(entityName: "AssetRecord")
+            request.predicate = includeTrashed
+                ? NSPredicate(format: "libraryID == %@ AND contentHash IN %@", library.id, Array(hashes))
+                : NSPredicate(
+                    format: "libraryID == %@ AND contentHash IN %@ AND isTrashed == NO",
+                    library.id,
+                    Array(hashes)
+                )
+
+            var references: [String: DuplicateAssetReference] = [:]
+            for record in try context.fetch(request) {
+                guard let contentHash = record.value(forKey: "contentHash") as? String,
+                      let assetID = record.value(forKey: "id") as? String else {
+                    continue
+                }
+                references[contentHash] = DuplicateAssetReference(
+                    assetID: assetID,
+                    isTrashed: record.value(forKey: "isTrashed") as? Bool ?? false
+                )
+            }
+            return references
         }
     }
 
@@ -498,17 +622,16 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         }
     }
 
-    private func assetRecord(withContentHash contentHash: String) throws -> AssetItem? {
-        let request = NSFetchRequest<NSManagedObject>(entityName: "AssetRecord")
-        request.fetchLimit = 1
-        request.predicate = NSPredicate(
-            format: "libraryID == %@ AND contentHash == %@",
-            library.id,
-            contentHash
-        )
+    private func asset(withContentHash contentHash: String) throws -> AssetItem? {
+        guard let record = try assetRecord(contentHash: contentHash) else {
+            return nil
+        }
 
-        guard let record = try context.fetch(request).first,
-              let id = record.value(forKey: "id") as? String else {
+        return try asset(from: record)
+    }
+
+    private func asset(from record: NSManagedObject) throws -> AssetItem? {
+        guard let id = record.value(forKey: "id") as? String else {
             return nil
         }
 
@@ -518,6 +641,18 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
             paletteColors: try colorsByAssetID(for: [id])[id, default: []],
             tags: try tagsByAssetID(for: [id])[id, default: []]
         )
+    }
+
+    private func assetRecord(contentHash: String) throws -> NSManagedObject? {
+        let request = NSFetchRequest<NSManagedObject>(entityName: "AssetRecord")
+        request.fetchLimit = 1
+        request.predicate = NSPredicate(
+            format: "libraryID == %@ AND contentHash == %@",
+            library.id,
+            contentHash
+        )
+
+        return try context.fetch(request).first
     }
 
     private func assetRecord(id: AssetItem.ID) throws -> NSManagedObject? {

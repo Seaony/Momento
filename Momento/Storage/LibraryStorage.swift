@@ -153,6 +153,19 @@ nonisolated struct LibraryStorage: Sendable {
         try FileManager.default.moveItem(at: fileURL, to: availableTrashURL(for: fileURL, in: trashURL))
     }
 
+    nonisolated func removeStoredAssetFiles(for asset: AssetItem, in library: AssetLibrary) throws {
+        if FileManager.default.fileExists(atPath: asset.storageURL.path) {
+            try FileManager.default.removeItem(at: asset.storageURL)
+        }
+
+        let thumbnailURL = thumbnailURL(forContentHash: asset.contentHash, in: library)
+        if FileManager.default.fileExists(atPath: thumbnailURL.path) {
+            try FileManager.default.removeItem(at: thumbnailURL)
+        }
+
+        try removePreviewCacheFiles(forContentHash: asset.contentHash, in: library)
+    }
+
     nonisolated func relativePath(for url: URL, in library: AssetLibrary) throws -> String {
         let packageURL = rootURL(for: library).standardizedFileURL
         let assetURL = url.standardizedFileURL
@@ -167,6 +180,21 @@ nonisolated struct LibraryStorage: Sendable {
 
     nonisolated func resolveAssetURL(relativePath: String, in library: AssetLibrary) -> URL {
         rootURL(for: library).appendingPathComponent(relativePath, isDirectory: false)
+    }
+
+    nonisolated private func removePreviewCacheFiles(forContentHash contentHash: String, in library: AssetLibrary) throws {
+        let previewsURL = rootURL(for: library).appendingPathComponent("previews", isDirectory: true)
+        guard let enumerator = FileManager.default.enumerator(
+            at: previewsURL,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return
+        }
+
+        for case let url as URL in enumerator where url.lastPathComponent.contains(contentHash) {
+            try FileManager.default.removeItem(at: url)
+        }
     }
 
     nonisolated private func writeManifest(_ manifest: LibraryManifest, in library: AssetLibrary) throws {
