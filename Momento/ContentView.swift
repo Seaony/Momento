@@ -439,7 +439,7 @@ struct ContentView: View {
     }
 
     private var filterFacetPicker: some View {
-        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 19, style: .continuous)
 
         return HStack(spacing: 6) {
             ForEach(AssetFilterFacet.allCases) { facet in
@@ -448,10 +448,10 @@ struct ContentView: View {
         }
         .padding(5)
         .background {
-            shape.fill(Color.white.opacity(0.08))
+            shape.fill(Color.black.opacity(0.58))
         }
         .overlay {
-            shape.strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+            shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
         }
         .transaction(value: selectedFilterFacet) { transaction in
             transaction.disablesAnimations = true
@@ -461,14 +461,14 @@ struct ContentView: View {
     private func filterFacetButton(_ facet: AssetFilterFacet) -> some View {
         let isSelected = selectedFilterFacet == facet
         let isHovered = hoveredFilterFacet == facet
-        let shape = RoundedRectangle(cornerRadius: 13, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 15, style: .continuous)
 
         return Button {
             selectedFilterFacet = facet
         } label: {
             Text(filterFacetSegmentTitle(for: facet))
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(isSelected ? 0.98 : 0.74))
+                .foregroundStyle(isSelected ? Color.black.opacity(0.88) : Color.white.opacity(0.78))
                 .lineLimit(1)
                 .minimumScaleFactor(0.86)
                 .frame(maxWidth: .infinity)
@@ -479,12 +479,12 @@ struct ContentView: View {
         .pointerStyle(.link)
         .background {
             if isSelected || isHovered {
-                shape.fill(Color.white.opacity(isSelected ? 0.18 : 0.08))
+                shape.fill(isSelected ? Color.white.opacity(0.94) : Color.white.opacity(0.10))
             }
         }
         .overlay {
             if isSelected {
-                shape.strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
+                shape.strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
             }
         }
         .onHover { hovering in
