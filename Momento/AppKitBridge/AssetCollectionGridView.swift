@@ -26,6 +26,7 @@ private enum AssetCollectionMetrics {
     static let listImageCornerRadius: CGFloat = 6
     static let dimensionBadgeCornerRadius: CGFloat = 5
     static let dimensionBadgeHeight: CGFloat = 16
+    static let dimensionBadgeTopInset: CGFloat = 8
     static let dimensionBadgeHorizontalPadding: CGFloat = 3
     static let sectionHorizontalInset: CGFloat = 8
     static let sectionVerticalInset: CGFloat = 14
@@ -34,10 +35,11 @@ private enum AssetCollectionMetrics {
     static let listSeparatorHorizontalInset: CGFloat = 18
     static let listSeparatorAlpha: CGFloat = 0.055
     static let favoriteButtonWidth: CGFloat = 22
-    static let favoriteButtonHeight: CGFloat = 15
+    static let favoriteButtonHeight: CGFloat = 16
     static let favoriteButtonLeadingInset: CGFloat = 7
-    static let favoriteButtonTopInset: CGFloat = 10.5
+    static let favoriteButtonTopInset: CGFloat = dimensionBadgeTopInset + (dimensionBadgeHeight - favoriteButtonHeight) / 2
     static let favoriteButtonCornerRadius: CGFloat = favoriteButtonHeight / 2
+    static let favoriteSymbolPointSize: CGFloat = 14
     static let favoriteButtonBackgroundAlpha: CGFloat = 0.3
     static let favoriteButtonAppearanceAnimationDuration: CFTimeInterval = 0.14
     static let favoriteButtonBackgroundAnimationDuration: CFTimeInterval = 0.12
@@ -1125,7 +1127,10 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
             previewImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: AssetCollectionMetrics.masonryImageInset),
             previewImageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -AssetCollectionMetrics.masonryImageInset),
             previewImageView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -AssetCollectionMetrics.masonryImageInset),
-            dimensionBadgeView.topAnchor.constraint(equalTo: previewImageView.topAnchor, constant: 8),
+            dimensionBadgeView.topAnchor.constraint(
+                equalTo: previewImageView.topAnchor,
+                constant: AssetCollectionMetrics.dimensionBadgeTopInset
+            ),
             dimensionBadgeView.trailingAnchor.constraint(equalTo: previewImageView.trailingAnchor, constant: -8),
             dimensionBadgeView.heightAnchor.constraint(equalToConstant: AssetCollectionMetrics.dimensionBadgeHeight)
         ]
@@ -1324,7 +1329,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         NSImage(
             systemSymbolName: isFavorite ? "heart.fill" : "heart",
             accessibilityDescription: localization.string("Favorites")
-        )?.withSymbolConfiguration(.init(pointSize: 12.5, weight: .semibold))
+        )?.withSymbolConfiguration(.init(pointSize: AssetCollectionMetrics.favoriteSymbolPointSize, weight: .semibold))
     }
 
     private func subtitle(for asset: AssetItem, viewMode: AssetViewMode, localization: AppLocalization) -> String {
