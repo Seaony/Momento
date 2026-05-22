@@ -515,9 +515,10 @@ struct ContentView: View {
 
     private var filterColorsContent: some View {
         let colorCategories = store.availableFilterColorCategories
+        let columns = Array(repeating: GridItem(.fixed(34), spacing: 5), count: 8)
 
         return LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: 34, maximum: 34), spacing: 7)],
+            columns: columns,
             alignment: .leading,
             spacing: 7
         ) {
