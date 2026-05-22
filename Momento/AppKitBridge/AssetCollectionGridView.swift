@@ -33,9 +33,9 @@ private enum AssetCollectionMetrics {
     static let listThumbnailSize: CGFloat = 78
     static let listSeparatorHorizontalInset: CGFloat = 18
     static let listSeparatorAlpha: CGFloat = 0.055
-    static let favoriteButtonSize: CGFloat = 24
+    static let favoriteButtonSize: CGFloat = 20
     static let favoriteButtonInset: CGFloat = 8
-    static let favoriteButtonCornerRadius: CGFloat = 12
+    static let favoriteButtonCornerRadius: CGFloat = 10
     static let favoriteButtonBackgroundAlpha: CGFloat = 0.3
     static let selectionBackgroundAnimationDuration: CFTimeInterval = 0.12
     static let titleTextColor = NSColor.labelColor.withAlphaComponent(0.5)
@@ -277,10 +277,53 @@ struct AssetCollectionGridView: NSViewRepresentable {
     }
 
     private func applyAssetChanges(to collectionView: NSCollectionView, coordinator: Coordinator) {
+        if let favoriteChangeIndexPaths = favoriteOnlyChangeIndexPaths(from: coordinator.currentAssets, to: assets) {
+            coordinator.currentAssets = assets
+            coordinator.rebuildAssetIndex(for: assets)
+
+            for indexPath in favoriteChangeIndexPaths {
+                guard let item = collectionView.item(at: indexPath) as? AssetCollectionViewItem,
+                      assets.indices.contains(indexPath.item) else {
+                    continue
+                }
+
+                item.updateFavoriteState(with: assets[indexPath.item])
+            }
+            return
+        }
+
         coordinator.currentAssets = assets
         coordinator.rebuildAssetIndex(for: assets)
         prepareLayout(for: collectionView)
         collectionView.reloadData()
+    }
+
+    private func favoriteOnlyChangeIndexPaths(from oldAssets: [AssetItem], to newAssets: [AssetItem]) -> Set<IndexPath>? {
+        guard oldAssets.count == newAssets.count else {
+            return nil
+        }
+
+        var changedIndexPaths: Set<IndexPath> = []
+
+        for index in oldAssets.indices {
+            var oldAsset = oldAssets[index]
+            let newAsset = newAssets[index]
+            guard oldAsset.id == newAsset.id else {
+                return nil
+            }
+
+            let oldIsFavorite = oldAsset.isFavorite
+            oldAsset.isFavorite = newAsset.isFavorite
+            guard oldAsset == newAsset else {
+                return nil
+            }
+
+            if oldIsFavorite != newAsset.isFavorite {
+                changedIndexPaths.insert(IndexPath(item: index, section: 0))
+            }
+        }
+
+        return changedIndexPaths
     }
 
     private func prepareLayout(for collectionView: NSCollectionView) {
@@ -1144,6 +1187,15 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         containerView.synchronizeHoverStateWithPointer()
     }
 
+    func updateFavoriteState(with asset: AssetItem) {
+        guard self.asset?.id == asset.id else {
+            return
+        }
+
+        self.asset = asset
+        updateFavoriteButton()
+    }
+
     @objc private func handleFavoriteClick(_ sender: NSButton) {
         onFavoriteToggle?()
     }
@@ -1241,6 +1293,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         guard let asset else {
             favoriteButton.isHidden = true
             favoriteButton.image = nil
+            favoriteButton.layer?.backgroundColor = NSColor.clear.cgColor
             return
         }
 
@@ -1250,9 +1303,9 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         favoriteButton.contentTintColor = asset.isFavorite
             ? .systemRed
             : NSColor.white.withAlphaComponent(0.92)
-        favoriteButton.layer?.backgroundColor = NSColor.black
-            .withAlphaComponent(AssetCollectionMetrics.favoriteButtonBackgroundAlpha)
-            .cgColor
+        favoriteButton.layer?.backgroundColor = contentView.isHovered
+            ? NSColor.black.withAlphaComponent(AssetCollectionMetrics.favoriteButtonBackgroundAlpha).cgColor
+            : NSColor.clear.cgColor
         favoriteButton.toolTip = localization.string(asset.isFavorite ? "Favorited" : "Favorites")
     }
 
@@ -1260,7 +1313,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         NSImage(
             systemSymbolName: isFavorite ? "heart.fill" : "heart",
             accessibilityDescription: localization.string("Favorites")
-        )?.withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))
+        )?.withSymbolConfiguration(.init(pointSize: 12.5, weight: .semibold))
     }
 
     private func subtitle(for asset: AssetItem, viewMode: AssetViewMode, localization: AppLocalization) -> String {
