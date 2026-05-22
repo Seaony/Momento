@@ -35,6 +35,8 @@ struct MomentoShellView<Content: View>: View {
     @State private var sidebarWidth = MomentoTheme.sidebarWidth
     @State private var sidebarResizeStartWidth: CGFloat?
     @State private var isSidebarCollapsed = false
+    @State private var inspectorWidth = MomentoTheme.inspectorWidth
+    @State private var inspectorResizeStartWidth: CGFloat?
 
     init(
         sidebarSelection: Binding<String?>,
@@ -136,7 +138,7 @@ struct MomentoShellView<Content: View>: View {
             InspectorTitlebarSpacerConfigurator(
                 isInspectorPresented: $isInspectorPresented,
                 isVisible: showsChromeControls,
-                inspectorWidth: MomentoTheme.inspectorWidth,
+                inspectorWidth: effectiveInspectorWidth,
                 label: localization.string("Toggle Inspector")
             )
             .frame(width: 0, height: 0)
@@ -183,9 +185,12 @@ struct MomentoShellView<Content: View>: View {
             tags: $inspectorTags,
             notes: $inspectorNotes
         )
-        .frame(width: MomentoTheme.inspectorWidth)
+        .frame(width: effectiveInspectorWidth)
         .fixedSize(horizontal: true, vertical: false)
         .layoutPriority(1)
+        .overlay(alignment: .leading) {
+            inspectorResizeHandle()
+        }
         .ignoresSafeArea(.container, edges: .top)
         .transition(
             .asymmetric(
@@ -219,12 +224,43 @@ struct MomentoShellView<Content: View>: View {
             )
     }
 
+    private func inspectorResizeHandle() -> some View {
+        Rectangle()
+            .fill(Color.clear)
+            .frame(width: 14)
+            .contentShape(Rectangle())
+            .pointerStyle(.columnResize(directions: .all))
+            .gesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                    .onChanged { value in
+                        let startWidth = inspectorResizeStartWidth ?? effectiveInspectorWidth
+                        let widthRange = inspectorWidthRange
+                        let proposedWidth = startWidth - value.translation.width
+
+                        inspectorResizeStartWidth = startWidth
+
+                        inspectorWidth = proposedWidth.clamped(to: widthRange)
+                    }
+                    .onEnded { _ in
+                        inspectorResizeStartWidth = nil
+                    }
+            )
+    }
+
     private var effectiveSidebarWidth: CGFloat {
         sidebarWidth.clamped(to: sidebarWidthRange)
     }
 
     private var sidebarWidthRange: ClosedRange<CGFloat> {
         MomentoTheme.sidebarMinWidth...MomentoTheme.sidebarMaxWidth
+    }
+
+    private var effectiveInspectorWidth: CGFloat {
+        inspectorWidth.clamped(to: inspectorWidthRange)
+    }
+
+    private var inspectorWidthRange: ClosedRange<CGFloat> {
+        MomentoTheme.inspectorMinWidth...MomentoTheme.inspectorMaxWidth
     }
 
     private var sidebarToggleLabel: String {
