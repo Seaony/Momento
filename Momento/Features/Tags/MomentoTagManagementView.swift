@@ -2,8 +2,9 @@ import SwiftUI
 
 struct MomentoTagManagementView: View {
     private static let rowCornerRadius: CGFloat = 10
-    private static let actionColumnWidth: CGFloat = 76
-    private static let actionButtonSize: CGFloat = 30
+    private static let actionColumnWidth: CGFloat = 86
+    private static let actionButtonWidth: CGFloat = 34
+    private static let actionButtonHeight: CGFloat = 30
 
     @Environment(\.appLocalization) private var localization
 
@@ -15,7 +16,6 @@ struct MomentoTagManagementView: View {
     @State private var draftTagName = ""
     @State private var deletingTag: TagSummary?
     @State private var hoveredRowID: TagItem.ID?
-    @State private var hoveredActionID: String?
     @State private var hoveredMenuID: TagItem.ID?
     @FocusState private var isNameFieldFocused: Bool
 
@@ -137,8 +137,7 @@ struct MomentoTagManagementView: View {
             HStack(spacing: 6) {
                 if isEditing {
                     actionButton(
-                        id: "\(summary.id)-save",
-                        systemImage: "checkmark.circle.fill",
+                        systemImage: "checkmark",
                         accessibilityLabel: localization.string("Save Changes"),
                         foregroundColor: Color.accentColor
                     ) {
@@ -147,8 +146,7 @@ struct MomentoTagManagementView: View {
                     .disabled(trimmedDraftTagName.isEmpty)
 
                     actionButton(
-                        id: "\(summary.id)-cancel",
-                        systemImage: "xmark.circle.fill",
+                        systemImage: "xmark",
                         accessibilityLabel: localization.string("Cancel"),
                         foregroundColor: MomentoTheme.secondaryText
                     ) {
@@ -221,39 +219,28 @@ struct MomentoTagManagementView: View {
     }
 
     private func actionButton(
-        id: String,
         systemImage: String,
         accessibilityLabel: String,
         foregroundColor: Color? = nil,
         role: ButtonRole? = nil,
         action: @escaping () -> Void
     ) -> some View {
-        let isHovered = hoveredActionID == id
-        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
         let resolvedForegroundColor = foregroundColor ?? (role == .destructive ? Color.red.opacity(0.9) : MomentoTheme.primaryText)
 
         return Button(role: role, action: action) {
             Image(systemName: systemImage)
-                .symbolRenderingMode(.hierarchical)
-                .font(.system(size: 15, weight: .semibold))
-                .frame(width: Self.actionButtonSize, height: Self.actionButtonSize)
-                .background {
-                    if isHovered {
-                        shape.fill(MomentoTheme.sidebarIconHoverBackground)
-                    }
-                }
-                .contentShape(shape)
+                .symbolRenderingMode(.monochrome)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(resolvedForegroundColor)
+                .frame(width: Self.actionButtonWidth, height: Self.actionButtonHeight)
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(resolvedForegroundColor)
+        .buttonStyle(.glass)
+        .buttonBorderShape(.roundedRectangle(radius: 10))
+        .controlSize(.small)
         .contentShape(shape)
         .pointerStyle(.link)
         .accessibilityLabel(accessibilityLabel)
-        .onHover { hovering in
-            withAnimation(.smooth(duration: 0.12)) {
-                hoveredActionID = hovering ? id : nil
-            }
-        }
     }
 
     private var emptyState: some View {
