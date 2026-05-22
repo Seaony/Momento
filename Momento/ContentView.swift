@@ -19,7 +19,7 @@ private enum ContentToolbarMetrics {
     static let searchFieldWidth: CGFloat = 168
     static let iconButtonWidth: CGFloat = 38
     static let filterPopoverWidth: CGFloat = 340
-    static let filterPopoverHeight: CGFloat = 304
+    static let filterScrollableContentMaxHeight: CGFloat = 220
     static let sortPopoverWidth: CGFloat = 156
     static let popoverSectionSpacing: CGFloat = 12
 }
@@ -403,23 +403,12 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 12) {
                 filterFacetPicker
                 filterFacetContent
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-
-                if store.filterState.isActive {
-                    HStack {
-                        Spacer(minLength: 0)
-                        Button(localization.string("Clear Filters")) {
-                            store.clearAssetFilters()
-                        }
-                        .font(.system(size: 12, weight: .medium))
-                        .buttonStyle(.glass)
-                        .controlSize(.small)
-                    }
-                }
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
             }
         }
         .padding(12)
-        .frame(width: ContentToolbarMetrics.filterPopoverWidth, height: ContentToolbarMetrics.filterPopoverHeight)
+        .frame(width: ContentToolbarMetrics.filterPopoverWidth)
+        .fixedSize(horizontal: false, vertical: true)
         .background {
             MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.16)), cornerRadius: 18)
         }
@@ -476,23 +465,16 @@ struct ContentView: View {
     private var filterColorsContent: some View {
         let colorCategories = store.availableFilterColorCategories
 
-        return ScrollView {
-            if colorCategories.isEmpty {
-                filterEmptyText(localization.string("No colors available"))
-            } else {
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 34, maximum: 34), spacing: 8)],
-                    alignment: .leading,
-                    spacing: 8
-                ) {
-                    ForEach(colorCategories) { category in
-                        colorCategoryFilterButton(category)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+        return LazyVGrid(
+            columns: [GridItem(.adaptive(minimum: 34, maximum: 34), spacing: 7)],
+            alignment: .leading,
+            spacing: 7
+        ) {
+            ForEach(colorCategories) { category in
+                colorCategoryFilterButton(category)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var filterTagsContent: some View {
@@ -526,8 +508,9 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+            .frame(maxHeight: ContentToolbarMetrics.filterScrollableContentMaxHeight)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     private var filterFileTypesContent: some View {
@@ -556,7 +539,8 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxHeight: ContentToolbarMetrics.filterScrollableContentMaxHeight)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     private var filteredFilterTags: [TagItem] {
@@ -791,22 +775,46 @@ struct ContentView: View {
             Color(red: 0.5, green: 0.5, blue: 0.5)
         case .red:
             Color(red: 0.92, green: 0.16, blue: 0.16)
-        case .orange:
-            Color(red: 0.95, green: 0.45, blue: 0.12)
-        case .yellow:
-            Color(red: 0.95, green: 0.78, blue: 0.16)
-        case .green:
-            Color(red: 0.22, green: 0.66, blue: 0.32)
-        case .teal:
-            Color(red: 0.1, green: 0.64, blue: 0.68)
-        case .blue:
-            Color(red: 0.16, green: 0.42, blue: 0.86)
-        case .purple:
-            Color(red: 0.5, green: 0.28, blue: 0.82)
+        case .rose:
+            Color(red: 0.93, green: 0.23, blue: 0.34)
         case .pink:
             Color(red: 0.88, green: 0.28, blue: 0.58)
+        case .magenta:
+            Color(red: 0.78, green: 0.18, blue: 0.78)
+        case .purple:
+            Color(red: 0.5, green: 0.28, blue: 0.82)
+        case .violet:
+            Color(red: 0.38, green: 0.28, blue: 0.85)
+        case .indigo:
+            Color(red: 0.22, green: 0.28, blue: 0.72)
+        case .blue:
+            Color(red: 0.16, green: 0.42, blue: 0.86)
+        case .sky:
+            Color(red: 0.22, green: 0.62, blue: 0.9)
+        case .cyan:
+            Color(red: 0.14, green: 0.72, blue: 0.84)
+        case .teal:
+            Color(red: 0.1, green: 0.64, blue: 0.68)
+        case .mint:
+            Color(red: 0.32, green: 0.78, blue: 0.62)
+        case .green:
+            Color(red: 0.22, green: 0.66, blue: 0.32)
+        case .lime:
+            Color(red: 0.58, green: 0.78, blue: 0.2)
+        case .olive:
+            Color(red: 0.48, green: 0.5, blue: 0.18)
+        case .yellow:
+            Color(red: 0.95, green: 0.78, blue: 0.16)
+        case .amber:
+            Color(red: 0.88, green: 0.58, blue: 0.16)
+        case .orange:
+            Color(red: 0.95, green: 0.45, blue: 0.12)
+        case .coral:
+            Color(red: 0.94, green: 0.34, blue: 0.24)
         case .brown:
             Color(red: 0.48, green: 0.28, blue: 0.13)
+        case .beige:
+            Color(red: 0.78, green: 0.67, blue: 0.5)
         }
     }
 

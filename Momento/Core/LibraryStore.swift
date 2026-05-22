@@ -135,8 +135,7 @@ final class LibraryStore {
     }
 
     var availableFilterColorCategories: [AssetColorCategory] {
-        let availableCategories = Set(currentLibraryAssets.flatMap { Self.colorCategories(for: $0) })
-        return AssetColorCategory.allCases.filter { availableCategories.contains($0) }
+        AssetColorCategory.allCases
     }
 
     var availableFilterFileExtensions: [String] {
@@ -894,13 +893,6 @@ final class LibraryStore {
             return .black
         }
 
-        if saturation <= 0.14 {
-            if brightness >= 0.82 {
-                return .white
-            }
-            return brightness <= 0.28 ? .black : .gray
-        }
-
         let hue: Double
         if delta == 0 {
             hue = 0
@@ -913,27 +905,66 @@ final class LibraryStore {
         }
 
         let normalizedHue = hue < 0 ? hue + 360 : hue
-        if normalizedHue >= 15, normalizedHue < 50, brightness < 0.65, saturation > 0.22 {
+
+        if saturation <= 0.14 {
+            if brightness >= 0.82 {
+                return .white
+            }
+            return brightness <= 0.28 ? .black : .gray
+        }
+
+        if saturation <= 0.34,
+           brightness >= 0.62,
+           normalizedHue >= 35,
+           normalizedHue < 70 {
+            return .beige
+        }
+
+        if normalizedHue >= 15, normalizedHue < 50, brightness < 0.58, saturation > 0.22 {
             return .brown
         }
 
+        if normalizedHue >= 50, normalizedHue < 90, brightness < 0.58, saturation > 0.22 {
+            return .olive
+        }
+
         switch normalizedHue {
-        case 0..<15, 345..<360:
+        case 0..<12, 350..<360:
             return .red
-        case 15..<45:
+        case 12..<25:
+            return .coral
+        case 25..<38:
             return .orange
-        case 45..<70:
+        case 38..<50:
+            return .amber
+        case 50..<65:
             return .yellow
-        case 70..<165:
+        case 65..<85:
+            return .lime
+        case 85..<145:
             return .green
+        case 145..<165:
+            return .mint
         case 165..<195:
             return .teal
-        case 195..<255:
+        case 195..<205:
+            return .cyan
+        case 205..<220:
+            return .sky
+        case 220..<250:
             return .blue
-        case 255..<285:
+        case 250..<265:
+            return .indigo
+        case 265..<285:
+            return .violet
+        case 285..<305:
             return .purple
-        case 285..<345:
+        case 305..<325:
+            return .magenta
+        case 325..<340:
             return .pink
+        case 340..<350:
+            return .rose
         default:
             return .red
         }

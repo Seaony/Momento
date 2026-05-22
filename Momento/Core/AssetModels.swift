@@ -265,14 +265,26 @@ nonisolated enum AssetColorCategory: String, CaseIterable, Identifiable, Hashabl
     case white
     case gray
     case red
-    case orange
-    case yellow
-    case green
-    case teal
-    case blue
-    case purple
+    case rose
     case pink
+    case magenta
+    case purple
+    case violet
+    case indigo
+    case blue
+    case sky
+    case cyan
+    case teal
+    case mint
+    case green
+    case lime
+    case olive
+    case yellow
+    case amber
+    case orange
+    case coral
     case brown
+    case beige
 
     var id: String { rawValue }
 }

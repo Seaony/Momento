@@ -75,22 +75,46 @@ struct AppLocalization: Equatable {
             string("Gray")
         case .red:
             string("Red")
-        case .orange:
-            string("Orange")
-        case .yellow:
-            string("Yellow")
-        case .green:
-            string("Green")
-        case .teal:
-            string("Teal")
-        case .blue:
-            string("Blue")
-        case .purple:
-            string("Purple")
+        case .rose:
+            string("Rose")
         case .pink:
             string("Pink")
+        case .magenta:
+            string("Magenta")
+        case .purple:
+            string("Purple")
+        case .violet:
+            string("Violet")
+        case .indigo:
+            string("Indigo")
+        case .blue:
+            string("Blue")
+        case .sky:
+            string("Sky")
+        case .cyan:
+            string("Cyan")
+        case .teal:
+            string("Teal")
+        case .mint:
+            string("Mint")
+        case .green:
+            string("Green")
+        case .lime:
+            string("Lime")
+        case .olive:
+            string("Olive")
+        case .yellow:
+            string("Yellow")
+        case .amber:
+            string("Amber")
+        case .orange:
+            string("Orange")
+        case .coral:
+            string("Coral")
         case .brown:
             string("Brown")
+        case .beige:
+            string("Beige")
         }
     }
 
