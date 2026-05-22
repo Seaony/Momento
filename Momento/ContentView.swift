@@ -9,6 +9,10 @@ private struct FolderCreationRequest: Identifiable {
 
 private enum ContentToolbarMetrics {
     static let searchFieldWidth: CGFloat = 168
+    static let iconButtonWidth: CGFloat = 38
+    static let filterPopoverWidth: CGFloat = 320
+    static let sortPopoverWidth: CGFloat = 248
+    static let popoverSectionSpacing: CGFloat = 12
 }
 
 struct ContentView: View {
@@ -28,6 +32,11 @@ struct ContentView: View {
     @State private var inspectorNotesByAssetID: [AssetItem.ID: String] = [:]
     @State private var importError: String?
     @State private var hoveredToolbarViewMode: AssetViewMode?
+    @State private var hoveredToolbarActionID: String?
+    @State private var hoveredFilterOptionID: String?
+    @State private var hoveredSortOptionID: String?
+    @State private var isFilterPopoverPresented = false
+    @State private var isSortPopoverPresented = false
     @State private var shellToastRequest: MomentoToastRequest?
 
     private var sidebarSelection: Binding<String?> {
@@ -191,6 +200,9 @@ struct ContentView: View {
                 ToolbarItemGroup(placement: .automatic) {
                     toolbarViewModeSwitcher
                         .padding(.trailing, 6)
+                    toolbarFilterButton
+                    toolbarSortButton
+                        .padding(.trailing, 6)
                     toolbarSearchControl
                 }
                 .sharedBackgroundVisibility(.hidden)
@@ -299,6 +311,416 @@ struct ContentView: View {
         .fixedSize(horizontal: true, vertical: false)
         .layoutPriority(10)
         .help(placeholder)
+    }
+
+    private var toolbarFilterButton: some View {
+        toolbarIconButton(
+            id: "filter",
+            systemImage: store.filterState.isActive ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle",
+            label: localization.string("Filter"),
+            isActive: store.filterState.isActive
+        ) {
+            withAnimation(.smooth(duration: 0.16)) {
+                isSortPopoverPresented = false
+                isFilterPopoverPresented.toggle()
+            }
+        }
+        .popover(isPresented: $isFilterPopoverPresented, arrowEdge: .bottom) {
+            filterPopover
+        }
+    }
+
+    private var toolbarSortButton: some View {
+        toolbarIconButton(
+            id: "sort",
+            systemImage: "arrow.up.arrow.down.circle",
+            label: localization.string("Sort"),
+            isActive: true
+        ) {
+            withAnimation(.smooth(duration: 0.16)) {
+                isFilterPopoverPresented = false
+                isSortPopoverPresented.toggle()
+            }
+        }
+        .popover(isPresented: $isSortPopoverPresented, arrowEdge: .bottom) {
+            sortPopover
+        }
+    }
+
+    private func toolbarIconButton(
+        id: String,
+        systemImage: String,
+        label: String,
+        isActive: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        let isHovered = hoveredToolbarActionID == id
+        let shape = RoundedRectangle(cornerRadius: MomentoTheme.toolbarControlRadius, style: .continuous)
+
+        return Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: MomentoTheme.toolbarIconSize, weight: .semibold))
+                .foregroundStyle(isActive || isHovered ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
+                .frame(width: ContentToolbarMetrics.iconButtonWidth, height: MomentoTheme.toolbarControlHeight)
+                .background {
+                    MomentoGlassBackground(glass: .regular.interactive(true), cornerRadius: MomentoTheme.toolbarControlRadius)
+                }
+                .overlay {
+                    if isHovered {
+                        shape.fill(MomentoTheme.sidebarIconHoverBackground)
+                    }
+                }
+                .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .help(label)
+        .accessibilityLabel(label)
+        .onHover { hovering in
+            withAnimation(.smooth(duration: 0.14)) {
+                if hovering {
+                    hoveredToolbarActionID = id
+                } else if hoveredToolbarActionID == id {
+                    hoveredToolbarActionID = nil
+                }
+            }
+        }
+    }
+
+    private var filterPopover: some View {
+        GlassEffectContainer(spacing: 10) {
+            VStack(alignment: .leading, spacing: ContentToolbarMetrics.popoverSectionSpacing) {
+                popoverHeader(
+                    title: localization.string("Filter"),
+                    actionTitle: localization.string("Clear Filters"),
+                    showsAction: store.filterState.isActive
+                ) {
+                    store.clearAssetFilters()
+                }
+
+                filterColorsSection
+                filterTagsSection
+                filterFileTypesSection
+            }
+        }
+        .padding(12)
+        .frame(width: ContentToolbarMetrics.filterPopoverWidth)
+        .background {
+            MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.16)), cornerRadius: 18)
+        }
+    }
+
+    private var sortPopover: some View {
+        GlassEffectContainer(spacing: 10) {
+            VStack(alignment: .leading, spacing: ContentToolbarMetrics.popoverSectionSpacing) {
+                Text(localization.string("Sort"))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(MomentoTheme.primaryText)
+
+                VStack(alignment: .leading, spacing: 7) {
+                    ForEach(AssetSortOption.allCases) { option in
+                        sortChoiceButton(
+                            id: "sort-option-\(option.id)",
+                            title: localization.title(for: option),
+                            systemImage: sortSystemImage(for: option),
+                            isSelected: store.sortOption == option
+                        ) {
+                            store.setSortOption(option)
+                        }
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(localization.string("Direction"))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(MomentoTheme.secondaryText)
+
+                    HStack(spacing: 7) {
+                        ForEach(AssetSortDirection.allCases) { direction in
+                            sortDirectionButton(direction)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .frame(width: ContentToolbarMetrics.sortPopoverWidth)
+        .background {
+            MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.16)), cornerRadius: 18)
+        }
+    }
+
+    private var filterColorsSection: some View {
+        let colors = store.availableFilterColorHexes
+
+        return filterSection(title: localization.string("Colors")) {
+            if colors.isEmpty {
+                filterEmptyText(localization.string("No colors available"))
+            } else {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 64), spacing: 7)],
+                    alignment: .leading,
+                    spacing: 7
+                ) {
+                    ForEach(colors, id: \.self) { hex in
+                        colorFilterButton(hex)
+                    }
+                }
+            }
+        }
+    }
+
+    private var filterTagsSection: some View {
+        let tags = store.tags
+
+        return filterSection(title: localization.string("Tags")) {
+            if tags.isEmpty {
+                filterEmptyText(localization.string("No tags"))
+            } else {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 88), spacing: 7)],
+                    alignment: .leading,
+                    spacing: 7
+                ) {
+                    ForEach(tags) { tag in
+                        filterChoiceButton(
+                            id: "filter-tag-\(tag.id)",
+                            title: tag.name,
+                            systemImage: "number",
+                            isSelected: store.filterState.tagIDs.contains(tag.id)
+                        ) {
+                            store.toggleFilterTag(id: tag.id)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var filterFileTypesSection: some View {
+        let fileExtensions = store.availableFilterFileExtensions
+
+        return filterSection(title: localization.string("File Types")) {
+            if fileExtensions.isEmpty {
+                filterEmptyText(localization.string("No file types available"))
+            } else {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 72), spacing: 7)],
+                    alignment: .leading,
+                    spacing: 7
+                ) {
+                    ForEach(fileExtensions, id: \.self) { fileExtension in
+                        filterChoiceButton(
+                            id: "filter-file-\(fileExtension)",
+                            title: fileExtension.uppercased(),
+                            systemImage: "doc",
+                            isSelected: store.filterState.fileExtensions.contains(fileExtension)
+                        ) {
+                            store.toggleFilterFileExtension(fileExtension)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func popoverHeader(
+        title: String,
+        actionTitle: String,
+        showsAction: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        HStack(spacing: 10) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(MomentoTheme.primaryText)
+
+            Spacer(minLength: 8)
+
+            if showsAction {
+                Button(actionTitle, action: action)
+                    .font(.system(size: 12, weight: .medium))
+                    .buttonStyle(.glass)
+                    .controlSize(.small)
+            }
+        }
+    }
+
+    private func filterSection<Content: View>(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(MomentoTheme.secondaryText)
+
+            content()
+        }
+    }
+
+    private func filterEmptyText(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(MomentoTheme.tertiaryText)
+            .frame(height: 28)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func colorFilterButton(_ hex: String) -> some View {
+        let isSelected = store.filterState.colorHexes.contains(hex)
+        let isHovered = hoveredFilterOptionID == "filter-color-\(hex)"
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        let swatchShape = RoundedRectangle(cornerRadius: 5, style: .continuous)
+
+        return Button {
+            store.toggleFilterColor(hex)
+        } label: {
+            HStack(spacing: 6) {
+                swatchShape
+                    .fill(Color(hex: hex) ?? .clear)
+                    .frame(width: 16, height: 16)
+                    .overlay {
+                        swatchShape.strokeBorder(Color.white.opacity(0.24), lineWidth: 1)
+                    }
+
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold))
+                }
+            }
+            .foregroundStyle(MomentoTheme.primaryText)
+            .padding(.horizontal, 8)
+            .frame(height: 30)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .glassEffect(
+                .regular.tint(Color.white.opacity(isSelected || isHovered ? 0.16 : 0.06)).interactive(),
+                in: shape
+            )
+            .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .help(hex)
+        .onHover { hovering in
+            updateFilterOptionHover(id: "filter-color-\(hex)", hovering: hovering)
+        }
+    }
+
+    private func filterChoiceButton(
+        id: String,
+        title: String,
+        systemImage: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        let isHovered = hoveredFilterOptionID == id
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+
+        return Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : systemImage)
+                    .font(.system(size: 11, weight: .semibold))
+                Text(title)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(MomentoTheme.primaryText)
+            .padding(.horizontal, 9)
+            .frame(height: 30)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .glassEffect(
+                .regular.tint(Color.white.opacity(isSelected || isHovered ? 0.16 : 0.06)).interactive(),
+                in: shape
+            )
+            .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .onHover { hovering in
+            updateFilterOptionHover(id: id, hovering: hovering)
+        }
+    }
+
+    private func sortChoiceButton(
+        id: String,
+        title: String,
+        systemImage: String,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        let isHovered = hoveredSortOptionID == id
+        let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
+
+        return Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: isSelected ? "checkmark.circle.fill" : systemImage)
+                    .font(.system(size: 12, weight: .semibold))
+                    .frame(width: 16)
+                Text(title)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(MomentoTheme.primaryText)
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .glassEffect(
+                .regular.tint(Color.white.opacity(isSelected || isHovered ? 0.16 : 0.06)).interactive(),
+                in: shape
+            )
+            .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .onHover { hovering in
+            updateSortOptionHover(id: id, hovering: hovering)
+        }
+    }
+
+    private func sortDirectionButton(_ direction: AssetSortDirection) -> some View {
+        let isSelected = store.sortDirection == direction
+
+        return sortChoiceButton(
+            id: "sort-direction-\(direction.id)",
+            title: localization.title(for: direction),
+            systemImage: direction == .ascending ? "arrow.up" : "arrow.down",
+            isSelected: isSelected
+        ) {
+            store.setSortDirection(direction)
+        }
+    }
+
+    private func updateFilterOptionHover(id: String, hovering: Bool) {
+        withAnimation(.smooth(duration: 0.12)) {
+            if hovering {
+                hoveredFilterOptionID = id
+            } else if hoveredFilterOptionID == id {
+                hoveredFilterOptionID = nil
+            }
+        }
+    }
+
+    private func updateSortOptionHover(id: String, hovering: Bool) {
+        withAnimation(.smooth(duration: 0.12)) {
+            if hovering {
+                hoveredSortOptionID = id
+            } else if hoveredSortOptionID == id {
+                hoveredSortOptionID = nil
+            }
+        }
+    }
+
+    private func sortSystemImage(for option: AssetSortOption) -> String {
+        switch option {
+        case .addedTime:
+            "calendar"
+        case .name:
+            "textformat"
+        case .fileSize:
+            "externaldrive"
+        }
     }
 
     @ViewBuilder

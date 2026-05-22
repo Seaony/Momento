@@ -260,6 +260,31 @@ nonisolated struct AssetItem: Identifiable, Hashable, Codable, Sendable {
     }
 }
 
+nonisolated struct AssetFilterState: Hashable, Codable, Sendable {
+    var colorHexes: Set<String> = []
+    var tagIDs: Set<TagItem.ID> = []
+    var fileExtensions: Set<String> = []
+
+    var isActive: Bool {
+        !colorHexes.isEmpty || !tagIDs.isEmpty || !fileExtensions.isEmpty
+    }
+}
+
+nonisolated enum AssetSortOption: String, CaseIterable, Identifiable, Hashable, Codable, Sendable {
+    case addedTime
+    case name
+    case fileSize
+
+    var id: String { rawValue }
+}
+
+nonisolated enum AssetSortDirection: String, CaseIterable, Identifiable, Hashable, Codable, Sendable {
+    case ascending
+    case descending
+
+    var id: String { rawValue }
+}
+
 nonisolated enum AssetViewMode: String, CaseIterable, Identifiable, Hashable, Codable, Sendable {
     case masonry
     case grid

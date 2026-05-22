@@ -487,6 +487,75 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testVisibleAssetsApplyToolbarFiltersAndSorting() throws {
+        let library = AssetLibrary(id: "library", name: "Library", createdAt: Date(timeIntervalSince1970: 0))
+        let warmTag = TagItem(id: "warm", name: "Warm")
+        let coolTag = TagItem(id: "cool", name: "Cool")
+        let smallPNG = toolbarFilterAsset(
+            id: "small-png",
+            libraryID: library.id,
+            displayName: "Beta",
+            fileExtension: "png",
+            byteSize: 100,
+            tag: warmTag,
+            colorHex: "#FF0000",
+            importedAt: Date(timeIntervalSince1970: 10)
+        )
+        let largeJPG = toolbarFilterAsset(
+            id: "large-jpg",
+            libraryID: library.id,
+            displayName: "Alpha",
+            fileExtension: "jpg",
+            byteSize: 300,
+            tag: coolTag,
+            colorHex: "#0000FF",
+            importedAt: Date(timeIntervalSince1970: 20)
+        )
+        let mediumPNG = toolbarFilterAsset(
+            id: "medium-png",
+            libraryID: library.id,
+            displayName: "Gamma",
+            fileExtension: "png",
+            byteSize: 200,
+            tag: warmTag,
+            colorHex: "#00FF00",
+            importedAt: Date(timeIntervalSince1970: 30)
+        )
+        let store = LibraryStore(
+            libraries: [library],
+            assets: [mediumPNG, largeJPG, smallPNG],
+            loadRecentLibrary: false
+        )
+
+        XCTAssertEqual(store.availableFilterFileExtensions, ["jpg", "png"])
+        XCTAssertEqual(Set(store.availableFilterColorHexes), Set(["#0000FF", "#00FF00", "#FF0000"]))
+
+        store.toggleFilterFileExtension("PNG")
+        XCTAssertEqual(store.visibleAssets.map(\.id), ["small-png", "medium-png"])
+
+        store.toggleFilterTag(id: warmTag.id)
+        XCTAssertEqual(store.visibleAssets.map(\.id), ["small-png", "medium-png"])
+
+        store.toggleFilterColor("#00ff00")
+        XCTAssertEqual(store.visibleAssets.map(\.id), ["medium-png"])
+
+        store.clearAssetFilters()
+        store.selectAsset(id: smallPNG.id)
+        store.toggleFilterFileExtension("jpg")
+        XCTAssertEqual(store.visibleAssets.map(\.id), ["large-jpg"])
+        XCTAssertNil(store.selectedAssetID)
+
+        store.clearAssetFilters()
+        store.setSortOption(.fileSize)
+        store.setSortDirection(.descending)
+        XCTAssertEqual(store.visibleAssets.map(\.id), ["large-jpg", "medium-png", "small-png"])
+
+        store.setSortOption(.name)
+        store.setSortDirection(.ascending)
+        XCTAssertEqual(store.visibleAssets.map(\.id), ["large-jpg", "small-png", "medium-png"])
+    }
+
+    @MainActor
     func testMissingRecentLibraryIsPrunedOnLaunchAndReportsError() throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }
@@ -741,6 +810,42 @@ final class LibraryPackagePersistenceTests: XCTestCase {
             loadRecentLibrary: false
         )
         XCTAssertEqual(relaunched.recentLibraries.map(\.name), ["Beta", "Alpha", "Gamma"])
+    }
+
+    private func toolbarFilterAsset(
+        id: String,
+        libraryID: String,
+        displayName: String,
+        fileExtension: String,
+        byteSize: Int64,
+        tag: TagItem,
+        colorHex: String,
+        importedAt: Date
+    ) -> AssetItem {
+        AssetItem(
+            id: id,
+            libraryID: libraryID,
+            displayName: displayName,
+            originalURL: nil,
+            storageURL: URL(fileURLWithPath: "/Samples/\(displayName).\(fileExtension)"),
+            kind: .image,
+            fileExtension: fileExtension,
+            byteSize: byteSize,
+            contentHash: id,
+            dimensions: nil,
+            tags: [tag],
+            paletteColors: [
+                AssetColor(
+                    libraryID: libraryID,
+                    assetID: id,
+                    hex: colorHex,
+                    coverage: 0.5,
+                    sortIndex: 0
+                )
+            ],
+            isFavorite: false,
+            importedAt: importedAt
+        )
     }
 }
 

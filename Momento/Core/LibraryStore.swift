@@ -11,6 +11,9 @@ final class LibraryStore {
     var selectedAssetID: AssetItem.ID?
     var searchQuery = ""
     var viewMode: AssetViewMode = .masonry
+    var filterState = AssetFilterState()
+    var sortOption: AssetSortOption = .addedTime
+    var sortDirection: AssetSortDirection = .ascending
     var sidebarSelection: SidebarSelection = .library("")
     var recentLibraries: [RecentLibraryReference]
     var libraryErrorMessage: String?
@@ -69,7 +72,7 @@ final class LibraryStore {
             return []
         }
 
-        let libraryAssets = assets.filter { $0.libraryID == currentLibrary.id }
+        let libraryAssets = currentLibraryAssets
         let scopedAssets: [AssetItem]
 
         switch sidebarSelection {
@@ -93,17 +96,18 @@ final class LibraryStore {
             scopedAssets = []
         }
 
+        let filteredAssets = applyFilters(to: scopedAssets)
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !query.isEmpty else {
-            return scopedAssets
+            return sortAssets(filteredAssets)
         }
 
-        return scopedAssets.filter { asset in
+        return sortAssets(filteredAssets.filter { asset in
             asset.displayName.localizedCaseInsensitiveContains(query)
                 || asset.fileExtension.localizedCaseInsensitiveContains(query)
                 || asset.tags.contains { $0.name.localizedCaseInsensitiveContains(query) }
-        }
+        })
     }
 
     var selectedAsset: AssetItem? {
@@ -128,6 +132,36 @@ final class LibraryStore {
             .flatMap(\.tags)
             .filter { seen.insert($0.id).inserted }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    var availableFilterColorHexes: [String] {
+        var seen = Set<String>()
+        return currentLibraryAssets
+            .flatMap(\.paletteColors)
+            .sorted {
+                if $0.coverage == $1.coverage {
+                    return $0.hex.localizedStandardCompare($1.hex) == .orderedAscending
+                }
+                return $0.coverage > $1.coverage
+            }
+            .compactMap { color in
+                let normalized = Self.normalizedColorHex(color.hex)
+                guard seen.insert(normalized).inserted else {
+                    return nil
+                }
+                return normalized
+            }
+    }
+
+    var availableFilterFileExtensions: [String] {
+        Array(
+            Set(
+                currentLibraryAssets
+                    .map { Self.normalizedFileExtension($0.fileExtension) }
+                    .filter { !$0.isEmpty }
+            )
+        )
+        .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
     var tagSummaries: [TagSummary] {
@@ -268,6 +302,52 @@ final class LibraryStore {
         viewMode = mode
     }
 
+    func toggleFilterColor(_ hex: String) {
+        let normalized = Self.normalizedColorHex(hex)
+        if filterState.colorHexes.contains(normalized) {
+            filterState.colorHexes.remove(normalized)
+        } else {
+            filterState.colorHexes.insert(normalized)
+        }
+        pruneSelectedAssetIfNeeded()
+    }
+
+    func toggleFilterTag(id tagID: TagItem.ID) {
+        if filterState.tagIDs.contains(tagID) {
+            filterState.tagIDs.remove(tagID)
+        } else {
+            filterState.tagIDs.insert(tagID)
+        }
+        pruneSelectedAssetIfNeeded()
+    }
+
+    func toggleFilterFileExtension(_ fileExtension: String) {
+        let normalized = Self.normalizedFileExtension(fileExtension)
+        guard !normalized.isEmpty else {
+            return
+        }
+
+        if filterState.fileExtensions.contains(normalized) {
+            filterState.fileExtensions.remove(normalized)
+        } else {
+            filterState.fileExtensions.insert(normalized)
+        }
+        pruneSelectedAssetIfNeeded()
+    }
+
+    func clearAssetFilters() {
+        filterState = AssetFilterState()
+        pruneSelectedAssetIfNeeded()
+    }
+
+    func setSortOption(_ option: AssetSortOption) {
+        sortOption = option
+    }
+
+    func setSortDirection(_ direction: AssetSortDirection) {
+        sortDirection = direction
+    }
+
     func closeCurrentLibrary() {
         libraryAccessScope = nil
         metadataStore = nil
@@ -277,6 +357,9 @@ final class LibraryStore {
         folders = []
         selectedAssetID = nil
         searchQuery = ""
+        filterState = AssetFilterState()
+        sortOption = .addedTime
+        sortDirection = .ascending
         sidebarSelection = .library("")
         libraryErrorMessage = nil
     }
@@ -619,6 +702,66 @@ final class LibraryStore {
         recentLibraries = recentStore.load()
     }
 
+    private var currentLibraryAssets: [AssetItem] {
+        guard let currentLibrary else {
+            return []
+        }
+
+        return assets.filter { $0.libraryID == currentLibrary.id }
+    }
+
+    private func applyFilters(to assets: [AssetItem]) -> [AssetItem] {
+        guard filterState.isActive else {
+            return assets
+        }
+
+        return assets.filter { asset in
+            let matchesColors = filterState.colorHexes.isEmpty || asset.paletteColors.contains { color in
+                filterState.colorHexes.contains(Self.normalizedColorHex(color.hex))
+            }
+            let matchesTags = filterState.tagIDs.isEmpty || asset.tags.contains { tag in
+                filterState.tagIDs.contains(tag.id)
+            }
+            let matchesFileTypes = filterState.fileExtensions.isEmpty
+                || filterState.fileExtensions.contains(Self.normalizedFileExtension(asset.fileExtension))
+
+            return matchesColors && matchesTags && matchesFileTypes
+        }
+    }
+
+    private func sortAssets(_ assets: [AssetItem]) -> [AssetItem] {
+        assets.sorted { lhs, rhs in
+            let comparison: ComparisonResult
+            switch sortOption {
+            case .addedTime:
+                comparison = lhs.importedAt.compare(rhs.importedAt)
+            case .name:
+                comparison = lhs.displayName.localizedStandardCompare(rhs.displayName)
+            case .fileSize:
+                comparison = lhs.byteSize == rhs.byteSize
+                    ? lhs.displayName.localizedStandardCompare(rhs.displayName)
+                    : (lhs.byteSize < rhs.byteSize ? .orderedAscending : .orderedDescending)
+            }
+
+            if comparison == .orderedSame {
+                return lhs.id.localizedStandardCompare(rhs.id) == .orderedAscending
+            }
+
+            switch sortDirection {
+            case .ascending:
+                return comparison == .orderedAscending
+            case .descending:
+                return comparison == .orderedDescending
+            }
+        }
+    }
+
+    private func pruneSelectedAssetIfNeeded() {
+        if let selectedAssetID, !visibleAssets.contains(where: { $0.id == selectedAssetID }) {
+            self.selectedAssetID = nil
+        }
+    }
+
     private func activateLibrary(_ library: AssetLibrary, accessScope: LibraryAccessScope) throws {
         let metadataStore = try LibraryMetadataStore(library: library, storage: storage)
         let loadedAssets = try metadataStore.loadAssets()
@@ -632,6 +775,9 @@ final class LibraryStore {
         folders = loadedFolders
         selectedAssetID = nil
         searchQuery = ""
+        filterState = AssetFilterState()
+        sortOption = .addedTime
+        sortDirection = .ascending
         sidebarSelection = .library(library.id)
         libraryErrorMessage = nil
     }
@@ -700,6 +846,21 @@ final class LibraryStore {
         return tags.filter { tag in
             seen.insert(tag.id).inserted
         }
+    }
+
+    private static func normalizedColorHex(_ hex: String) -> String {
+        let trimmed = hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        if trimmed.hasPrefix("#") {
+            return trimmed
+        }
+
+        return "#\(trimmed)"
+    }
+
+    private static func normalizedFileExtension(_ fileExtension: String) -> String {
+        fileExtension
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
     }
 
     private func nextFolderName(parentID: AssetFolder.ID?) -> String {

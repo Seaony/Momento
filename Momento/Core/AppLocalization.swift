@@ -45,6 +45,26 @@ struct AppLocalization: Equatable {
         }
     }
 
+    func title(for sortOption: AssetSortOption) -> String {
+        switch sortOption {
+        case .addedTime:
+            string("Added")
+        case .name:
+            string("Name")
+        case .fileSize:
+            string("File Size")
+        }
+    }
+
+    func title(for sortDirection: AssetSortDirection) -> String {
+        switch sortDirection {
+        case .ascending:
+            string("Ascending")
+        case .descending:
+            string("Descending")
+        }
+    }
+
     func kindTitle(for kind: AssetKind) -> String {
         switch kind {
         case .image:
