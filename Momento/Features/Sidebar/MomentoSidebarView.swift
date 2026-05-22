@@ -23,6 +23,7 @@ private enum MomentoSidebarMenuMetrics {
     static let separatorHeight: CGFloat = 1
     static let separatorHorizontalInset: CGFloat = 10
     static let separatorVerticalPadding: CGFloat = 3
+    static let libraryMoreMenuWidth: CGFloat = 176
 }
 
 struct MomentoSidebarView: View {
@@ -1071,7 +1072,7 @@ private struct MomentoLibrarySwitcherMenu: View {
             }
         }
         .padding(6)
-        .frame(width: 150, alignment: .leading)
+        .frame(width: MomentoSidebarMenuMetrics.libraryMoreMenuWidth, alignment: .leading)
         .background {
             MomentoGlassBackground(glass: .regular, cornerRadius: 12)
         }
