@@ -53,7 +53,7 @@ final class LibraryStore {
             self.currentLibrary = currentLibrary
             self.assets = initialAssets
             self.folders = []
-            self.selectedAssetID = initialAssets.first?.id
+            self.selectedAssetID = nil
             self.sidebarSelection = .library(currentLibrary.id)
         } else if loadRecentLibrary, let reference = recentLibraries.first {
             do {
@@ -284,7 +284,7 @@ final class LibraryStore {
         }
 
         if let selectedAssetID, !visibleAssets.contains(where: { $0.id == selectedAssetID }) {
-            self.selectedAssetID = visibleAssets.first?.id
+            self.selectedAssetID = nil
         }
     }
 
@@ -331,7 +331,7 @@ final class LibraryStore {
         )
         folders = try metadataStore.loadFolders()
         sidebarSelection = .folder(folder.id)
-        selectedAssetID = visibleAssets.first?.id
+        selectedAssetID = nil
     }
 
     func renameFolder(id: AssetFolder.ID, to name: String) throws {
@@ -357,7 +357,7 @@ final class LibraryStore {
         }
 
         if let selectedAssetID, !visibleAssets.contains(where: { $0.id == selectedAssetID }) {
-            self.selectedAssetID = visibleAssets.first?.id
+            self.selectedAssetID = nil
         }
     }
 
@@ -443,7 +443,7 @@ final class LibraryStore {
 
         assets.removeAll { $0.id == assetID }
         if selectedAssetID == assetID {
-            selectedAssetID = visibleAssets.first?.id
+            selectedAssetID = nil
         }
     }
 
@@ -469,10 +469,6 @@ final class LibraryStore {
         }
 
         mergeAssets(savedAssets)
-
-        if selectedAssetID == nil {
-            selectedAssetID = visibleAssets.first?.id
-        }
     }
 
     private func openRecentLibrary(_ reference: RecentLibraryReference) throws {
@@ -516,7 +512,7 @@ final class LibraryStore {
         libraries = [library]
         assets = loadedAssets
         folders = loadedFolders
-        selectedAssetID = loadedAssets.first?.id
+        selectedAssetID = nil
         searchQuery = ""
         sidebarSelection = .library(library.id)
         libraryErrorMessage = nil
