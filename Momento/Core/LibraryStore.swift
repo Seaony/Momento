@@ -17,6 +17,7 @@ final class LibraryStore {
 
     private let importService: AssetImportService
     private let thumbnailService: AssetThumbnailService
+    private let colorAnalysisService: AssetColorAnalysisService
     private let storage: LibraryStorage
     private let recentStore: RecentLibraryStore
     private var metadataStore: LibraryMetadataStore?
@@ -40,6 +41,7 @@ final class LibraryStore {
         self.importService = importService
         self.storage = storage
         self.thumbnailService = AssetThumbnailService(storage: storage)
+        self.colorAnalysisService = AssetColorAnalysisService()
         self.recentStore = recentStore
         self.recentLibraries = recentStore.load()
         self.libraryErrorMessage = nil
@@ -358,6 +360,76 @@ final class LibraryStore {
         mergeAssets(try metadataStore.unassignAssets(ids: ids, from: folderID))
     }
 
+    func refreshThumbnail(for assetID: AssetItem.ID) throws -> AssetItem? {
+        guard let currentLibrary else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        guard let index = assets.firstIndex(where: { $0.id == assetID && $0.libraryID == currentLibrary.id }) else {
+            throw LibraryStoreError.missingAsset
+        }
+
+        var asset = assets[index]
+        guard asset.kind == .image || asset.kind == .gif else {
+            return asset
+        }
+
+        let thumbnailURL = try thumbnailService.generateThumbnail(
+            for: asset.storageURL,
+            contentHash: asset.contentHash,
+            in: currentLibrary
+        )
+        asset.thumbnailURL = thumbnailURL
+        assets[index] = asset
+        return asset
+    }
+
+    func reanalyzeColors(for assetID: AssetItem.ID) throws {
+        guard let metadataStore,
+              let currentLibrary else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        guard let asset = assets.first(where: { $0.id == assetID && $0.libraryID == currentLibrary.id }) else {
+            throw LibraryStoreError.missingAsset
+        }
+
+        let sourceURL = asset.thumbnailURL ?? asset.storageURL
+        let colors = colorAnalysisService.paletteColors(
+            for: sourceURL,
+            libraryID: currentLibrary.id,
+            assetID: asset.id
+        )
+        mergeAssets([try metadataStore.replaceColors(colors, forAssetID: asset.id)])
+    }
+
+    func moveAssetToTrash(id assetID: AssetItem.ID) throws {
+        guard let metadataStore,
+              let currentLibrary else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        guard let asset = assets.first(where: { $0.id == assetID && $0.libraryID == currentLibrary.id }) else {
+            throw LibraryStoreError.missingAsset
+        }
+
+        try metadataStore.deleteAsset(id: assetID)
+
+        if FileManager.default.fileExists(atPath: asset.storageURL.path) {
+            try storage.trashAssetFile(at: asset.storageURL)
+        }
+
+        if let thumbnailURL = asset.thumbnailURL,
+           FileManager.default.fileExists(atPath: thumbnailURL.path) {
+            try? FileManager.default.removeItem(at: thumbnailURL)
+        }
+
+        assets.removeAll { $0.id == assetID }
+        if selectedAssetID == assetID {
+            selectedAssetID = visibleAssets.first?.id
+        }
+    }
+
     func importItems(from urls: [URL]) async throws {
         guard let currentLibrary, let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
@@ -558,6 +630,7 @@ enum LibraryStoreError: LocalizedError {
     case missingRecentLibrary
     case unsupportedLibraryURL
     case invalidLibraryName
+    case missingAsset
 
     var errorDescription: String? {
         switch self {
@@ -569,6 +642,8 @@ enum LibraryStoreError: LocalizedError {
             "Choose a .momento package."
         case .invalidLibraryName:
             "Enter a library name."
+        case .missingAsset:
+            "This asset is no longer available."
         }
     }
 }

@@ -1312,6 +1312,23 @@
         }
       }
     },
+    "Preview Original" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preview Original"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "预览原图"
+          }
+        }
+      }
+    },
     "Preview the selected asset" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1342,6 +1359,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "快速预览"
+          }
+        }
+      }
+    },
+    "Reanalyze Colors" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reanalyze Colors"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新分析色彩"
           }
         }
       }
@@ -1410,6 +1444,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重命名资源库"
+          }
+        }
+      }
+    },
+    "Refresh Thumbnail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh Thumbnail"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刷新缩略图"
           }
         }
       }
@@ -1733,6 +1784,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "所选资源库不存在或已被移动。"
+          }
+        }
+      }
+    },
+    "This asset is no longer available." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This asset is no longer available."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个资源不再可用。"
           }
         }
       }

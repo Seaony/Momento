@@ -105,6 +105,68 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testRefreshingImportedAssetThumbnailRegeneratesCacheFile() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        let source = try environment.writeOnePixelPNG(named: "thumbnail.png")
+        try await store.importItems(from: [source])
+        let asset = try XCTUnwrap(store.assets.first)
+        let originalThumbnailURL = try XCTUnwrap(asset.thumbnailURL)
+        try FileManager.default.removeItem(at: originalThumbnailURL)
+
+        let refreshedAsset = try XCTUnwrap(try store.refreshThumbnail(for: asset.id))
+
+        XCTAssertEqual(refreshedAsset.id, asset.id)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: try XCTUnwrap(refreshedAsset.thumbnailURL).path))
+    }
+
+    @MainActor
+    func testMovingImportedAssetToTrashRemovesMetadataAndStoredFile() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let storage = LibraryStorage(applicationSupportRoot: environment.rootURL, trashURLs: [environment.trashURL])
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            storage: storage,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        let source = try environment.writeOnePixelPNG(named: "trashed.png")
+        try await store.importItems(from: [source])
+        let asset = try XCTUnwrap(store.assets.first)
+        let storedAssetURL = asset.storageURL
+        let thumbnailURL = try XCTUnwrap(asset.thumbnailURL)
+
+        try store.moveAssetToTrash(id: asset.id)
+
+        XCTAssertTrue(store.assets.isEmpty)
+        XCTAssertNil(store.selectedAssetID)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: storedAssetURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: thumbnailURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: environment.trashURL.appendingPathComponent(storedAssetURL.lastPathComponent).path))
+
+        let reopened = LibraryStore(
+            defaultViewMode: .grid,
+            storage: storage,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try reopened.openLibrary(at: environment.packageURL)
+        XCTAssertTrue(reopened.assets.isEmpty)
+    }
+
+    @MainActor
     func testReloadsImportedAssetsWithoutOriginalSource() async throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }

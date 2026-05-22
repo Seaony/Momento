@@ -41,6 +41,54 @@ private enum AssetCollectionMetrics {
     static let selectedSubtitleTextColor = NSColor.white.withAlphaComponent(0.72)
     static let imageEntranceAnimationDuration: CFTimeInterval = 0.18
     static let imageEntranceScale: CGFloat = 0.985
+    static let contextMenuWidth: CGFloat = 184
+    static let contextMenuPadding: CGFloat = 6
+    static let contextMenuRowHeight: CGFloat = 28
+    static let contextMenuRowSpacing: CGFloat = 2
+    static let contextMenuRowCornerRadius: CGFloat = 8
+    static let contextMenuPanelCornerRadius: CGFloat = 12
+}
+
+enum AssetContextMenuAction: CaseIterable {
+    case previewOriginal
+    case refreshThumbnail
+    case reanalyzeColors
+    case revealInFinder
+    case moveToTrash
+
+    var titleKey: String {
+        switch self {
+        case .previewOriginal:
+            "Preview Original"
+        case .refreshThumbnail:
+            "Refresh Thumbnail"
+        case .reanalyzeColors:
+            "Reanalyze Colors"
+        case .revealInFinder:
+            "Reveal in Finder"
+        case .moveToTrash:
+            "Move to Trash"
+        }
+    }
+
+    var systemImageName: String {
+        switch self {
+        case .previewOriginal:
+            "eye"
+        case .refreshThumbnail:
+            "arrow.clockwise"
+        case .reanalyzeColors:
+            "paintpalette"
+        case .revealInFinder:
+            "finder"
+        case .moveToTrash:
+            "trash"
+        }
+    }
+
+    var isDestructive: Bool {
+        self == .moveToTrash
+    }
 }
 
 struct AssetCollectionGridView: NSViewRepresentable {
@@ -52,6 +100,11 @@ struct AssetCollectionGridView: NSViewRepresentable {
     var onDoubleClick: (AssetItem) -> Void
     var onSpacePreviewStart: (AssetItem, NSRect?) -> Void
     var onSpacePreviewEnd: () -> Void
+    var onContextMenuAction: (AssetItem, AssetContextMenuAction) -> Void
+
+    static func invalidatePreviewCache(for asset: AssetItem) {
+        AssetPreviewImageProvider.shared.invalidateImage(for: asset)
+    }
 
     init(
         assets: [AssetItem],
@@ -61,7 +114,8 @@ struct AssetCollectionGridView: NSViewRepresentable {
         onSelectionChange: @escaping (Set<AssetItem.ID>) -> Void = { _ in },
         onDoubleClick: @escaping (AssetItem) -> Void = { _ in },
         onSpacePreviewStart: @escaping (AssetItem, NSRect?) -> Void = { _, _ in },
-        onSpacePreviewEnd: @escaping () -> Void = {}
+        onSpacePreviewEnd: @escaping () -> Void = {},
+        onContextMenuAction: @escaping (AssetItem, AssetContextMenuAction) -> Void = { _, _ in }
     ) {
         self.assets = assets
         self.selectedAssetIDs = selectedAssetIDs
@@ -71,6 +125,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
         self.onDoubleClick = onDoubleClick
         self.onSpacePreviewStart = onSpacePreviewStart
         self.onSpacePreviewEnd = onSpacePreviewEnd
+        self.onContextMenuAction = onContextMenuAction
     }
 
     func makeCoordinator() -> Coordinator {
@@ -231,6 +286,12 @@ extension AssetCollectionGridView {
             assetItem.onHoverPreviewChange = { [weak self, assetID = asset.id] isHovered in
                 self?.updateHoveredPreviewAsset(assetID: assetID, isHovered: isHovered)
             }
+            assetItem.onContextMenuOpen = { [weak self, assetID = asset.id] in
+                self?.selectAssetForContextMenu(assetID: assetID)
+            }
+            assetItem.onContextMenuAction = { [weak self, assetID = asset.id] action in
+                self?.performContextMenuAction(assetID: assetID, action: action)
+            }
             assetItem.configure(with: asset, viewMode: parent.viewMode, localization: parent.localization)
             return assetItem
         }
@@ -331,6 +392,28 @@ extension AssetCollectionGridView {
             } else if hoveredPreviewAssetID == assetID {
                 hoveredPreviewAssetID = nil
             }
+        }
+
+        private func selectAssetForContextMenu(assetID: AssetItem.ID) {
+            guard let collectionView,
+                  let index = assetIndexByID[assetID] else {
+                return
+            }
+
+            let indexPath = IndexPath(item: index, section: 0)
+            if !collectionView.selectionIndexPaths.contains(indexPath) {
+                collectionView.selectionIndexPaths = [indexPath]
+                publishSelection(from: collectionView)
+            }
+        }
+
+        private func performContextMenuAction(assetID: AssetItem.ID, action: AssetContextMenuAction) {
+            guard let index = assetIndexByID[assetID],
+                  parent.assets.indices.contains(index) else {
+                return
+            }
+
+            parent.onContextMenuAction(parent.assets[index], action)
         }
 
         private func previewIndexPath(in collectionView: NSCollectionView) -> IndexPath? {
@@ -689,6 +772,10 @@ private final class AssetPreviewImageProvider {
         return image
     }
 
+    func invalidateImage(for asset: AssetItem) {
+        cache.removeObject(forKey: identity(for: asset) as NSString)
+    }
+
     private func loadImage(for asset: AssetItem) -> NSImage {
         if asset.kind == .image || asset.kind == .gif {
             if let thumbnailURL = asset.thumbnailURL,
@@ -717,6 +804,8 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     static let reuseIdentifier = NSUserInterfaceItemIdentifier("AssetCollectionViewItem")
 
     var onHoverPreviewChange: ((Bool) -> Void)?
+    var onContextMenuOpen: (() -> Void)?
+    var onContextMenuAction: ((AssetContextMenuAction) -> Void)?
 
     private let containerView = HoverTrackingView()
     private let contentView = HoverSelectionView()
@@ -730,6 +819,8 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     private var masonryConstraints: [NSLayoutConstraint] = []
     private var listConstraints: [NSLayoutConstraint] = []
     private var mode: AssetViewMode = .grid
+    private var asset: AssetItem?
+    private var localization = AppLocalization(language: .system)
     private let gridTitleHeight: CGFloat = 16
     private let gridSubtitleHeight: CGFloat = 14
 
@@ -750,6 +841,12 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
                 self?.onHoverPreviewChange?(false)
             }
         }
+        let rightClickRecognizer = NSClickGestureRecognizer(
+            target: self,
+            action: #selector(handleRightClick(_:))
+        )
+        rightClickRecognizer.buttonMask = 0x2
+        containerView.addGestureRecognizer(rightClickRecognizer)
 
         contentView.translatesAutoresizingMaskIntoConstraints = false
         contentView.layer?.masksToBounds = false
@@ -883,6 +980,9 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         separatorView.isHidden = true
         containerView.resetHoverState()
         onHoverPreviewChange = nil
+        onContextMenuOpen = nil
+        onContextMenuAction = nil
+        asset = nil
         contentView.isHovered = false
         contentView.isSelected = false
         contentView.viewMode = .grid
@@ -892,6 +992,8 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     }
 
     func configure(with asset: AssetItem, viewMode: AssetViewMode, localization: AppLocalization) {
+        self.asset = asset
+        self.localization = localization
         mode = viewMode
         contentView.viewMode = viewMode
         fileNameLabel.stringValue = asset.displayName
@@ -908,6 +1010,32 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         previewImageView.contentMode = imageContentMode(for: asset, viewMode: viewMode)
         applyModeLayout()
         containerView.synchronizeHoverStateWithPointer()
+    }
+
+    @objc private func handleRightClick(_ sender: NSClickGestureRecognizer) {
+        showContextMenu(at: sender.location(in: containerView))
+    }
+
+    private func showContextMenu(at location: NSPoint) {
+        guard asset != nil else {
+            return
+        }
+
+        onContextMenuOpen?()
+        let menu = NSMenu()
+        menu.showsStateColumn = false
+        let menuItem = NSMenuItem()
+        let menuView = AssetContextMenuView(
+            localization: localization,
+            actions: AssetContextMenuAction.allCases,
+            onSelect: { [weak self] action in
+                self?.onContextMenuAction?(action)
+            }
+        )
+        menuView.frame = NSRect(origin: .zero, size: menuView.intrinsicContentSize)
+        menuItem.view = menuView
+        menu.addItem(menuItem)
+        menu.popUp(positioning: nil, at: location, in: containerView)
     }
 
     private func applyModeLayout() {
@@ -1186,6 +1314,195 @@ private final class DimensionBadgeView: NSView {
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -AssetCollectionMetrics.dimensionBadgeHorizontalPadding),
             label.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
+    }
+}
+
+private final class AssetContextMenuView: NSView {
+    private let rowViews: [AssetContextMenuRowView]
+
+    override var isFlipped: Bool {
+        true
+    }
+
+    init(
+        localization: AppLocalization,
+        actions: [AssetContextMenuAction],
+        onSelect: @escaping (AssetContextMenuAction) -> Void
+    ) {
+        rowViews = actions.map { action in
+            AssetContextMenuRowView(
+                title: localization.string(action.titleKey),
+                systemImageName: action.systemImageName,
+                isDestructive: action.isDestructive,
+                onSelect: { onSelect(action) }
+            )
+        }
+        super.init(frame: .zero)
+        setUpView()
+    }
+
+    required init?(coder: NSCoder) {
+        rowViews = []
+        super.init(coder: coder)
+        setUpView()
+    }
+
+    override var intrinsicContentSize: NSSize {
+        let rowCount = CGFloat(rowViews.count)
+        return NSSize(
+            width: AssetCollectionMetrics.contextMenuWidth,
+            height: AssetCollectionMetrics.contextMenuPadding * 2
+                + rowCount * AssetCollectionMetrics.contextMenuRowHeight
+                + max(rowCount - 1, 0) * AssetCollectionMetrics.contextMenuRowSpacing
+        )
+    }
+
+    override func layout() {
+        super.layout()
+
+        let rowWidth = max(bounds.width - AssetCollectionMetrics.contextMenuPadding * 2, 0)
+        var y = AssetCollectionMetrics.contextMenuPadding
+        for rowView in rowViews {
+            rowView.frame = NSRect(
+                x: AssetCollectionMetrics.contextMenuPadding,
+                y: y,
+                width: rowWidth,
+                height: AssetCollectionMetrics.contextMenuRowHeight
+            )
+            y += AssetCollectionMetrics.contextMenuRowHeight + AssetCollectionMetrics.contextMenuRowSpacing
+        }
+    }
+
+    private func setUpView() {
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.72).cgColor
+        layer?.cornerRadius = AssetCollectionMetrics.contextMenuPanelCornerRadius
+        layer?.cornerCurve = .continuous
+        layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
+        layer?.borderWidth = 0.6
+
+        for rowView in rowViews {
+            addSubview(rowView)
+        }
+    }
+}
+
+private final class AssetContextMenuRowView: NSView {
+    private let title: String
+    private let systemImageName: String
+    private let isDestructive: Bool
+    private let onSelect: () -> Void
+    private let imageView = NSImageView()
+    private let label = NSTextField(labelWithString: "")
+    private var trackingArea: NSTrackingArea?
+    private var isHovered = false {
+        didSet {
+            updateAppearance()
+        }
+    }
+
+    init(
+        title: String,
+        systemImageName: String,
+        isDestructive: Bool,
+        onSelect: @escaping () -> Void
+    ) {
+        self.title = title
+        self.systemImageName = systemImageName
+        self.isDestructive = isDestructive
+        self.onSelect = onSelect
+        super.init(frame: .zero)
+        setUpView()
+    }
+
+    required init?(coder: NSCoder) {
+        title = ""
+        systemImageName = ""
+        isDestructive = false
+        onSelect = {}
+        super.init(coder: coder)
+        setUpView()
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+
+        let newTrackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.activeInActiveApp, .mouseEnteredAndExited, .inVisibleRect],
+            owner: self
+        )
+        addTrackingArea(newTrackingArea)
+        trackingArea = newTrackingArea
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovered = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovered = false
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard bounds.contains(convert(event.locationInWindow, from: nil)) else {
+            return
+        }
+
+        enclosingMenuItem?.menu?.cancelTracking()
+        onSelect()
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+
+    private func setUpView() {
+        wantsLayer = true
+        layer?.cornerRadius = AssetCollectionMetrics.contextMenuRowCornerRadius
+        layer?.cornerCurve = .continuous
+
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        imageView.image = NSImage(systemSymbolName: systemImageName, accessibilityDescription: title)
+        imageView.symbolConfiguration = .init(pointSize: 13, weight: .medium)
+        imageView.contentTintColor = isDestructive ? .systemRed : .secondaryLabelColor
+
+        label.stringValue = title
+        label.font = .systemFont(ofSize: 12, weight: .medium)
+        label.textColor = isDestructive ? .systemRed : .labelColor
+        label.lineBreakMode = .byTruncatingTail
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        addSubview(imageView)
+        addSubview(label)
+
+        NSLayoutConstraint.activate([
+            imageView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            imageView.centerYAnchor.constraint(equalTo: centerYAnchor),
+            imageView.widthAnchor.constraint(equalToConstant: 16),
+            imageView.heightAnchor.constraint(equalToConstant: 16),
+
+            label.leadingAnchor.constraint(equalTo: imageView.trailingAnchor, constant: 8),
+            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ])
+
+        updateAppearance()
+    }
+
+    private func updateAppearance() {
+        layer?.backgroundColor = isHovered
+            ? NSColor.white.withAlphaComponent(AssetCollectionMetrics.hoverBackgroundAlpha).cgColor
+            : NSColor.clear.cgColor
     }
 }
 

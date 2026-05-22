@@ -201,6 +201,48 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         }
     }
 
+    func replaceColors(_ colors: [AssetColor], forAssetID assetID: AssetItem.ID) throws -> AssetItem {
+        try context.performAndWait {
+            guard try assetRecord(id: assetID) != nil else {
+                throw LibraryMetadataError.missingAsset
+            }
+
+            for record in try colorRecords(assetID: assetID) {
+                context.delete(record)
+            }
+            saveColors(colors, forAssetID: assetID)
+
+            if context.hasChanges {
+                try context.save()
+            }
+
+            guard let asset = try assets(ids: [assetID]).first else {
+                throw LibraryMetadataError.missingAsset
+            }
+            return asset
+        }
+    }
+
+    func deleteAsset(id assetID: AssetItem.ID) throws {
+        try context.performAndWait {
+            guard let assetRecord = try assetRecord(id: assetID) else {
+                throw LibraryMetadataError.missingAsset
+            }
+
+            for record in try colorRecords(assetID: assetID) {
+                context.delete(record)
+            }
+            for record in try membershipRecords(assetIDs: [assetID]) {
+                context.delete(record)
+            }
+            context.delete(assetRecord)
+
+            if context.hasChanges {
+                try context.save()
+            }
+        }
+    }
+
     private func assets(ids: Set<AssetItem.ID>) throws -> [AssetItem] {
         guard !ids.isEmpty else {
             return []
@@ -244,6 +286,13 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
             folderIDs: try folderIDsByAssetID(for: [id])[id, default: []],
             paletteColors: try colorsByAssetID(for: [id])[id, default: []]
         )
+    }
+
+    private func assetRecord(id: AssetItem.ID) throws -> NSManagedObject? {
+        let request = NSFetchRequest<NSManagedObject>(entityName: "AssetRecord")
+        request.fetchLimit = 1
+        request.predicate = NSPredicate(format: "libraryID == %@ AND id == %@", library.id, id)
+        return try context.fetch(request).first
     }
 
     private func asset(
@@ -491,6 +540,20 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         return try context.fetch(request)
     }
 
+    private func membershipRecords(assetIDs: Set<String>) throws -> [NSManagedObject] {
+        guard !assetIDs.isEmpty else {
+            return []
+        }
+
+        let request = NSFetchRequest<NSManagedObject>(entityName: "AssetFolderMembershipRecord")
+        request.predicate = NSPredicate(
+            format: "libraryID == %@ AND assetID IN %@",
+            library.id,
+            Array(assetIDs)
+        )
+        return try context.fetch(request)
+    }
+
     private func membershipRecords(folderIDs: Set<String>) throws -> [NSManagedObject] {
         guard !folderIDs.isEmpty else {
             return []
@@ -502,6 +565,12 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
             library.id,
             Array(folderIDs)
         )
+        return try context.fetch(request)
+    }
+
+    private func colorRecords(assetID: AssetItem.ID) throws -> [NSManagedObject] {
+        let request = NSFetchRequest<NSManagedObject>(entityName: "AssetColorRecord")
+        request.predicate = NSPredicate(format: "libraryID == %@ AND assetID == %@", library.id, assetID)
         return try context.fetch(request)
     }
 
@@ -543,6 +612,7 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
 enum LibraryMetadataError: LocalizedError {
     case invalidFolderName
     case missingFolder
+    case missingAsset
 
     var errorDescription: String? {
         switch self {
@@ -550,6 +620,8 @@ enum LibraryMetadataError: LocalizedError {
             "Enter a folder name."
         case .missingFolder:
             "This folder no longer exists."
+        case .missingAsset:
+            "This asset is no longer available."
         }
     }
 }

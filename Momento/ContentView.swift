@@ -159,7 +159,8 @@ struct ContentView: View {
                     onSelectionChange: selectAssets,
                     onDoubleClick: preview,
                     onSpacePreviewStart: previewWhileSpaceIsPressed,
-                    onSpacePreviewEnd: endSpacePreview
+                    onSpacePreviewEnd: endSpacePreview,
+                    onContextMenuAction: handleAssetContextMenuAction
                 )
 
                 if visibleAssets.isEmpty {
@@ -473,6 +474,57 @@ struct ContentView: View {
             }
         default:
             break
+        }
+    }
+
+    private func handleAssetContextMenuAction(_ asset: AssetItem, action: AssetContextMenuAction) {
+        switch action {
+        case .previewOriginal:
+            preview(asset)
+        case .refreshThumbnail:
+            refreshThumbnail(for: asset)
+        case .reanalyzeColors:
+            reanalyzeColors(for: asset)
+        case .revealInFinder:
+            revealInFinder(asset)
+        case .moveToTrash:
+            moveAssetToTrash(asset)
+        }
+    }
+
+    private func refreshThumbnail(for asset: AssetItem) {
+        do {
+            AssetCollectionGridView.invalidatePreviewCache(for: asset)
+            if let updatedAsset = try store.refreshThumbnail(for: asset.id) {
+                AssetCollectionGridView.invalidatePreviewCache(for: updatedAsset)
+            }
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func reanalyzeColors(for asset: AssetItem) {
+        do {
+            try store.reanalyzeColors(for: asset.id)
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func revealInFinder(_ asset: AssetItem) {
+        guard let fileURL = previewURL(for: asset) else {
+            return
+        }
+
+        NSWorkspace.shared.activateFileViewerSelecting([fileURL])
+    }
+
+    private func moveAssetToTrash(_ asset: AssetItem) {
+        do {
+            AssetCollectionGridView.invalidatePreviewCache(for: asset)
+            try store.moveAssetToTrash(id: asset.id)
+        } catch {
+            showImportError(error)
         }
     }
 
