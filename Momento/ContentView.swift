@@ -16,8 +16,10 @@ private enum AssetFilterFacet: String, CaseIterable, Hashable, Identifiable {
 }
 
 private enum ContentToolbarMetrics {
-    static let searchFieldWidth: CGFloat = 168
-    static let searchControlWidth: CGFloat = 214
+    // 搜索框使用弹性宽度（min...max）而不是写死宽度：窄窗口下工具栏会优先把
+    // 它压窄，而不是因为无法压缩而整体收进溢出菜单、退化成一个按钮。
+    static let searchControlMinWidth: CGFloat = 140
+    static let searchControlMaxWidth: CGFloat = 214
     static let iconButtonWidth: CGFloat = 38
     static let viewModeSwitcherWidth: CGFloat = 112
     static let filterPopoverWidth: CGFloat = 340
@@ -310,14 +312,17 @@ struct ContentView: View {
 
             TextField(placeholder, text: $store.searchQuery)
                 .textFieldStyle(.plain)
-                .frame(width: ContentToolbarMetrics.searchFieldWidth)
+                .frame(maxWidth: .infinity)
         }
         .padding(.horizontal, 11)
-        .frame(width: ContentToolbarMetrics.searchControlWidth, height: MomentoTheme.toolbarControlHeight)
+        .frame(
+            minWidth: ContentToolbarMetrics.searchControlMinWidth,
+            maxWidth: ContentToolbarMetrics.searchControlMaxWidth
+        )
+        .frame(height: MomentoTheme.toolbarControlHeight)
         .background {
             toolbarControlBackground(cornerRadius: MomentoTheme.toolbarControlRadius)
         }
-        .fixedSize(horizontal: true, vertical: false)
         .layoutPriority(10)
         .help(placeholder)
     }

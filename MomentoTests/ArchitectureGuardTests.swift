@@ -40,13 +40,17 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertFalse(shellSource.contains("inspectorResizeHandle()"))
     }
 
-    func testToolbarSearchUsesFixedWidthControlWithoutCollapsingToolbarItems() throws {
+    func testToolbarSearchUsesFlexibleWidthSoItCompressesInsteadOfCollapsing() throws {
         let source = try String(contentsOf: contentViewURL(), encoding: .utf8)
 
-        XCTAssertTrue(source.contains("static let searchControlWidth: CGFloat = 214"))
         XCTAssertTrue(source.contains("ToolbarItemGroup(placement: .automatic)"))
-        XCTAssertTrue(source.contains(".frame(width: ContentToolbarMetrics.searchControlWidth, height: MomentoTheme.toolbarControlHeight)"))
-        XCTAssertTrue(source.contains(".fixedSize(horizontal: true, vertical: false)"))
+        XCTAssertTrue(source.contains("static let searchControlMinWidth"))
+        XCTAssertTrue(source.contains("static let searchControlMaxWidth"))
+        XCTAssertTrue(source.contains("minWidth: ContentToolbarMetrics.searchControlMinWidth"))
+        XCTAssertTrue(source.contains("maxWidth: ContentToolbarMetrics.searchControlMaxWidth"))
+        // 搜索框不能再写死宽度或对水平方向 fixedSize，否则窄窗口下整组会被收进工具栏溢出菜单。
+        XCTAssertFalse(source.contains("static let searchControlWidth"))
+        XCTAssertFalse(source.contains(".fixedSize(horizontal: true"))
         XCTAssertFalse(source.contains("toolbarControlCluster"))
         XCTAssertFalse(source.contains("static let controlClusterWidth"))
     }
