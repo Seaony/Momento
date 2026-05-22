@@ -178,19 +178,19 @@ struct ContentView: View {
         }
         .toolbar {
             if !isModalOverlayVisible {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .primaryAction) {
                     toolbarImportButton
                         .padding(.trailing, 8)
                 }
                 .sharedBackgroundVisibility(.hidden)
 
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .confirmationAction) {
                     toolbarViewModeSwitcher
                         .padding(.trailing, 8)
                 }
                 .sharedBackgroundVisibility(.hidden)
 
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .confirmationAction) {
                     toolbarSearchControl
                 }
                 .sharedBackgroundVisibility(.hidden)
