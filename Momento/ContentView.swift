@@ -143,6 +143,7 @@ struct ContentView: View {
             onMoveLibrary: moveLibrary,
             onReloadLibrary: reloadLibrary,
             onCloseLibrary: closeLibrary,
+            onImportAssets: { isImporterPresented = true },
             onCreateFolder: presentCreateFolderDialog,
             onRenameFolder: presentRenameFolderDialog,
             onDeleteFolder: presentDeleteFolderDialog,
@@ -178,15 +179,9 @@ struct ContentView: View {
         }
         .toolbar {
             if !isModalOverlayVisible {
-                ToolbarItem(placement: .primaryAction) {
-                    toolbarImportButton
-                        .padding(.trailing, 8)
-                }
-                .sharedBackgroundVisibility(.hidden)
-
                 ToolbarItem(placement: .confirmationAction) {
                     toolbarViewModeSwitcher
-                        .padding(.trailing, 8)
+                        .padding(.trailing, 6)
                 }
                 .sharedBackgroundVisibility(.hidden)
 
@@ -209,28 +204,8 @@ struct ContentView: View {
         }
     }
 
-    private var toolbarImportButton: some View {
-        Button {
-            isImporterPresented = true
-        } label: {
-            Image(systemName: "square.and.arrow.down")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(MomentoTheme.secondaryText)
-                .frame(width: 44, height: 38)
-                .background {
-                    toolbarControlBackground(cornerRadius: 12)
-                }
-                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .pointerStyle(.link)
-        .help(localization.string("Import Assets"))
-        .accessibilityLabel(localization.string("Import Assets"))
-    }
-
     private var toolbarViewModeSwitcher: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 2) {
             ForEach(AssetViewMode.allCases) { viewMode in
                 let isSelected = store.viewMode == viewMode
                 let isHovered = hoveredToolbarViewMode == viewMode
@@ -239,13 +214,13 @@ struct ContentView: View {
                     store.setViewMode(viewMode)
                 } label: {
                     Image(systemName: systemImage(for: viewMode))
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(isSelected ? Color.white : MomentoTheme.secondaryText)
-                        .frame(width: 38, height: 30)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(isSelected ? Color.white : MomentoTheme.primaryText)
+                        .frame(width: 34, height: 28)
                         .background {
                             toolbarSegmentBackground(isSelected: isSelected, isHovered: isHovered)
                         }
-                        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
                 .buttonStyle(.plain)
                 .pointerStyle(.link)
@@ -262,30 +237,30 @@ struct ContentView: View {
                 }
             }
         }
-        .padding(4)
-        .frame(height: 38)
+        .padding(3)
+        .frame(height: 34)
         .background {
-            toolbarControlBackground(cornerRadius: 12)
+            toolbarControlBackground(cornerRadius: 10)
         }
     }
 
     @ViewBuilder
     private var toolbarSearchControl: some View {
         if isToolbarSearchExpanded {
-            HStack(spacing: 9) {
+            HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(MomentoTheme.secondaryText)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(MomentoTheme.primaryText)
 
                 TextField(localization.string("Search assets, tags, colors..."), text: $store.searchQuery)
                     .textFieldStyle(.plain)
                     .focused($isToolbarSearchFocused)
-                    .frame(width: 280)
+                    .frame(width: 260)
             }
-            .padding(.horizontal, 13)
-            .frame(height: 38)
+            .padding(.horizontal, 11)
+            .frame(height: 34)
             .background {
-                toolbarControlBackground(cornerRadius: 12)
+                toolbarControlBackground(cornerRadius: 10)
             }
             .onAppear {
                 isToolbarSearchFocused = true
@@ -298,13 +273,13 @@ struct ContentView: View {
                 isToolbarSearchFocused = true
             } label: {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(MomentoTheme.secondaryText)
-                    .frame(width: 44, height: 38)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(MomentoTheme.primaryText)
+                    .frame(width: 38, height: 34)
                     .background {
-                        toolbarControlBackground(cornerRadius: 12)
+                        toolbarControlBackground(cornerRadius: 10)
                     }
-                    .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             }
             .buttonStyle(.plain)
             .pointerStyle(.link)
@@ -324,7 +299,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private func toolbarSegmentBackground(isSelected: Bool, isHovered: Bool) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
 
         if isSelected {
             shape.fill(Color.accentColor)

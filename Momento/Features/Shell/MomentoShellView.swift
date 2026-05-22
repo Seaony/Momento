@@ -32,6 +32,7 @@ struct MomentoShellView<Content: View>: View {
     var onMoveLibrary: (RecentLibraryReference.ID, RecentLibraryReference.ID, Bool) -> Void
     var onReloadLibrary: () -> Void
     var onCloseLibrary: () -> Void
+    var onImportAssets: () -> Void
     var onCreateFolder: (AssetFolder.ID?) -> Void
     var onRenameFolder: (AssetFolder.ID) -> Void
     var onDeleteFolder: (AssetFolder.ID) -> Void
@@ -76,6 +77,7 @@ struct MomentoShellView<Content: View>: View {
         onMoveLibrary: @escaping (RecentLibraryReference.ID, RecentLibraryReference.ID, Bool) -> Void = { _, _, _ in },
         onReloadLibrary: @escaping () -> Void = {},
         onCloseLibrary: @escaping () -> Void = {},
+        onImportAssets: @escaping () -> Void = {},
         onCreateFolder: @escaping (AssetFolder.ID?) -> Void = { _ in },
         onRenameFolder: @escaping (AssetFolder.ID) -> Void = { _ in },
         onDeleteFolder: @escaping (AssetFolder.ID) -> Void = { _ in },
@@ -108,6 +110,7 @@ struct MomentoShellView<Content: View>: View {
         self.onMoveLibrary = onMoveLibrary
         self.onReloadLibrary = onReloadLibrary
         self.onCloseLibrary = onCloseLibrary
+        self.onImportAssets = onImportAssets
         self.onCreateFolder = onCreateFolder
         self.onRenameFolder = onRenameFolder
         self.onDeleteFolder = onDeleteFolder
@@ -173,7 +176,9 @@ struct MomentoShellView<Content: View>: View {
                 isCollapsed: $isSidebarCollapsed,
                 isVisible: showsChromeControls,
                 buttonMinX: sidebarToggleButtonMinX,
-                label: sidebarToggleLabel
+                label: sidebarToggleLabel,
+                importAction: onImportAssets,
+                importLabel: localization.string("Import Assets")
             )
             .frame(width: 0, height: 0)
         }

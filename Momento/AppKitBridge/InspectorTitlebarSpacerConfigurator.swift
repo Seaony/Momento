@@ -180,8 +180,8 @@ private struct InspectorTitlebarControlAccessoryView: View {
             }
         } label: {
             Image(systemName: "sidebar.right")
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(isHovered ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(MomentoTheme.primaryText)
                 .frame(width: MomentoTheme.sidebarTitlebarButtonSize, height: MomentoTheme.sidebarTitlebarButtonSize)
                 .background {
                     if isHovered {
