@@ -33,6 +33,10 @@ private enum AssetCollectionMetrics {
     static let listThumbnailSize: CGFloat = 78
     static let listSeparatorHorizontalInset: CGFloat = 18
     static let listSeparatorAlpha: CGFloat = 0.055
+    static let favoriteButtonSize: CGFloat = 24
+    static let favoriteButtonInset: CGFloat = 8
+    static let favoriteButtonCornerRadius: CGFloat = 12
+    static let favoriteButtonBackgroundAlpha: CGFloat = 0.3
     static let selectionBackgroundAnimationDuration: CFTimeInterval = 0.12
     static let titleTextColor = NSColor.labelColor.withAlphaComponent(0.5)
     static let subtitleTextColor = NSColor.labelColor.withAlphaComponent(0.3)
@@ -131,6 +135,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
     var onDoubleClick: (AssetItem) -> Void
     var onSpacePreviewStart: (AssetItem, NSRect?) -> Void
     var onSpacePreviewEnd: () -> Void
+    var onFavoriteToggle: (AssetItem) -> Void
     var onContextMenuAction: (AssetItem, AssetContextMenuAction) -> Void
 
     static func invalidatePreviewCache(for asset: AssetItem) {
@@ -146,6 +151,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
         onDoubleClick: @escaping (AssetItem) -> Void = { _ in },
         onSpacePreviewStart: @escaping (AssetItem, NSRect?) -> Void = { _, _ in },
         onSpacePreviewEnd: @escaping () -> Void = {},
+        onFavoriteToggle: @escaping (AssetItem) -> Void = { _ in },
         onContextMenuAction: @escaping (AssetItem, AssetContextMenuAction) -> Void = { _, _ in }
     ) {
         self.assets = assets
@@ -156,6 +162,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
         self.onDoubleClick = onDoubleClick
         self.onSpacePreviewStart = onSpacePreviewStart
         self.onSpacePreviewEnd = onSpacePreviewEnd
+        self.onFavoriteToggle = onFavoriteToggle
         self.onContextMenuAction = onContextMenuAction
     }
 
@@ -334,6 +341,9 @@ extension AssetCollectionGridView {
             assetItem.onContextMenuAction = { [weak self, assetID = asset.id] action in
                 self?.performContextMenuAction(assetID: assetID, action: action)
             }
+            assetItem.onFavoriteToggle = { [weak self, assetID = asset.id] in
+                self?.toggleFavorite(assetID: assetID)
+            }
             assetItem.configure(with: asset, viewMode: parent.viewMode, localization: parent.localization)
             return assetItem
         }
@@ -456,6 +466,15 @@ extension AssetCollectionGridView {
             }
 
             parent.onContextMenuAction(parent.assets[index], action)
+        }
+
+        private func toggleFavorite(assetID: AssetItem.ID) {
+            guard let index = assetIndexByID[assetID],
+                  parent.assets.indices.contains(index) else {
+                return
+            }
+
+            parent.onFavoriteToggle(parent.assets[index])
         }
 
         private func previewIndexPath(in collectionView: NSCollectionView) -> IndexPath? {
@@ -889,10 +908,12 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     var onHoverPreviewChange: ((Bool) -> Void)?
     var onContextMenuOpen: (() -> Void)?
     var onContextMenuAction: ((AssetContextMenuAction) -> Void)?
+    var onFavoriteToggle: (() -> Void)?
 
     private let containerView = HoverTrackingView()
     private let contentView = HoverSelectionView()
     private let previewImageView = AssetPreviewImageView()
+    private let favoriteButton = NSButton()
     private let fileNameLabel = NSTextField(labelWithString: "")
     private let subtitleLabel = NSTextField(labelWithString: "")
     private let dateLabel = NSTextField(labelWithString: "")
@@ -918,6 +939,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         containerView.translatesAutoresizingMaskIntoConstraints = false
         containerView.hoverChanged = { [weak self] isHovered in
             self?.contentView.isHovered = isHovered
+            self?.updateFavoriteButton()
             if isHovered {
                 self?.onHoverPreviewChange?(true)
             } else {
@@ -936,6 +958,18 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
         previewImageView.translatesAutoresizingMaskIntoConstraints = false
         previewImageView.cornerRadius = AssetCollectionMetrics.gridImageCornerRadius
+
+        favoriteButton.translatesAutoresizingMaskIntoConstraints = false
+        favoriteButton.isBordered = false
+        favoriteButton.imagePosition = .imageOnly
+        favoriteButton.bezelStyle = .regularSquare
+        favoriteButton.target = self
+        favoriteButton.action = #selector(handleFavoriteClick(_:))
+        favoriteButton.wantsLayer = true
+        favoriteButton.layer?.cornerRadius = AssetCollectionMetrics.favoriteButtonCornerRadius
+        favoriteButton.layer?.cornerCurve = .continuous
+        favoriteButton.toolTip = localization.string("Favorites")
+        favoriteButton.isHidden = true
 
         fileNameLabel.lineBreakMode = .byTruncatingTail
         fileNameLabel.maximumNumberOfLines = 1
@@ -983,6 +1017,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         contentView.addSubview(dateLabel)
         contentView.addSubview(dimensionBadgeView)
         contentView.addSubview(separatorView)
+        contentView.addSubview(favoriteButton)
         containerView.addSubview(contentView)
         view = containerView
 
@@ -1001,7 +1036,18 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
                 constant: -AssetCollectionMetrics.listSeparatorHorizontalInset
             ),
             separatorView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            separatorView.heightAnchor.constraint(equalToConstant: 1)
+            separatorView.heightAnchor.constraint(equalToConstant: 1),
+
+            favoriteButton.leadingAnchor.constraint(
+                equalTo: previewImageView.leadingAnchor,
+                constant: AssetCollectionMetrics.favoriteButtonInset
+            ),
+            favoriteButton.topAnchor.constraint(
+                equalTo: previewImageView.topAnchor,
+                constant: AssetCollectionMetrics.favoriteButtonInset
+            ),
+            favoriteButton.widthAnchor.constraint(equalToConstant: AssetCollectionMetrics.favoriteButtonSize),
+            favoriteButton.heightAnchor.constraint(equalToConstant: AssetCollectionMetrics.favoriteButtonSize)
         ])
 
         gridConstraints = [
@@ -1065,7 +1111,9 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         onHoverPreviewChange = nil
         onContextMenuOpen = nil
         onContextMenuAction = nil
+        onFavoriteToggle = nil
         asset = nil
+        updateFavoriteButton()
         contentView.isHovered = false
         contentView.isSelected = false
         contentView.viewMode = .grid
@@ -1092,7 +1140,12 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         )
         previewImageView.contentMode = imageContentMode(for: asset, viewMode: viewMode)
         applyModeLayout()
+        updateFavoriteButton()
         containerView.synchronizeHoverStateWithPointer()
+    }
+
+    @objc private func handleFavoriteClick(_ sender: NSButton) {
+        onFavoriteToggle?()
     }
 
     @objc private func handleRightClick(_ sender: NSClickGestureRecognizer) {
@@ -1182,6 +1235,32 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         dateLabel.textColor = usesSelectedText
             ? AssetCollectionMetrics.selectedTitleTextColor
             : AssetCollectionMetrics.listDateTextColor
+    }
+
+    private func updateFavoriteButton() {
+        guard let asset else {
+            favoriteButton.isHidden = true
+            favoriteButton.image = nil
+            return
+        }
+
+        let isVisible = asset.isFavorite || contentView.isHovered
+        favoriteButton.isHidden = !isVisible
+        favoriteButton.image = favoriteImage(isFavorite: asset.isFavorite)
+        favoriteButton.contentTintColor = asset.isFavorite
+            ? .systemRed
+            : NSColor.white.withAlphaComponent(0.92)
+        favoriteButton.layer?.backgroundColor = NSColor.black
+            .withAlphaComponent(AssetCollectionMetrics.favoriteButtonBackgroundAlpha)
+            .cgColor
+        favoriteButton.toolTip = localization.string(asset.isFavorite ? "Favorited" : "Favorites")
+    }
+
+    private func favoriteImage(isFavorite: Bool) -> NSImage? {
+        NSImage(
+            systemSymbolName: isFavorite ? "heart.fill" : "heart",
+            accessibilityDescription: localization.string("Favorites")
+        )?.withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))
     }
 
     private func subtitle(for asset: AssetItem, viewMode: AssetViewMode, localization: AppLocalization) -> String {

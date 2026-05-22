@@ -377,6 +377,22 @@ final class LibraryStore {
         mergeAssets(try metadataStore.unassignAssets(ids: ids, from: folderID))
     }
 
+    func toggleFavorite(for assetID: AssetItem.ID) throws {
+        guard let metadataStore,
+              let currentLibrary else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        guard let asset = assets.first(where: { $0.id == assetID && $0.libraryID == currentLibrary.id }) else {
+            throw LibraryStoreError.missingAsset
+        }
+
+        mergeAssets([try metadataStore.setFavorite(!asset.isFavorite, forAssetID: asset.id)])
+        if let selectedAssetID, !visibleAssets.contains(where: { $0.id == selectedAssetID }) {
+            self.selectedAssetID = nil
+        }
+    }
+
     func refreshThumbnail(for assetID: AssetItem.ID) throws -> AssetItem? {
         guard let currentLibrary else {
             throw LibraryStoreError.noCurrentLibrary

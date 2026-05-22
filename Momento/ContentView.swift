@@ -169,6 +169,7 @@ struct ContentView: View {
                     },
                     onSpacePreviewStart: previewWhileSpaceIsPressed,
                     onSpacePreviewEnd: endSpacePreview,
+                    onFavoriteToggle: toggleFavorite,
                     onContextMenuAction: handleAssetContextMenuAction
                 )
 
@@ -686,6 +687,14 @@ struct ContentView: View {
             if moveAssetToTrash(asset) {
                 showAssetActionToast(action)
             }
+        }
+    }
+
+    private func toggleFavorite(_ asset: AssetItem) {
+        do {
+            try store.toggleFavorite(for: asset.id)
+        } catch {
+            showImportError(error)
         }
     }
 

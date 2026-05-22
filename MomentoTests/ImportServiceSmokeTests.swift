@@ -129,6 +129,42 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testTogglingFavoritePersistsAcrossReloads() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        let source = try environment.writeOnePixelPNG(named: "favorite.png")
+        try await store.importItems(from: [source])
+        let asset = try XCTUnwrap(store.assets.first)
+
+        try store.toggleFavorite(for: asset.id)
+        XCTAssertTrue(try XCTUnwrap(store.assets.first).isFavorite)
+        store.selectSidebarItem(id: "favorites")
+        XCTAssertEqual(store.visibleAssets.map(\.id), [asset.id])
+
+        let reopened = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try reopened.openLibrary(at: environment.packageURL)
+        XCTAssertTrue(try XCTUnwrap(reopened.assets.first).isFavorite)
+
+        store.selectAsset(id: asset.id)
+        try store.toggleFavorite(for: asset.id)
+        XCTAssertFalse(try XCTUnwrap(store.assets.first).isFavorite)
+        XCTAssertTrue(store.visibleAssets.isEmpty)
+        XCTAssertNil(store.selectedAssetID)
+    }
+
+    @MainActor
     func testMovingImportedAssetToTrashRemovesMetadataAndStoredFile() async throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }

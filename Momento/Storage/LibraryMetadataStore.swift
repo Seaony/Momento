@@ -224,6 +224,24 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         }
     }
 
+    func setFavorite(_ isFavorite: Bool, forAssetID assetID: AssetItem.ID) throws -> AssetItem {
+        try context.performAndWait {
+            guard let record = try assetRecord(id: assetID) else {
+                throw LibraryMetadataError.missingAsset
+            }
+
+            record.setValue(isFavorite, forKey: "isFavorite")
+            if context.hasChanges {
+                try context.save()
+            }
+
+            guard let asset = try assets(ids: [assetID]).first else {
+                throw LibraryMetadataError.missingAsset
+            }
+            return asset
+        }
+    }
+
     func replaceColors(_ colors: [AssetColor], forAssetID assetID: AssetItem.ID) throws -> AssetItem {
         try context.performAndWait {
             guard try assetRecord(id: assetID) != nil else {
