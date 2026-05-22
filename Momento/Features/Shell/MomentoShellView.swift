@@ -177,7 +177,6 @@ struct MomentoShellView<Content: View>: View {
         .frame(width: MomentoTheme.inspectorWidth)
         .fixedSize(horizontal: true, vertical: false)
         .layoutPriority(1)
-        .ignoresSafeArea(.container, edges: .top)
         .transition(
             .asymmetric(
                 insertion: .move(edge: .trailing).combined(with: .opacity),
