@@ -11,7 +11,7 @@ private enum ContentToolbarMetrics {
     static let searchFieldWidth: CGFloat = 168
     static let iconButtonWidth: CGFloat = 38
     static let filterPopoverWidth: CGFloat = 320
-    static let sortPopoverWidth: CGFloat = 248
+    static let sortPopoverWidth: CGFloat = 156
     static let popoverSectionSpacing: CGFloat = 12
 }
 
@@ -642,6 +642,11 @@ struct ContentView: View {
 
         return Button(action: action) {
             HStack(spacing: 8) {
+                if isSelected {
+                    Image(systemName: sortDirectionSystemImage())
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(width: 16)
+                }
                 Text(title)
                     .lineLimit(1)
                 Spacer(minLength: 0)
@@ -660,6 +665,15 @@ struct ContentView: View {
         .pointerStyle(.link)
         .onHover { hovering in
             updateSortOptionHover(id: id, hovering: hovering)
+        }
+    }
+
+    private func sortDirectionSystemImage() -> String {
+        switch store.sortDirection {
+        case .ascending:
+            "arrow.up.circle.fill"
+        case .descending:
+            "arrow.down.circle.fill"
         }
     }
 
