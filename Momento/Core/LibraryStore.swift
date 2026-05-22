@@ -393,6 +393,27 @@ final class LibraryStore {
         }
     }
 
+    func renameAsset(id assetID: AssetItem.ID, to displayName: String) throws {
+        let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            throw LibraryStoreError.invalidAssetName
+        }
+
+        guard let metadataStore,
+              let currentLibrary else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        guard assets.contains(where: { $0.id == assetID && $0.libraryID == currentLibrary.id }) else {
+            throw LibraryStoreError.missingAsset
+        }
+
+        mergeAssets([try metadataStore.renameAsset(id: assetID, to: trimmedName)])
+        if let selectedAssetID, !visibleAssets.contains(where: { $0.id == selectedAssetID }) {
+            self.selectedAssetID = nil
+        }
+    }
+
     func refreshThumbnail(for assetID: AssetItem.ID) throws -> AssetItem? {
         guard let currentLibrary else {
             throw LibraryStoreError.noCurrentLibrary
@@ -659,6 +680,7 @@ enum LibraryStoreError: LocalizedError {
     case missingRecentLibrary
     case unsupportedLibraryURL
     case invalidLibraryName
+    case invalidAssetName
     case missingAsset
 
     var errorDescription: String? {
@@ -671,6 +693,8 @@ enum LibraryStoreError: LocalizedError {
             "Choose a .momento package."
         case .invalidLibraryName:
             "Enter a library name."
+        case .invalidAssetName:
+            "Enter an asset title."
         case .missingAsset:
             "This asset is no longer available."
         }

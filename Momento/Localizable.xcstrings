@@ -704,6 +704,23 @@
         }
       }
     },
+    "Enter an asset title." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter an asset title."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请输入图片标题。"
+          }
+        }
+      }
+    },
     "Enter a library name." : {
       "extractionState" : "stale",
       "localizations" : {

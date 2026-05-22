@@ -242,6 +242,29 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         }
     }
 
+    func renameAsset(id assetID: AssetItem.ID, to displayName: String) throws -> AssetItem {
+        try context.performAndWait {
+            let trimmedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedName.isEmpty else {
+                throw LibraryMetadataError.invalidAssetName
+            }
+
+            guard let record = try assetRecord(id: assetID) else {
+                throw LibraryMetadataError.missingAsset
+            }
+
+            record.setValue(trimmedName, forKey: "displayName")
+            if context.hasChanges {
+                try context.save()
+            }
+
+            guard let asset = try assets(ids: [assetID]).first else {
+                throw LibraryMetadataError.missingAsset
+            }
+            return asset
+        }
+    }
+
     func replaceColors(_ colors: [AssetColor], forAssetID assetID: AssetItem.ID) throws -> AssetItem {
         try context.performAndWait {
             guard try assetRecord(id: assetID) != nil else {
@@ -652,6 +675,7 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
 
 enum LibraryMetadataError: LocalizedError {
     case invalidFolderName
+    case invalidAssetName
     case missingFolder
     case missingAsset
 
@@ -659,6 +683,8 @@ enum LibraryMetadataError: LocalizedError {
         switch self {
         case .invalidFolderName:
             "Enter a folder name."
+        case .invalidAssetName:
+            "Enter an asset title."
         case .missingFolder:
             "This folder no longer exists."
         case .missingAsset:

@@ -156,6 +156,7 @@ struct ContentView: View {
             inspectorTags: selectedTags,
             inspectorNotes: inspectorNotes,
             toastRequest: $shellToastRequest,
+            onRenameInspectorAsset: renameAssetTitle,
             commands: commands,
             onCommandSelected: handleCommand
         ) {
@@ -640,6 +641,14 @@ struct ContentView: View {
             shellToastRequest = MomentoToastRequest(
                 message: localization.string(isAddingFavorite ? "Added to Favorites" : "Removed from Favorites")
             )
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func renameAssetTitle(_ assetID: AssetItem.ID, to title: String) {
+        do {
+            try store.renameAsset(id: assetID, to: title)
         } catch {
             showImportError(error)
         }

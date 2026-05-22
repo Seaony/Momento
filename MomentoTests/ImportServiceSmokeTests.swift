@@ -165,6 +165,37 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testRenamingImportedAssetDisplayNamePersistsAcrossReloads() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        let source = try environment.writeOnePixelPNG(named: "original-title.png")
+        try await store.importItems(from: [source])
+        let asset = try XCTUnwrap(store.assets.first)
+
+        try store.renameAsset(id: asset.id, to: "Renamed Asset")
+
+        XCTAssertEqual(try XCTUnwrap(store.assets.first).displayName, "Renamed Asset")
+        store.searchQuery = "Renamed"
+        XCTAssertEqual(store.visibleAssets.map(\.id), [asset.id])
+
+        let reopened = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try reopened.openLibrary(at: environment.packageURL)
+        XCTAssertEqual(try XCTUnwrap(reopened.assets.first).displayName, "Renamed Asset")
+    }
+
+    @MainActor
     func testMovingImportedAssetToTrashRemovesMetadataAndStoredFile() async throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }

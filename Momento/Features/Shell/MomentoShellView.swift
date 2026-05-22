@@ -43,6 +43,7 @@ struct MomentoShellView<Content: View>: View {
     @Binding var inspectorTags: [String]
     @Binding var inspectorNotes: String
     @Binding var toastRequest: MomentoToastRequest?
+    var onRenameInspectorAsset: (MomentoInspectorAsset.ID, String) -> Void
     var commands: [MomentoCommand]
     var onCommandSelected: (MomentoCommand) -> Void
     var content: () -> Content
@@ -88,6 +89,7 @@ struct MomentoShellView<Content: View>: View {
         inspectorTags: Binding<[String]> = .constant([]),
         inspectorNotes: Binding<String> = .constant(""),
         toastRequest: Binding<MomentoToastRequest?> = .constant(nil),
+        onRenameInspectorAsset: @escaping (MomentoInspectorAsset.ID, String) -> Void = { _, _ in },
         commands: [MomentoCommand] = .momentoDefaultCommands,
         onCommandSelected: @escaping (MomentoCommand) -> Void = { _ in },
         @ViewBuilder content: @escaping () -> Content
@@ -121,6 +123,7 @@ struct MomentoShellView<Content: View>: View {
         self._inspectorTags = inspectorTags
         self._inspectorNotes = inspectorNotes
         self._toastRequest = toastRequest
+        self.onRenameInspectorAsset = onRenameInspectorAsset
         self.commands = commands
         self.onCommandSelected = onCommandSelected
         self.content = content
@@ -235,6 +238,7 @@ struct MomentoShellView<Content: View>: View {
             asset: inspectorAsset,
             tags: $inspectorTags,
             notes: $inspectorNotes,
+            onTitleCommit: onRenameInspectorAsset,
             onColorCopied: showColorCopyToast
         )
         .frame(width: effectiveInspectorWidth)
@@ -248,7 +252,7 @@ struct MomentoShellView<Content: View>: View {
                 isInspectorHovered = hovering
             }
         }
-        .padding(.top, MomentoTheme.floatingSidebarTitlebarContentInset)
+        .padding(.top, MomentoTheme.inspectorContentTopInset)
         .transition(
             .asymmetric(
                 insertion: .move(edge: .trailing).combined(with: .opacity),

@@ -74,22 +74,29 @@ struct MomentoInspectorView: View {
     @Binding var tags: [String]
     @Binding var notes: String
     var onRevealInFinder: (() -> Void)?
+    var onTitleCommit: ((MomentoInspectorAsset.ID, String) -> Void)?
     var onColorCopied: (() -> Void)?
 
     @State private var pendingTag = ""
     @State private var hoveredColorID: String?
+    @State private var hoveredTitleID: MomentoInspectorAsset.ID?
+    @State private var editingTitleID: MomentoInspectorAsset.ID?
+    @State private var draftTitle = ""
+    @FocusState private var isTitleFieldFocused: Bool
 
     init(
         asset: MomentoInspectorAsset?,
         tags: Binding<[String]> = .constant([]),
         notes: Binding<String> = .constant(""),
         onRevealInFinder: (() -> Void)? = nil,
+        onTitleCommit: ((MomentoInspectorAsset.ID, String) -> Void)? = nil,
         onColorCopied: (() -> Void)? = nil
     ) {
         self.asset = asset
         self._tags = tags
         self._notes = notes
         self.onRevealInFinder = onRevealInFinder
+        self.onTitleCommit = onTitleCommit
         self.onColorCopied = onColorCopied
     }
 
@@ -116,6 +123,10 @@ struct MomentoInspectorView: View {
             idealWidth: MomentoTheme.inspectorWidth,
             maxWidth: MomentoTheme.inspectorMaxWidth
         )
+        .onChange(of: asset?.id) { _, _ in
+            cancelTitleEditing()
+            hoveredTitleID = nil
+        }
     }
 
     private func preview(_ asset: MomentoInspectorAsset) -> some View {
@@ -124,9 +135,92 @@ struct MomentoInspectorView: View {
 
             colorSection(asset.colors)
 
+            titleEditor(asset)
+        }
+    }
+
+    private func beginTitleEditing(_ asset: MomentoInspectorAsset) {
+        editingTitleID = asset.id
+        draftTitle = asset.title
+        isTitleFieldFocused = true
+    }
+
+    private func commitTitleEditing(for asset: MomentoInspectorAsset) {
+        guard editingTitleID == asset.id else {
+            return
+        }
+
+        let trimmedTitle = draftTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        editingTitleID = nil
+        isTitleFieldFocused = false
+
+        guard !trimmedTitle.isEmpty, trimmedTitle != asset.title else {
+            return
+        }
+
+        onTitleCommit?(asset.id, trimmedTitle)
+    }
+
+    private func cancelTitleEditing() {
+        editingTitleID = nil
+        draftTitle = ""
+        isTitleFieldFocused = false
+    }
+
+    @ViewBuilder
+    private func titleEditor(_ asset: MomentoInspectorAsset) -> some View {
+        let isEditing = editingTitleID == asset.id
+        let isHovered = hoveredTitleID == asset.id
+        let titleShape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+
+        if isEditing {
+            TextField("", text: $draftTitle, axis: .vertical)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13, weight: .regular))
+                .lineLimit(1...6)
+                .focused($isTitleFieldFocused)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background {
+                    titleShape
+                        .fill(Color.white.opacity(0.08))
+                        .overlay {
+                            titleShape.strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+                        }
+                }
+                .onSubmit {
+                    commitTitleEditing(for: asset)
+                }
+                .onChange(of: isTitleFieldFocused) { _, isFocused in
+                    if !isFocused {
+                        commitTitleEditing(for: asset)
+                    }
+                }
+                .task {
+                    isTitleFieldFocused = true
+                }
+        } else {
             Text(asset.title)
                 .font(.system(size: 13, weight: .regular))
-                .lineLimit(2)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background {
+                    titleShape.fill(isHovered ? Color.white.opacity(0.06) : Color.clear)
+                }
+                .contentShape(titleShape)
+                .pointerStyle(.link)
+                .onTapGesture {
+                    beginTitleEditing(asset)
+                }
+                .onHover { hovering in
+                    withAnimation(.smooth(duration: 0.12)) {
+                        hoveredTitleID = hovering ? asset.id : nil
+                    }
+                }
         }
     }
 
@@ -242,10 +336,10 @@ struct MomentoInspectorView: View {
                     .padding(.horizontal, 5)
                     .padding(.vertical, 3)
                     .background {
-                        Capsule(style: .continuous)
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .fill(Color.black.opacity(0.24))
                             .overlay {
-                                Capsule(style: .continuous)
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
                                     .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
                             }
                     }

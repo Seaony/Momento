@@ -77,6 +77,8 @@ struct AppLocalization: Equatable {
             string("Choose a .momento package.")
         case .invalidLibraryName:
             string("Enter a library name.")
+        case .invalidAssetName:
+            string("Enter an asset title.")
         case .missingAsset:
             string("This asset is no longer available.")
         }
