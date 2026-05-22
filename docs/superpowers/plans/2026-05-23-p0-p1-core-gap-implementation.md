@@ -57,9 +57,9 @@ This revision bakes in the technical review fixes needed before implementation. 
 Add tests that import one image, reload the library, and assert:
 - `originalFileName` is preserved separately from `displayName`.
 - `utiIdentifier` is stored.
-- `note` can be persisted after a later task adds the write API.
+- `note` hydrates as `nil` by default. Do not test note writes in Task 1.
 - `isTrashed == false` by default.
-- `updatedAt` exists and changes on title/note/tag updates.
+- `updatedAt` exists, falls back to `importedAt` for old rows, and changes on title/favorite updates. Do not test note/tag-driven `updatedAt` until Task 2/Task 4.
 - A library created with the current pre-v3 model opens under v3 without migration failure.
 
 Run:
@@ -70,6 +70,12 @@ xcodebuild test -scheme Momento -only-testing:MomentoTests/ImportServiceSmokeTes
 ```
 
 Expected before implementation: FAIL because fields do not exist.
+
+Pre-v3 migration fixture rule:
+
+- Build the fixture with `MomentoModel v2.xcdatamodel` in the test helper before opening it with the v3 stack, or check in a tiny SQLite fixture created from the current v2 model.
+- Do not create the "pre-v3" fixture through the normal `MomentoCoreDataStack` after v3 becomes current; that would only test a fresh v3 library.
+- The fixture should contain at least one `AssetRecord` with `tagsData`, one color record, and one folder membership so v3 opening validates old rows do not break. Task 2 owns assertions that legacy `tagsData` is backfilled into `TagRecord`/`AssetTagRecord`.
 
 - [ ] **Step 2: Create one Core Data model version v3**
 
@@ -157,7 +163,7 @@ Rules:
 - `originalFileName` is the source file's full last path component, not the title without extension.
 - `displayName` remains the editable title.
 - `utiIdentifier` comes from `UTType(filenameExtension:)?.identifier`, with `public.data` fallback only if UTType cannot be inferred.
-- `updatedAt` changes whenever user-visible metadata changes.
+- In Task 1, `updatedAt` changes for title and favorite updates only. Task 2 covers tag updates; Task 4 covers note updates; Task 3 covers trash updates.
 - Existing records whose `updatedAt` is nil hydrate as `updatedAt = importedAt`, then get a real `updatedAt` the next time metadata changes.
 
 - [ ] **Step 6: Commit**
@@ -210,12 +216,19 @@ Replace blob mutation with record mutation:
 
 ```swift
 func loadTags() throws -> [TagItem]
-func updateTags(_ tags: [TagItem], forAssetID assetID: AssetItem.ID) throws -> AssetItem
+func resolveOrCreateTags(named names: [String]) throws -> [TagItem]
+func setTagNames(_ names: [String], forAssetID assetID: AssetItem.ID) throws -> AssetItem
 func renameTag(id tagID: TagItem.ID, to name: String) throws -> [AssetItem]
 func deleteTag(id tagID: TagItem.ID) throws -> [AssetItem]
 ```
 
 `loadAssets()` should fetch asset tag links and hydrate `AssetItem.tags` from `TagRecord`.
+
+Rules:
+
+- Do not expose a primary mutation API that asks callers to construct `[TagItem]` for names. That repeats the current bug where `TagItem(name:)` fabricates `name.lowercased()` IDs.
+- `ContentView.selectedTags` and `LibraryStore.updateSelectedTags(_:)` may still traffic in names, but `LibraryMetadataStore` must resolve those names to real persisted tag IDs.
+- Task 6 can add the bulk `addTag(id:toAssets:)` API once drag/drop needs it.
 
 - [ ] **Step 4: Backfill legacy `tagsData` idempotently**
 
@@ -235,7 +248,7 @@ Rules:
 
 - [ ] **Step 5: Update `LibraryStore` tag state**
 
-`LibraryStore.tags`, `tagSummaries`, `updateSelectedTags`, `renameTag`, and `deleteTag` should rely on `TagRecord`-backed data. Keep sidebar IDs as `tag-\(id)`, but make callers use actual tag IDs returned by the store.
+`LibraryStore.tags`, `tagSummaries`, `updateSelectedTags`, `renameTag`, and `deleteTag` should rely on `TagRecord`-backed data. Keep sidebar IDs as `tag-\(id)`, but make callers use actual tag IDs returned by the store. Update tests that currently call `renameTag(id: "mood", ...)` unless the test is explicitly verifying legacy backfill preserves an existing legacy ID.
 
 - [ ] **Step 6: Commit**
 
@@ -396,6 +409,7 @@ git commit -m "feat: persist asset notes"
 **Files:**
 - Create: `Momento/AppKitBridge/AssetDragPasteboardWriter.swift`
 - Create: `Momento/AppKitBridge/AssetFilePromiseProvider.swift`
+- Create: `Momento/AppKitBridge/AssetDragPasteboardItem.swift`
 - Modify: `Momento/Core/LibraryStore.swift`
 - Modify: `Momento/ContentView.swift`
 - Modify: `Momento/AppKitBridge/AssetCollectionGridView.swift`
@@ -429,7 +443,7 @@ xcodebuild test -scheme Momento -only-testing:MomentoTests/ArchitectureGuardTest
 
 Expected before implementation: FAIL.
 
-- [ ] **Step 3: Create internal pasteboard writer**
+- [ ] **Step 3: Create internal pasteboard payload**
 
 `AssetDragPasteboardWriter` should encode:
 
@@ -442,6 +456,8 @@ Use a custom pasteboard type:
 ```swift
 static let assetIDsPasteboardType = NSPasteboard.PasteboardType("com.seaony.momento.asset-ids")
 ```
+
+Also define the matching `UTType` string for SwiftUI/sidebar drop loading. Keep the encoded payload small JSON data; do not serialize full `AssetItem` values.
 
 - [ ] **Step 4: Create file promise provider**
 
@@ -458,7 +474,20 @@ Rules:
 - Multi-select creates one provider per selected asset.
 - File promise writes must use the destination URL passed by the delegate and call the completion handler with any error.
 
-- [ ] **Step 5: Wire drag source in `AssetCollectionGridView`**
+- [ ] **Step 5: Create a combined pasteboard item**
+
+`collectionView(_:pasteboardWriterForItemAt:)` can return only one `NSPasteboardWriting` per item. Do not choose between internal IDs and file promises. Create `AssetDragPasteboardItem` that writes both representations:
+
+- internal Momento asset-ID payload for app-internal drops
+- `NSFilePromiseProvider`/file-promise representation for Finder and other apps
+
+Implementation options:
+
+- Preferred: subclass/wrap `NSFilePromiseProvider` only if it can also advertise/write the internal pasteboard type reliably.
+- Otherwise create a custom `NSPasteboardWriting` object whose `writableTypes(for:)` includes the internal type and a file-promise type, delegating promise fulfillment to `AssetFilePromiseProvider`.
+- If AppKit cannot support the combined writer cleanly, split behavior explicitly: use file promises for external dragging and use an AppKit sidebar drop target that can read the same dragging session's pasteboard. Do not leave one path broken silently.
+
+- [ ] **Step 6: Wire drag source in `AssetCollectionGridView`**
 
 Rules:
 
@@ -467,7 +496,7 @@ Rules:
 - Drag image should use existing selected item snapshots where practical.
 - Long-press QuickLook must not conflict with drag start.
 
-- [ ] **Step 6: Manual validation checklist**
+- [ ] **Step 7: Manual validation checklist**
 
 Because AppKit dragging is hard to unit test fully, validate manually after implementation:
 
@@ -476,10 +505,10 @@ Because AppKit dragging is hard to unit test fully, validate manually after impl
 - Dragging does not remove assets from Momento.
 - Drag start does not trigger the prior input-error sound.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add Momento/AppKitBridge/AssetDragPasteboardWriter.swift Momento/AppKitBridge/AssetFilePromiseProvider.swift Momento/Core/LibraryStore.swift Momento/ContentView.swift Momento/AppKitBridge/AssetCollectionGridView.swift MomentoTests/ArchitectureGuardTests.swift
+git add Momento/AppKitBridge/AssetDragPasteboardWriter.swift Momento/AppKitBridge/AssetFilePromiseProvider.swift Momento/AppKitBridge/AssetDragPasteboardItem.swift Momento/Core/LibraryStore.swift Momento/ContentView.swift Momento/AppKitBridge/AssetCollectionGridView.swift MomentoTests/ArchitectureGuardTests.swift
 git commit -m "feat: drag assets out with file promises"
 ```
 
@@ -538,7 +567,17 @@ Rules:
 
 If implementation remains small, allow dropping assets onto tag/folder chips in the inspector too. If this adds complexity, defer to sidebar-only drag organization.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Manual validation checklist**
+
+Because cross-view drag/drop is hard to test fully, validate manually after implementation:
+
+- Drag one or more selected assets to a sidebar folder assigns those assets.
+- Drag one or more selected assets to a sidebar tag links that tag.
+- Drop hover state appears only on accepted targets.
+- Dropping onto `.all`, `.favorites`, `.trash`, and management rows is rejected.
+- Selection remains stable after a successful drop.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add Momento/Features/Sidebar/MomentoSidebarView.swift Momento/Features/Inspector/MomentoInspectorView.swift Momento/Core/LibraryStore.swift Momento/Storage/LibraryMetadataStore.swift MomentoTests/ImportServiceSmokeTests.swift MomentoTests/ArchitectureGuardTests.swift
