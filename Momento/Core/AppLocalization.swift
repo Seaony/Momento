@@ -48,9 +48,9 @@ struct AppLocalization: Equatable {
     func title(for sortOption: AssetSortOption) -> String {
         switch sortOption {
         case .addedTime:
-            string("Added")
+            string("Added Time")
         case .name:
-            string("Name")
+            string("File Name")
         case .fileSize:
             string("File Size")
         }

@@ -170,6 +170,23 @@
         }
       }
     },
+    "Added Time" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Added Time"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加时间"
+          }
+        }
+      }
+    },
     "Added to Favorites" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1560,6 +1577,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "文件大小"
+          }
+        }
+      }
+    },
+    "File Name" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "File Name"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件名称"
           }
         }
       }

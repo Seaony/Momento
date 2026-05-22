@@ -413,16 +413,11 @@ struct ContentView: View {
     private var sortPopover: some View {
         GlassEffectContainer(spacing: 10) {
             VStack(alignment: .leading, spacing: ContentToolbarMetrics.popoverSectionSpacing) {
-                Text(localization.string("Sort"))
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(MomentoTheme.primaryText)
-
                 VStack(alignment: .leading, spacing: 7) {
                     ForEach(AssetSortOption.allCases) { option in
                         sortChoiceButton(
                             id: "sort-option-\(option.id)",
                             title: localization.title(for: option),
-                            systemImage: sortSystemImage(for: option),
                             isSelected: store.sortOption == option
                         ) {
                             store.setSortOption(option)
@@ -639,7 +634,6 @@ struct ContentView: View {
     private func sortChoiceButton(
         id: String,
         title: String,
-        systemImage: String,
         isSelected: Bool,
         action: @escaping () -> Void
     ) -> some View {
@@ -648,9 +642,6 @@ struct ContentView: View {
 
         return Button(action: action) {
             HStack(spacing: 8) {
-                Image(systemName: isSelected ? sortDirectionSystemImage() : systemImage)
-                    .font(.system(size: 12, weight: .semibold))
-                    .frame(width: 16)
                 Text(title)
                     .lineLimit(1)
                 Spacer(minLength: 0)
@@ -689,26 +680,6 @@ struct ContentView: View {
             } else if hoveredSortOptionID == id {
                 hoveredSortOptionID = nil
             }
-        }
-    }
-
-    private func sortDirectionSystemImage() -> String {
-        switch store.sortDirection {
-        case .ascending:
-            "arrow.up.circle.fill"
-        case .descending:
-            "arrow.down.circle.fill"
-        }
-    }
-
-    private func sortSystemImage(for option: AssetSortOption) -> String {
-        switch option {
-        case .addedTime:
-            "calendar"
-        case .name:
-            "textformat"
-        case .fileSize:
-            "externaldrive"
         }
     }
 
