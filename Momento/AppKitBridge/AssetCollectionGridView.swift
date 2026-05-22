@@ -16,7 +16,8 @@ private enum AssetCollectionMetrics {
     static let selectionCornerRadius = MomentoTheme.assetImageCornerRadius
     static let hoverBackgroundAlpha: CGFloat = 0.08
     static let masonryImageCornerRadius = MomentoTheme.assetImageCornerRadius
-    static let gridImageCornerRadius: CGFloat = 10
+    static let gridImageCornerRadius: CGFloat = 6
+    static let gridImageVerticalInset: CGFloat = 8
     static let listImageCornerRadius: CGFloat = 6
     static let dimensionBadgeCornerRadius: CGFloat = 5
     static let dimensionBadgeHeight: CGFloat = 16
@@ -27,8 +28,8 @@ private enum AssetCollectionMetrics {
     static let listThumbnailSize: CGFloat = 52
     static let listSeparatorAlpha: CGFloat = 0.1
     static let selectionBackgroundAnimationDuration: CFTimeInterval = 0.12
-    static let titleTextColor = NSColor.labelColor.withAlphaComponent(0.72)
-    static let subtitleTextColor = NSColor.labelColor.withAlphaComponent(0.46)
+    static let titleTextColor = NSColor.labelColor.withAlphaComponent(0.64)
+    static let subtitleTextColor = NSColor.labelColor.withAlphaComponent(0.38)
 }
 
 struct AssetCollectionGridView: NSViewRepresentable {
@@ -575,10 +576,10 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         ])
 
         gridConstraints = [
-            previewImageView.topAnchor.constraint(equalTo: contentView.topAnchor),
+            previewImageView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: AssetCollectionMetrics.gridImageVerticalInset),
             previewImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
             previewImageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            previewImageView.bottomAnchor.constraint(equalTo: fileNameLabel.topAnchor, constant: -8),
+            previewImageView.bottomAnchor.constraint(equalTo: fileNameLabel.topAnchor, constant: -AssetCollectionMetrics.gridImageVerticalInset),
             previewImageView.heightAnchor.constraint(greaterThanOrEqualToConstant: 96),
 
             fileNameLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 6),
