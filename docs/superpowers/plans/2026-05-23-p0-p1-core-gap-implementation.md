@@ -12,18 +12,20 @@
 
 ## Review Decisions
 
-The plan below is implementable as written, but these product choices should be confirmed before execution:
+This revision bakes in the technical review fixes needed before implementation. Remaining product confirmations are listed in the review checklist:
 
-1. **Notes UI:** Notes were previously removed from the inspector UI. This plan persists `Asset.note` and reintroduces a compact editable Notes section only if review approves it. If not approved, land the data/API layer and keep the UI hidden.
-2. **Tag migration:** Keep `tagsData` as a temporary legacy field in the next model version, backfill `TagRecord`/`AssetTagRecord`, and ignore `tagsData` afterward. Removing `tagsData` can be a later cleanup after the new model is proven.
-3. **Library import semantics:** "Open Library" references a package in place. "Import Library" copies an existing `.momento`/legacy `.momentolibrary` package into a chosen destination or app-managed location, validates it, and adds it to Recent Libraries.
-4. **Multi-format import:** SVG/PDF/video import is explicitly out of scope for P0/P1. Keep the current image/GIF scope and do not add placeholder model or thumbnail work just for future formats.
+1. **Notes UI:** Notes must not return to the right inspector. This plan persists `Asset.note` for data correctness and future use, but does not add a Notes section back to the UI.
+2. **Core Data migration:** Use exactly one new model version for this pass. Add all v3 fields and entities in that one version, then keep API/UI work in later commits without changing the schema again. `updatedAt` must not be a migration trap: the persistent field is optional in v3 and app state maps missing values to `importedAt`.
+3. **Tag migration:** Keep `tagsData` as a temporary legacy field in v3, backfill `TagRecord`/`AssetTagRecord`, and ignore `tagsData` afterward. Preserve legacy tag IDs during backfill; new tags may use generated stable IDs, and UI/tests must stop deriving tag IDs from names.
+4. **Trash duplicate imports:** Re-importing a file whose content hash belongs to a trashed asset restores that asset instead of silently skipping the import.
+5. **Library import semantics:** "Open Library" references a package in place. "Import Library" copies an existing `.momento`/legacy `.momentolibrary` package, validates it, saves a security-scoped recent-library bookmark for the copied package, and refuses duplicate library IDs until a future "duplicate as new library" migration exists.
+6. **Multi-format import:** SVG/PDF/video import is explicitly out of scope for P0/P1. Keep the current image/GIF scope and do not add placeholder model or thumbnail work just for future formats.
 
 ## References Checked
 
 - Apple Core Data automatic migration: lightweight migration can infer common model changes; nonoptional additions need defaults, and larger changes should be staged.
-- Apple AppKit collection view drag/drop: `NSCollectionViewDelegate` provides `canDragItemsAt`, `pasteboardWriterForItemAt`, `validateDrop`, and `acceptDrop`.
-- Apple `NSFilePromiseProvider`: use file promises when dragging files from the app to Finder or other apps.
+- Apple AppKit collection view drag/drop: `NSCollectionViewDelegate` provides `collectionView(_:pasteboardWriterForItemAt:)` for drag sources.
+- Apple `NSFilePromiseProvider`: use one provider per promised file when dragging files from the app to Finder or other apps, and write promised files in the delegate rather than moving source files.
 - Apple UniformTypeIdentifiers: use UTTypes to classify importable files and pasteboard/file-promise content.
 - Eagle API references confirm folders, tags, extension filtering, rating, annotation, URL/bookmark, and trash are core comparison dimensions, but this plan only covers P0/P1.
 
@@ -58,18 +60,22 @@ Add tests that import one image, reload the library, and assert:
 - `note` can be persisted after a later task adds the write API.
 - `isTrashed == false` by default.
 - `updatedAt` exists and changes on title/note/tag updates.
+- A library created with the current pre-v3 model opens under v3 without migration failure.
 
 Run:
 
 ```bash
 xcodebuild test -scheme Momento -only-testing:MomentoTests/ImportServiceSmokeTests/testImportedAssetPersistsCoreMetadata
+xcodebuild test -scheme Momento -only-testing:MomentoTests/ImportServiceSmokeTests/testOpeningPreV3LibraryMigratesMetadata
 ```
 
 Expected before implementation: FAIL because fields do not exist.
 
-- [ ] **Step 2: Create Core Data model version v3**
+- [ ] **Step 2: Create one Core Data model version v3**
 
 Create `MomentoModel v3.xcdatamodel` and set `.xccurrentversion` to v3.
+
+Schema rule: this plan must not create v4 just to add tags. Add every new field/entity needed by Chunk 1 in v3 before committing schema changes.
 
 Add to `AssetRecord`:
 
@@ -80,16 +86,36 @@ Add to `AssetRecord`:
 - `note: String`, optional
 - `isTrashed: Boolean`, nonoptional, default `NO`
 - `trashedAt: Date`, optional
-- `updatedAt: Date`, nonoptional
+- `updatedAt: Date`, optional in Core Data v3
 
 Keep existing fields for compatibility:
 
 - `tagsData` remains temporarily as legacy data.
 - `exifMetadataData` remains as the serialized EXIF payload.
 
+Also add the v3 tag entities now so Task 2 can wire behavior without another model version:
+
+`TagRecord`
+- `id: String`
+- `libraryID: String`
+- `name: String`
+- `normalizedName: String`
+- `colorHex: String`, optional
+- `createdAt: Date`
+- `updatedAt: Date`
+- uniqueness: `libraryID + normalizedName`
+
+`AssetTagRecord`
+- `id: String`
+- `libraryID: String`
+- `assetID: String`
+- `tagID: String`
+- `createdAt: Date`
+- uniqueness: `libraryID + assetID + tagID`
+
 - [ ] **Step 3: Verify lightweight migration assumptions**
 
-Because this adds mostly optional fields and nonoptional fields with defaults, it should stay in lightweight migration territory.
+Because this adds optional fields, new entities, and nonoptional fields with defaults, it should stay in lightweight migration territory. Do not trust this assumption without opening a pre-v3 library in a test.
 
 Run:
 
@@ -114,7 +140,7 @@ var trashedAt: Date?
 var updatedAt: Date
 ```
 
-Update initializers and all call sites. Avoid optional `updatedAt` in app state; old data should fall back to `importedAt` during mapping.
+Update initializers and all call sites. Avoid optional `updatedAt` in app state; old data and nil Core Data values must fall back to `importedAt` during mapping.
 
 - [ ] **Step 5: Map v3 fields in `LibraryMetadataStore`**
 
@@ -132,6 +158,7 @@ Rules:
 - `displayName` remains the editable title.
 - `utiIdentifier` comes from `UTType(filenameExtension:)?.identifier`, with `public.data` fallback only if UTType cannot be inferred.
 - `updatedAt` changes whenever user-visible metadata changes.
+- Existing records whose `updatedAt` is nil hydrate as `updatedAt = importedAt`, then get a real `updatedAt` the next time metadata changes.
 
 - [ ] **Step 6: Commit**
 
@@ -143,7 +170,6 @@ git commit -m "feat: align asset metadata model"
 ### Task 2: Promote tags to first-class records
 
 **Files:**
-- Modify: `Momento/Storage/MomentoModel.xcdatamodeld`
 - Modify: `Momento/Core/AssetModels.swift`
 - Modify: `Momento/Storage/LibraryMetadataStore.swift`
 - Modify: `Momento/Core/LibraryStore.swift`
@@ -157,6 +183,7 @@ Add tests for:
 - Renaming a tag updates one `TagRecord` and keeps `AssetTagRecord` links.
 - Deleting a tag removes links but does not delete assets.
 - Two tags that normalize to the same lowercase trimmed name cannot coexist.
+- Tests resolve tag IDs from `store.tags`/`tagSummaries`; do not assume `name.lowercased()` is the ID for newly created tags.
 
 Run:
 
@@ -166,29 +193,16 @@ xcodebuild test -scheme Momento -only-testing:MomentoTests/ImportServiceSmokeTes
 
 Expected before implementation: FAIL.
 
-- [ ] **Step 2: Add `TagRecord` and `AssetTagRecord`**
+- [ ] **Step 2: Use the v3 tag schema without changing the model again**
 
-Add entities:
+Task 1 already added `TagRecord` and `AssetTagRecord` to v3. Do not create v4 for this task.
 
-`TagRecord`
-- `id: String`
-- `libraryID: String`
-- `name: String`
-- `normalizedName: String`
-- `colorHex: String`, optional
-- `createdAt: Date`
-- `updatedAt: Date`
-- uniqueness: `libraryID + normalizedName`
+ID rules:
 
-`AssetTagRecord`
-- `id: String`
-- `libraryID: String`
-- `assetID: String`
-- `tagID: String`
-- `createdAt: Date`
-- uniqueness: `libraryID + assetID + tagID`
-
-Use string UUIDs to stay consistent with existing value types.
+- During legacy backfill, preserve `TagItem.id` from `tagsData` so existing sidebar selections like `tag-\(id)` keep working.
+- New tags get generated stable string IDs; do not derive new IDs from tag names.
+- Renaming a tag changes `name`, `normalizedName`, and `updatedAt`, but never changes `id`.
+- `TagItem.init(name:)` can keep its current default for sample/in-memory compatibility, but persistent tag creation must go through `LibraryMetadataStore`.
 
 - [ ] **Step 3: Add tag APIs in `LibraryMetadataStore`**
 
@@ -216,16 +230,17 @@ Rules:
 - If `AssetTagRecord` already exists for an asset, do not duplicate links.
 - Decode `tagsData` only as migration input.
 - Create missing `TagRecord`s by normalized name.
+- If multiple legacy blobs contain the same normalized name with different IDs, pick the first stable ID deterministically and rewrite links to that one `TagRecord`.
 - Keep `tagsData` untouched for one model version but stop writing new values.
 
 - [ ] **Step 5: Update `LibraryStore` tag state**
 
-`LibraryStore.tags`, `tagSummaries`, `updateSelectedTags`, `renameTag`, and `deleteTag` should rely on `TagRecord`-backed data. Keep existing sidebar IDs (`tag-\(id)`) stable enough for UI.
+`LibraryStore.tags`, `tagSummaries`, `updateSelectedTags`, `renameTag`, and `deleteTag` should rely on `TagRecord`-backed data. Keep sidebar IDs as `tag-\(id)`, but make callers use actual tag IDs returned by the store.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add Momento/Storage/MomentoModel.xcdatamodeld Momento/Core/AssetModels.swift Momento/Storage/LibraryMetadataStore.swift Momento/Core/LibraryStore.swift MomentoTests/ImportServiceSmokeTests.swift
+git add Momento/Core/AssetModels.swift Momento/Storage/LibraryMetadataStore.swift Momento/Core/LibraryStore.swift MomentoTests/ImportServiceSmokeTests.swift
 git commit -m "feat: store tags as first-class records"
 ```
 
@@ -241,6 +256,7 @@ git commit -m "feat: store tags as first-class records"
 - Modify: `Momento/Storage/LibraryStorage.swift`
 - Modify: `Momento/Features/Sidebar/MomentoSidebarView.swift`
 - Modify: `Momento/AppKitBridge/AssetCollectionGridView.swift`
+- Modify: `Momento/Localizable.xcstrings`
 - Test: `MomentoTests/ImportServiceSmokeTests.swift`
 
 - [ ] **Step 1: Replace current trash test**
@@ -253,6 +269,7 @@ Replace `testMovingImportedAssetToTrashRemovesMetadataAndStoredFile` with tests 
 - Restore clears `isTrashed`/`trashedAt`.
 - Folder membership survives trash/restore.
 - Empty trash removes metadata, tag links, colors, memberships, asset file, thumbnail.
+- Re-importing the same file while its asset is in Trash restores the existing asset instead of silently skipping it.
 
 Run:
 
@@ -270,6 +287,7 @@ In `LibraryMetadataStore`:
 func moveAssetToTrash(id assetID: AssetItem.ID) throws -> AssetItem
 func restoreAssets(ids: Set<AssetItem.ID>) throws -> [AssetItem]
 func emptyTrash() throws -> [AssetItem.ID]
+func assetIDsByContentHash(_ hashes: Set<String>, includeTrashed: Bool) throws -> [String: AssetItem.ID]
 ```
 
 Rules:
@@ -278,6 +296,8 @@ Rules:
 - Moving to trash does not delete folder memberships.
 - Empty trash performs the destructive cleanup.
 - `trashedAt` is set once per move-to-trash action.
+- Duplicate import resolution must be metadata-driven, not hidden inside `AssetImportService`'s current `existingContentHashes` skip.
+- If a duplicate hash maps to a trashed asset, restore that asset, merge any requested folder membership, and return the restored asset through `mergeAssets`.
 
 - [ ] **Step 3: Update `LibraryStore` view scoping**
 
@@ -286,6 +306,7 @@ Rules:
 - `.trash` selection returns only trashed assets.
 - `.all`, `.favorites`, `.unfiled`, `.untagged`, `.tag`, `.folder`, search and filters exclude trashed assets.
 - Selection clears if the selected asset leaves the current scope.
+- `selectedAsset` should not expose a trashed asset while the current scope excludes trash.
 - Command palette "Move to Trash" remains soft delete.
 - Add restore and empty trash actions in store first; UI can expose them in the same task or next task.
 
@@ -297,11 +318,12 @@ Minimum P0 UI:
 - Context menu in Trash offers "Restore" and "Delete Permanently" or "Empty Trash".
 - Non-Trash context menu keeps "Move to Trash".
 - Do not hide toolbar chrome during delete/empty dialogs.
+- Add/update localized strings for restore, delete permanently, and empty trash.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Momento/Core/LibraryStore.swift Momento/Storage/LibraryMetadataStore.swift Momento/Storage/LibraryStorage.swift Momento/Features/Sidebar/MomentoSidebarView.swift Momento/AppKitBridge/AssetCollectionGridView.swift MomentoTests/ImportServiceSmokeTests.swift
+git add Momento/Core/LibraryStore.swift Momento/Storage/LibraryMetadataStore.swift Momento/Storage/LibraryStorage.swift Momento/Features/Sidebar/MomentoSidebarView.swift Momento/AppKitBridge/AssetCollectionGridView.swift Momento/Localizable.xcstrings MomentoTests/ImportServiceSmokeTests.swift
 git commit -m "feat: soft delete trashed assets"
 ```
 
@@ -311,9 +333,7 @@ git commit -m "feat: soft delete trashed assets"
 - Modify: `Momento/Core/AssetModels.swift`
 - Modify: `Momento/Storage/LibraryMetadataStore.swift`
 - Modify: `Momento/Core/LibraryStore.swift`
-- Modify: `Momento/ContentView.swift`
-- Modify: `Momento/Features/Shell/MomentoShellView.swift`
-- Modify: `Momento/Features/Inspector/MomentoInspectorView.swift`
+- Modify: `Momento/ContentView.swift` only if stale local notes state is still wired
 - Test: `MomentoTests/ImportServiceSmokeTests.swift`
 
 - [ ] **Step 1: Add failing note tests**
@@ -322,7 +342,8 @@ Add tests for:
 
 - Update selected asset note.
 - Reload library and verify note persists.
-- Switch between two selected assets and verify each asset shows its own note.
+- Switch between two selected assets through store APIs and verify each asset keeps its own note.
+- No inspector Notes section is added back.
 
 Run:
 
@@ -330,7 +351,7 @@ Run:
 xcodebuild test -scheme Momento -only-testing:MomentoTests/ImportServiceSmokeTests/testUpdatingAssetNotePersistsAcrossReloads
 ```
 
-Expected before implementation: FAIL because notes are local UI state.
+Expected before implementation: FAIL because notes are local UI state or missing from persistent metadata.
 
 - [ ] **Step 2: Add metadata write API**
 
@@ -351,25 +372,18 @@ func updateNote(_ note: String, forAssetID assetID: AssetItem.ID) throws
 
 Use `mergeAssets` to update in-memory state without reloading the whole library.
 
-- [ ] **Step 4: Replace local notes dictionary**
+- [ ] **Step 4: Remove fake local notes state if present**
 
-Remove `ContentView.inspectorNotesByAssetID`. Bind inspector notes to `store.selectedAsset?.note ?? ""`.
+Remove `ContentView.inspectorNotesByAssetID` and any stale binding that suggests notes are saved when they are not. Do not add a visible notes editor.
 
-For `TextEditor`, avoid writing on every keystroke if it causes grid flashes:
+- [ ] **Step 5: Keep Notes out of the inspector**
 
-- Keep a local draft inside `MomentoInspectorView`.
-- Reset draft on `asset.id` change.
-- Commit on focus loss and explicit keyboard submit if available.
-- Do not reload all assets for note edits.
-
-- [ ] **Step 5: UI review decision**
-
-If Notes section is approved, add `notesEditor` back into the inspector below Folders and above EXIF with the existing section separator style. If not approved, keep the editor hidden but keep data/API/tests.
+Do not add `notesEditor` back into `MomentoInspectorView`. The only UI-related work in this task is removing misleading local state if it still exists.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add Momento/Core/AssetModels.swift Momento/Storage/LibraryMetadataStore.swift Momento/Core/LibraryStore.swift Momento/ContentView.swift Momento/Features/Shell/MomentoShellView.swift Momento/Features/Inspector/MomentoInspectorView.swift MomentoTests/ImportServiceSmokeTests.swift
+git add Momento/Core/AssetModels.swift Momento/Storage/LibraryMetadataStore.swift Momento/Core/LibraryStore.swift Momento/ContentView.swift MomentoTests/ImportServiceSmokeTests.swift
 git commit -m "feat: persist asset notes"
 ```
 
@@ -382,12 +396,25 @@ git commit -m "feat: persist asset notes"
 **Files:**
 - Create: `Momento/AppKitBridge/AssetDragPasteboardWriter.swift`
 - Create: `Momento/AppKitBridge/AssetFilePromiseProvider.swift`
+- Modify: `Momento/Core/LibraryStore.swift`
+- Modify: `Momento/ContentView.swift`
 - Modify: `Momento/AppKitBridge/AssetCollectionGridView.swift`
 - Test: `MomentoTests/ArchitectureGuardTests.swift`
 
-- [ ] **Step 1: Add architecture guard**
+- [ ] **Step 1: Add real multi-selection state**
 
-Add a source-level test asserting:
+Current `NSCollectionView` can publish a `Set<AssetItem.ID>`, but `ContentView` collapses it to the first ID. Fix this before drag work.
+
+Rules:
+
+- Add `selectedAssetIDs: Set<AssetItem.ID>` to `LibraryStore`.
+- Keep `selectedAssetID` or add `primarySelectedAssetID` only as the inspector/preview anchor.
+- `ContentView.selectAssets(_:)` stores the full set and updates the primary anchor deterministically.
+- Scope changes, trash, search, folder/tag filters, and library switching prune the full selected set, not only one ID.
+
+- [ ] **Step 2: Add coarse architecture guard**
+
+Add a source-level test asserting the behavior has a native AppKit drag path without over-specifying helper names:
 
 - `AssetCollectionGridView` implements `collectionView(_:canDragItemsAt:with:)`.
 - It implements `collectionView(_:pasteboardWriterForItemAt:)`.
@@ -402,7 +429,7 @@ xcodebuild test -scheme Momento -only-testing:MomentoTests/ArchitectureGuardTest
 
 Expected before implementation: FAIL.
 
-- [ ] **Step 2: Create internal pasteboard writer**
+- [ ] **Step 3: Create internal pasteboard writer**
 
 `AssetDragPasteboardWriter` should encode:
 
@@ -416,7 +443,7 @@ Use a custom pasteboard type:
 static let assetIDsPasteboardType = NSPasteboard.PasteboardType("com.seaony.momento.asset-ids")
 ```
 
-- [ ] **Step 3: Create file promise provider**
+- [ ] **Step 4: Create file promise provider**
 
 `AssetFilePromiseProvider` should use `NSFilePromiseProvider` with:
 
@@ -429,8 +456,9 @@ Rules:
 - Dragging to Finder copies files out, never moves the library's content-addressed source file.
 - File names use `displayName + "." + fileExtension`, resolving collisions at destination.
 - Multi-select creates one provider per selected asset.
+- File promise writes must use the destination URL passed by the delegate and call the completion handler with any error.
 
-- [ ] **Step 4: Wire drag source in `AssetCollectionGridView`**
+- [ ] **Step 5: Wire drag source in `AssetCollectionGridView`**
 
 Rules:
 
@@ -439,7 +467,7 @@ Rules:
 - Drag image should use existing selected item snapshots where practical.
 - Long-press QuickLook must not conflict with drag start.
 
-- [ ] **Step 5: Manual validation checklist**
+- [ ] **Step 6: Manual validation checklist**
 
 Because AppKit dragging is hard to unit test fully, validate manually after implementation:
 
@@ -448,10 +476,10 @@ Because AppKit dragging is hard to unit test fully, validate manually after impl
 - Dragging does not remove assets from Momento.
 - Drag start does not trigger the prior input-error sound.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add Momento/AppKitBridge/AssetDragPasteboardWriter.swift Momento/AppKitBridge/AssetFilePromiseProvider.swift Momento/AppKitBridge/AssetCollectionGridView.swift MomentoTests/ArchitectureGuardTests.swift
+git add Momento/AppKitBridge/AssetDragPasteboardWriter.swift Momento/AppKitBridge/AssetFilePromiseProvider.swift Momento/Core/LibraryStore.swift Momento/ContentView.swift Momento/AppKitBridge/AssetCollectionGridView.swift MomentoTests/ArchitectureGuardTests.swift
 git commit -m "feat: drag assets out with file promises"
 ```
 
@@ -489,9 +517,14 @@ func addTag(id tagID: TagItem.ID, toAssets assetIDs: Set<AssetItem.ID>) throws
 
 Keep these methods merge-based; do not reload the whole asset list.
 
-- [ ] **Step 3: Add SwiftUI drop handling**
+- [ ] **Step 3: Add sidebar drop handling**
 
 Sidebar folder rows and tag rows should accept the internal Momento pasteboard type.
+
+Do not assume AppKit `NSPasteboardWriting` automatically works with SwiftUI's `dropDestination(for:)`. Choose one explicit bridge:
+
+- Preferred: define a custom `UTType` and make `AssetDragPasteboardWriter` expose data that a SwiftUI `DropDelegate` can load through `NSItemProvider.loadDataRepresentation`.
+- Fallback: add a small AppKit drop target wrapper for sidebar rows if SwiftUI cannot reliably read the AppKit pasteboard type.
 
 Rules:
 
@@ -541,6 +574,8 @@ Import `Source/`, then assert:
 - `Posters` and `References` folders exist.
 - Imported assets have matching folder IDs.
 - Reopening the library preserves folders and memberships.
+- Importing the same folder again does not copy duplicate files but preserves idempotent folder membership.
+- If a duplicate file is currently trashed, folder import restores it and assigns the matching folder.
 
 Run:
 
@@ -574,8 +609,8 @@ Introduce:
 
 ```swift
 struct AssetImportBatch {
-    var assets: [AssetItem]
-    var folderAssignments: [AssetItem.ID: [[String]]]
+    var newAssets: [AssetItem]
+    var folderAssignmentsByContentHash: [String: [[String]]]
 }
 ```
 
@@ -583,6 +618,8 @@ For duplicates:
 
 - Do not copy the physical file again.
 - Do create folder membership if a duplicate is imported through a folder hierarchy.
+- Do not let `AssetImportService` drop duplicates before the metadata layer can resolve folder assignments.
+- The metadata layer resolves each content hash to either a new asset or an existing asset, including trashed assets that should be restored.
 
 - [ ] **Step 4: Add metadata store batch save**
 
@@ -596,8 +633,8 @@ Rules:
 
 - Create missing folders by `(libraryID, parentID, name)`.
 - Reuse existing folders with matching sibling name.
-- Save asset records first, then memberships.
-- Preserve folder memberships for duplicates.
+- Save new asset records first, then resolve `folderAssignmentsByContentHash` against both new and existing records.
+- Preserve folder memberships for duplicates and restore duplicate trashed assets before returning.
 
 - [ ] **Step 5: Commit**
 
@@ -616,6 +653,7 @@ git commit -m "feat: preserve imported folder hierarchy"
 - Modify: `Momento/ContentView.swift`
 - Modify: `Momento/Features/Sidebar/MomentoSidebarView.swift`
 - Modify: `Momento/Features/CommandPalette/MomentoCommandPalette.swift`
+- Modify: `Momento/Localizable.xcstrings`
 - Test: `MomentoTests/ImportServiceSmokeTests.swift`
 
 - [ ] **Step 1: Add storage tests**
@@ -626,6 +664,8 @@ Add tests for:
 - Import validates manifest and database before adding to recent libraries.
 - Import refuses unknown manifest schema.
 - Importing into an existing destination does not overwrite silently.
+- Import refuses a package whose `libraryID` already exists in Recent Libraries or is the current library.
+- Import/export keeps security-scoped access alive for the full copy/validation operation.
 
 Run:
 
@@ -649,6 +689,8 @@ Rules:
 - Import is copy-only unless product review decides "import" should reference in place.
 - Never overwrite an existing package without explicit future UI.
 - Validate `manifest.json` first, then open the Core Data stack enough to confirm the store is readable.
+- Do not rewrite `manifest.libraryID` in P1. Rewriting the package ID would also require rewriting Core Data `libraryID` fields and is out of scope.
+- Refuse duplicate library IDs for now instead of silently replacing the Recent Library bookmark.
 
 - [ ] **Step 3: Add LibraryStore flows**
 
@@ -657,7 +699,7 @@ func exportCurrentLibrary(to destinationURL: URL) throws
 func importLibrary(from sourceURL: URL, destinationRootURL: URL?) throws
 ```
 
-Import should append to Recent Libraries and switch to the imported library.
+Import should save a security-scoped bookmark for the copied package, append it to Recent Libraries, and switch to the imported library.
 
 - [ ] **Step 4: Wire UI**
 
@@ -667,11 +709,12 @@ Minimum UI:
 - Command palette entries for import/export.
 - Use native file panels.
 - Do not hide toolbar/sidebar during dialogs.
+- Add/update localized strings for the new menu and command labels.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Momento/Storage/LibraryStorage.swift Momento/Core/LibraryStore.swift Momento/ContentView.swift Momento/Features/Sidebar/MomentoSidebarView.swift Momento/Features/CommandPalette/MomentoCommandPalette.swift MomentoTests/ImportServiceSmokeTests.swift
+git add Momento/Storage/LibraryStorage.swift Momento/Core/LibraryStore.swift Momento/ContentView.swift Momento/Features/Sidebar/MomentoSidebarView.swift Momento/Features/CommandPalette/MomentoCommandPalette.swift Momento/Localizable.xcstrings MomentoTests/ImportServiceSmokeTests.swift
 git commit -m "feat: import and export libraries"
 ```
 
@@ -721,7 +764,7 @@ Expected: `BUILD SUCCEEDED`.
 The agent must not launch the app. User should manually check:
 
 - Trash: move, restore, empty.
-- Notes: edit, switch selection, restart app.
+- Notes: no inspector Notes section is visible; persistence is covered by automated tests.
 - Drag: grid to Finder, grid to folder, grid to tag, multi-select.
 - Folder import hierarchy.
 - Library import/export.
@@ -749,14 +792,19 @@ Only commit if there are actual follow-up fixes.
 |---|---|
 | Core Data migration failure | Keep v3 additions lightweight where possible; add migration tests before UI work. |
 | Tag backfill duplicates tags | Normalize by trimmed lowercase name and enforce `libraryID + normalizedName` uniqueness. |
+| Tag IDs change unexpectedly | Preserve legacy IDs during backfill and make new code use actual returned IDs instead of name-derived IDs. |
 | Trash empty deletes files that restore still needs | Only delete physical files in `emptyTrash`; soft trash never moves/removes asset files. |
-| Notes cause grid flash | Merge single updated asset into memory; do not reload library on note writes. |
+| Re-import of trashed duplicate appears to do nothing | Resolve duplicates in metadata and restore trashed duplicate assets on import. |
+| Notes cause grid flash | Merge single updated asset into memory; do not reload library on note writes; do not add a visible inspector editor. |
+| Multi-select gets lost before drag/drop | Add real selection-set state before file promise and sidebar drop work. |
 | Drag/drop hard to unit test | Add source-level guard tests and explicit manual checklist. |
+| SwiftUI drop cannot read AppKit pasteboard writer | Use an explicit `UTType`/`NSItemProvider` bridge, or a small AppKit drop target wrapper if needed. |
 | Library export accidentally overwrites | Refuse existing destination in P1. |
+| Importing a copied library replaces an existing recent entry | Refuse duplicate library IDs until a future package-clone migration can rewrite manifest and Core Data library IDs together. |
 
 ## Review Checklist
 
-- [ ] Approve whether Notes section should return to the inspector UI.
 - [ ] Approve keeping `tagsData` as a temporary legacy field for one model version.
 - [ ] Approve "Import Library" as copy-in rather than open-in-place.
+- [ ] Approve refusing duplicate library IDs during import rather than cloning them as new libraries.
 - [ ] Approve not doing P2 features in this pass.
