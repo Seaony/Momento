@@ -1656,6 +1656,23 @@
         }
       }
     },
+    "Search image name" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search image name"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索图片名称"
+          }
+        }
+      }
+    },
     "Select an item to inspect metadata, tags, colors, and file details." : {
       "extractionState" : "stale",
       "localizations" : {
