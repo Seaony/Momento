@@ -11,6 +11,8 @@ import UniformTypeIdentifiers
 private enum AssetCollectionMetrics {
     static let masonryItemWidth: CGFloat = 164
     static let masonryImageInset: CGFloat = 3
+    static let gridItemWidth: CGFloat = 160
+    static let gridItemHeight: CGFloat = 190
     static let selectionCornerRadius = MomentoTheme.assetImageCornerRadius
     static let hoverBackgroundAlpha: CGFloat = 0.08
     static let imageCornerRadius = MomentoTheme.assetImageCornerRadius
@@ -21,7 +23,10 @@ private enum AssetCollectionMetrics {
     static let sectionVerticalInset: CGFloat = 14
     static let listItemHeight: CGFloat = 68
     static let listThumbnailSize: CGFloat = 52
+    static let listSeparatorAlpha: CGFloat = 0.1
     static let selectionBackgroundAnimationDuration: CFTimeInterval = 0.12
+    static let titleTextColor = NSColor.labelColor.withAlphaComponent(0.82)
+    static let subtitleTextColor = NSColor.labelColor.withAlphaComponent(0.58)
 }
 
 struct AssetCollectionGridView: NSViewRepresentable {
@@ -138,9 +143,12 @@ struct AssetCollectionGridView: NSViewRepresentable {
 
         switch viewMode {
         case .grid:
-            layout.itemSize = NSSize(width: 148, height: 178)
-            layout.minimumInteritemSpacing = 14
-            layout.minimumLineSpacing = 18
+            layout.itemSize = NSSize(
+                width: AssetCollectionMetrics.gridItemWidth,
+                height: AssetCollectionMetrics.gridItemHeight
+            )
+            layout.minimumInteritemSpacing = 8
+            layout.minimumLineSpacing = 12
         case .masonry:
             break
         case .list:
@@ -203,7 +211,10 @@ extension AssetCollectionGridView {
         ) -> NSSize {
             switch parent.viewMode {
             case .grid:
-                return NSSize(width: 148, height: 178)
+                return NSSize(
+                    width: AssetCollectionMetrics.gridItemWidth,
+                    height: AssetCollectionMetrics.gridItemHeight
+                )
             case .masonry:
                 return .zero
             case .list:
@@ -468,10 +479,11 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
     private let containerView = HoverTrackingView()
     private let contentView = HoverSelectionView()
-    private let previewImageView = NSImageView()
+    private let previewImageView = AssetPreviewImageView()
     private let fileNameLabel = NSTextField(labelWithString: "")
     private let subtitleLabel = NSTextField(labelWithString: "")
     private let dimensionBadgeView = DimensionBadgeView()
+    private let separatorView = NSView()
     private var gridConstraints: [NSLayoutConstraint] = []
     private var masonryConstraints: [NSLayoutConstraint] = []
     private var listConstraints: [NSLayoutConstraint] = []
@@ -499,19 +511,15 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         contentView.translatesAutoresizingMaskIntoConstraints = false
         contentView.layer?.masksToBounds = false
 
-        previewImageView.imageScaling = .scaleProportionallyUpOrDown
         previewImageView.translatesAutoresizingMaskIntoConstraints = false
-        previewImageView.wantsLayer = true
-        previewImageView.layer?.cornerRadius = AssetCollectionMetrics.imageCornerRadius
-        previewImageView.layer?.cornerCurve = .continuous
-        previewImageView.layer?.masksToBounds = true
+        previewImageView.cornerRadius = AssetCollectionMetrics.imageCornerRadius
 
         fileNameLabel.lineBreakMode = .byTruncatingTail
         fileNameLabel.maximumNumberOfLines = 1
         fileNameLabel.cell?.truncatesLastVisibleLine = true
         fileNameLabel.alignment = .center
         fileNameLabel.font = .systemFont(ofSize: 12, weight: .regular)
-        fileNameLabel.textColor = .labelColor
+        fileNameLabel.textColor = AssetCollectionMetrics.titleTextColor
         fileNameLabel.translatesAutoresizingMaskIntoConstraints = false
         fileNameLabel.setContentCompressionResistancePriority(.required, for: .vertical)
         fileNameLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -522,7 +530,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         subtitleLabel.cell?.truncatesLastVisibleLine = true
         subtitleLabel.alignment = .center
         subtitleLabel.font = .systemFont(ofSize: 11)
-        subtitleLabel.textColor = .secondaryLabelColor
+        subtitleLabel.textColor = AssetCollectionMetrics.subtitleTextColor
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
         subtitleLabel.setContentCompressionResistancePriority(.required, for: .vertical)
         subtitleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -531,10 +539,16 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         dimensionBadgeView.translatesAutoresizingMaskIntoConstraints = false
         dimensionBadgeView.isHidden = true
 
+        separatorView.translatesAutoresizingMaskIntoConstraints = false
+        separatorView.wantsLayer = true
+        separatorView.layer?.backgroundColor = NSColor.white.withAlphaComponent(AssetCollectionMetrics.listSeparatorAlpha).cgColor
+        separatorView.isHidden = true
+
         contentView.addSubview(previewImageView)
         contentView.addSubview(fileNameLabel)
         contentView.addSubview(subtitleLabel)
         contentView.addSubview(dimensionBadgeView)
+        contentView.addSubview(separatorView)
         containerView.addSubview(contentView)
         view = containerView
 
@@ -542,7 +556,12 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
             contentView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
             contentView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
             contentView.topAnchor.constraint(equalTo: containerView.topAnchor),
-            contentView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
+            contentView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor),
+
+            separatorView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            separatorView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            separatorView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            separatorView.heightAnchor.constraint(equalToConstant: 1)
         ])
 
         gridConstraints = [
@@ -597,6 +616,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         subtitleLabel.stringValue = ""
         dimensionBadgeView.stringValue = ""
         dimensionBadgeView.isHidden = true
+        separatorView.isHidden = true
         onHoverPreviewChange = nil
         contentView.isHovered = false
         contentView.isSelected = false
@@ -611,6 +631,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         subtitleLabel.stringValue = subtitle(for: asset)
         dimensionBadgeView.stringValue = subtitle(for: asset)
         previewImageView.image = previewImage(for: asset)
+        previewImageView.contentMode = imageContentMode(for: asset, viewMode: viewMode)
         applyModeLayout()
     }
 
@@ -625,18 +646,20 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
             fileNameLabel.alignment = .center
             fileNameLabel.maximumNumberOfLines = 1
             fileNameLabel.lineBreakMode = .byTruncatingTail
-            fileNameLabel.font = .systemFont(ofSize: 12, weight: .medium)
-            fileNameLabel.textColor = .labelColor
+            fileNameLabel.font = .systemFont(ofSize: 12, weight: .regular)
+            fileNameLabel.textColor = AssetCollectionMetrics.titleTextColor
             subtitleLabel.alignment = .center
             subtitleLabel.maximumNumberOfLines = 1
             subtitleLabel.lineBreakMode = .byTruncatingTail
             subtitleLabel.font = .systemFont(ofSize: 11, weight: .regular)
-            subtitleLabel.textColor = .secondaryLabelColor
+            subtitleLabel.textColor = AssetCollectionMetrics.subtitleTextColor
+            separatorView.isHidden = true
             NSLayoutConstraint.activate(gridConstraints)
         case .masonry:
             fileNameLabel.isHidden = true
             subtitleLabel.isHidden = true
             dimensionBadgeView.isHidden = dimensionBadgeView.stringValue.isEmpty
+            separatorView.isHidden = true
             NSLayoutConstraint.activate(masonryConstraints)
         case .list:
             fileNameLabel.isHidden = false
@@ -645,13 +668,14 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
             fileNameLabel.alignment = .left
             fileNameLabel.maximumNumberOfLines = 1
             fileNameLabel.lineBreakMode = .byTruncatingTail
-            fileNameLabel.font = .systemFont(ofSize: 13, weight: .medium)
-            fileNameLabel.textColor = .labelColor
+            fileNameLabel.font = .systemFont(ofSize: 13, weight: .regular)
+            fileNameLabel.textColor = AssetCollectionMetrics.titleTextColor
             subtitleLabel.alignment = .left
             subtitleLabel.maximumNumberOfLines = 1
             subtitleLabel.lineBreakMode = .byTruncatingTail
             subtitleLabel.font = .systemFont(ofSize: 11, weight: .regular)
-            subtitleLabel.textColor = .secondaryLabelColor
+            subtitleLabel.textColor = AssetCollectionMetrics.subtitleTextColor
+            separatorView.isHidden = false
             NSLayoutConstraint.activate(listConstraints)
         }
     }
@@ -662,6 +686,14 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         }
 
         return ""
+    }
+
+    private func imageContentMode(for asset: AssetItem, viewMode: AssetViewMode) -> AssetPreviewImageView.ContentMode {
+        if (asset.kind == .image || asset.kind == .gif), viewMode != .masonry {
+            return .aspectFill
+        }
+
+        return .aspectFit
     }
 
     private func previewImage(for asset: AssetItem) -> NSImage {
@@ -694,6 +726,71 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
         let rectInWindow = previewImageView.convert(previewImageView.bounds, to: nil)
         return window.convertToScreen(rectInWindow)
+    }
+}
+
+private final class AssetPreviewImageView: NSView {
+    enum ContentMode {
+        case aspectFit
+        case aspectFill
+    }
+
+    var image: NSImage? {
+        didSet {
+            needsDisplay = true
+        }
+    }
+
+    var contentMode: ContentMode = .aspectFit {
+        didSet {
+            needsDisplay = true
+        }
+    }
+
+    var cornerRadius: CGFloat = 0 {
+        didSet {
+            needsDisplay = true
+        }
+    }
+
+    override var isFlipped: Bool {
+        true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        guard let image, image.size.width > 0, image.size.height > 0, bounds.width > 0, bounds.height > 0 else {
+            return
+        }
+
+        let clipPath = NSBezierPath(roundedRect: bounds, xRadius: cornerRadius, yRadius: cornerRadius)
+        NSGraphicsContext.saveGraphicsState()
+        clipPath.addClip()
+        NSGraphicsContext.current?.imageInterpolation = .high
+        image.draw(in: imageDrawRect(for: image.size))
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    private func imageDrawRect(for imageSize: NSSize) -> NSRect {
+        let widthScale = bounds.width / imageSize.width
+        let heightScale = bounds.height / imageSize.height
+        let scale: CGFloat
+
+        switch contentMode {
+        case .aspectFit:
+            scale = min(widthScale, heightScale)
+        case .aspectFill:
+            scale = max(widthScale, heightScale)
+        }
+
+        let drawSize = NSSize(width: imageSize.width * scale, height: imageSize.height * scale)
+        return NSRect(
+            x: bounds.midX - drawSize.width / 2,
+            y: bounds.midY - drawSize.height / 2,
+            width: drawSize.width,
+            height: drawSize.height
+        )
     }
 }
 

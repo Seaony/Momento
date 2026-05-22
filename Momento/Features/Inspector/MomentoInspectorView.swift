@@ -125,7 +125,7 @@ struct MomentoInspectorView: View {
             colorSection(asset.colors)
 
             Text(asset.title)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 13, weight: .regular))
                 .lineLimit(2)
         }
     }
