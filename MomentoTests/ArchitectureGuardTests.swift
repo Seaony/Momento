@@ -28,7 +28,7 @@ final class ArchitectureGuardTests: XCTestCase {
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
         let themeSource = try String(contentsOf: designSystemURL(), encoding: .utf8)
 
-        XCTAssertTrue(themeSource.contains("static let mainWindowMinWidth = sidebarMaxWidth + floatingSidebarInset * 2 + contentMinWidth + inspectorWidth"))
+        XCTAssertTrue(themeSource.contains("static let mainWindowMinWidth = sidebarMaxWidth + floatingSidebarInset * 2 + contentMinWidth + contentSidebarGap * 2 + inspectorWidth"))
         XCTAssertTrue(contentSource.contains(".frame(minWidth: MomentoTheme.mainWindowMinWidth, minHeight: MomentoTheme.mainWindowMinHeight)"))
         XCTAssertTrue(appSource.contains(".windowResizability(.contentMinSize)"))
     }

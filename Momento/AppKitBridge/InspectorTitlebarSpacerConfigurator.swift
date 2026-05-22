@@ -4,7 +4,6 @@ import SwiftUI
 struct InspectorTitlebarSpacerConfigurator: NSViewRepresentable {
     @Binding var isInspectorPresented: Bool
     var isVisible: Bool
-    var inspectorWidth: CGFloat
     var label: String
 
     func makeCoordinator() -> Coordinator {
@@ -27,7 +26,6 @@ struct InspectorTitlebarSpacerConfigurator: NSViewRepresentable {
             configuration: Configuration(
                 isInspectorPresented: $isInspectorPresented,
                 isVisible: isVisible,
-                inspectorWidth: inspectorWidth,
                 label: label
             )
         )
@@ -51,7 +49,6 @@ struct InspectorTitlebarSpacerConfigurator: NSViewRepresentable {
     struct Configuration {
         var isInspectorPresented: Binding<Bool>
         var isVisible: Bool
-        var inspectorWidth: CGFloat
         var label: String
     }
 }
@@ -115,11 +112,10 @@ extension InspectorTitlebarSpacerConfigurator {
                 isInspectorPresented: configuration.isInspectorPresented,
                 label: configuration.label
             )
-            let size = accessorySize(configuration: configuration)
+            let size = accessorySize()
 
             containerView?.update(
-                rootView: rootView,
-                inspectorWidth: configuration.isInspectorPresented.wrappedValue ? configuration.inspectorWidth : 0
+                rootView: rootView
             )
             containerView?.setFrameSize(size)
             accessoryController?.view.setFrameSize(size)
@@ -137,10 +133,9 @@ extension InspectorTitlebarSpacerConfigurator {
             let hostingView = InspectorTitlebarControlHostingView(rootView: rootView)
             let containerView = InspectorTitlebarControlContainerView(hostingView: hostingView)
             containerView.update(
-                rootView: rootView,
-                inspectorWidth: configuration.isInspectorPresented.wrappedValue ? configuration.inspectorWidth : 0
+                rootView: rootView
             )
-            containerView.frame = NSRect(origin: .zero, size: accessorySize(configuration: configuration))
+            containerView.frame = NSRect(origin: .zero, size: accessorySize())
 
             let accessoryController = NSTitlebarAccessoryViewController()
             accessoryController.layoutAttribute = .right
@@ -151,14 +146,11 @@ extension InspectorTitlebarSpacerConfigurator {
             window.addTitlebarAccessoryViewController(accessoryController)
         }
 
-        private func accessorySize(configuration: Configuration) -> NSSize {
-            let reservedInspectorWidth = configuration.isInspectorPresented.wrappedValue ? configuration.inspectorWidth : 0
-
+        private func accessorySize() -> NSSize {
             return NSSize(
                 width: MomentoTheme.sidebarTitlebarButtonTrailingInset
                     + MomentoTheme.sidebarTitlebarButtonSize
-                    + MomentoTheme.sidebarTitlebarButtonTrailingInset
-                    + reservedInspectorWidth,
+                    + MomentoTheme.sidebarTitlebarButtonTrailingInset,
                 height: MomentoTheme.floatingSidebarTitlebarContentInset
             )
         }
@@ -207,7 +199,6 @@ private struct InspectorTitlebarControlAccessoryView: View {
 
 private final class InspectorTitlebarControlContainerView: NSView {
     private let hostingView: InspectorTitlebarControlHostingView
-    private var inspectorWidth: CGFloat = 0
 
     override var isFlipped: Bool {
         true
@@ -224,9 +215,8 @@ private final class InspectorTitlebarControlContainerView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func update(rootView: InspectorTitlebarControlAccessoryView, inspectorWidth: CGFloat) {
+    func update(rootView: InspectorTitlebarControlAccessoryView) {
         hostingView.rootView = rootView
-        self.inspectorWidth = inspectorWidth
         needsLayout = true
     }
 
@@ -236,7 +226,6 @@ private final class InspectorTitlebarControlContainerView: NSView {
         let buttonX = max(
             MomentoTheme.sidebarTitlebarButtonTrailingInset,
             bounds.width
-                - inspectorWidth
                 - MomentoTheme.sidebarTitlebarButtonTrailingInset
                 - MomentoTheme.sidebarTitlebarButtonSize
         )

@@ -187,7 +187,6 @@ struct MomentoShellView<Content: View>: View {
             InspectorTitlebarSpacerConfigurator(
                 isInspectorPresented: $isInspectorPresented,
                 isVisible: showsChromeControls,
-                inspectorWidth: effectiveInspectorWidth,
                 label: localization.string("Toggle Inspector")
             )
             .frame(width: 0, height: 0)
@@ -249,7 +248,7 @@ struct MomentoShellView<Content: View>: View {
                 isInspectorHovered = hovering
             }
         }
-        .ignoresSafeArea(.container, edges: .top)
+        .padding(.top, MomentoTheme.floatingSidebarTitlebarContentInset)
         .transition(
             .asymmetric(
                 insertion: .move(edge: .trailing).combined(with: .opacity),
