@@ -42,6 +42,7 @@ struct ContentView: View {
     @State private var importError: String?
     @State private var hoveredToolbarViewMode: AssetViewMode?
     @State private var hoveredToolbarActionID: String?
+    @State private var hoveredFilterFacet: AssetFilterFacet?
     @State private var hoveredFilterOptionID: String?
     @State private var hoveredSortOptionID: String?
     @State private var selectedFilterFacet: AssetFilterFacet = .colors
@@ -400,17 +401,17 @@ struct ContentView: View {
 
     private var filterPopover: some View {
         GlassEffectContainer(spacing: 10) {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 14) {
                 filterFacetPicker
                 filterFacetContent
                     .frame(maxWidth: .infinity, alignment: .topLeading)
             }
         }
-        .padding(12)
+        .padding(14)
         .frame(width: ContentToolbarMetrics.filterPopoverWidth)
         .fixedSize(horizontal: false, vertical: true)
         .background {
-            MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.16)), cornerRadius: 18)
+            MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.18)), cornerRadius: 20)
         }
     }
 
@@ -438,16 +439,68 @@ struct ContentView: View {
     }
 
     private var filterFacetPicker: some View {
-        Picker("", selection: $selectedFilterFacet) {
-            ForEach(AssetFilterFacet.allCases) { facet in
-                Text(filterFacetSegmentTitle(for: facet))
-                    .tag(facet)
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+
+        return GlassEffectContainer(spacing: 6) {
+            HStack(spacing: 6) {
+                ForEach(AssetFilterFacet.allCases) { facet in
+                    filterFacetButton(facet)
+                }
+            }
+            .padding(4)
+            .background {
+                MomentoGlassBackground(glass: .regular.tint(Color.white.opacity(0.05)), cornerRadius: 16)
+            }
+            .overlay {
+                shape.strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
             }
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .controlSize(.regular)
-        .frame(maxWidth: .infinity)
+    }
+
+    private func filterFacetButton(_ facet: AssetFilterFacet) -> some View {
+        let isSelected = selectedFilterFacet == facet
+        let isHovered = hoveredFilterFacet == facet
+        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+
+        return Button {
+            withAnimation(.smooth(duration: 0.16)) {
+                selectedFilterFacet = facet
+            }
+        } label: {
+            Text(filterFacetSegmentTitle(for: facet))
+                .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
+                .foregroundStyle(isSelected ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
+                .lineLimit(1)
+                .minimumScaleFactor(0.86)
+                .frame(maxWidth: .infinity)
+                .frame(height: 30)
+                .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .background {
+            if isSelected || isHovered {
+                Color.clear
+                    .glassEffect(
+                        .regular.tint(Color.white.opacity(isSelected ? 0.16 : 0.10)).interactive(),
+                        in: shape
+                    )
+            }
+        }
+        .overlay {
+            if isSelected {
+                shape.strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+            }
+        }
+        .onHover { hovering in
+            withAnimation(.smooth(duration: 0.12)) {
+                if hovering {
+                    hoveredFilterFacet = facet
+                } else if hoveredFilterFacet == facet {
+                    hoveredFilterFacet = nil
+                }
+            }
+        }
     }
 
     @ViewBuilder
