@@ -381,8 +381,10 @@ struct MomentoInspectorView: View {
                 .font(.system(size: 12, weight: .semibold))
                 .frame(width: 34, height: 26)
                 .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
         .buttonStyle(.plain)
+        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         .pointerStyle(.link)
         .accessibilityLabel(localization.string("Add tag"))
         .popover(isPresented: $isTagPickerPresented, arrowEdge: .bottom) {
