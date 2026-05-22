@@ -13,11 +13,13 @@ private enum AssetCollectionMetrics {
     static let masonryImageInset: CGFloat = 3
     static let gridItemWidth: CGFloat = 160
     static let gridItemHeight: CGFloat = 190
+    static let gridInteritemSpacing: CGFloat = 8
+    static let gridLineSpacing: CGFloat = 12
     static let selectionCornerRadius = MomentoTheme.assetImageCornerRadius
     static let hoverBackgroundAlpha: CGFloat = 0.08
     static let masonryImageCornerRadius = MomentoTheme.assetImageCornerRadius
     static let gridImageCornerRadius: CGFloat = 6
-    static let gridImageVerticalInset: CGFloat = 8
+    static let gridImageInset: CGFloat = 8
     static let listImageCornerRadius: CGFloat = 6
     static let dimensionBadgeCornerRadius: CGFloat = 5
     static let dimensionBadgeHeight: CGFloat = 16
@@ -28,8 +30,8 @@ private enum AssetCollectionMetrics {
     static let listThumbnailSize: CGFloat = 52
     static let listSeparatorAlpha: CGFloat = 0.1
     static let selectionBackgroundAnimationDuration: CFTimeInterval = 0.12
-    static let titleTextColor = NSColor.labelColor.withAlphaComponent(0.64)
-    static let subtitleTextColor = NSColor.labelColor.withAlphaComponent(0.38)
+    static let titleTextColor = NSColor.labelColor.withAlphaComponent(0.5)
+    static let subtitleTextColor = NSColor.labelColor.withAlphaComponent(0.3)
 }
 
 struct AssetCollectionGridView: NSViewRepresentable {
@@ -121,6 +123,8 @@ struct AssetCollectionGridView: NSViewRepresentable {
             context.coordinator.currentAssets = assets
             if let masonryLayout = collectionView.collectionViewLayout as? AssetMasonryCollectionViewLayout {
                 masonryLayout.assets = assets
+            } else if collectionView.collectionViewLayout is AssetGridCollectionViewLayout {
+                collectionView.collectionViewLayout?.invalidateLayout()
             }
             collectionView.reloadData()
         }
@@ -134,6 +138,10 @@ struct AssetCollectionGridView: NSViewRepresentable {
             return AssetMasonryCollectionViewLayout(assets: assets)
         }
 
+        if viewMode == .grid {
+            return AssetGridCollectionViewLayout()
+        }
+
         let layout = NSCollectionViewFlowLayout()
         layout.sectionInset = NSEdgeInsets(
             top: AssetCollectionMetrics.sectionVerticalInset,
@@ -142,21 +150,9 @@ struct AssetCollectionGridView: NSViewRepresentable {
             right: AssetCollectionMetrics.sectionHorizontalInset
         )
 
-        switch viewMode {
-        case .grid:
-            layout.itemSize = NSSize(
-                width: AssetCollectionMetrics.gridItemWidth,
-                height: AssetCollectionMetrics.gridItemHeight
-            )
-            layout.minimumInteritemSpacing = 8
-            layout.minimumLineSpacing = 12
-        case .masonry:
-            break
-        case .list:
-            layout.itemSize = NSSize(width: 320, height: AssetCollectionMetrics.listItemHeight)
-            layout.minimumInteritemSpacing = 0
-            layout.minimumLineSpacing = 1
-        }
+        layout.itemSize = NSSize(width: 320, height: AssetCollectionMetrics.listItemHeight)
+        layout.minimumInteritemSpacing = 0
+        layout.minimumLineSpacing = 1
 
         return layout
     }
@@ -369,6 +365,86 @@ private final class AssetPreviewCollectionView: NSCollectionView {
     }
 }
 
+private final class AssetGridCollectionViewLayout: NSCollectionViewLayout {
+    private var cachedAttributes: [IndexPath: NSCollectionViewLayoutAttributes] = [:]
+    private var contentSize: NSSize = .zero
+    private var preparedBoundsSize: NSSize = .zero
+
+    private let itemSize = NSSize(
+        width: AssetCollectionMetrics.gridItemWidth,
+        height: AssetCollectionMetrics.gridItemHeight
+    )
+    private let interitemSpacing = AssetCollectionMetrics.gridInteritemSpacing
+    private let lineSpacing = AssetCollectionMetrics.gridLineSpacing
+    private let sectionInset = NSEdgeInsets(
+        top: AssetCollectionMetrics.sectionVerticalInset,
+        left: AssetCollectionMetrics.sectionHorizontalInset,
+        bottom: AssetCollectionMetrics.sectionVerticalInset,
+        right: AssetCollectionMetrics.sectionHorizontalInset
+    )
+
+    override func prepare() {
+        super.prepare()
+
+        guard let collectionView else {
+            cachedAttributes = [:]
+            contentSize = .zero
+            return
+        }
+
+        let itemCount = collectionView.numberOfItems(inSection: 0)
+        preparedBoundsSize = collectionView.bounds.size
+        let contentWidth = max(collectionView.bounds.width, itemSize.width + sectionInset.left + sectionInset.right)
+        let availableWidth = max(contentWidth - sectionInset.left - sectionInset.right, itemSize.width)
+        let columnCount = max(Int((availableWidth + interitemSpacing) / (itemSize.width + interitemSpacing)), 1)
+        let columnsWidth = CGFloat(columnCount) * itemSize.width + CGFloat(columnCount - 1) * interitemSpacing
+        let startX = sectionInset.left + max((availableWidth - columnsWidth) / 2, 0)
+        var attributesByIndexPath: [IndexPath: NSCollectionViewLayoutAttributes] = [:]
+
+        for item in 0..<itemCount {
+            let indexPath = IndexPath(item: item, section: 0)
+            let row = item / columnCount
+            let column = item % columnCount
+            let frame = NSRect(
+                x: startX + CGFloat(column) * (itemSize.width + interitemSpacing),
+                y: sectionInset.top + CGFloat(row) * (itemSize.height + lineSpacing),
+                width: itemSize.width,
+                height: itemSize.height
+            )
+
+            let attributes = NSCollectionViewLayoutAttributes(forItemWith: indexPath)
+            attributes.frame = frame
+            attributesByIndexPath[indexPath] = attributes
+        }
+
+        cachedAttributes = attributesByIndexPath
+
+        let rowCount = itemCount == 0 ? 0 : Int(ceil(CGFloat(itemCount) / CGFloat(columnCount)))
+        let itemsHeight = CGFloat(rowCount) * itemSize.height + CGFloat(max(rowCount - 1, 0)) * lineSpacing
+        let contentHeight = max(
+            sectionInset.top + itemsHeight + sectionInset.bottom,
+            collectionView.enclosingScrollView?.contentSize.height ?? collectionView.bounds.height
+        )
+        contentSize = NSSize(width: contentWidth, height: contentHeight)
+    }
+
+    override var collectionViewContentSize: NSSize {
+        contentSize
+    }
+
+    override func layoutAttributesForElements(in rect: NSRect) -> [NSCollectionViewLayoutAttributes] {
+        cachedAttributes.values.filter { $0.frame.intersects(rect) }
+    }
+
+    override func layoutAttributesForItem(at indexPath: IndexPath) -> NSCollectionViewLayoutAttributes? {
+        cachedAttributes[indexPath]
+    }
+
+    override func shouldInvalidateLayout(forBoundsChange newBounds: NSRect) -> Bool {
+        newBounds.size != preparedBoundsSize
+    }
+}
+
 private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
     var assets: [AssetItem] {
         didSet {
@@ -576,10 +652,10 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         ])
 
         gridConstraints = [
-            previewImageView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: AssetCollectionMetrics.gridImageVerticalInset),
-            previewImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            previewImageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-            previewImageView.bottomAnchor.constraint(equalTo: fileNameLabel.topAnchor, constant: -AssetCollectionMetrics.gridImageVerticalInset),
+            previewImageView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: AssetCollectionMetrics.gridImageInset),
+            previewImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: AssetCollectionMetrics.gridImageInset),
+            previewImageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -AssetCollectionMetrics.gridImageInset),
+            previewImageView.bottomAnchor.constraint(equalTo: fileNameLabel.topAnchor, constant: -AssetCollectionMetrics.gridImageInset),
             previewImageView.heightAnchor.constraint(greaterThanOrEqualToConstant: 96),
 
             fileNameLabel.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 6),
