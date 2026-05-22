@@ -4,6 +4,7 @@
         <attribute name="byteSize" optional="NO" attributeType="Integer 64" defaultValueString="0" usesScalarValueType="YES"/>
         <attribute name="contentHash" optional="NO" attributeType="String"/>
         <attribute name="displayName" optional="NO" attributeType="String"/>
+        <attribute name="exifMetadataData" optional="YES" attributeType="Binary"/>
         <attribute name="fileExtension" optional="NO" attributeType="String"/>
         <attribute name="id" optional="NO" attributeType="String"/>
         <attribute name="importedAt" optional="NO" attributeType="Date" usesScalarValueType="NO"/>
@@ -65,7 +66,7 @@
         </uniquenessConstraints>
     </entity>
     <elements>
-        <element name="AssetRecord" positionX="-63" positionY="-18" width="128" height="239"/>
+        <element name="AssetRecord" positionX="-63" positionY="-18" width="128" height="254"/>
         <element name="AssetColorRecord" positionX="108" positionY="-18" width="128" height="149"/>
         <element name="AssetFolderMembershipRecord" positionX="279" positionY="-18" width="128" height="134"/>
         <element name="FolderRecord" positionX="450" positionY="-18" width="128" height="164"/>

@@ -87,6 +87,7 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
                 record.setValue(asset.contentHash, forKey: "contentHash")
                 record.setValue(asset.dimensions?.width, forKey: "pixelWidth")
                 record.setValue(asset.dimensions?.height, forKey: "pixelHeight")
+                record.setValue(exifMetadataData(asset.exifMetadata), forKey: "exifMetadataData")
                 record.setValue(asset.isFavorite, forKey: "isFavorite")
                 record.setValue(asset.importedAt, forKey: "importedAt")
                 saveColors(asset.paletteColors, forAssetID: asset.id)
@@ -399,6 +400,7 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
             byteSize: int64Value(record.value(forKey: "byteSize")) ?? 0,
             contentHash: contentHash,
             dimensions: dimensions,
+            exifMetadata: exifMetadata(from: record.value(forKey: "exifMetadataData")),
             tags: [],
             folderIDs: folderIDs,
             paletteColors: paletteColors,
@@ -650,6 +652,22 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
             return value.intValue
         }
         return nil
+    }
+
+    private func exifMetadataData(_ metadata: AssetExifMetadata?) -> Data? {
+        guard let metadata else {
+            return nil
+        }
+
+        return try? JSONEncoder.momento.encode(metadata)
+    }
+
+    private func exifMetadata(from value: Any?) -> AssetExifMetadata? {
+        guard let data = value as? Data else {
+            return nil
+        }
+
+        return try? JSONDecoder.momento.decode(AssetExifMetadata.self, from: data)
     }
 
     private func int64Value(_ value: Any?) -> Int64? {

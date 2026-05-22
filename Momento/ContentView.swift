@@ -949,8 +949,196 @@ private extension MomentoInspectorAsset {
             filePath: fileURL?.path,
             fileSize: localization.fileSize(asset.byteSize),
             addedDate: asset.importedAt,
-            kind: localization.kindTitle(for: asset.kind)
+            kind: localization.kindTitle(for: asset.kind),
+            exifItems: Self.exifItems(for: asset.exifMetadata, localization: localization)
         )
+    }
+
+    private static func exifItems(
+        for metadata: AssetExifMetadata?,
+        localization: AppLocalization
+    ) -> [MomentoInspectorInfoItem] {
+        guard let metadata else {
+            return []
+        }
+
+        var items: [MomentoInspectorInfoItem] = []
+        appendDate(metadata.fileCreatedAt, label: "Created", to: &items, localization: localization)
+        appendDate(metadata.fileModifiedAt, label: "Modified", to: &items, localization: localization)
+        appendDate(metadata.contentCreatedAt, label: "Content Created", to: &items, localization: localization)
+
+        if let dimensions = dimensionsValue(width: metadata.pixelWidth, height: metadata.pixelHeight) {
+            append(dimensions, label: "Dimensions", to: &items, localization: localization)
+        }
+        if let resolution = resolutionValue(width: metadata.dpiWidth, height: metadata.dpiHeight, localization: localization) {
+            append(resolution, label: "Resolution", to: &items, localization: localization)
+        }
+
+        append(metadata.colorModel, label: "Color Space", to: &items, localization: localization)
+        append(metadata.profileName, label: "Color Profile", to: &items, localization: localization)
+        append(metadata.cameraMake, label: "Camera Maker", to: &items, localization: localization)
+        append(metadata.cameraModel, label: "Camera Model", to: &items, localization: localization)
+        append(metadata.lensModel, label: "Lens Model", to: &items, localization: localization)
+
+        if let exposureTime = metadata.exposureTime {
+            append(exposureTimeValue(exposureTime, localization: localization), label: "Exposure Time", to: &items, localization: localization)
+        }
+        if let focalLength = metadata.focalLength {
+            append(localization.format("%@ mm", numberString(focalLength, localization: localization)), label: "Focal Length", to: &items, localization: localization)
+        }
+        if !metadata.isoSpeedRatings.isEmpty {
+            let iso = metadata.isoSpeedRatings.map { integerString($0, localization: localization) }.joined(separator: ", ")
+            append(iso, label: "ISO", to: &items, localization: localization)
+        }
+        if let flashFired = metadata.flashFired {
+            append(localization.string(flashFired ? "Yes" : "No"), label: "Flash", to: &items, localization: localization)
+        }
+        if let fNumber = metadata.fNumber {
+            append("f/\(numberString(fNumber, localization: localization))", label: "Aperture", to: &items, localization: localization)
+        }
+        if let exposureProgram = metadata.exposureProgram {
+            append(exposureProgramValue(exposureProgram, localization: localization), label: "Exposure Program", to: &items, localization: localization)
+        }
+        if let meteringMode = metadata.meteringMode {
+            append(meteringModeValue(meteringMode, localization: localization), label: "Metering Mode", to: &items, localization: localization)
+        }
+        if let whiteBalance = metadata.whiteBalance {
+            append(whiteBalanceValue(whiteBalance, localization: localization), label: "White Balance", to: &items, localization: localization)
+        }
+        append(metadata.creator, label: "Creator", to: &items, localization: localization)
+        return items
+    }
+
+    private static func appendDate(
+        _ date: Date?,
+        label: String,
+        to items: inout [MomentoInspectorInfoItem],
+        localization: AppLocalization
+    ) {
+        guard let date else {
+            return
+        }
+        append(localization.dateTime(date), label: label, to: &items, localization: localization)
+    }
+
+    private static func append(
+        _ value: String?,
+        label: String,
+        to items: inout [MomentoInspectorInfoItem],
+        localization: AppLocalization
+    ) {
+        guard let value, !value.isEmpty else {
+            return
+        }
+
+        items.append(MomentoInspectorInfoItem(label: localization.string(label), value: value))
+    }
+
+    private static func dimensionsValue(width: Int?, height: Int?) -> String? {
+        guard let width, let height else {
+            return nil
+        }
+        return "\(width) × \(height)"
+    }
+
+    private static func resolutionValue(
+        width: Double?,
+        height: Double?,
+        localization: AppLocalization
+    ) -> String? {
+        guard let width, let height else {
+            return nil
+        }
+        return "\(numberString(width, localization: localization)) × \(numberString(height, localization: localization))"
+    }
+
+    private static func exposureTimeValue(
+        _ seconds: Double,
+        localization: AppLocalization
+    ) -> String {
+        guard seconds > 0 else {
+            return numberString(seconds, localization: localization, maximumFractionDigits: 3)
+        }
+
+        if seconds < 1 {
+            let denominator = Int((1 / seconds).rounded())
+            if denominator > 1 {
+                return "1/\(integerString(denominator, localization: localization))"
+            }
+        }
+
+        return numberString(seconds, localization: localization, maximumFractionDigits: 3)
+    }
+
+    private static func exposureProgramValue(
+        _ value: Int,
+        localization: AppLocalization
+    ) -> String {
+        let key: String? = switch value {
+        case 0: "Not defined"
+        case 1: "Manual"
+        case 2: "Normal program"
+        case 3: "Aperture priority"
+        case 4: "Shutter priority"
+        case 5: "Creative program"
+        case 6: "Action program"
+        case 7: "Portrait mode"
+        case 8: "Landscape mode"
+        default: nil
+        }
+
+        return key.map(localization.string) ?? integerString(value, localization: localization)
+    }
+
+    private static func meteringModeValue(
+        _ value: Int,
+        localization: AppLocalization
+    ) -> String {
+        let key: String? = switch value {
+        case 0: "Unknown"
+        case 1: "Average"
+        case 2: "Center-weighted average"
+        case 3: "Spot"
+        case 4: "Multi-spot"
+        case 5: "Pattern"
+        case 6: "Partial"
+        case 255: "Other"
+        default: nil
+        }
+
+        return key.map(localization.string) ?? integerString(value, localization: localization)
+    }
+
+    private static func whiteBalanceValue(
+        _ value: Int,
+        localization: AppLocalization
+    ) -> String {
+        let key: String? = switch value {
+        case 0: "Auto"
+        case 1: "Manual"
+        default: nil
+        }
+
+        return key.map(localization.string) ?? integerString(value, localization: localization)
+    }
+
+    private static func integerString(
+        _ value: Int,
+        localization: AppLocalization
+    ) -> String {
+        value.formatted(.number.locale(localization.locale))
+    }
+
+    private static func numberString(
+        _ value: Double,
+        localization: AppLocalization,
+        maximumFractionDigits: Int = 1
+    ) -> String {
+        let formatter = NumberFormatter()
+        formatter.locale = localization.locale
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = maximumFractionDigits
+        return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
     }
 }
 

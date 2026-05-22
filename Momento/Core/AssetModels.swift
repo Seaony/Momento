@@ -38,6 +38,100 @@ nonisolated struct AssetDimensions: Hashable, Codable, Sendable {
     var height: Int
 }
 
+nonisolated struct AssetExifMetadata: Hashable, Codable, Sendable {
+    var fileCreatedAt: Date?
+    var fileModifiedAt: Date?
+    var contentCreatedAt: Date?
+    var pixelWidth: Int?
+    var pixelHeight: Int?
+    var dpiWidth: Double?
+    var dpiHeight: Double?
+    var colorModel: String?
+    var profileName: String?
+    var cameraMake: String?
+    var cameraModel: String?
+    var lensModel: String?
+    var exposureTime: Double?
+    var focalLength: Double?
+    var isoSpeedRatings: [Int]
+    var flashFired: Bool?
+    var fNumber: Double?
+    var exposureProgram: Int?
+    var meteringMode: Int?
+    var whiteBalance: Int?
+    var creator: String?
+
+    init(
+        fileCreatedAt: Date? = nil,
+        fileModifiedAt: Date? = nil,
+        contentCreatedAt: Date? = nil,
+        pixelWidth: Int? = nil,
+        pixelHeight: Int? = nil,
+        dpiWidth: Double? = nil,
+        dpiHeight: Double? = nil,
+        colorModel: String? = nil,
+        profileName: String? = nil,
+        cameraMake: String? = nil,
+        cameraModel: String? = nil,
+        lensModel: String? = nil,
+        exposureTime: Double? = nil,
+        focalLength: Double? = nil,
+        isoSpeedRatings: [Int] = [],
+        flashFired: Bool? = nil,
+        fNumber: Double? = nil,
+        exposureProgram: Int? = nil,
+        meteringMode: Int? = nil,
+        whiteBalance: Int? = nil,
+        creator: String? = nil
+    ) {
+        self.fileCreatedAt = fileCreatedAt
+        self.fileModifiedAt = fileModifiedAt
+        self.contentCreatedAt = contentCreatedAt
+        self.pixelWidth = pixelWidth
+        self.pixelHeight = pixelHeight
+        self.dpiWidth = dpiWidth
+        self.dpiHeight = dpiHeight
+        self.colorModel = colorModel
+        self.profileName = profileName
+        self.cameraMake = cameraMake
+        self.cameraModel = cameraModel
+        self.lensModel = lensModel
+        self.exposureTime = exposureTime
+        self.focalLength = focalLength
+        self.isoSpeedRatings = isoSpeedRatings
+        self.flashFired = flashFired
+        self.fNumber = fNumber
+        self.exposureProgram = exposureProgram
+        self.meteringMode = meteringMode
+        self.whiteBalance = whiteBalance
+        self.creator = creator
+    }
+
+    var isEmpty: Bool {
+        fileCreatedAt == nil
+            && fileModifiedAt == nil
+            && contentCreatedAt == nil
+            && pixelWidth == nil
+            && pixelHeight == nil
+            && dpiWidth == nil
+            && dpiHeight == nil
+            && colorModel == nil
+            && profileName == nil
+            && cameraMake == nil
+            && cameraModel == nil
+            && lensModel == nil
+            && exposureTime == nil
+            && focalLength == nil
+            && isoSpeedRatings.isEmpty
+            && flashFired == nil
+            && fNumber == nil
+            && exposureProgram == nil
+            && meteringMode == nil
+            && whiteBalance == nil
+            && creator == nil
+    }
+}
+
 nonisolated struct AssetFolder: Identifiable, Hashable, Codable, Sendable {
     var id: String
     var libraryID: String
@@ -110,6 +204,7 @@ nonisolated struct AssetItem: Identifiable, Hashable, Codable, Sendable {
     var byteSize: Int64
     var contentHash: String
     var dimensions: AssetDimensions?
+    var exifMetadata: AssetExifMetadata?
     var tags: [TagItem]
     var folderIDs: [String]
     var paletteColors: [AssetColor]
@@ -128,6 +223,7 @@ nonisolated struct AssetItem: Identifiable, Hashable, Codable, Sendable {
         byteSize: Int64,
         contentHash: String,
         dimensions: AssetDimensions?,
+        exifMetadata: AssetExifMetadata? = nil,
         tags: [TagItem],
         folderIDs: [String] = [],
         paletteColors: [AssetColor] = [],
@@ -145,6 +241,7 @@ nonisolated struct AssetItem: Identifiable, Hashable, Codable, Sendable {
         self.byteSize = byteSize
         self.contentHash = contentHash
         self.dimensions = dimensions
+        self.exifMetadata = exifMetadata
         self.tags = tags
         self.folderIDs = folderIDs
         self.paletteColors = paletteColors

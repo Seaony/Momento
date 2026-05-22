@@ -29,6 +29,13 @@ struct MomentoInspectorColor: Identifiable, Hashable {
     }
 }
 
+struct MomentoInspectorInfoItem: Identifiable, Hashable {
+    var label: String
+    var value: String
+
+    var id: String { label }
+}
+
 struct MomentoInspectorAsset: Identifiable, Hashable {
     var id: String
     var title: String
@@ -40,6 +47,7 @@ struct MomentoInspectorAsset: Identifiable, Hashable {
     var fileSize: String?
     var addedDate: Date?
     var kind: String?
+    var exifItems: [MomentoInspectorInfoItem]
 
     init(
         id: String,
@@ -52,7 +60,8 @@ struct MomentoInspectorAsset: Identifiable, Hashable {
         filePath: String? = nil,
         fileSize: String? = nil,
         addedDate: Date? = nil,
-        kind: String? = nil
+        kind: String? = nil,
+        exifItems: [MomentoInspectorInfoItem] = []
     ) {
         self.id = id
         self.title = title
@@ -64,6 +73,7 @@ struct MomentoInspectorAsset: Identifiable, Hashable {
         self.fileSize = fileSize
         self.addedDate = addedDate
         self.kind = kind
+        self.exifItems = exifItems
     }
 }
 
@@ -108,6 +118,7 @@ struct MomentoInspectorView: View {
                         preview(asset)
                         metadata(asset)
                         tagEditor
+                        exifMetadata(asset)
                     }
                     .padding(
                         EdgeInsets(
@@ -275,6 +286,17 @@ struct MomentoInspectorView: View {
             }
             if let addedDate = asset.addedDate {
                 infoRow(localization.string("Added"), localization.dateTime(addedDate))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func exifMetadata(_ asset: MomentoInspectorAsset) -> some View {
+        if !asset.exifItems.isEmpty {
+            inspectorSection(localization.string("EXIF")) {
+                ForEach(asset.exifItems) { item in
+                    infoRow(item.label, item.value)
+                }
             }
         }
     }

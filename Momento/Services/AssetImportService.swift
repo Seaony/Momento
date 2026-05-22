@@ -92,6 +92,7 @@ struct AssetImportService: Sendable {
                         byteSize: Int64(values.fileSize ?? 0),
                         contentHash: hash,
                         dimensions: imageDimensions(for: fileURL),
+                        exifMetadata: imageExifMetadata(for: fileURL),
                         tags: [],
                         paletteColors: paletteColors,
                         thumbnailURL: thumbnailURL,
@@ -207,4 +208,111 @@ nonisolated private func imageDimensions(for url: URL) -> AssetDimensions? {
     }
 
     return AssetDimensions(width: width, height: height)
+}
+
+nonisolated private func imageExifMetadata(for url: URL) -> AssetExifMetadata? {
+    let resourceValues = try? url.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey])
+
+    guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+          let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] else {
+        let metadata = AssetExifMetadata(
+            fileCreatedAt: resourceValues?.creationDate,
+            fileModifiedAt: resourceValues?.contentModificationDate
+        )
+        return metadata.isEmpty ? nil : metadata
+    }
+
+    let exif = properties[kCGImagePropertyExifDictionary] as? [CFString: Any] ?? [:]
+    let tiff = properties[kCGImagePropertyTIFFDictionary] as? [CFString: Any] ?? [:]
+
+    let contentCreatedAt = dateTimeValue(exif[kCGImagePropertyExifDateTimeOriginal])
+        ?? dateTimeValue(exif[kCGImagePropertyExifDateTimeDigitized])
+        ?? dateTimeValue(tiff[kCGImagePropertyTIFFDateTime])
+
+    let flashValue = intValue(exif[kCGImagePropertyExifFlash])
+    let metadata = AssetExifMetadata(
+        fileCreatedAt: resourceValues?.creationDate,
+        fileModifiedAt: resourceValues?.contentModificationDate,
+        contentCreatedAt: contentCreatedAt,
+        pixelWidth: intValue(properties[kCGImagePropertyPixelWidth]),
+        pixelHeight: intValue(properties[kCGImagePropertyPixelHeight]),
+        dpiWidth: doubleValue(properties[kCGImagePropertyDPIWidth]),
+        dpiHeight: doubleValue(properties[kCGImagePropertyDPIHeight]),
+        colorModel: stringValue(properties[kCGImagePropertyColorModel]),
+        profileName: stringValue(properties[kCGImagePropertyProfileName])
+            ?? stringValue(properties[kCGImagePropertyNamedColorSpace]),
+        cameraMake: stringValue(tiff[kCGImagePropertyTIFFMake]),
+        cameraModel: stringValue(tiff[kCGImagePropertyTIFFModel]),
+        lensModel: stringValue(exif[kCGImagePropertyExifLensModel]),
+        exposureTime: doubleValue(exif[kCGImagePropertyExifExposureTime]),
+        focalLength: doubleValue(exif[kCGImagePropertyExifFocalLength]),
+        isoSpeedRatings: intArrayValue(exif[kCGImagePropertyExifISOSpeedRatings]),
+        flashFired: flashValue.map { ($0 & 1) == 1 },
+        fNumber: doubleValue(exif[kCGImagePropertyExifFNumber]),
+        exposureProgram: intValue(exif[kCGImagePropertyExifExposureProgram]),
+        meteringMode: intValue(exif[kCGImagePropertyExifMeteringMode]),
+        whiteBalance: intValue(exif[kCGImagePropertyExifWhiteBalance]),
+        creator: stringValue(tiff[kCGImagePropertyTIFFArtist])
+    )
+
+    return metadata.isEmpty ? nil : metadata
+}
+
+nonisolated private func stringValue(_ value: Any?) -> String? {
+    guard let string = value as? String else {
+        return nil
+    }
+
+    let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+}
+
+nonisolated private func intValue(_ value: Any?) -> Int? {
+    if let value = value as? Int {
+        return value
+    }
+    if let value = value as? NSNumber {
+        return value.intValue
+    }
+    return nil
+}
+
+nonisolated private func doubleValue(_ value: Any?) -> Double? {
+    if let value = value as? Double {
+        return value
+    }
+    if let value = value as? Float {
+        return Double(value)
+    }
+    if let value = value as? Int {
+        return Double(value)
+    }
+    if let value = value as? NSNumber {
+        return value.doubleValue
+    }
+    return nil
+}
+
+nonisolated private func intArrayValue(_ value: Any?) -> [Int] {
+    if let values = value as? [Int] {
+        return values
+    }
+    if let values = value as? [NSNumber] {
+        return values.map(\.intValue)
+    }
+    if let value = intValue(value) {
+        return [value]
+    }
+    return []
+}
+
+nonisolated private func dateTimeValue(_ value: Any?) -> Date? {
+    guard let string = stringValue(value) else {
+        return nil
+    }
+
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
+    return formatter.date(from: string)
 }

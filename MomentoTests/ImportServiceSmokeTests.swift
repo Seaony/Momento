@@ -1,4 +1,7 @@
+import CoreGraphics
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 import XCTest
 @testable import Momento
 
@@ -193,6 +196,45 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         )
         try reopened.openLibrary(at: environment.packageURL)
         XCTAssertEqual(try XCTUnwrap(reopened.assets.first).displayName, "Renamed Asset")
+    }
+
+    @MainActor
+    func testImportPersistsExifMetadataAcrossReloads() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        let source = try environment.writeOnePixelJPEGWithExif(named: "exif.jpg")
+        try await store.importItems(from: [source])
+        let metadata = try XCTUnwrap(store.assets.first?.exifMetadata)
+
+        XCTAssertEqual(metadata.pixelWidth, 1)
+        XCTAssertEqual(metadata.pixelHeight, 1)
+        XCTAssertEqual(metadata.dpiWidth, 300)
+        XCTAssertEqual(metadata.dpiHeight, 300)
+        XCTAssertEqual(metadata.colorModel, "RGB")
+        XCTAssertEqual(metadata.profileName, "sRGB IEC61966-2.1")
+        XCTAssertEqual(metadata.cameraMake, "NIKON CORPORATION")
+        XCTAssertEqual(metadata.cameraModel, "NIKON Z 7_2")
+        XCTAssertEqual(metadata.lensModel, "50.0 mm f/1.8")
+        XCTAssertEqual(metadata.exposureTime, 0.004)
+        XCTAssertEqual(metadata.focalLength, 50)
+        XCTAssertEqual(metadata.isoSpeedRatings, [64])
+        XCTAssertEqual(metadata.fNumber, 1.8)
+
+        let reopened = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try reopened.openLibrary(at: environment.packageURL)
+        XCTAssertEqual(reopened.assets.first?.exifMetadata, metadata)
     }
 
     @MainActor
@@ -632,6 +674,60 @@ private struct TestEnvironment {
         let data = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=")!
         let url = inputURL.appendingPathComponent(fileName)
         try data.write(to: url)
+        return url
+    }
+
+    func writeOnePixelJPEGWithExif(named fileName: String) throws -> URL {
+        let url = inputURL.appendingPathComponent(fileName)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let pixel = Data([255, 0, 0, 255])
+        guard
+            let provider = CGDataProvider(data: pixel as CFData),
+            let image = CGImage(
+                width: 1,
+                height: 1,
+                bitsPerComponent: 8,
+                bitsPerPixel: 32,
+                bytesPerRow: 4,
+                space: colorSpace,
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                provider: provider,
+                decode: nil,
+                shouldInterpolate: false,
+                intent: .defaultIntent
+            ),
+            let destination = CGImageDestinationCreateWithURL(
+                url as CFURL,
+                UTType.jpeg.identifier as CFString,
+                1,
+                nil
+            )
+        else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+
+        let properties: [CFString: Any] = [
+            kCGImagePropertyDPIWidth: 300,
+            kCGImagePropertyDPIHeight: 300,
+            kCGImagePropertyColorModel: kCGImagePropertyColorModelRGB,
+            kCGImagePropertyProfileName: "sRGB IEC61966-2.1",
+            kCGImagePropertyTIFFDictionary: [
+                kCGImagePropertyTIFFMake: "NIKON CORPORATION",
+                kCGImagePropertyTIFFModel: "NIKON Z 7_2"
+            ],
+            kCGImagePropertyExifDictionary: [
+                kCGImagePropertyExifLensModel: "50.0 mm f/1.8",
+                kCGImagePropertyExifExposureTime: 0.004,
+                kCGImagePropertyExifFocalLength: 50.0,
+                kCGImagePropertyExifISOSpeedRatings: [64],
+                kCGImagePropertyExifFNumber: 1.8
+            ]
+        ]
+
+        CGImageDestinationAddImage(destination, image, properties as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
         return url
     }
 
