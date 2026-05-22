@@ -39,6 +39,8 @@ struct MomentoShellView<Content: View>: View {
     @State private var inspectorResizeStartWidth: CGFloat?
     @State private var isInspectorHovered = false
     @State private var isInspectorResizeHandleHovered = false
+    @State private var isColorCopyToastVisible = false
+    @State private var colorCopyToastToken = UUID()
 
     init(
         sidebarSelection: Binding<String?>,
@@ -127,6 +129,10 @@ struct MomentoShellView<Content: View>: View {
             commands: commands,
             onSelect: onCommandSelected
         )
+        .overlay {
+            colorCopyToast
+        }
+        .animation(.smooth(duration: 0.18), value: isColorCopyToastVisible)
         .background {
             SidebarTitlebarToggleConfigurator(
                 isCollapsed: $isSidebarCollapsed,
@@ -185,7 +191,8 @@ struct MomentoShellView<Content: View>: View {
         MomentoInspectorView(
             asset: inspectorAsset,
             tags: $inspectorTags,
-            notes: $inspectorNotes
+            notes: $inspectorNotes,
+            onColorCopied: showColorCopyToast
         )
         .frame(width: effectiveInspectorWidth)
         .fixedSize(horizontal: true, vertical: false)
@@ -294,6 +301,51 @@ struct MomentoShellView<Content: View>: View {
         }
 
         return .white.opacity(0.34)
+    }
+
+    @ViewBuilder
+    private var colorCopyToast: some View {
+        if isColorCopyToastVisible {
+            Label(localization.string("Color copied"), systemImage: "checkmark")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .labelStyle(.titleAndIcon)
+                .padding(.horizontal, 16)
+                .frame(height: 42)
+                .background {
+                    MomentoGlassBackground(
+                        glass: .regular.tint(Color.black.opacity(0.36)),
+                        cornerRadius: 14
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+                    }
+                }
+                .shadow(color: Color.black.opacity(0.32), radius: 18, y: 10)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .allowsHitTesting(false)
+                .zIndex(10)
+        }
+    }
+
+    private func showColorCopyToast() {
+        let token = UUID()
+        colorCopyToastToken = token
+
+        withAnimation(.smooth(duration: 0.18)) {
+            isColorCopyToastVisible = true
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.45) {
+            guard colorCopyToastToken == token else {
+                return
+            }
+
+            withAnimation(.smooth(duration: 0.18)) {
+                isColorCopyToastVisible = false
+            }
+        }
     }
 
     private var sidebarToggleLabel: String {

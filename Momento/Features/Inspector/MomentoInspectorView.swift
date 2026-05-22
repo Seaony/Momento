@@ -74,22 +74,23 @@ struct MomentoInspectorView: View {
     @Binding var tags: [String]
     @Binding var notes: String
     var onRevealInFinder: (() -> Void)?
+    var onColorCopied: (() -> Void)?
 
     @State private var pendingTag = ""
     @State private var hoveredColorID: String?
-    @State private var isColorCopyToastVisible = false
-    @State private var colorCopyToastToken = UUID()
 
     init(
         asset: MomentoInspectorAsset?,
         tags: Binding<[String]> = .constant([]),
         notes: Binding<String> = .constant(""),
-        onRevealInFinder: (() -> Void)? = nil
+        onRevealInFinder: (() -> Void)? = nil,
+        onColorCopied: (() -> Void)? = nil
     ) {
         self.asset = asset
         self._tags = tags
         self._notes = notes
         self.onRevealInFinder = onRevealInFinder
+        self.onColorCopied = onColorCopied
     }
 
     var body: some View {
@@ -115,10 +116,6 @@ struct MomentoInspectorView: View {
             idealWidth: MomentoTheme.inspectorWidth,
             maxWidth: MomentoTheme.inspectorMaxWidth
         )
-        .overlay(alignment: .bottom) {
-            colorCopyToast
-        }
-        .animation(.smooth(duration: 0.16), value: isColorCopyToastVisible)
     }
 
     private func preview(_ asset: MomentoInspectorAsset) -> some View {
@@ -236,45 +233,63 @@ struct MomentoInspectorView: View {
         if !colors.isEmpty {
             GeometryReader { proxy in
                 ScrollView(.horizontal) {
-                    HStack(spacing: 4) {
+                    HStack(spacing: 1) {
                         ForEach(colors) { color in
                             colorSwatchButton(color)
                                 .zIndex(hoveredColorID == color.id ? 1 : 0)
                         }
                     }
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 3)
+                    .background {
+                        Capsule(style: .continuous)
+                            .fill(Color.black.opacity(0.24))
+                            .overlay {
+                                Capsule(style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                            }
+                    }
                     .frame(minWidth: proxy.size.width, alignment: .center)
                 }
                 .scrollIndicators(.never)
-                .overlay(alignment: .top) {
-                    if let hoveredColor = colors.first(where: { $0.id == hoveredColorID }) {
+            }
+            .frame(height: 28)
+            .frame(maxWidth: .infinity)
+            .overlayPreferenceValue(ColorSwatchBoundsKey.self) { bounds in
+                GeometryReader { proxy in
+                    if
+                        let hoveredColor = colors.first(where: { $0.id == hoveredColorID }),
+                        let anchor = bounds[hoveredColor.id]
+                    {
+                        let swatchFrame = proxy[anchor]
+
                         colorTooltip(hoveredColor)
-                            .offset(y: -34)
-                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                            .position(x: swatchFrame.midX, y: swatchFrame.minY - 20)
+                            .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .bottom)))
                             .zIndex(2)
                     }
                 }
+                .allowsHitTesting(false)
             }
-            .frame(height: 24)
-            .frame(maxWidth: .infinity)
             .zIndex(1)
         }
     }
 
     private func colorSwatchButton(_ color: MomentoInspectorColor) -> some View {
         let isHovered = hoveredColorID == color.id
-        let swatchShape = RoundedRectangle(cornerRadius: 6, style: .continuous)
-        let hoverShape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        let swatchShape = RoundedRectangle(cornerRadius: 5, style: .continuous)
+        let hoverShape = RoundedRectangle(cornerRadius: 7, style: .continuous)
 
         return Button {
             copyColor(color)
         } label: {
             swatchShape
                 .fill(Color(hex: color.hex) ?? .clear)
-                .frame(width: 18, height: 18)
+                .frame(width: 16, height: 16)
                 .overlay {
                     swatchShape.strokeBorder(MomentoTheme.subtleStroke, lineWidth: 1)
                 }
-                .padding(3)
+                .padding(2)
                 .background {
                     if isHovered {
                         hoverShape.fill(MomentoTheme.sidebarIconHoverBackground)
@@ -289,6 +304,9 @@ struct MomentoInspectorView: View {
         .onHover { hovering in
             updateColorHover(id: color.id, isHovering: hovering)
         }
+        .anchorPreference(key: ColorSwatchBoundsKey.self, value: .bounds) { anchor in
+            [color.id: anchor]
+        }
         .accessibilityLabel(color.helpText)
     }
 
@@ -301,14 +319,16 @@ struct MomentoInspectorView: View {
             .padding(.horizontal, 10)
             .frame(height: 30)
             .background {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.black.opacity(0.82))
+                MomentoGlassBackground(
+                    glass: .regular.tint(Color.black.opacity(0.34)),
+                    cornerRadius: 9
+                )
                     .overlay {
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.18), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
                     }
             }
-            .shadow(color: Color.black.opacity(0.32), radius: 8, y: 4)
+            .shadow(color: Color.black.opacity(0.28), radius: 12, y: 6)
             .allowsHitTesting(false)
     }
 
@@ -397,29 +417,8 @@ struct MomentoInspectorView: View {
         pendingTag = ""
     }
 
-    @ViewBuilder
-    private var colorCopyToast: some View {
-        if isColorCopyToastVisible {
-            Text(localization.string("Color copied"))
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(MomentoTheme.primaryText)
-                .padding(.horizontal, 12)
-                .frame(height: 30)
-                .background {
-                    MomentoGlassBackground(cornerRadius: 10)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .strokeBorder(MomentoTheme.subtleStroke, lineWidth: 1)
-                        }
-                }
-                .padding(.bottom, 14)
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
-                .allowsHitTesting(false)
-        }
-    }
-
     private func updateColorHover(id: String, isHovering: Bool) {
-        withAnimation(.smooth(duration: 0.14)) {
+        withAnimation(.spring(response: 0.22, dampingFraction: 0.9)) {
             if isHovering {
                 hoveredColorID = id
             } else if hoveredColorID == id {
@@ -436,22 +435,15 @@ struct MomentoInspectorView: View {
             return
         }
 
-        let token = UUID()
-        colorCopyToastToken = token
+        onColorCopied?()
+    }
+}
 
-        withAnimation(.smooth(duration: 0.16)) {
-            isColorCopyToastVisible = true
-        }
+private struct ColorSwatchBoundsKey: PreferenceKey {
+    static var defaultValue: [String: Anchor<CGRect>] = [:]
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
-            guard colorCopyToastToken == token else {
-                return
-            }
-
-            withAnimation(.smooth(duration: 0.16)) {
-                isColorCopyToastVisible = false
-            }
-        }
+    static func reduce(value: inout [String: Anchor<CGRect>], nextValue: () -> [String: Anchor<CGRect>]) {
+        value.merge(nextValue(), uniquingKeysWith: { $1 })
     }
 }
 
