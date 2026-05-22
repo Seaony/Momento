@@ -33,9 +33,9 @@ private enum AssetCollectionMetrics {
     static let listThumbnailSize: CGFloat = 78
     static let listSeparatorHorizontalInset: CGFloat = 18
     static let listSeparatorAlpha: CGFloat = 0.055
-    static let favoriteButtonSize: CGFloat = 20
-    static let favoriteButtonInset: CGFloat = 8
-    static let favoriteButtonCornerRadius: CGFloat = 10
+    static let favoriteButtonSize: CGFloat = 16
+    static let favoriteButtonInset: CGFloat = 10
+    static let favoriteButtonCornerRadius: CGFloat = 8
     static let favoriteButtonBackgroundAlpha: CGFloat = 0.3
     static let selectionBackgroundAnimationDuration: CFTimeInterval = 0.12
     static let titleTextColor = NSColor.labelColor.withAlphaComponent(0.5)
@@ -956,7 +956,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     private let containerView = HoverTrackingView()
     private let contentView = HoverSelectionView()
     private let previewImageView = AssetPreviewImageView()
-    private let favoriteButton = NSButton()
+    private let favoriteButton = FavoriteButton()
     private let fileNameLabel = NSTextField(labelWithString: "")
     private let subtitleLabel = NSTextField(labelWithString: "")
     private let dateLabel = NSTextField(labelWithString: "")
@@ -983,6 +983,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         containerView.hoverChanged = { [weak self] isHovered in
             self?.contentView.isHovered = isHovered
             self?.updateFavoriteButton()
+            self?.favoriteButton.synchronizeHoverStateWithPointer()
             if isHovered {
                 self?.onHoverPreviewChange?(true)
             } else {
@@ -1011,6 +1012,9 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         favoriteButton.wantsLayer = true
         favoriteButton.layer?.cornerRadius = AssetCollectionMetrics.favoriteButtonCornerRadius
         favoriteButton.layer?.cornerCurve = .continuous
+        favoriteButton.hoverChanged = { [weak self] _ in
+            self?.updateFavoriteButton()
+        }
         favoriteButton.toolTip = localization.string("Favorites")
         favoriteButton.isHidden = true
 
@@ -1151,6 +1155,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         dimensionBadgeView.isHidden = true
         separatorView.isHidden = true
         containerView.resetHoverState()
+        favoriteButton.resetHoverState()
         onHoverPreviewChange = nil
         onContextMenuOpen = nil
         onContextMenuAction = nil
@@ -1185,6 +1190,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         applyModeLayout()
         updateFavoriteButton()
         containerView.synchronizeHoverStateWithPointer()
+        favoriteButton.synchronizeHoverStateWithPointer()
     }
 
     func updateFavoriteState(with asset: AssetItem) {
@@ -1293,17 +1299,21 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         guard let asset else {
             favoriteButton.isHidden = true
             favoriteButton.image = nil
+            favoriteButton.resetHoverState()
             favoriteButton.layer?.backgroundColor = NSColor.clear.cgColor
             return
         }
 
         let isVisible = asset.isFavorite || contentView.isHovered
         favoriteButton.isHidden = !isVisible
+        if !isVisible {
+            favoriteButton.resetHoverState()
+        }
         favoriteButton.image = favoriteImage(isFavorite: asset.isFavorite)
         favoriteButton.contentTintColor = asset.isFavorite
             ? .systemRed
             : NSColor.white.withAlphaComponent(0.92)
-        favoriteButton.layer?.backgroundColor = contentView.isHovered
+        favoriteButton.layer?.backgroundColor = favoriteButton.isPointerInside
             ? NSColor.black.withAlphaComponent(AssetCollectionMetrics.favoriteButtonBackgroundAlpha).cgColor
             : NSColor.clear.cgColor
         favoriteButton.toolTip = localization.string(asset.isFavorite ? "Favorited" : "Favorites")
@@ -1826,6 +1836,76 @@ private final class AssetContextMenuRowView: NSView {
 
         NSCursor.pop()
         didPushCursor = false
+    }
+}
+
+private final class FavoriteButton: NSButton {
+    var hoverChanged: ((Bool) -> Void)?
+    private var trackingArea: NSTrackingArea?
+    private(set) var isPointerInside = false
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+
+        let options: NSTrackingArea.Options = [.activeInActiveApp, .mouseEnteredAndExited, .inVisibleRect]
+        let newTrackingArea = NSTrackingArea(rect: bounds, options: options, owner: self)
+        addTrackingArea(newTrackingArea)
+        trackingArea = newTrackingArea
+        synchronizeHoverStateWithPointer()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+
+        if window == nil {
+            resetHoverState()
+        } else {
+            synchronizeHoverStateWithPointer()
+        }
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        setHovered(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        setHovered(false)
+    }
+
+    func resetHoverState() {
+        setHovered(false, notify: false)
+    }
+
+    func synchronizeHoverStateWithPointer() {
+        guard let window,
+              !isHidden,
+              !bounds.isEmpty else {
+            setHovered(false)
+            return
+        }
+
+        let pointerLocation = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        setHovered(bounds.contains(pointerLocation) && visibleRect.contains(pointerLocation))
+    }
+
+    private func setHovered(_ isHovered: Bool, notify: Bool = true) {
+        guard isPointerInside != isHovered else {
+            return
+        }
+
+        isPointerInside = isHovered
+        if notify {
+            hoverChanged?(isHovered)
+        }
     }
 }
 
