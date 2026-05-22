@@ -713,8 +713,8 @@ struct MomentoInspectorView: View {
         let checkboxShape = RoundedRectangle(cornerRadius: 6, style: .continuous)
         let foreground = Color.white.opacity(0.94)
         let secondaryForeground = Color.white.opacity(0.72)
-        let rowFill = Color.white.opacity(isHovered || isSelected ? 0.13 : 0.07)
-        let checkboxFill = Color.white.opacity(isSelected ? 0.2 : 0.1)
+        let rowFill = Color.white.opacity(isHovered || isSelected ? 0.1 : 0.035)
+        let checkboxFill = Color.white.opacity(isSelected ? 0.22 : 0.08)
 
         return HStack(spacing: 7) {
             Button {
@@ -733,51 +733,44 @@ struct MomentoInspectorView: View {
             Button {
                 toggleFolderSelection(folder.id)
             } label: {
-                HStack(spacing: 8) {
-                    ZStack {
-                        checkboxShape
-                            .fill(checkboxFill)
-                            .background {
-                                Color.clear
-                                    .glassEffect(.clear, in: checkboxShape)
-                            }
-                            .overlay {
-                                checkboxShape.strokeBorder(Color.white.opacity(isSelected ? 0.4 : 0.24), lineWidth: 1)
-                            }
-
-                        if isSelected {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(foreground)
-                        }
-                    }
-                    .frame(width: 20, height: 20)
-
-                    Image(systemName: "folder")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(secondaryForeground)
-
-                    Text(folder.name)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(foreground)
-                        .lineLimit(1)
-
-                    Spacer(minLength: 0)
-                }
-                .padding(.leading, CGFloat(row.depth) * 14)
-                .padding(.trailing, 9)
-                .frame(height: Self.folderPickerRowHeight)
-                .background {
+                ZStack {
                     rowShape
                         .fill(rowFill)
-                        .background {
-                            Color.clear
-                                .glassEffect(.clear, in: rowShape)
-                        }
                         .overlay {
-                            rowShape.strokeBorder(Color.white.opacity(isHovered || isSelected ? 0.18 : 0.08), lineWidth: 1)
+                            rowShape.strokeBorder(Color.white.opacity(isHovered || isSelected ? 0.16 : 0.07), lineWidth: 1)
                         }
+
+                    HStack(spacing: 8) {
+                        ZStack {
+                            checkboxShape
+                                .fill(checkboxFill)
+                                .overlay {
+                                    checkboxShape.strokeBorder(Color.white.opacity(isSelected ? 0.42 : 0.26), lineWidth: 1)
+                                }
+
+                            if isSelected {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(foreground)
+                            }
+                        }
+                        .frame(width: 20, height: 20)
+
+                        Image(systemName: "folder")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(secondaryForeground)
+
+                        Text(folder.name)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(foreground)
+                            .lineLimit(1)
+
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.leading, CGFloat(row.depth) * 14)
+                    .padding(.trailing, 9)
                 }
+                .frame(height: Self.folderPickerRowHeight)
                 .contentShape(rowShape)
             }
             .buttonStyle(.plain)
