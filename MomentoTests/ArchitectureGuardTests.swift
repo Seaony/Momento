@@ -113,11 +113,17 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertFalse(bridgeSource.contains("final class AssetDragPasteboardItem"))
     }
 
-    func testAssetDragOutPlaysCompletionSoundAfterSuccessfulPromiseWrite() throws {
+    func testAssetDragOutPlaysTrashSoundOnceAfterDragBatchCompletes() throws {
+        let assetGridSource = try String(contentsOf: assetGridURL(), encoding: .utf8)
         let bridgeSource = try appKitBridgeSource()
 
+        XCTAssertTrue(assetGridSource.contains("AssetDragExportBatch(expectedFileCount: selectedAssetIDs.count)"))
+        XCTAssertTrue(assetGridSource.contains("exportBatch: exportBatch"))
+        XCTAssertTrue(bridgeSource.contains("exportBatch.promiseDidFinish(success: success)"))
         XCTAssertTrue(bridgeSource.contains("AssetDragExportSoundPlayer.playSuccessSound()"))
-        XCTAssertTrue(bridgeSource.contains("NSSound(named: NSSound.Name(\"Pop\"))"))
+        XCTAssertTrue(bridgeSource.contains("move to trash.aif"))
+        XCTAssertTrue(bridgeSource.contains("NSSound(contentsOfFile: moveToTrashSoundPath, byReference: true)"))
+        XCTAssertFalse(bridgeSource.contains("NSSound(named: NSSound.Name(\"Pop\"))"))
         XCTAssertTrue(bridgeSource.contains("completionHandler(nil)"))
     }
 

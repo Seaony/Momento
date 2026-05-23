@@ -393,6 +393,7 @@ extension AssetCollectionGridView {
         private var hoveredPreviewAssetID: AssetItem.ID?
         private var assetIndexByID: [AssetItem.ID: Int]
         private var activeDragPrimaryAssetID: AssetItem.ID?
+        private var activeDragExportBatch: AssetDragExportBatch?
 
         init(_ parent: AssetCollectionGridView) {
             self.parent = parent
@@ -506,11 +507,21 @@ extension AssetCollectionGridView {
 
             let primaryAssetID = activeDragPrimaryAssetID ?? asset.id
             let selectedAssetIDs = orderedDragAssetIDs(primaryAssetID: primaryAssetID, in: collectionView)
+            let exportBatch: AssetDragExportBatch
+            if let activeDragExportBatch {
+                exportBatch = activeDragExportBatch
+            } else {
+                let newExportBatch = AssetDragExportBatch(expectedFileCount: selectedAssetIDs.count)
+                activeDragExportBatch = newExportBatch
+                exportBatch = newExportBatch
+            }
+
             return AssetFilePromiseProvider(
                 asset: asset,
                 libraryID: asset.libraryID,
                 assetIDs: selectedAssetIDs,
-                primaryAssetID: primaryAssetID
+                primaryAssetID: primaryAssetID,
+                exportBatch: exportBatch
             )
         }
 
@@ -521,6 +532,7 @@ extension AssetCollectionGridView {
             dragOperation operation: NSDragOperation
         ) {
             activeDragPrimaryAssetID = nil
+            activeDragExportBatch = nil
         }
 
         func syncSelection() {

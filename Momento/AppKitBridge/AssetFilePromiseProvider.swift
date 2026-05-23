@@ -10,8 +10,15 @@ nonisolated final class AssetFilePromiseProvider: NSFilePromiseProvider, NSFileP
     private let payloadData: Data
     private let sourceURL: URL
     private let fileName: String
+    private let exportBatch: AssetDragExportBatch
 
-    init?(asset: AssetItem, libraryID: AssetLibrary.ID, assetIDs: [AssetItem.ID], primaryAssetID: AssetItem.ID) {
+    init?(
+        asset: AssetItem,
+        libraryID: AssetLibrary.ID,
+        assetIDs: [AssetItem.ID],
+        primaryAssetID: AssetItem.ID,
+        exportBatch: AssetDragExportBatch
+    ) {
         guard let payloadData = AssetDragPasteboardWriter.encodedPayload(
             libraryID: libraryID,
             assetIDs: assetIDs,
@@ -23,6 +30,7 @@ nonisolated final class AssetFilePromiseProvider: NSFilePromiseProvider, NSFileP
         self.payloadData = payloadData
         sourceURL = asset.storageURL
         fileName = Self.promisedFileName(for: asset)
+        self.exportBatch = exportBatch
         super.init()
         fileType = asset.utiIdentifier
         delegate = self
@@ -70,9 +78,16 @@ nonisolated final class AssetFilePromiseProvider: NSFilePromiseProvider, NSFileP
         do {
             try FileManager.default.copyItem(at: sourceURL, to: availableDestinationURL(for: url))
             completionHandler(nil)
-            AssetDragExportSoundPlayer.playSuccessSound()
+            notifyExportBatch(success: true)
         } catch {
             completionHandler(error)
+            notifyExportBatch(success: false)
+        }
+    }
+
+    private func notifyExportBatch(success: Bool) {
+        if exportBatch.promiseDidFinish(success: success) {
+            AssetDragExportSoundPlayer.playSuccessSound()
         }
     }
 
@@ -118,7 +133,41 @@ nonisolated final class AssetFilePromiseProvider: NSFilePromiseProvider, NSFileP
     }
 }
 
+nonisolated final class AssetDragExportBatch: @unchecked Sendable {
+    private let lock = NSLock()
+    private let expectedFileCount: Int
+    private var completedFileCount = 0
+    private var hasFailure = false
+    private var didNotifyCompletion = false
+
+    init(expectedFileCount: Int) {
+        self.expectedFileCount = max(expectedFileCount, 1)
+    }
+
+    func promiseDidFinish(success: Bool) -> Bool {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+
+        if !success {
+            hasFailure = true
+        }
+        completedFileCount += 1
+
+        guard !didNotifyCompletion, completedFileCount >= expectedFileCount else {
+            return false
+        }
+
+        didNotifyCompletion = true
+        return !hasFailure
+    }
+}
+
 nonisolated private enum AssetDragExportSoundPlayer {
+    private static let moveToTrashSoundPath =
+        "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/finder/move to trash.aif"
+
     @MainActor
     private static var successSound: NSSound?
 
@@ -131,7 +180,7 @@ nonisolated private enum AssetDragExportSoundPlayer {
     @MainActor
     private static func playSuccessSoundOnMainActor() {
         if successSound == nil {
-            successSound = NSSound(named: NSSound.Name("Pop"))
+            successSound = NSSound(contentsOfFile: moveToTrashSoundPath, byReference: true)
         }
 
         successSound?.stop()
