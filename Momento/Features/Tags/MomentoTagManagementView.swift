@@ -33,22 +33,19 @@ struct MomentoTagManagementView: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .alert(
-            localization.string("Delete Tag"),
-            isPresented: deleteAlertIsPresented
-        ) {
-            Button(localization.string("Cancel"), role: .cancel) {
-                deletingTag = nil
-            }
-            Button(localization.string("Delete Tag"), role: .destructive) {
-                if let deletingTag {
-                    onDeleteTag(deletingTag.id)
-                }
-                deletingTag = nil
-            }
-        } message: {
+        .overlay {
             if let deletingTag {
-                Text(localization.format("Delete tag warning: %@", deletingTag.tag.name))
+                MomentoDestructiveConfirmationDialog(
+                    isPresented: deleteDialogIsPresented,
+                    iconName: "trash.fill",
+                    title: localization.string("Delete Tag"),
+                    message: localization.format("Delete tag warning: %@", deletingTag.tag.name),
+                    confirmTitle: localization.string("Delete Tag"),
+                    onConfirm: {
+                        onDeleteTag(deletingTag.id)
+                    }
+                )
+                .zIndex(30)
             }
         }
     }
@@ -114,8 +111,10 @@ struct MomentoTagManagementView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .layoutPriority(1)
                     .background {
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .fill(Color.white.opacity(0.08))
+                        MomentoGlassBackground(
+                            glass: .regular.interactive(true),
+                            cornerRadius: 9
+                        )
                             .overlay {
                                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                                     .strokeBorder(Color.accentColor.opacity(0.75), lineWidth: 1)
@@ -203,11 +202,10 @@ struct MomentoTagManagementView: View {
             Image(systemName: "ellipsis")
                 .font(.system(size: 14, weight: .semibold))
                 .frame(width: 30, height: 28)
-                .background {
-                    if isHovered {
-                        shape.fill(MomentoTheme.sidebarIconHoverBackground)
-                    }
-                }
+                .glassEffect(
+                    .regular.tint(Color.white.opacity(isHovered ? 0.12 : 0.04)).interactive(true),
+                    in: shape
+                )
                 .contentShape(shape)
         }
         .menuStyle(.button)
@@ -301,7 +299,7 @@ struct MomentoTagManagementView: View {
         draftTagName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var deleteAlertIsPresented: Binding<Bool> {
+    private var deleteDialogIsPresented: Binding<Bool> {
         Binding {
             deletingTag != nil
         } set: { isPresented in

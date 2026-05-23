@@ -230,9 +230,7 @@ private struct SidebarTitlebarToggleAccessoryView: View {
     }
 
     private var sidebarToggleButton: some View {
-        let shape = RoundedRectangle(cornerRadius: 7, style: .continuous)
-
-        return Button {
+        Button {
             withAnimation(.smooth(duration: 0.18)) {
                 isCollapsed.toggle()
             }
@@ -242,11 +240,10 @@ private struct SidebarTitlebarToggleAccessoryView: View {
                 .foregroundStyle(MomentoTheme.primaryText)
                 .frame(width: MomentoTheme.sidebarTitlebarButtonSize, height: MomentoTheme.sidebarTitlebarButtonSize)
                 .background {
-                    if isToggleHovered {
-                        shape.fill(MomentoTheme.sidebarIconHoverBackground)
-                    } else {
-                        Color.clear
-                    }
+                    MomentoGlassBackground(
+                        glass: .regular.interactive(isToggleHovered),
+                        cornerRadius: 9
+                    )
                 }
         }
         .buttonStyle(.plain)

@@ -163,18 +163,6 @@ struct ContentView: View {
             allowsMultipleSelection: true,
             onCompletion: handleImportResult
         )
-        .alert(
-            Text(localization.string("Delete Permanently")),
-            isPresented: permanentAssetDeletionAlertIsPresented,
-            presenting: pendingPermanentAssetDeletion
-        ) { request in
-            Button(localization.string("Cancel"), role: .cancel) {}
-            Button(localization.string("Delete Permanently"), role: .destructive) {
-                confirmPermanentAssetDeletion(request)
-            }
-        } message: { request in
-            Text(permanentAssetDeletionMessage(for: request))
-        }
         .dropDestination(for: URL.self) { urls, _ in
             importURLs(urls)
             return true
@@ -498,10 +486,10 @@ struct ContentView: View {
         }
         .padding(5)
         .background {
-            ZStack {
-                shape.fill(.regularMaterial)
-                shape.fill(Color.black.opacity(0.14))
-            }
+            MomentoGlassBackground(
+                glass: .regular.tint(Color.white.opacity(0.05)).interactive(true),
+                cornerRadius: 14
+            )
         }
         .overlay {
             shape.strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
@@ -530,11 +518,10 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .pointerStyle(.link)
-        .background {
-            if isSelected || isHovered {
-                shape.fill(Color.white.opacity(isSelected ? 0.15 : 0.07))
-            }
-        }
+        .glassEffect(
+            .regular.tint(Color.white.opacity(isSelected ? 0.14 : (isHovered ? 0.08 : 0))).interactive(true),
+            in: shape
+        )
         .overlay {
             if isSelected {
                 shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
@@ -1007,6 +994,20 @@ struct ContentView: View {
             )
             .zIndex(36)
         }
+
+        if let pendingPermanentAssetDeletion {
+            MomentoDestructiveConfirmationDialog(
+                isPresented: permanentAssetDeletionDialogIsPresented,
+                iconName: "trash.fill",
+                title: localization.string("Delete Permanently"),
+                message: permanentAssetDeletionMessage(for: pendingPermanentAssetDeletion),
+                confirmTitle: localization.string("Delete Permanently"),
+                onConfirm: {
+                    confirmPermanentAssetDeletion(pendingPermanentAssetDeletion)
+                }
+            )
+            .zIndex(37)
+        }
     }
 
     @ViewBuilder
@@ -1079,7 +1080,7 @@ struct ContentView: View {
         }
     }
 
-    private var permanentAssetDeletionAlertIsPresented: Binding<Bool> {
+    private var permanentAssetDeletionDialogIsPresented: Binding<Bool> {
         Binding {
             pendingPermanentAssetDeletion != nil
         } set: { isPresented in

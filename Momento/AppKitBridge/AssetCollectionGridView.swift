@@ -1944,7 +1944,7 @@ private final class AssetContextMenuView: NSView {
     }
 }
 
-private final class AssetContextMenuBackgroundView: NSView {
+private final class AssetContextMenuBackgroundView: NSGlassEffectView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         setUpView()
@@ -1956,8 +1956,11 @@ private final class AssetContextMenuBackgroundView: NSView {
     }
 
     private func setUpView() {
+        style = .regular
+        tintColor = NSColor.black.withAlphaComponent(0.16)
+        cornerRadius = AssetCollectionMetrics.contextMenuPanelCornerRadius
         wantsLayer = true
-        layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.82).cgColor
+        layer?.backgroundColor = NSColor.clear.cgColor
         layer?.cornerRadius = AssetCollectionMetrics.contextMenuPanelCornerRadius
         layer?.cornerCurve = .continuous
         layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor

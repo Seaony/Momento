@@ -820,6 +820,7 @@ struct MomentoInspectorView: View {
         let foreground = Color.white.opacity(0.94)
         let secondaryForeground = Color.white.opacity(0.72)
         let checkboxFill = Color.white.opacity(isSelected ? 0.22 : 0.08)
+        let isHovered = hoveredFolderChoiceID == folder.id
 
         return HStack(spacing: 2) {
             Button {
@@ -871,6 +872,12 @@ struct MomentoInspectorView: View {
         }
         .padding(.leading, CGFloat(row.depth) * 22)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            if isHovered {
+                rowShape.fill(MomentoTheme.sidebarIconHoverBackground)
+            }
+        }
+        .clipShape(rowShape)
         .onHover { hovering in
             withAnimation(.smooth(duration: 0.12)) {
                 hoveredFolderChoiceID = hovering ? folder.id : nil

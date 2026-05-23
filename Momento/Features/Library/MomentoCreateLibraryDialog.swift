@@ -6,6 +6,7 @@ private let createLibraryDialogIconSize: CGFloat = 48
 private let createLibraryDialogFieldHeight: CGFloat = 36
 private let deleteLibraryDialogWidth: CGFloat = 430
 private let folderNameDialogWidth: CGFloat = 420
+private let destructiveConfirmationDialogWidth: CGFloat = 430
 
 enum MomentoLibraryNameDialogMode {
     case create
@@ -621,6 +622,112 @@ struct MomentoDialogBackdrop: View {
             .ignoresSafeArea()
             .contentShape(Rectangle())
             .onTapGesture(perform: dismiss)
+    }
+}
+
+struct MomentoDestructiveConfirmationDialog: View {
+    @Environment(\.appLocalization) private var localization
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Binding var isPresented: Bool
+
+    var iconName: String
+    var title: String
+    var message: String
+    var confirmTitle: String
+    var onConfirm: () -> Void
+
+    @State private var isCancelButtonHovered = false
+    @State private var isConfirmButtonHovered = false
+
+    var body: some View {
+        ZStack {
+            MomentoDialogBackdrop(dismiss: dismiss)
+
+            HStack(alignment: .top, spacing: 16) {
+                Image(systemName: iconName)
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: createLibraryDialogIconSize, height: createLibraryDialogIconSize)
+                    .background {
+                        MomentoGlassBackground(glass: .regular.tint(Color.red), cornerRadius: 14)
+                    }
+
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(title)
+                            .font(.system(size: 18, weight: .semibold))
+
+                        Text(message)
+                            .font(.system(size: 13, weight: .regular))
+                            .lineSpacing(2)
+                            .foregroundStyle(MomentoTheme.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    HStack(spacing: 14) {
+                        Button {
+                            dismiss()
+                        } label: {
+                            Text(localization.string("Cancel"))
+                                .font(.system(size: 14, weight: .semibold))
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.glass)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.large)
+                        .contentShape(Capsule(style: .continuous))
+                        .pointerStyle(.link)
+                        .createLibraryDialogButtonHoverFeedback(isHovered: isCancelButtonHovered, reduceMotion: reduceMotion)
+                        .onHover { isHovered in
+                            isCancelButtonHovered = isHovered
+                        }
+
+                        Button(role: .destructive) {
+                            confirm()
+                        } label: {
+                            Text(confirmTitle)
+                                .font(.system(size: 14, weight: .semibold))
+                                .padding(.horizontal, 18)
+                                .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.glassProminent)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.large)
+                        .tint(.red)
+                        .contentShape(Capsule(style: .continuous))
+                        .pointerStyle(.link)
+                        .createLibraryDialogButtonHoverFeedback(isHovered: isConfirmButtonHovered, reduceMotion: reduceMotion)
+                        .onHover { isHovered in
+                            isConfirmButtonHovered = isHovered
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 34)
+            .padding(.vertical, 30)
+            .frame(width: destructiveConfirmationDialogWidth)
+            .background {
+                MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.18)), cornerRadius: 14)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .onTapGesture {}
+        }
+        .transition(.opacity)
+        .onExitCommand {
+            dismiss()
+        }
+    }
+
+    private func confirm() {
+        dismiss()
+        onConfirm()
+    }
+
+    private func dismiss() {
+        withAnimation(.smooth(duration: 0.16)) {
+            isPresented = false
+        }
     }
 }
 
