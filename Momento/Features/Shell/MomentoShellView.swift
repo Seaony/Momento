@@ -44,6 +44,7 @@ struct MomentoShellView<Content: View>: View {
     var subtitle: String?
     var showsChromeControls: Bool
     var inspectorAsset: MomentoInspectorAsset?
+    var inspectorAssets: [MomentoInspectorAsset]
     @Binding var inspectorTags: [String]
     var inspectorAvailableTags: [String]
     @Binding var inspectorFolderIDs: [AssetFolder.ID]
@@ -91,6 +92,7 @@ struct MomentoShellView<Content: View>: View {
         subtitle: String? = "0 items",
         showsChromeControls: Bool = true,
         inspectorAsset: MomentoInspectorAsset? = nil,
+        inspectorAssets: [MomentoInspectorAsset] = [],
         inspectorTags: Binding<[String]> = .constant([]),
         inspectorAvailableTags: [String] = [],
         inspectorFolderIDs: Binding<[AssetFolder.ID]> = .constant([]),
@@ -130,6 +132,7 @@ struct MomentoShellView<Content: View>: View {
         self.subtitle = subtitle
         self.showsChromeControls = showsChromeControls
         self.inspectorAsset = inspectorAsset
+        self.inspectorAssets = inspectorAssets
         self._inspectorTags = inspectorTags
         self.inspectorAvailableTags = inspectorAvailableTags
         self._inspectorFolderIDs = inspectorFolderIDs
@@ -247,6 +250,7 @@ struct MomentoShellView<Content: View>: View {
     private var trailingInspector: some View {
         MomentoInspectorView(
             asset: inspectorAsset,
+            assets: inspectorAssets,
             tags: $inspectorTags,
             availableTags: inspectorAvailableTags,
             folderIDs: $inspectorFolderIDs,

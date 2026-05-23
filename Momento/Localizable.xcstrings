@@ -65,6 +65,23 @@
         }
       }
     },
+    "%d selected assets" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d selected assets"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已选择 %d 个资源"
+          }
+        }
+      }
+    },
     "%lld" : {
 
     },

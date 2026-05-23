@@ -558,6 +558,62 @@ final class LibraryStore {
         mergeAssets(try metadataStore.addTag(id: tagID, toAssets: activeAssetIDs(in: assetIDs)))
     }
 
+    func addTag(named name: String, toAssets assetIDs: Set<AssetItem.ID>) throws {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            throw LibraryStoreError.invalidTagName
+        }
+
+        guard let metadataStore,
+              currentLibrary != nil else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        let validAssetIDs = activeAssetIDs(in: assetIDs)
+        guard !validAssetIDs.isEmpty else {
+            return
+        }
+
+        guard let tag = try metadataStore.resolveOrCreateTags(named: [trimmedName]).first else {
+            throw LibraryStoreError.invalidTagName
+        }
+
+        tags = try metadataStore.loadTags()
+        mergeAssets(try metadataStore.addTag(id: tag.id, toAssets: validAssetIDs))
+    }
+
+    func removeTag(named name: String, fromAssets assetIDs: Set<AssetItem.ID>) throws {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            throw LibraryStoreError.invalidTagName
+        }
+
+        guard let metadataStore,
+              currentLibrary != nil else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        let validAssetIDs = activeAssetIDs(in: assetIDs)
+        guard !validAssetIDs.isEmpty else {
+            return
+        }
+
+        let normalizedName = trimmedName.lowercased()
+        var updatedAssets: [AssetItem] = []
+
+        for asset in currentLibraryAssets where validAssetIDs.contains(asset.id) {
+            let updatedTags = asset.tags.filter { $0.name.lowercased() != normalizedName }
+            guard updatedTags.count != asset.tags.count else {
+                continue
+            }
+
+            updatedAssets.append(try metadataStore.updateTags(updatedTags, forAssetID: asset.id))
+        }
+
+        mergeAssets(updatedAssets)
+        tags = try metadataStore.loadTags()
+    }
+
     func createFolder(name: String? = nil, parentID: AssetFolder.ID? = nil) throws {
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary

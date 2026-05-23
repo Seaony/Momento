@@ -673,6 +673,18 @@ final class LibraryPackagePersistenceTests: XCTestCase {
             asset.tags.map(\.id).count == Set(asset.tags.map(\.id)).count
         })
 
+        try store.addTag(named: "Batch", toAssets: assetIDs)
+        XCTAssertEqual(store.tagSummaries.first { $0.tag.name == "Batch" }?.assetCount, 2)
+
+        try store.removeTag(named: "Batch", fromAssets: [firstAsset.id])
+        XCTAssertFalse(try XCTUnwrap(store.assets.first { $0.id == firstAsset.id }).tags.contains { $0.name == "Batch" })
+        XCTAssertTrue(try XCTUnwrap(store.assets.first { $0.id == secondAsset.id }).tags.contains { $0.name == "Batch" })
+
+        try store.removeTag(named: "Batch", fromAssets: assetIDs)
+        XCTAssertTrue(store.assets.allSatisfy { asset in
+            !asset.tags.contains { $0.name == "Batch" }
+        })
+
         try store.moveAssetToTrash(id: secondAsset.id)
         try store.assignAssets(ids: assetIDs, to: archiveFolderID)
         try store.addTag(id: archiveTagID, toAssets: assetIDs)

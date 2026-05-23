@@ -111,10 +111,14 @@ struct MomentoInspectorView: View {
     private static let inspectorSectionSpacing: CGFloat = 12
     private static let inspectorSectionSeparatorOpacity = 0.06
     private static let titleLineSpacing: CGFloat = 3
+    private static let multiSelectionPreviewHeight: CGFloat = 156
+    private static let multiSelectionCardWidth: CGFloat = 156
+    private static let multiSelectionCardHeight: CGFloat = 112
 
     @Environment(\.appLocalization) private var localization
 
     var asset: MomentoInspectorAsset?
+    var assets: [MomentoInspectorAsset]
     @Binding var tags: [String]
     var availableTags: [String]
     @Binding var folderIDs: [AssetFolder.ID]
@@ -143,6 +147,7 @@ struct MomentoInspectorView: View {
 
     init(
         asset: MomentoInspectorAsset?,
+        assets: [MomentoInspectorAsset] = [],
         tags: Binding<[String]> = .constant([]),
         availableTags: [String] = [],
         folderIDs: Binding<[AssetFolder.ID]> = .constant([]),
@@ -152,6 +157,7 @@ struct MomentoInspectorView: View {
         onColorCopied: (() -> Void)? = nil
     ) {
         self.asset = asset
+        self.assets = assets
         self._tags = tags
         self.availableTags = availableTags
         self._folderIDs = folderIDs
@@ -161,9 +167,42 @@ struct MomentoInspectorView: View {
         self.onColorCopied = onColorCopied
     }
 
+    private var inspectedAssets: [MomentoInspectorAsset] {
+        if !assets.isEmpty {
+            return assets
+        }
+
+        return asset.map { [$0] } ?? []
+    }
+
+    private var inspectedAssetResetID: String {
+        inspectedAssets.map(\.id).joined(separator: "|")
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            if let asset {
+            let currentAssets = inspectedAssets
+
+            if currentAssets.count > 1 {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: Self.inspectorSectionSpacing) {
+                        multiSelectionPreview(currentAssets)
+                        tagEditor
+                        folderEditor
+                    }
+                    .padding(
+                        EdgeInsets(
+                            top: MomentoTheme.inspectorContentTopInset + 16,
+                            leading: 16,
+                            bottom: 16,
+                            trailing: 16
+                        )
+                    )
+                }
+                .contentMargins(.top, 0, for: .scrollContent)
+                .ignoresSafeArea(.container, edges: .top)
+                .scrollIndicators(.never)
+            } else if let asset = currentAssets.first {
                 ScrollView {
                     VStack(alignment: .leading, spacing: Self.inspectorSectionSpacing) {
                         preview(asset)
@@ -195,7 +234,7 @@ struct MomentoInspectorView: View {
             maxHeight: .infinity,
             alignment: .top
         )
-        .onChange(of: asset?.id) { _, _ in
+        .onChange(of: inspectedAssetResetID) { _, _ in
             cancelTitleEditing()
             hoveredTitleID = nil
             hoveredTag = nil
@@ -223,6 +262,72 @@ struct MomentoInspectorView: View {
 
             titleEditor(asset)
         }
+    }
+
+    private func multiSelectionPreview(_ assets: [MomentoInspectorAsset]) -> some View {
+        ZStack(alignment: .bottom) {
+            ZStack {
+                ForEach(Array(assets.prefix(3).enumerated()), id: \.element.id) { index, asset in
+                    multiSelectionPreviewCard(asset, index: index)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: Self.multiSelectionPreviewHeight)
+
+            Text(localization.format("%d selected assets", assets.count))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(MomentoTheme.primaryText)
+                .padding(.horizontal, 10)
+                .frame(height: 28)
+                .background {
+                    MomentoGlassBackground(
+                        glass: .regular.tint(Color.black.opacity(0.22)),
+                        cornerRadius: 9
+                    )
+                }
+                .padding(.bottom, 5)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(localization.format("%d selected assets", assets.count))
+    }
+
+    private func multiSelectionPreviewCard(_ asset: MomentoInspectorAsset, index: Int) -> some View {
+        let previewShape = RoundedRectangle(cornerRadius: MomentoTheme.assetImageCornerRadius, style: .continuous)
+        let rotationDegrees = [-6.0, 1.5, 7.0][min(index, 2)]
+        let horizontalOffset: CGFloat = [-34, 0, 34][min(index, 2)]
+        let verticalOffset: CGFloat = [12, 0, 14][min(index, 2)]
+
+        return ZStack {
+            if let image = asset.previewImage {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                VStack(spacing: 7) {
+                    Image(systemName: "photo")
+                        .font(.system(size: 24, weight: .regular))
+                    Text(asset.fileName)
+                        .font(.system(size: 11, weight: .medium))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(MomentoTheme.secondaryText)
+                .padding(10)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background {
+                    MomentoGlassBackground(cornerRadius: MomentoTheme.assetImageCornerRadius)
+                }
+            }
+        }
+        .frame(width: Self.multiSelectionCardWidth, height: Self.multiSelectionCardHeight)
+        .clipShape(previewShape)
+        .overlay {
+            previewShape.strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.24), radius: 14, x: 0, y: 8)
+        .rotationEffect(.degrees(rotationDegrees))
+        .offset(x: horizontalOffset, y: verticalOffset)
+        .zIndex(Double(index))
     }
 
     private func beginTitleEditing(_ asset: MomentoInspectorAsset) {

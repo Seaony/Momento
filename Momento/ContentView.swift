@@ -81,14 +81,32 @@ struct ContentView: View {
         store.selectedAssetIDs
     }
 
+    private var selectedInspectorAssets: [AssetItem] {
+        store.visibleAssets.filter { selectedAssetIDs.contains($0.id) }
+    }
+
+    private var inspectorAssets: [MomentoInspectorAsset] {
+        selectedInspectorAssets.map { MomentoInspectorAsset(asset: $0, localization: localization) }
+    }
+
     private var selectedTags: Binding<[String]> {
         Binding {
-            store.selectedAsset?.tags.map(\.name) ?? []
+            let assets = selectedInspectorAssets
+            guard assets.count > 1 else {
+                return store.selectedAsset?.tags.map(\.name) ?? []
+            }
+
+            return batchTagNames(for: assets)
         } set: { names in
-            do {
-                try store.updateSelectedTags(names)
-            } catch {
-                showImportError(error)
+            let assets = selectedInspectorAssets
+            if assets.count > 1 {
+                updateBatchTags(names, for: assets)
+            } else {
+                do {
+                    try store.updateSelectedTags(names)
+                } catch {
+                    showImportError(error)
+                }
             }
         }
     }
@@ -99,9 +117,19 @@ struct ContentView: View {
 
     private var selectedFolderIDs: Binding<[AssetFolder.ID]> {
         Binding {
-            store.selectedAsset?.folderIDs ?? []
+            let assets = selectedInspectorAssets
+            guard assets.count > 1 else {
+                return store.selectedAsset?.folderIDs ?? []
+            }
+
+            return batchFolderIDs(for: assets)
         } set: { folderIDs in
-            updateSelectedFolders(folderIDs)
+            let assets = selectedInspectorAssets
+            if assets.count > 1 {
+                updateBatchFolders(folderIDs, for: assets)
+            } else {
+                updateSelectedFolders(folderIDs)
+            }
         }
     }
 
@@ -210,6 +238,7 @@ struct ContentView: View {
             title: title,
             subtitle: localization.itemCount(visibleAssets.count),
             inspectorAsset: store.selectedAsset.map { MomentoInspectorAsset(asset: $0, localization: localization) },
+            inspectorAssets: inspectorAssets,
             inspectorTags: selectedTags,
             inspectorAvailableTags: availableTagNames,
             inspectorFolderIDs: selectedFolderIDs,
@@ -1464,6 +1493,94 @@ struct ContentView: View {
                 try store.assignAssets(ids: assetIDs, to: folderID)
             }
             for folderID in currentFolderIDs.subtracting(nextFolderIDs) {
+                try store.unassignAssets(ids: assetIDs, from: folderID)
+            }
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func batchTagNames(for assets: [AssetItem]) -> [String] {
+        var selectedTagNamesByKey: [String: String] = [:]
+        for tag in assets.flatMap(\.tags) {
+            let key = tag.name.lowercased()
+            if selectedTagNamesByKey[key] == nil {
+                selectedTagNamesByKey[key] = tag.name
+            }
+        }
+        let selectedKeys = Set(selectedTagNamesByKey.keys)
+        var orderedNames: [String] = []
+        var emittedKeys = Set<String>()
+
+        for tag in store.tags {
+            let key = tag.name.lowercased()
+            guard selectedKeys.contains(key), emittedKeys.insert(key).inserted else {
+                continue
+            }
+            orderedNames.append(tag.name)
+        }
+
+        for (key, name) in selectedTagNamesByKey.sorted(by: { $0.value.localizedCaseInsensitiveCompare($1.value) == .orderedAscending }) {
+            guard emittedKeys.insert(key).inserted else {
+                continue
+            }
+            orderedNames.append(name)
+        }
+
+        return orderedNames
+    }
+
+    private func updateBatchTags(_ names: [String], for assets: [AssetItem]) {
+        let assetIDs = Set(assets.map(\.id))
+        let currentNames = batchTagNames(for: assets)
+        let currentKeys = Set(currentNames.map { $0.lowercased() })
+        var requestedNamesByKey: [String: String] = [:]
+        for name in names {
+            let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedName.isEmpty else {
+                continue
+            }
+
+            let key = trimmedName.lowercased()
+            if requestedNamesByKey[key] == nil {
+                requestedNamesByKey[key] = trimmedName
+            }
+        }
+        let requestedKeys = Set(requestedNamesByKey.keys)
+
+        do {
+            for key in requestedKeys.subtracting(currentKeys).sorted() {
+                if let name = requestedNamesByKey[key] {
+                    try store.addTag(named: name, toAssets: assetIDs)
+                }
+            }
+
+            for name in currentNames where !requestedKeys.contains(name.lowercased()) {
+                try store.removeTag(named: name, fromAssets: assetIDs)
+            }
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func batchFolderIDs(for assets: [AssetItem]) -> [AssetFolder.ID] {
+        let selectedIDs = Set(assets.flatMap(\.folderIDs))
+        return store.folders.compactMap { folder in
+            selectedIDs.contains(folder.id) ? folder.id : nil
+        }
+    }
+
+    private func updateBatchFolders(_ folderIDs: [AssetFolder.ID], for assets: [AssetItem]) {
+        let assetIDs = Set(assets.map(\.id))
+        let currentIDs = Set(batchFolderIDs(for: assets))
+        let requestedIDs = Set(folderIDs)
+
+        do {
+            for folderID in requestedIDs.subtracting(currentIDs) {
+                try store.assignAssets(ids: assetIDs, to: folderID)
+            }
+
+            for folderID in currentIDs.subtracting(requestedIDs) {
                 try store.unassignAssets(ids: assetIDs, from: folderID)
             }
         } catch {
