@@ -95,6 +95,16 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertFalse(inspectorSource.contains("localization.string(\"Notes\")"))
     }
 
+    func testTagManagementSelectionCollapsesInspector() throws {
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+
+        XCTAssertTrue(contentSource.contains(".onChange(of: store.sidebarSelection) { _, selection in"))
+        XCTAssertTrue(contentSource.contains("collapseInspectorForTagManagementIfNeeded(selection)"))
+        XCTAssertTrue(contentSource.contains("private func collapseInspectorForTagManagementIfNeeded(_ selection: SidebarSelection)"))
+        XCTAssertTrue(contentSource.contains("guard case .tagManagement = selection, isInspectorPresented else"))
+        XCTAssertTrue(contentSource.contains("isInspectorPresented = false"))
+    }
+
     func testAssetGridSupportsDraggingAndFilePromises() throws {
         let assetGridSource = try String(contentsOf: assetGridURL(), encoding: .utf8)
         let bridgeSource = try appKitBridgeSource()

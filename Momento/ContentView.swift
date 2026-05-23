@@ -161,6 +161,9 @@ struct ContentView: View {
         .onChange(of: defaultViewMode) { _, newValue in
             store.setViewMode(newValue)
         }
+        .onChange(of: store.sidebarSelection) { _, selection in
+            collapseInspectorForTagManagementIfNeeded(selection)
+        }
         .frame(minWidth: MomentoTheme.mainWindowMinWidth, minHeight: MomentoTheme.mainWindowMinHeight)
     }
 
@@ -1017,6 +1020,16 @@ struct ContentView: View {
 
     private var defaultViewMode: AssetViewMode {
         AssetViewMode(rawValue: defaultViewModeRawValue) ?? .masonry
+    }
+
+    private func collapseInspectorForTagManagementIfNeeded(_ selection: SidebarSelection) {
+        guard case .tagManagement = selection, isInspectorPresented else {
+            return
+        }
+
+        withAnimation(.smooth(duration: 0.18)) {
+            isInspectorPresented = false
+        }
     }
 
     private var errorMessage: String? {
