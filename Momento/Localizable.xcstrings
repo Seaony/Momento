@@ -85,6 +85,9 @@
     "%lld" : {
 
     },
+    "%lld%%" : {
+
+    },
     "1 item" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -561,74 +564,6 @@
         }
       }
     },
-    "Choose Export Folder" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose Export Folder"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "选择导出文件夹"
-          }
-        }
-      }
-    },
-    "Choose the format for %d selected assets." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose the format for %d selected assets."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "为选中的 %d 个资源选择导出格式。"
-          }
-        }
-      }
-    },
-    "Choose the format for this asset." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Choose the format for this asset."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "为这个资源选择导出格式。"
-          }
-        }
-      }
-    },
-    "Copy the stored file without conversion." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copy the stored file without conversion."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "不转换，直接复制库内原始文件。"
-          }
-        }
-      }
-    },
     "Center-weighted average" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -697,6 +632,23 @@
         }
       }
     },
+    "Choose Export Folder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Export Folder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择导出文件夹"
+          }
+        }
+      }
+    },
     "Choose files or folders" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -727,6 +679,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "选择保存路径"
+          }
+        }
+      }
+    },
+    "Choose the format for %d selected assets." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose the format for %d selected assets."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为选中的 %d 个资源选择导出格式。"
+          }
+        }
+      }
+    },
+    "Choose the format for this asset." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose the format for this asset."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为这个资源选择导出格式。"
           }
         }
       }
@@ -931,6 +917,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "复制当前资源库包"
+          }
+        }
+      }
+    },
+    "Copy the stored file without conversion." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy the stored file without conversion."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不转换，直接复制库内原始文件。"
           }
         }
       }
@@ -1615,23 +1618,6 @@
         }
       }
     },
-    "Export Library" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Export Library"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "导出资源库"
-          }
-        }
-      }
-    },
     "Export" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1649,19 +1635,19 @@
         }
       }
     },
-    "Export Assets" : {
+    "Export a compressed JPEG file." : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Export Assets"
+            "value" : "Export a compressed JPEG file."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "导出资源"
+            "value" : "导出为压缩 JPEG 文件。"
           }
         }
       }
@@ -1683,19 +1669,36 @@
         }
       }
     },
-    "Export a compressed JPEG file." : {
+    "Export Assets" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Export a compressed JPEG file."
+            "value" : "Export Assets"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "导出为压缩 JPEG 文件。"
+            "value" : "导出资源"
+          }
+        }
+      }
+    },
+    "Export Library" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Export Library"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导出资源库"
           }
         }
       }
@@ -1730,108 +1733,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已导出 1 个资源"
-          }
-        }
-      }
-    },
-    "JPEG Image" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "JPEG Image"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "JPEG 图片"
-          }
-        }
-      }
-    },
-    "JPEG Quality" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "JPEG Quality"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "JPEG 质量"
-          }
-        }
-      }
-    },
-    "Original File" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Original File"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "原始文件"
-          }
-        }
-      }
-    },
-    "PNG Image" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PNG Image"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "PNG 图片"
-          }
-        }
-      }
-    },
-    "Select one or more assets to export." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Select one or more assets to export."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请选择一个或多个要导出的资源。"
-          }
-        }
-      }
-    },
-    "The selected asset cannot be exported in that format." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The selected asset cannot be exported in that format."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "所选资源无法导出为该格式。"
           }
         }
       }
@@ -2359,6 +2260,40 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "ISO 感光度"
+          }
+        }
+      }
+    },
+    "JPEG Image" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "JPEG Image"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "JPEG 图片"
+          }
+        }
+      }
+    },
+    "JPEG Quality" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "JPEG Quality"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "JPEG 质量"
           }
         }
       }
@@ -3145,6 +3080,23 @@
         }
       }
     },
+    "Original File" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Original File"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "原始文件"
+          }
+        }
+      }
+    },
     "Other" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -3243,6 +3195,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "粉色"
+          }
+        }
+      }
+    },
+    "PNG Image" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PNG Image"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PNG 图片"
           }
         }
       }
@@ -3740,6 +3709,23 @@
         }
       }
     },
+    "Select one or more assets to export." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select one or more assets to export."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请选择一个或多个要导出的资源。"
+          }
+        }
+      }
+    },
     "Settings" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -4059,6 +4045,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "图片已导入当前资源库。"
+          }
+        }
+      }
+    },
+    "The selected asset cannot be exported in that format." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The selected asset cannot be exported in that format."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所选资源无法导出为该格式。"
           }
         }
       }
