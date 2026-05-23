@@ -1,25 +1,58 @@
 import AppKit
 import Foundation
 
-final class AssetFilePromiseProvider: NSObject, NSFilePromiseProviderDelegate {
+nonisolated final class AssetFilePromiseProvider: NSFilePromiseProvider, NSFilePromiseProviderDelegate {
     enum UserInfoKey {
         static let sourceURL = "sourceURL"
         static let fileName = "fileName"
     }
 
-    private(set) var provider: NSFilePromiseProvider!
+    private let payloadData: Data
     private let sourceURL: URL
     private let fileName: String
 
-    init(asset: AssetItem) {
+    init?(asset: AssetItem, libraryID: AssetLibrary.ID, assetIDs: [AssetItem.ID], primaryAssetID: AssetItem.ID) {
+        guard let payloadData = AssetDragPasteboardWriter.encodedPayload(
+            libraryID: libraryID,
+            assetIDs: assetIDs,
+            primaryAssetID: primaryAssetID
+        ) else {
+            return nil
+        }
+
+        self.payloadData = payloadData
         sourceURL = asset.storageURL
         fileName = Self.promisedFileName(for: asset)
         super.init()
-        provider = NSFilePromiseProvider(fileType: asset.utiIdentifier, delegate: self)
-        provider.userInfo = [
+        fileType = asset.utiIdentifier
+        delegate = self
+        userInfo = [
             UserInfoKey.sourceURL: sourceURL,
             UserInfoKey.fileName: fileName
         ]
+    }
+
+    override func writableTypes(for pasteboard: NSPasteboard) -> [NSPasteboard.PasteboardType] {
+        [AssetDragPasteboardWriter.assetIDsPasteboardType] + super.writableTypes(for: pasteboard)
+    }
+
+    override func pasteboardPropertyList(forType type: NSPasteboard.PasteboardType) -> Any? {
+        if type == AssetDragPasteboardWriter.assetIDsPasteboardType {
+            return payloadData
+        }
+
+        return super.pasteboardPropertyList(forType: type)
+    }
+
+    override func writingOptions(
+        forType type: NSPasteboard.PasteboardType,
+        pasteboard: NSPasteboard
+    ) -> NSPasteboard.WritingOptions {
+        if type == AssetDragPasteboardWriter.assetIDsPasteboardType {
+            return []
+        }
+
+        return super.writingOptions(forType: type, pasteboard: pasteboard)
     }
 
     func filePromiseProvider(

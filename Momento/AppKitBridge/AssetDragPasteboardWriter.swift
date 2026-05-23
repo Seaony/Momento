@@ -8,7 +8,7 @@ nonisolated struct AssetDragPasteboardPayload: Codable, Hashable, Sendable {
     var primaryAssetID: AssetItem.ID
 }
 
-enum AssetDragPasteboardWriter {
+nonisolated enum AssetDragPasteboardWriter {
     static let assetIDsTypeIdentifier = "com.seaony.momento.asset-ids"
     static let assetIDsPasteboardType = NSPasteboard.PasteboardType(assetIDsTypeIdentifier)
     static let assetIDsUTType = UTType(exportedAs: assetIDsTypeIdentifier)

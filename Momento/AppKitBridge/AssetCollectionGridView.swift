@@ -506,7 +506,7 @@ extension AssetCollectionGridView {
 
             let primaryAssetID = activeDragPrimaryAssetID ?? asset.id
             let selectedAssetIDs = orderedDragAssetIDs(primaryAssetID: primaryAssetID, in: collectionView)
-            return AssetDragPasteboardItem(
+            return AssetFilePromiseProvider(
                 asset: asset,
                 libraryID: asset.libraryID,
                 assetIDs: selectedAssetIDs,

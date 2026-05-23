@@ -104,6 +104,15 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(bridgeSource.contains("com.seaony.momento.asset-ids"))
     }
 
+    func testAssetDragWriterIsFilePromiseProviderItself() throws {
+        let assetGridSource = try String(contentsOf: assetGridURL(), encoding: .utf8)
+        let bridgeSource = try appKitBridgeSource()
+
+        XCTAssertTrue(bridgeSource.contains("final class AssetFilePromiseProvider: NSFilePromiseProvider, NSFilePromiseProviderDelegate"))
+        XCTAssertTrue(assetGridSource.contains("return AssetFilePromiseProvider("))
+        XCTAssertFalse(bridgeSource.contains("final class AssetDragPasteboardItem"))
+    }
+
     func testInternalAssetDragUTTypeIsDeclaredInInfoPlist() throws {
         let data = try Data(contentsOf: infoPlistURL())
         let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any])
