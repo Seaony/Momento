@@ -2261,6 +2261,40 @@
         }
       }
     },
+    "Saved to Momento" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved to Momento"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存到 Momento"
+          }
+        }
+      }
+    },
+    "The image has been imported into your current library." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The image has been imported into your current library."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "图片已导入当前资源库。"
+          }
+        }
+      }
+    },
     "More Actions" : {
       "extractionState" : "stale",
       "localizations" : {

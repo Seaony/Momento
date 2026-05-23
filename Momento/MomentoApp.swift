@@ -70,6 +70,11 @@ struct MomentoApp: App {
         do {
             try browserImportServer.start { url in
                 try await store.importRemoteImage(from: url)
+                let localization = AppLocalization(language: appLanguage)
+                await BrowserImportNotificationService.notifyImageSaved(
+                    title: localization.string("Saved to Momento"),
+                    body: localization.string("The image has been imported into your current library.")
+                )
             }
         } catch {
             store.libraryErrorMessage = error.localizedDescription
