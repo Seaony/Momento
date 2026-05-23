@@ -30,8 +30,13 @@ nonisolated final class BrowserImportServer: @unchecked Sendable {
     static let port: UInt16 = 47641
 
     private let queue = DispatchQueue(label: "com.seaony.Momento.browser-import-server")
+    private let listenPort: UInt16
     private var listener: NWListener?
     private var importHandler: (@MainActor @Sendable (URL) async throws -> Void)?
+
+    init(port: UInt16 = BrowserImportServer.port) {
+        listenPort = port
+    }
 
     func start(importHandler: @escaping @MainActor @Sendable (URL) async throws -> Void) throws {
         self.importHandler = importHandler
@@ -39,10 +44,10 @@ nonisolated final class BrowserImportServer: @unchecked Sendable {
             return
         }
 
-        let port = NWEndpoint.Port(rawValue: Self.port)!
+        let port = NWEndpoint.Port(rawValue: listenPort)!
         let parameters = NWParameters.tcp
         parameters.allowLocalEndpointReuse = true
-        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: port)
+        parameters.acceptLocalOnly = true
 
         let listener = try NWListener(using: parameters, on: port)
         listener.newConnectionHandler = { [weak self] connection in

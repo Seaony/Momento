@@ -3,6 +3,12 @@ import XCTest
 @testable import Momento
 
 final class BrowserImportHTTPTests: XCTestCase {
+    func testServerStartsWithLocalListener() throws {
+        let server = BrowserImportServer(port: 0)
+        try server.start { _ in }
+        server.stop()
+    }
+
     func testParsesChromeExtensionImageImportRequest() throws {
         let body = #"{"url":"https://example.com/source.png"}"#
         let request = httpRequest(
