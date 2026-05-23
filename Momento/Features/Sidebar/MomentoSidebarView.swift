@@ -39,7 +39,6 @@ struct MomentoSidebarView: View {
     var currentLibraryID: RecentLibraryReference.ID?
     var recentLibraries: [RecentLibraryReference]
     var folders: [AssetFolder]
-    var tagSummaries: [TagSummary]
     var counts: MomentoSidebarAssetCounts
     var onCreateLibrary: () -> Void
     var onOpenLibrary: () -> Void
@@ -56,13 +55,11 @@ struct MomentoSidebarView: View {
     var onRenameFolder: (AssetFolder.ID) -> Void
     var onDeleteFolder: (AssetFolder.ID) -> Void
     var onAssignDroppedAssetsToFolder: (Set<AssetItem.ID>, AssetFolder.ID) -> Void
-    var onAssignDroppedAssetsToTag: (Set<AssetItem.ID>, TagItem.ID) -> Void
 
     @State private var hoveredFooterActionID: String?
     @State private var hoveredNavigationItemID: String?
     @State private var hoveredFolderControlID: String?
     @State private var hoveredFolderID: AssetFolder.ID?
-    @State private var hoveredTagID: TagItem.ID?
     @State private var targetedAssetDropID: String?
     @State private var isFolderSectionHovered = false
     @State private var isFolderSectionExpanded = true
@@ -76,7 +73,6 @@ struct MomentoSidebarView: View {
         currentLibraryID: RecentLibraryReference.ID? = nil,
         recentLibraries: [RecentLibraryReference] = [],
         folders: [AssetFolder] = [],
-        tagSummaries: [TagSummary] = [],
         counts: MomentoSidebarAssetCounts = .empty,
         onCreateLibrary: @escaping () -> Void = {},
         onOpenLibrary: @escaping () -> Void = {},
@@ -92,15 +88,13 @@ struct MomentoSidebarView: View {
         onCreateFolder: @escaping (AssetFolder.ID?) -> Void = { _ in },
         onRenameFolder: @escaping (AssetFolder.ID) -> Void = { _ in },
         onDeleteFolder: @escaping (AssetFolder.ID) -> Void = { _ in },
-        onAssignDroppedAssetsToFolder: @escaping (Set<AssetItem.ID>, AssetFolder.ID) -> Void = { _, _ in },
-        onAssignDroppedAssetsToTag: @escaping (Set<AssetItem.ID>, TagItem.ID) -> Void = { _, _ in }
+        onAssignDroppedAssetsToFolder: @escaping (Set<AssetItem.ID>, AssetFolder.ID) -> Void = { _, _ in }
     ) {
         self._selection = selection
         self.libraryName = libraryName
         self.currentLibraryID = currentLibraryID
         self.recentLibraries = recentLibraries
         self.folders = folders
-        self.tagSummaries = tagSummaries
         self.counts = counts
         self.onCreateLibrary = onCreateLibrary
         self.onOpenLibrary = onOpenLibrary
@@ -117,7 +111,6 @@ struct MomentoSidebarView: View {
         self.onRenameFolder = onRenameFolder
         self.onDeleteFolder = onDeleteFolder
         self.onAssignDroppedAssetsToFolder = onAssignDroppedAssetsToFolder
-        self.onAssignDroppedAssetsToTag = onAssignDroppedAssetsToTag
     }
 
     var body: some View {
@@ -253,12 +246,6 @@ struct MomentoSidebarView: View {
 
             sidebarNavigationDivider
 
-            if !tagSummaries.isEmpty {
-                sidebarTagSection
-
-                sidebarNavigationDivider
-            }
-
             sidebarFolderSection
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -270,88 +257,6 @@ struct MomentoSidebarView: View {
             .frame(height: 0.5)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
-    }
-
-    private var sidebarTagSection: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(localization.string("Tags"))
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(MomentoTheme.primaryText)
-                .padding(.leading, 10)
-                .padding(.trailing, 7)
-                .frame(height: 24)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(tagSummaries) { summary in
-                    tagRow(summary)
-                }
-            }
-        }
-    }
-
-    private func tagRow(_ summary: TagSummary) -> some View {
-        let tag = summary.tag
-        let rowID = "tag-\(tag.id)"
-        let isSelected = selection == rowID
-        let isHovered = hoveredTagID == tag.id
-        let isDropTargeted = targetedAssetDropID == rowID
-        let foregroundStyle = sidebarNavigationForeground(
-            isSelected: isSelected,
-            isHovered: isHovered || isDropTargeted
-        )
-
-        return HStack(spacing: 10) {
-            Image(systemName: "number")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(foregroundStyle)
-                .frame(width: 18)
-
-            Text(tag.name)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(foregroundStyle)
-                .lineLimit(1)
-                .truncationMode(.tail)
-
-            Spacer(minLength: 0)
-
-            countBadge(summary.assetCount, foregroundStyle: foregroundStyle)
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 30)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            sidebarAssetDropRowBackground(
-                isSelected: isSelected,
-                isHovered: isHovered,
-                isDropTargeted: isDropTargeted
-            )
-        }
-        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-        .pointerStyle(.link)
-        .onTapGesture {
-            withAnimation(.smooth(duration: 0.16)) {
-                selection = rowID
-            }
-        }
-        .onHover { hovering in
-            withAnimation(.smooth(duration: 0.14)) {
-                if hovering {
-                    hoveredTagID = tag.id
-                } else if hoveredTagID == tag.id {
-                    hoveredTagID = nil
-                }
-            }
-        }
-        .onDrop(of: [AssetDragPasteboardWriter.assetIDsUTType], delegate: MomentoSidebarAssetDropDelegate(
-            currentLibraryID: currentLibraryID,
-            targetID: rowID,
-            targetedAssetDropID: $targetedAssetDropID
-        ) { assetIDs in
-            onAssignDroppedAssetsToTag(assetIDs, tag.id)
-        })
-        .help(tag.name)
-        .accessibilityLabel(tag.name)
     }
 
     private func sidebarNavigationItem(

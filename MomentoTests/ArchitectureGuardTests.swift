@@ -141,9 +141,9 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(sidebarSource.contains("MomentoSidebarAssetDropDelegate"))
         XCTAssertTrue(sidebarSource.contains("AssetDragPasteboardWriter.assetIDsUTType"))
         XCTAssertTrue(sidebarSource.contains("onAssignDroppedAssetsToFolder(assetIDs, folder.id)"))
-        XCTAssertTrue(sidebarSource.contains("onAssignDroppedAssetsToTag(assetIDs, tag.id)"))
+        XCTAssertFalse(sidebarSource.contains("sidebarTagSection"))
+        XCTAssertFalse(sidebarSource.contains("onAssignDroppedAssetsToTag"))
         XCTAssertTrue(contentSource.contains("try store.assignAssets(ids: assetIDs, to: folderID)"))
-        XCTAssertTrue(contentSource.contains("try store.addTag(id: tagID, toAssets: assetIDs)"))
     }
 
     private func repositoryRoot() -> URL {

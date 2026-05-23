@@ -157,7 +157,6 @@ struct ContentView: View {
             currentLibraryID: store.currentLibrary?.id,
             recentLibraries: store.recentLibraries,
             folders: store.folders,
-            tagSummaries: store.tagSummaries,
             sidebarCounts: sidebarAssetCounts,
             onCreateLibrary: createLibrary,
             onOpenLibrary: openLibrary,
@@ -175,7 +174,6 @@ struct ContentView: View {
             onRenameFolder: presentRenameFolderDialog,
             onDeleteFolder: presentDeleteFolderDialog,
             onAssignDroppedAssetsToFolder: assignDroppedAssetsToFolder,
-            onAssignDroppedAssetsToTag: assignDroppedAssetsToTag,
             title: title,
             subtitle: localization.itemCount(visibleAssets.count),
             inspectorAsset: store.selectedAsset.map { MomentoInspectorAsset(asset: $0, localization: localization) },
@@ -1268,14 +1266,6 @@ struct ContentView: View {
     private func assignDroppedAssetsToFolder(_ assetIDs: Set<AssetItem.ID>, folderID: AssetFolder.ID) {
         do {
             try store.assignAssets(ids: assetIDs, to: folderID)
-        } catch {
-            showImportError(error)
-        }
-    }
-
-    private func assignDroppedAssetsToTag(_ assetIDs: Set<AssetItem.ID>, tagID: TagItem.ID) {
-        do {
-            try store.addTag(id: tagID, toAssets: assetIDs)
         } catch {
             showImportError(error)
         }
