@@ -1078,6 +1078,59 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testImportingFolderPreservesHierarchyAsVirtualFolders() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        let sourceRoot = environment.inputURL.appendingPathComponent("Source", isDirectory: true)
+        let postersURL = sourceRoot.appendingPathComponent("Posters", isDirectory: true)
+        let referencesURL = sourceRoot.appendingPathComponent("References", isDirectory: true)
+        try FileManager.default.createDirectory(at: postersURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: referencesURL, withIntermediateDirectories: true)
+        _ = try environment.writeOnePixelPNG(named: "cover.png", in: postersURL)
+        _ = try environment.writeOnePixelJPEGWithExif(named: "nested.jpg", in: referencesURL)
+
+        try await store.importItems(from: [sourceRoot])
+
+        let postersFolderID = try XCTUnwrap(store.folders.first { $0.name == "Posters" }?.id)
+        let referencesFolderID = try XCTUnwrap(store.folders.first { $0.name == "References" }?.id)
+        XCTAssertNil(store.folders.first { $0.name == "Source" })
+        XCTAssertEqual(store.assets.count, 2)
+        XCTAssertTrue(try XCTUnwrap(store.assets.first { $0.displayName == "cover" }).folderIDs.contains(postersFolderID))
+        XCTAssertTrue(try XCTUnwrap(store.assets.first { $0.displayName == "nested" }).folderIDs.contains(referencesFolderID))
+
+        let storedAssetCount = try environment.storedAssetFiles().count
+        let reopened = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try reopened.openLibrary(at: environment.packageURL)
+        XCTAssertEqual(Set(reopened.folders.map(\.name)), ["Posters", "References"])
+        XCTAssertTrue(try XCTUnwrap(reopened.assets.first { $0.displayName == "cover" }).folderIDs.contains(postersFolderID))
+        XCTAssertTrue(try XCTUnwrap(reopened.assets.first { $0.displayName == "nested" }).folderIDs.contains(referencesFolderID))
+
+        try await reopened.importItems(from: [sourceRoot])
+        XCTAssertEqual(reopened.assets.count, 2)
+        XCTAssertEqual(try environment.storedAssetFiles().count, storedAssetCount)
+        XCTAssertTrue(try XCTUnwrap(reopened.assets.first { $0.displayName == "cover" }).folderIDs.contains(postersFolderID))
+
+        let coverID = try XCTUnwrap(reopened.assets.first { $0.displayName == "cover" }?.id)
+        try reopened.moveAssetToTrash(id: coverID)
+        try await reopened.importItems(from: [sourceRoot])
+        let restoredCover = try XCTUnwrap(reopened.assets.first { $0.id == coverID })
+        XCTAssertFalse(restoredCover.isTrashed)
+        XCTAssertTrue(restoredCover.folderIDs.contains(postersFolderID))
+    }
+
+    @MainActor
     func testRenamingRecentLibraryUpdatesManifestCurrentLibraryAndRecentReference() throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }
@@ -1216,15 +1269,19 @@ private struct TestEnvironment {
         try FileManager.default.createDirectory(at: inputURL, withIntermediateDirectories: true)
     }
 
-    func writeOnePixelPNG(named fileName: String) throws -> URL {
+    func writeOnePixelPNG(named fileName: String, in directory: URL? = nil) throws -> URL {
         let data = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=")!
-        let url = inputURL.appendingPathComponent(fileName)
+        let directory = directory ?? inputURL
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent(fileName)
         try data.write(to: url)
         return url
     }
 
-    func writeOnePixelJPEGWithExif(named fileName: String) throws -> URL {
-        let url = inputURL.appendingPathComponent(fileName)
+    func writeOnePixelJPEGWithExif(named fileName: String, in directory: URL? = nil) throws -> URL {
+        let directory = directory ?? inputURL
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent(fileName)
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         let pixel = Data([255, 0, 0, 255])
         guard

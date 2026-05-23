@@ -83,10 +83,19 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
     }
 
     func saveImportedAssets(_ assets: [AssetItem]) throws -> [AssetItem] {
-        try context.performAndWait {
-            var savedAssets: [AssetItem] = []
+        try saveImportedBatch(
+            AssetImportBatch(
+                newAssets: assets,
+                folderAssignmentsByContentHash: [:]
+            )
+        )
+    }
 
-            for importedAsset in assets {
+    func saveImportedBatch(_ batch: AssetImportBatch) throws -> [AssetItem] {
+        try context.performAndWait {
+            var affectedAssetIDs = Set<AssetItem.ID>()
+
+            for importedAsset in batch.newAssets {
                 if let existingRecord = try assetRecord(contentHash: importedAsset.contentHash) {
                     if (existingRecord.value(forKey: "isTrashed") as? Bool) == true {
                         let now = Date()
@@ -94,8 +103,8 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
                         existingRecord.setValue(nil, forKey: "trashedAt")
                         existingRecord.setValue(now, forKey: "updatedAt")
                     }
-                    if let existing = try asset(from: existingRecord) {
-                        savedAssets.append(existing)
+                    if let existingID = existingRecord.value(forKey: "id") as? String {
+                        affectedAssetIDs.insert(existingID)
                     }
                     continue
                 }
@@ -128,16 +137,19 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
                 record.setValue(nil, forKey: "tagsData")
                 saveColors(importedAsset.paletteColors, forAssetID: importedAsset.id)
 
-                var savedAsset = importedAsset
-                savedAsset.exifMetadata = exifMetadata(from: storedExifMetadataData)
-                savedAssets.append(savedAsset)
+                affectedAssetIDs.insert(importedAsset.id)
             }
+
+            try saveFolderAssignments(
+                batch.folderAssignmentsByContentHash,
+                affectedAssetIDs: &affectedAssetIDs
+            )
 
             if context.hasChanges {
                 try context.save()
             }
 
-            return savedAssets
+            return try assets(ids: affectedAssetIDs)
         }
     }
 
@@ -1232,10 +1244,142 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         return maxSortIndex + 1
     }
 
+    private func saveFolderAssignments(
+        _ assignmentsByContentHash: [String: [[String]]],
+        affectedAssetIDs: inout Set<AssetItem.ID>
+    ) throws {
+        guard !assignmentsByContentHash.isEmpty else {
+            return
+        }
+
+        var folderPathCache: [String: AssetFolder.ID] = [:]
+
+        for (contentHash, assignments) in assignmentsByContentHash {
+            guard let assetRecord = try assetRecord(contentHash: contentHash),
+                  let assetID = assetRecord.value(forKey: "id") as? String else {
+                continue
+            }
+
+            affectedAssetIDs.insert(assetID)
+            let now = Date()
+            var didChangeAsset = false
+
+            if (assetRecord.value(forKey: "isTrashed") as? Bool) == true {
+                assetRecord.setValue(false, forKey: "isTrashed")
+                assetRecord.setValue(nil, forKey: "trashedAt")
+                didChangeAsset = true
+            }
+
+            var seenPaths = Set<[String]>()
+            for assignment in assignments {
+                let path = assignment.map {
+                    $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                }.filter {
+                    !$0.isEmpty
+                }
+
+                guard !path.isEmpty, seenPaths.insert(path).inserted else {
+                    continue
+                }
+
+                let folderID = try folderID(forPath: path, cache: &folderPathCache)
+                let existing = try existingMembershipAssetIDs(folderID: folderID, assetIDs: [assetID])
+                guard !existing.contains(assetID) else {
+                    continue
+                }
+
+                let membership = NSManagedObject(
+                    entity: entity(named: "AssetFolderMembershipRecord"),
+                    insertInto: context
+                )
+                membership.setValue("\(assetID)-\(folderID)", forKey: "id")
+                membership.setValue(library.id, forKey: "libraryID")
+                membership.setValue(assetID, forKey: "assetID")
+                membership.setValue(folderID, forKey: "folderID")
+                membership.setValue(now, forKey: "createdAt")
+                didChangeAsset = true
+            }
+
+            if didChangeAsset {
+                assetRecord.setValue(now, forKey: "updatedAt")
+            }
+        }
+    }
+
+    private func folderID(
+        forPath components: [String],
+        cache: inout [String: AssetFolder.ID]
+    ) throws -> AssetFolder.ID {
+        var parentID: AssetFolder.ID?
+        var currentPath: [String] = []
+
+        for component in components {
+            currentPath.append(component)
+            let cacheKey = currentPath.joined(separator: "\u{0}")
+            if let cachedID = cache[cacheKey] {
+                parentID = cachedID
+                continue
+            }
+
+            if let existingRecord = try folderRecord(parentID: parentID, name: component),
+               let existingID = existingRecord.value(forKey: "id") as? String {
+                cache[cacheKey] = existingID
+                parentID = existingID
+                continue
+            }
+
+            let now = Date()
+            let folder = AssetFolder(
+                libraryID: library.id,
+                name: component,
+                parentID: parentID,
+                sortIndex: try nextFolderSortIndex(parentID: parentID),
+                createdAt: now,
+                updatedAt: now
+            )
+            let record = NSManagedObject(entity: entity(named: "FolderRecord"), insertInto: context)
+            record.setValue(folder.id, forKey: "id")
+            record.setValue(folder.libraryID, forKey: "libraryID")
+            record.setValue(folder.name, forKey: "name")
+            record.setValue(folder.parentID, forKey: "parentID")
+            record.setValue(folder.sortIndex, forKey: "sortIndex")
+            record.setValue(folder.createdAt, forKey: "createdAt")
+            record.setValue(folder.updatedAt, forKey: "updatedAt")
+
+            cache[cacheKey] = folder.id
+            parentID = folder.id
+        }
+
+        guard let folderID = parentID else {
+            throw LibraryMetadataError.missingFolder
+        }
+        return folderID
+    }
+
     private func folderRecord(id: String) throws -> NSManagedObject? {
         let request = NSFetchRequest<NSManagedObject>(entityName: "FolderRecord")
         request.fetchLimit = 1
         request.predicate = NSPredicate(format: "libraryID == %@ AND id == %@", library.id, id)
+        return try context.fetch(request).first
+    }
+
+    private func folderRecord(parentID: String?, name: String) throws -> NSManagedObject? {
+        let request = NSFetchRequest<NSManagedObject>(entityName: "FolderRecord")
+        request.fetchLimit = 1
+        if let parentID {
+            request.predicate = NSPredicate(
+                format: "libraryID == %@ AND parentID == %@ AND name == %@",
+                library.id,
+                parentID,
+                name
+            )
+        } else {
+            request.predicate = NSPredicate(
+                format: "libraryID == %@ AND parentID == nil AND name == %@",
+                library.id,
+                name
+            )
+        }
         return try context.fetch(request).first
     }
 

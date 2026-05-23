@@ -743,16 +743,17 @@ final class LibraryStore {
             _ = importAccessScope
         }
 
-        let imported = try await importService.importItems(
+        let imported = try await importService.importBatch(
             from: urls,
             into: currentLibrary,
             excludingContentHashes: metadataStore.existingContentHashes()
         )
-        let savedAssets = try metadataStore.saveImportedAssets(imported)
+        let savedAssets = try metadataStore.saveImportedBatch(imported)
         guard self.currentLibrary?.id == importingLibraryID else {
             return
         }
 
+        folders = try metadataStore.loadFolders()
         mergeAssets(savedAssets)
         pruneSelectedAssetsIfNeeded()
     }

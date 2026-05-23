@@ -3,6 +3,17 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
+nonisolated struct AssetImportBatch: Sendable {
+    var newAssets: [AssetItem]
+    var folderAssignmentsByContentHash: [String: [[String]]]
+}
+
+nonisolated private struct AssetImportCandidate: Sendable {
+    var sourceURL: URL
+    var rootURL: URL?
+    var relativeFolderComponents: [String]
+}
+
 struct AssetImportService: Sendable {
     private let storage: LibraryStorage
     private let thumbnailService: AssetThumbnailService
@@ -24,6 +35,18 @@ struct AssetImportService: Sendable {
         into library: AssetLibrary,
         excludingContentHashes existingContentHashes: Set<String>
     ) async throws -> [AssetItem] {
+        try await importBatch(
+            from: urls,
+            into: library,
+            excludingContentHashes: existingContentHashes
+        ).newAssets
+    }
+
+    nonisolated func importBatch(
+        from urls: [URL],
+        into library: AssetLibrary,
+        excludingContentHashes existingContentHashes: Set<String>
+    ) async throws -> AssetImportBatch {
         // 用户从 Finder 选择的文件/文件夹可能来自 sandbox 外部。访问权限必须覆盖
         // 后面的 detached import task，所以 scope 在 await 之前创建，并在整个导入
         // 完成后统一释放，而不是只包住收集 URL 的同步阶段。
@@ -35,16 +58,26 @@ struct AssetImportService: Sendable {
         return try await Task.detached(priority: .userInitiated) {
             try storage.prepareLibraryDirectories(for: library)
 
-            let files = try collectSupportedFiles(from: urls)
+            let candidates = try collectImportCandidates(from: urls)
             var imported: [AssetItem] = []
+            var folderAssignmentsByContentHash: [String: [[String]]] = [:]
             var seenHashes = existingContentHashes
 
-            for fileURL in files {
+            for candidate in candidates {
+                let fileURL = candidate.sourceURL
                 guard let kind = assetKind(for: fileURL) else {
                     continue
                 }
 
                 let hash = try contentHash(for: fileURL)
+                if !candidate.relativeFolderComponents.isEmpty {
+                    var assignedPaths = folderAssignmentsByContentHash[hash, default: []]
+                    if !assignedPaths.contains(candidate.relativeFolderComponents) {
+                        assignedPaths.append(candidate.relativeFolderComponents)
+                        folderAssignmentsByContentHash[hash] = assignedPaths
+                    }
+                }
+
                 // 导入阶段先用 hash 做一次批内和库内去重，避免重复复制物理文件；
                 // Core Data 层仍有唯一约束，负责处理并发或历史数据带来的最终一致性。
                 guard seenHashes.insert(hash).inserted else {
@@ -108,7 +141,10 @@ struct AssetImportService: Sendable {
                 )
             }
 
-            return imported
+            return AssetImportBatch(
+                newAssets: imported,
+                folderAssignmentsByContentHash: folderAssignmentsByContentHash
+            )
         }.value
     }
 }
@@ -129,8 +165,8 @@ nonisolated private final class SourceAccessScope: @unchecked Sendable {
     }
 }
 
-nonisolated private func collectSupportedFiles(from urls: [URL]) throws -> [URL] {
-    var files: [URL] = []
+nonisolated private func collectImportCandidates(from urls: [URL]) throws -> [AssetImportCandidate] {
+    var candidates: [AssetImportCandidate] = []
 
     for url in urls {
         var isDirectory: ObjCBool = false
@@ -147,15 +183,48 @@ nonisolated private func collectSupportedFiles(from urls: [URL]) throws -> [URL]
                 continue
             }
 
-            for case let fileURL as URL in enumerator where isSupportedAsset(fileURL) {
-                files.append(fileURL)
+            for case let fileURL as URL in enumerator {
+                guard isRegularFile(fileURL), isSupportedAsset(fileURL) else {
+                    continue
+                }
+                candidates.append(
+                    AssetImportCandidate(
+                        sourceURL: fileURL,
+                        rootURL: url,
+                        relativeFolderComponents: relativeFolderComponents(for: fileURL, rootURL: url)
+                    )
+                )
             }
         } else if isSupportedAsset(url) {
-            files.append(url)
+            candidates.append(
+                AssetImportCandidate(
+                    sourceURL: url,
+                    rootURL: nil,
+                    relativeFolderComponents: []
+                )
+            )
         }
     }
 
-    return files.sorted { $0.path < $1.path }
+    return candidates.sorted { $0.sourceURL.path < $1.sourceURL.path }
+}
+
+nonisolated private func isRegularFile(_ url: URL) -> Bool {
+    (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
+}
+
+nonisolated private func relativeFolderComponents(for fileURL: URL, rootURL: URL) -> [String] {
+    let rootComponents = rootURL.standardizedFileURL.pathComponents
+    let parentComponents = fileURL.deletingLastPathComponent().standardizedFileURL.pathComponents
+
+    guard parentComponents.count >= rootComponents.count,
+          Array(parentComponents.prefix(rootComponents.count)) == rootComponents else {
+        return []
+    }
+
+    return parentComponents.dropFirst(rootComponents.count).filter { component in
+        !component.isEmpty && component != "/"
+    }
 }
 
 nonisolated private func isSupportedAsset(_ url: URL) -> Bool {
