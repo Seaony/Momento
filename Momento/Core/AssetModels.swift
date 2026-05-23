@@ -1,3 +1,4 @@
+// 中文注释：本文件定义 UI 和存储层之间传递的值类型模型，避免 SwiftUI 直接持有 Core Data 对象。
 import Foundation
 import UniformTypeIdentifiers
 

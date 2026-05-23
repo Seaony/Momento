@@ -1,3 +1,4 @@
+// 中文注释：本服务从图片缩略采样中提取主色，用于检查器色板和颜色筛选。
 import CoreGraphics
 import Foundation
 import ImageIO

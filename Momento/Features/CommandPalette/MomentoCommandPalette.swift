@@ -1,3 +1,4 @@
+// 中文注释：命令面板只负责展示和触发当前上下文命令，不持久化业务数据。
 import SwiftUI
 
 struct MomentoCommand: Identifiable, Hashable {

@@ -1,3 +1,4 @@
+// 中文注释：检查器展示当前选中素材的预览、颜色、详情、标签、文件夹和 EXIF 信息。
 import SwiftUI
 import AppKit
 

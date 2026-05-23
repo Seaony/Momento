@@ -1,3 +1,4 @@
+// 中文注释：本控制器管理长按预览浮窗的 AppKit 生命周期和 SwiftUI 内容承载。
 import AppKit
 import QuartzCore
 import SwiftUI

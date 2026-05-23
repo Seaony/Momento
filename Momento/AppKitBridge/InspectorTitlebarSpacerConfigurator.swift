@@ -1,3 +1,4 @@
+// 中文注释：本桥接在系统标题栏里预留检查器按钮空间，避免 SwiftUI 工具栏被右侧栏挤压。
 import AppKit
 import SwiftUI
 

@@ -1,3 +1,4 @@
+// 中文注释：本桥接把左侧栏折叠和导入按钮放进 AppKit 标题栏坐标系，保证窗口 chrome 命中稳定。
 import AppKit
 import SwiftUI
 

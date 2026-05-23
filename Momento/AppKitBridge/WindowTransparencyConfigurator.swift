@@ -1,3 +1,4 @@
+// 中文注释：本桥接只负责窗口级透明 backing，业务视图继续保持 SwiftUI 声明式结构。
 import AppKit
 import SwiftUI
 

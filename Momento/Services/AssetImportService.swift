@@ -1,3 +1,4 @@
+// 中文注释：本服务负责外部文件/文件夹导入，包含安全作用域访问、内容哈希去重、缩略图和元数据提取。
 import CryptoKit
 import Foundation
 import ImageIO

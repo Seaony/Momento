@@ -1,3 +1,4 @@
+// 中文注释：本类实现拖出到 Finder 的文件承诺写入，把库内素材复制到系统请求的位置。
 import AppKit
 import Foundation
 

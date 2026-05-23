@@ -1,3 +1,4 @@
+// 中文注释：LibraryStore 是主线程状态聚合层，把资源库持久化结果合并成 SwiftUI 可观察状态。
 import Foundation
 import Observation
 
@@ -78,6 +79,8 @@ final class LibraryStore {
             return []
         }
 
+        // 中文注释：素材列表的可见性顺序固定为「侧边栏范围 -> 筛选 -> 搜索 -> 排序」。
+        // 这个顺序会影响数量统计和选择清理，后续新增筛选条件时不要绕过这里。
         let libraryAssets = currentLibraryAssets
         let scopedAssets: [AssetItem]
 

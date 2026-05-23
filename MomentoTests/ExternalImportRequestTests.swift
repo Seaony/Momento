@@ -1,3 +1,4 @@
+// 中文注释：本测试覆盖 momento:// 外部导入 URL 的解析边界。
 import Foundation
 import XCTest
 @testable import Momento

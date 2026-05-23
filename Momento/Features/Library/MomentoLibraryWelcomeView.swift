@@ -1,3 +1,4 @@
+// 中文注释：欢迎页只承载创建/打开/最近资源库入口，不直接操作底层文件系统。
 import SwiftUI
 
 private let welcomeButtonWidth: CGFloat = 116

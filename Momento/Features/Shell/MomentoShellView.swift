@@ -1,3 +1,4 @@
+// 中文注释：Shell 负责主窗口三栏布局、浮层和 toast 管理，业务状态仍由 LibraryStore 持有。
 import SwiftUI
 
 struct MomentoToastRequest: Equatable {

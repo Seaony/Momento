@@ -1,3 +1,4 @@
+// 中文注释：本文件集中管理 .momento 包的目录结构、manifest、素材路径和废纸篓移动。
 import Foundation
 
 nonisolated struct LibraryStorage: Sendable {

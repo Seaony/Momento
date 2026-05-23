@@ -1,3 +1,4 @@
+// 中文注释：本服务下载浏览器传来的远程图片到临时文件，再交给常规导入管线处理。
 import Foundation
 import UniformTypeIdentifiers
 

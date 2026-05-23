@@ -1,3 +1,4 @@
+// 中文注释：本文件负责为单个资源库打开 Core Data SQLite store，并启用轻量迁移。
 import CoreData
 import Foundation
 

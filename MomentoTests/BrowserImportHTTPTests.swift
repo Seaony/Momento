@@ -1,3 +1,4 @@
+// 中文注释：本测试覆盖浏览器本地导入服务的 HTTP 路由、JSON 解析和监听启动行为。
 import Foundation
 import XCTest
 @testable import Momento

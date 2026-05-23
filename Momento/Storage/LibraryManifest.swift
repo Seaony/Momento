@@ -1,3 +1,4 @@
+// 中文注释：manifest 是资源库包的轻量元信息入口，用来识别库 ID、名称和 schema 版本。
 import Foundation
 
 nonisolated struct LibraryManifest: Codable, Equatable, Sendable {

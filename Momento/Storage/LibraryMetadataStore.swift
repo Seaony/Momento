@@ -1,3 +1,4 @@
+// 中文注释：本文件封装单个资源库的 Core Data 读写，并只向 UI 层暴露值类型模型。
 import CoreData
 import Foundation
 
@@ -105,6 +106,8 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
                         existingRecord.setValue(nil, forKey: "trashedAt")
                         didUpdateExistingRecord = true
                     }
+                    // 中文注释：内容哈希命中已有素材时不覆盖用户编辑过的标题、标签等信息；
+                    // 只在旧记录还没有来源页面时补写浏览器导入传来的上下文链接。
                     if storedURL(existingRecord.value(forKey: "sourcePageURL")) == nil,
                        let sourcePageURL = importedAsset.sourcePageURL {
                         existingRecord.setValue(sourcePageURL.absoluteString, forKey: "sourcePageURL")

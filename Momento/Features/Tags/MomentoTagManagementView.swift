@@ -1,3 +1,4 @@
+// 中文注释：标签管理页负责标签列表、重命名和删除入口，关联数量来自 store 汇总。
 import SwiftUI
 
 struct MomentoTagManagementView: View {

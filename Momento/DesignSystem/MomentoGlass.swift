@@ -1,3 +1,4 @@
+// 中文注释：本文件集中定义 Momento 的 Liquid Glass 背景、按钮样式和视觉 token。
 import SwiftUI
 
 struct MomentoGlassBackground: View {

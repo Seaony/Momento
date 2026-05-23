@@ -1,3 +1,4 @@
+// 中文注释：本测试用粗粒度源码护栏保护容易回归的架构约束和平台集成点。
 import Foundation
 import XCTest
 

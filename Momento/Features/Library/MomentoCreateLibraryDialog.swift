@@ -1,3 +1,4 @@
+// 中文注释：本文件集中实现资源库、文件夹等名称输入和确认弹窗。
 import SwiftUI
 
 private let createLibraryDialogWidth: CGFloat = 460

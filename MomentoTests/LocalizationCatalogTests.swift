@@ -1,3 +1,4 @@
+// 中文注释：本测试扫描源码里的本地化 key，确保字符串目录的英中翻译完整且非空。
 import Foundation
 import XCTest
 

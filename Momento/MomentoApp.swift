@@ -5,6 +5,7 @@
 //  Created by Seaony on 2026/5/21.
 //
 
+// 中文注释：应用入口负责注入全局 store、本地化环境、窗口命令和浏览器导入服务。
 import SwiftUI
 
 @main

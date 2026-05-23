@@ -1,3 +1,4 @@
+// 中文注释：本视图绘制素材预览浮层，具体窗口生命周期由 AppKit 面板控制器管理。
 import AppKit
 import SwiftUI
 

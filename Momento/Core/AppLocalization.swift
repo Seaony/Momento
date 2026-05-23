@@ -1,3 +1,4 @@
+// 中文注释：本文件集中封装字符串、本地化格式化和错误文案映射，避免界面层散落 Bundle 查询。
 import Foundation
 import SwiftUI
 

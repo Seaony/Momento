@@ -1,3 +1,4 @@
+// 中文注释：本对象桥接 macOS 打开文件事件，把 .momento 包 URL 交给 SwiftUI 状态层处理。
 import AppKit
 import Foundation
 

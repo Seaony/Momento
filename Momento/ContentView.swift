@@ -1,3 +1,4 @@
+// 中文注释：ContentView 是主工作区协调层，负责把 store 状态、顶部工具栏、素材列表和检查器连接起来。
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers

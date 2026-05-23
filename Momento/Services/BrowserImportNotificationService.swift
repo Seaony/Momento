@@ -1,3 +1,4 @@
+// 中文注释：浏览器导入通知是非关键反馈路径，失败时不影响素材已导入的主流程。
 import Foundation
 import UserNotifications
 

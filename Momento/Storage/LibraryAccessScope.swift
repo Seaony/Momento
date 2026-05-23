@@ -1,3 +1,4 @@
+// 中文注释：本文件封装资源库 security-scoped bookmark 的解析和访问生命周期。
 import Foundation
 
 struct RecentLibraryReference: Identifiable, Hashable, Codable, Sendable {

@@ -1,3 +1,4 @@
+// 中文注释：本服务负责把可重建缩略图写入资源库缓存目录，原始素材仍由 assets 目录保存。
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers

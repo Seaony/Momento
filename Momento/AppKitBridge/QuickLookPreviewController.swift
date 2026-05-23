@@ -1,3 +1,4 @@
+// 中文注释：本控制器把当前素材 URL 暴露给系统 Quick Look 面板。
 import AppKit
 import Quartz
 

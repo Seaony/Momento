@@ -1,3 +1,4 @@
+// 中文注释：侧边栏展示资源库导航、文件夹树和底部操作入口，并承接素材拖拽归类。
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers

@@ -1,3 +1,4 @@
+// 中文注释：本地浏览器导入服务只监听本机端口，把扩展请求转换成应用内导入动作。
 import Foundation
 import Network
 

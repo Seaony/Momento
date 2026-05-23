@@ -1,3 +1,4 @@
+// 中文注释：本测试文件覆盖资源库、导入、元数据、回收站、文件夹等数据生命周期的端到端烟雾路径。
 import CoreGraphics
 import CoreData
 import Foundation

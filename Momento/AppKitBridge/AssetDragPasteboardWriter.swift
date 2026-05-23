@@ -1,3 +1,4 @@
+// 中文注释：本文件定义应用内拖拽使用的 pasteboard payload，Finder 导出另走 file promise。
 import AppKit
 import Foundation
 import UniformTypeIdentifiers

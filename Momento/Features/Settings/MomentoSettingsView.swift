@@ -1,3 +1,4 @@
+// 中文注释：设置页只绑定用户偏好状态，网格等主工作区设置不在这里重复维护。
 import SwiftUI
 
 struct MomentoSettingsView: View {

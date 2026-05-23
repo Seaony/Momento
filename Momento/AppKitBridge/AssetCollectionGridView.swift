@@ -3,6 +3,7 @@
 //  Momento
 //
 
+// 中文注释：本文件封装高性能素材列表的 AppKit NSCollectionView 渲染、选择、预览、拖拽和快捷键桥接。
 import AppKit
 import QuartzCore
 import SwiftUI
@@ -313,6 +314,8 @@ struct AssetCollectionGridView: NSViewRepresentable {
     }
 
     private func applyAssetChanges(to collectionView: NSCollectionView, coordinator: Coordinator) {
+        // 中文注释：收藏、标题、标签、文件夹等轻量字段变化可以原地刷新 cell，
+        // 避免 reloadData 造成整个瀑布流闪烁和滚动位置抖动。
         if let itemUpdateIndexPaths = itemUpdateIndexPaths(from: coordinator.currentAssets, to: assets) {
             coordinator.currentAssets = assets
             coordinator.rebuildAssetIndex(for: assets)
@@ -367,6 +370,8 @@ struct AssetCollectionGridView: NSViewRepresentable {
     }
 
     private func canUpdateItemInPlace(from oldAsset: AssetItem, to newAsset: AssetItem) -> Bool {
+        // 中文注释：这里显式列出允许原地刷新的字段。只要布局、文件路径或缩略图相关字段变化，
+        // 比较结果就会失败并回退到完整 reload，保证布局缓存不会拿到过期数据。
         var comparableOldAsset = oldAsset
         comparableOldAsset.displayName = newAsset.displayName
         comparableOldAsset.byteSize = newAsset.byteSize

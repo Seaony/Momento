@@ -1,3 +1,4 @@
+// 中文注释：本枚举定义用户可选语言和对应 Locale，供 AppStorage 与环境 locale 共用。
 import Foundation
 
 enum AppLanguage: String, CaseIterable, Identifiable, Sendable {
