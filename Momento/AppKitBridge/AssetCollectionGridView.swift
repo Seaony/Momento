@@ -400,6 +400,7 @@ extension AssetCollectionGridView {
         private var assetIndexByID: [AssetItem.ID: Int]
         private var activeDragPrimaryAssetID: AssetItem.ID?
         private var activeDragExportBatch: AssetDragExportBatch?
+        private var activeDragSourcePlaceholders: [NSView] = []
 
         init(_ parent: AssetCollectionGridView) {
             self.parent = parent
@@ -534,11 +535,21 @@ extension AssetCollectionGridView {
         func collectionView(
             _ collectionView: NSCollectionView,
             draggingSession session: NSDraggingSession,
+            willBeginAt screenPoint: NSPoint,
+            forItemsAt indexPaths: Set<IndexPath>
+        ) {
+            showDragSourcePlaceholders(for: indexPaths, in: collectionView)
+        }
+
+        func collectionView(
+            _ collectionView: NSCollectionView,
+            draggingSession session: NSDraggingSession,
             endedAt screenPoint: NSPoint,
             dragOperation operation: NSDragOperation
         ) {
             activeDragPrimaryAssetID = nil
             activeDragExportBatch = nil
+            hideDragSourcePlaceholders()
         }
 
         func syncSelection() {
@@ -702,6 +713,31 @@ extension AssetCollectionGridView {
             return orderedIDs.isEmpty ? [primaryAssetID] : orderedIDs
         }
 
+        private func showDragSourcePlaceholders(
+            for indexPaths: Set<IndexPath>,
+            in collectionView: NSCollectionView
+        ) {
+            hideDragSourcePlaceholders()
+
+            activeDragSourcePlaceholders = indexPaths.compactMap { indexPath in
+                guard let item = collectionView.item(at: indexPath) as? AssetCollectionViewItem,
+                      let snapshot = item.dragSourcePlaceholderImage() else {
+                    return nil
+                }
+
+                let placeholder = AssetDragSourcePlaceholderView(frame: item.view.frame)
+                placeholder.image = snapshot
+                placeholder.imageScaling = .scaleAxesIndependently
+                collectionView.addSubview(placeholder, positioned: .above, relativeTo: nil)
+                return placeholder
+            }
+        }
+
+        private func hideDragSourcePlaceholders() {
+            activeDragSourcePlaceholders.forEach { $0.removeFromSuperview() }
+            activeDragSourcePlaceholders = []
+        }
+
         private func sourceFrameForPreview(at indexPath: IndexPath, in collectionView: NSCollectionView) -> NSRect? {
             guard let item = collectionView.item(at: indexPath) as? AssetCollectionViewItem else {
                 return nil
@@ -713,6 +749,12 @@ extension AssetCollectionGridView {
         private static func assetIndexByID(for assets: [AssetItem]) -> [AssetItem.ID: Int] {
             Dictionary(uniqueKeysWithValues: assets.enumerated().map { ($0.element.id, $0.offset) })
         }
+    }
+}
+
+private final class AssetDragSourcePlaceholderView: NSImageView {
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        nil
     }
 }
 
@@ -1551,6 +1593,24 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
         let rectInWindow = previewImageView.convert(previewImageView.visibleImageBounds, to: nil)
         return window.convertToScreen(rectInWindow)
+    }
+
+    func dragSourcePlaceholderImage() -> NSImage? {
+        view.layoutSubtreeIfNeeded()
+
+        let bounds = view.bounds
+        guard bounds.width > 0,
+              bounds.height > 0,
+              let representation = view.bitmapImageRepForCachingDisplay(in: bounds) else {
+            return nil
+        }
+
+        representation.size = bounds.size
+        view.cacheDisplay(in: bounds, to: representation)
+
+        let image = NSImage(size: bounds.size)
+        image.addRepresentation(representation)
+        return image
     }
 }
 
