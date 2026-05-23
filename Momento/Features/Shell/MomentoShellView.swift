@@ -22,6 +22,7 @@ struct MomentoShellView<Content: View>: View {
     var currentLibraryID: RecentLibraryReference.ID?
     var recentLibraries: [RecentLibraryReference]
     var folders: [AssetFolder]
+    var tagSummaries: [TagSummary]
     var sidebarCounts: MomentoSidebarAssetCounts
     var onCreateLibrary: () -> Void
     var onOpenLibrary: () -> Void
@@ -36,6 +37,8 @@ struct MomentoShellView<Content: View>: View {
     var onCreateFolder: (AssetFolder.ID?) -> Void
     var onRenameFolder: (AssetFolder.ID) -> Void
     var onDeleteFolder: (AssetFolder.ID) -> Void
+    var onAssignDroppedAssetsToFolder: (Set<AssetItem.ID>, AssetFolder.ID) -> Void
+    var onAssignDroppedAssetsToTag: (Set<AssetItem.ID>, TagItem.ID) -> Void
     var title: String
     var subtitle: String?
     var showsChromeControls: Bool
@@ -66,6 +69,7 @@ struct MomentoShellView<Content: View>: View {
         currentLibraryID: RecentLibraryReference.ID? = nil,
         recentLibraries: [RecentLibraryReference] = [],
         folders: [AssetFolder] = [],
+        tagSummaries: [TagSummary] = [],
         sidebarCounts: MomentoSidebarAssetCounts = .empty,
         onCreateLibrary: @escaping () -> Void = {},
         onOpenLibrary: @escaping () -> Void = {},
@@ -80,6 +84,8 @@ struct MomentoShellView<Content: View>: View {
         onCreateFolder: @escaping (AssetFolder.ID?) -> Void = { _ in },
         onRenameFolder: @escaping (AssetFolder.ID) -> Void = { _ in },
         onDeleteFolder: @escaping (AssetFolder.ID) -> Void = { _ in },
+        onAssignDroppedAssetsToFolder: @escaping (Set<AssetItem.ID>, AssetFolder.ID) -> Void = { _, _ in },
+        onAssignDroppedAssetsToTag: @escaping (Set<AssetItem.ID>, TagItem.ID) -> Void = { _, _ in },
         title: String = "All Assets",
         subtitle: String? = "0 items",
         showsChromeControls: Bool = true,
@@ -102,6 +108,7 @@ struct MomentoShellView<Content: View>: View {
         self.currentLibraryID = currentLibraryID
         self.recentLibraries = recentLibraries
         self.folders = folders
+        self.tagSummaries = tagSummaries
         self.sidebarCounts = sidebarCounts
         self.onCreateLibrary = onCreateLibrary
         self.onOpenLibrary = onOpenLibrary
@@ -116,6 +123,8 @@ struct MomentoShellView<Content: View>: View {
         self.onCreateFolder = onCreateFolder
         self.onRenameFolder = onRenameFolder
         self.onDeleteFolder = onDeleteFolder
+        self.onAssignDroppedAssetsToFolder = onAssignDroppedAssetsToFolder
+        self.onAssignDroppedAssetsToTag = onAssignDroppedAssetsToTag
         self.title = title
         self.subtitle = subtitle
         self.showsChromeControls = showsChromeControls
@@ -205,6 +214,7 @@ struct MomentoShellView<Content: View>: View {
             currentLibraryID: currentLibraryID,
             recentLibraries: recentLibraries,
             folders: folders,
+            tagSummaries: tagSummaries,
             counts: sidebarCounts,
             onCreateLibrary: onCreateLibrary,
             onOpenLibrary: onOpenLibrary,
@@ -217,7 +227,9 @@ struct MomentoShellView<Content: View>: View {
             onCloseLibrary: onCloseLibrary,
             onCreateFolder: onCreateFolder,
             onRenameFolder: onRenameFolder,
-            onDeleteFolder: onDeleteFolder
+            onDeleteFolder: onDeleteFolder,
+            onAssignDroppedAssetsToFolder: onAssignDroppedAssetsToFolder,
+            onAssignDroppedAssetsToTag: onAssignDroppedAssetsToTag
         )
         .frame(width: effectiveSidebarWidth)
         .fixedSize(horizontal: true, vertical: false)

@@ -448,6 +448,70 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testAssigningMultipleDraggedAssetsToFolderIsIdempotent() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        let firstSource = try environment.writeOnePixelPNG(named: "dragged-a.png")
+        let secondSource = try environment.writeOnePixelJPEGWithExif(named: "dragged-b.jpg")
+        try await store.importItems(from: [firstSource, secondSource])
+
+        let firstAsset = try XCTUnwrap(store.assets.first { $0.displayName == "dragged-a" })
+        let secondAsset = try XCTUnwrap(store.assets.first { $0.displayName == "dragged-b" })
+        let assetIDs = Set([firstAsset.id, secondAsset.id])
+
+        try store.createFolder(name: "Inbox")
+        let inboxID = try XCTUnwrap(store.folders.first { $0.name == "Inbox" }?.id)
+        try store.createFolder(name: "Archive")
+        let archiveFolderID = try XCTUnwrap(store.folders.first { $0.name == "Archive" }?.id)
+
+        store.selectSidebarItem(id: "all-assets")
+        store.selectAsset(id: firstAsset.id)
+        try store.updateSelectedTags(["Drop", "Archive"])
+        let dropTagID = try XCTUnwrap(store.tagSummaries.first { $0.tag.name == "Drop" }?.tag.id)
+        let archiveTagID = try XCTUnwrap(store.tagSummaries.first { $0.tag.name == "Archive" }?.tag.id)
+
+        store.selectSidebarItem(id: "all-assets")
+        store.selectAssets(ids: assetIDs)
+        XCTAssertEqual(store.selectedAssetIDs, assetIDs)
+
+        try store.assignAssets(ids: assetIDs, to: inboxID)
+        try store.assignAssets(ids: assetIDs, to: inboxID)
+
+        XCTAssertEqual(store.selectedAssetIDs, assetIDs)
+        XCTAssertTrue(try XCTUnwrap(store.assets.first { $0.id == firstAsset.id }).folderIDs.contains(inboxID))
+        XCTAssertTrue(try XCTUnwrap(store.assets.first { $0.id == secondAsset.id }).folderIDs.contains(inboxID))
+
+        try store.addTag(id: dropTagID, toAssets: assetIDs)
+        try store.addTag(id: dropTagID, toAssets: assetIDs)
+
+        XCTAssertEqual(store.selectedAssetIDs, assetIDs)
+        XCTAssertEqual(store.tagSummaries.first { $0.tag.id == dropTagID }?.assetCount, 2)
+        XCTAssertTrue(store.assets.allSatisfy { asset in
+            asset.tags.map(\.id).count == Set(asset.tags.map(\.id)).count
+        })
+
+        try store.moveAssetToTrash(id: secondAsset.id)
+        try store.assignAssets(ids: assetIDs, to: archiveFolderID)
+        try store.addTag(id: archiveTagID, toAssets: assetIDs)
+
+        let updatedFirst = try XCTUnwrap(store.assets.first { $0.id == firstAsset.id })
+        let trashedSecond = try XCTUnwrap(store.assets.first { $0.id == secondAsset.id })
+        XCTAssertTrue(updatedFirst.folderIDs.contains(archiveFolderID))
+        XCTAssertFalse(trashedSecond.folderIDs.contains(archiveFolderID))
+        XCTAssertTrue(updatedFirst.tags.contains { $0.id == archiveTagID })
+        XCTAssertFalse(trashedSecond.tags.contains { $0.id == archiveTagID })
+        XCTAssertTrue(trashedSecond.isTrashed)
+    }
+
+    @MainActor
     func testImportPersistsExifMetadataAcrossReloads() async throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }

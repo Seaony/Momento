@@ -510,6 +510,19 @@ final class LibraryStore {
         tags = Self.uniqueTags(from: assets, libraryID: currentLibrary.id)
     }
 
+    func addTag(id tagID: TagItem.ID, toAssets assetIDs: Set<AssetItem.ID>) throws {
+        guard let metadataStore,
+              currentLibrary != nil else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        guard tags.contains(where: { $0.id == tagID }) else {
+            throw LibraryStoreError.missingTag
+        }
+
+        mergeAssets(try metadataStore.addTag(id: tagID, toAssets: activeAssetIDs(in: assetIDs)))
+    }
+
     func createFolder(name: String? = nil, parentID: AssetFolder.ID? = nil) throws {
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
@@ -555,7 +568,7 @@ final class LibraryStore {
             throw LibraryStoreError.noCurrentLibrary
         }
 
-        mergeAssets(try metadataStore.assignAssets(ids: ids, to: folderID))
+        mergeAssets(try metadataStore.assignAssets(ids: activeAssetIDs(in: ids), to: folderID))
     }
 
     func unassignAssets(ids: Set<AssetItem.ID>, from folderID: AssetFolder.ID) throws {
@@ -795,6 +808,14 @@ final class LibraryStore {
         }
 
         return assets.filter { $0.libraryID == currentLibrary.id }
+    }
+
+    private func activeAssetIDs(in ids: Set<AssetItem.ID>) -> Set<AssetItem.ID> {
+        Set(
+            currentLibraryAssets
+                .filter { ids.contains($0.id) }
+                .map(\.id)
+        )
     }
 
     private func applyFilters(to assets: [AssetItem]) -> [AssetItem] {

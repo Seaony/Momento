@@ -226,7 +226,7 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
                 throw LibraryMetadataError.missingFolder
             }
 
-            let validAssetIDs = try existingAssetIDs(in: ids)
+            let validAssetIDs = try existingAssetIDs(in: ids, includeTrashed: false)
             let existing = try existingMembershipAssetIDs(folderID: folderID, assetIDs: validAssetIDs)
             let now = Date()
 
@@ -344,6 +344,42 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
                 try context.save()
             }
             return records.compactMap(tag(from:))
+        }
+    }
+
+    func addTag(id tagID: TagItem.ID, toAssets assetIDs: Set<AssetItem.ID>) throws -> [AssetItem] {
+        try context.performAndWait {
+            guard try tagRecord(id: tagID) != nil else {
+                throw LibraryMetadataError.missingTag
+            }
+
+            let validAssetIDs = try existingAssetIDs(in: assetIDs, includeTrashed: false)
+            let existingAssetIDs = Set(
+                try tagLinkRecords(tagID: tagID, assetIDs: validAssetIDs).compactMap {
+                    $0.value(forKey: "assetID") as? String
+                }
+            )
+            let now = Date()
+
+            for assetID in validAssetIDs.subtracting(existingAssetIDs) {
+                let link = NSManagedObject(entity: entity(named: "AssetTagRecord"), insertInto: context)
+                link.setValue("\(assetID)-\(tagID)", forKey: "id")
+                link.setValue(library.id, forKey: "libraryID")
+                link.setValue(assetID, forKey: "assetID")
+                link.setValue(tagID, forKey: "tagID")
+                link.setValue(now, forKey: "createdAt")
+            }
+
+            let linkedAssetIDs = validAssetIDs.subtracting(existingAssetIDs)
+            for assetRecord in try assetRecords(ids: linkedAssetIDs) {
+                assetRecord.setValue(now, forKey: "updatedAt")
+            }
+
+            if context.hasChanges {
+                try context.save()
+            }
+
+            return try assets(ids: validAssetIDs)
         }
     }
 
@@ -1071,6 +1107,21 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         return try context.fetch(request)
     }
 
+    private func tagLinkRecords(tagID: TagItem.ID, assetIDs: Set<AssetItem.ID>) throws -> [NSManagedObject] {
+        guard !assetIDs.isEmpty else {
+            return []
+        }
+
+        let request = NSFetchRequest<NSManagedObject>(entityName: "AssetTagRecord")
+        request.predicate = NSPredicate(
+            format: "libraryID == %@ AND tagID == %@ AND assetID IN %@",
+            library.id,
+            tagID,
+            Array(assetIDs)
+        )
+        return try context.fetch(request)
+    }
+
     private func assetIDs(linkedToTagID tagID: TagItem.ID) throws -> Set<AssetItem.ID> {
         Set(try tagLinkRecords(tagID: tagID).compactMap { $0.value(forKey: "assetID") as? String })
     }
@@ -1217,14 +1268,16 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         return result
     }
 
-    private func existingAssetIDs(in ids: Set<AssetItem.ID>) throws -> Set<String> {
+    private func existingAssetIDs(in ids: Set<AssetItem.ID>, includeTrashed: Bool = true) throws -> Set<String> {
         guard !ids.isEmpty else {
             return []
         }
         let request = NSFetchRequest<NSDictionary>(entityName: "AssetRecord")
         request.resultType = .dictionaryResultType
         request.propertiesToFetch = ["id"]
-        request.predicate = NSPredicate(format: "libraryID == %@ AND id IN %@", library.id, Array(ids))
+        request.predicate = includeTrashed
+            ? NSPredicate(format: "libraryID == %@ AND id IN %@", library.id, Array(ids))
+            : NSPredicate(format: "libraryID == %@ AND id IN %@ AND isTrashed == NO", library.id, Array(ids))
         return Set(try context.fetch(request).compactMap { $0["id"] as? String })
     }
 

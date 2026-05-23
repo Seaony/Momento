@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 import UniformTypeIdentifiers
 
-struct AssetDragPasteboardPayload: Codable, Hashable, Sendable {
+nonisolated struct AssetDragPasteboardPayload: Codable, Hashable, Sendable {
     var libraryID: AssetLibrary.ID
     var assetIDs: [AssetItem.ID]
     var primaryAssetID: AssetItem.ID

@@ -39,6 +39,7 @@ struct MomentoSidebarView: View {
     var currentLibraryID: RecentLibraryReference.ID?
     var recentLibraries: [RecentLibraryReference]
     var folders: [AssetFolder]
+    var tagSummaries: [TagSummary]
     var counts: MomentoSidebarAssetCounts
     var onCreateLibrary: () -> Void
     var onOpenLibrary: () -> Void
@@ -52,11 +53,15 @@ struct MomentoSidebarView: View {
     var onCreateFolder: (AssetFolder.ID?) -> Void
     var onRenameFolder: (AssetFolder.ID) -> Void
     var onDeleteFolder: (AssetFolder.ID) -> Void
+    var onAssignDroppedAssetsToFolder: (Set<AssetItem.ID>, AssetFolder.ID) -> Void
+    var onAssignDroppedAssetsToTag: (Set<AssetItem.ID>, TagItem.ID) -> Void
 
     @State private var hoveredFooterActionID: String?
     @State private var hoveredNavigationItemID: String?
     @State private var hoveredFolderControlID: String?
     @State private var hoveredFolderID: AssetFolder.ID?
+    @State private var hoveredTagID: TagItem.ID?
+    @State private var targetedAssetDropID: String?
     @State private var isFolderSectionHovered = false
     @State private var isFolderSectionExpanded = true
     @State private var expandedFolderIDs: Set<AssetFolder.ID> = []
@@ -69,6 +74,7 @@ struct MomentoSidebarView: View {
         currentLibraryID: RecentLibraryReference.ID? = nil,
         recentLibraries: [RecentLibraryReference] = [],
         folders: [AssetFolder] = [],
+        tagSummaries: [TagSummary] = [],
         counts: MomentoSidebarAssetCounts = .empty,
         onCreateLibrary: @escaping () -> Void = {},
         onOpenLibrary: @escaping () -> Void = {},
@@ -81,13 +87,16 @@ struct MomentoSidebarView: View {
         onCloseLibrary: @escaping () -> Void = {},
         onCreateFolder: @escaping (AssetFolder.ID?) -> Void = { _ in },
         onRenameFolder: @escaping (AssetFolder.ID) -> Void = { _ in },
-        onDeleteFolder: @escaping (AssetFolder.ID) -> Void = { _ in }
+        onDeleteFolder: @escaping (AssetFolder.ID) -> Void = { _ in },
+        onAssignDroppedAssetsToFolder: @escaping (Set<AssetItem.ID>, AssetFolder.ID) -> Void = { _, _ in },
+        onAssignDroppedAssetsToTag: @escaping (Set<AssetItem.ID>, TagItem.ID) -> Void = { _, _ in }
     ) {
         self._selection = selection
         self.libraryName = libraryName
         self.currentLibraryID = currentLibraryID
         self.recentLibraries = recentLibraries
         self.folders = folders
+        self.tagSummaries = tagSummaries
         self.counts = counts
         self.onCreateLibrary = onCreateLibrary
         self.onOpenLibrary = onOpenLibrary
@@ -101,6 +110,8 @@ struct MomentoSidebarView: View {
         self.onCreateFolder = onCreateFolder
         self.onRenameFolder = onRenameFolder
         self.onDeleteFolder = onDeleteFolder
+        self.onAssignDroppedAssetsToFolder = onAssignDroppedAssetsToFolder
+        self.onAssignDroppedAssetsToTag = onAssignDroppedAssetsToTag
     }
 
     var body: some View {
@@ -234,6 +245,12 @@ struct MomentoSidebarView: View {
 
             sidebarNavigationDivider
 
+            if !tagSummaries.isEmpty {
+                sidebarTagSection
+
+                sidebarNavigationDivider
+            }
+
             sidebarFolderSection
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -245,6 +262,88 @@ struct MomentoSidebarView: View {
             .frame(height: 0.5)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
+    }
+
+    private var sidebarTagSection: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(localization.string("Tags"))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(MomentoTheme.primaryText)
+                .padding(.leading, 10)
+                .padding(.trailing, 7)
+                .frame(height: 24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(tagSummaries) { summary in
+                    tagRow(summary)
+                }
+            }
+        }
+    }
+
+    private func tagRow(_ summary: TagSummary) -> some View {
+        let tag = summary.tag
+        let rowID = "tag-\(tag.id)"
+        let isSelected = selection == rowID
+        let isHovered = hoveredTagID == tag.id
+        let isDropTargeted = targetedAssetDropID == rowID
+        let foregroundStyle = sidebarNavigationForeground(
+            isSelected: isSelected,
+            isHovered: isHovered || isDropTargeted
+        )
+
+        return HStack(spacing: 10) {
+            Image(systemName: "number")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(foregroundStyle)
+                .frame(width: 18)
+
+            Text(tag.name)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(foregroundStyle)
+                .lineLimit(1)
+                .truncationMode(.tail)
+
+            Spacer(minLength: 0)
+
+            countBadge(summary.assetCount, foregroundStyle: foregroundStyle)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 30)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            sidebarAssetDropRowBackground(
+                isSelected: isSelected,
+                isHovered: isHovered,
+                isDropTargeted: isDropTargeted
+            )
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .pointerStyle(.link)
+        .onTapGesture {
+            withAnimation(.smooth(duration: 0.16)) {
+                selection = rowID
+            }
+        }
+        .onHover { hovering in
+            withAnimation(.smooth(duration: 0.14)) {
+                if hovering {
+                    hoveredTagID = tag.id
+                } else if hoveredTagID == tag.id {
+                    hoveredTagID = nil
+                }
+            }
+        }
+        .onDrop(of: [AssetDragPasteboardWriter.assetIDsUTType], delegate: MomentoSidebarAssetDropDelegate(
+            currentLibraryID: currentLibraryID,
+            targetID: rowID,
+            targetedAssetDropID: $targetedAssetDropID
+        ) { assetIDs in
+            onAssignDroppedAssetsToTag(assetIDs, tag.id)
+        })
+        .help(tag.name)
+        .accessibilityLabel(tag.name)
     }
 
     private func sidebarNavigationItem(
@@ -414,9 +513,14 @@ struct MomentoSidebarView: View {
 
     private func folderRow(_ row: MomentoSidebarFolderRow) -> some View {
         let folder = row.folder
+        let rowID = "folder-\(folder.id)"
         let isSelected = selection == "folder-\(folder.id)"
         let isHovered = hoveredFolderID == folder.id
-        let foregroundStyle = sidebarNavigationForeground(isSelected: isSelected, isHovered: isHovered)
+        let isDropTargeted = targetedAssetDropID == rowID
+        let foregroundStyle = sidebarNavigationForeground(
+            isSelected: isSelected,
+            isHovered: isHovered || isDropTargeted
+        )
 
         return HStack(spacing: 0) {
             Button {
@@ -454,7 +558,11 @@ struct MomentoSidebarView: View {
         .frame(height: 30)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
-            folderRowBackground(isSelected: isSelected, isHovered: isHovered)
+            sidebarAssetDropRowBackground(
+                isSelected: isSelected,
+                isHovered: isHovered,
+                isDropTargeted: isDropTargeted
+            )
         }
         .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         .pointerStyle(.link)
@@ -475,15 +583,26 @@ struct MomentoSidebarView: View {
         .contextMenu {
             folderContextMenuItems(for: folder)
         }
+        .onDrop(of: [AssetDragPasteboardWriter.assetIDsUTType], delegate: MomentoSidebarAssetDropDelegate(
+            currentLibraryID: currentLibraryID,
+            targetID: rowID,
+            targetedAssetDropID: $targetedAssetDropID
+        ) { assetIDs in
+            onAssignDroppedAssetsToFolder(assetIDs, folder.id)
+        })
         .help(folder.name)
         .accessibilityLabel(folder.name)
     }
 
     @ViewBuilder
-    private func folderRowBackground(isSelected: Bool, isHovered: Bool) -> some View {
+    private func sidebarAssetDropRowBackground(
+        isSelected: Bool,
+        isHovered: Bool,
+        isDropTargeted: Bool
+    ) -> some View {
         let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
 
-        if isSelected || isHovered {
+        if isSelected || isHovered || isDropTargeted {
             shape.fill(MomentoTheme.sidebarIconHoverBackground)
         } else {
             Color.clear
@@ -813,6 +932,74 @@ private struct MomentoSidebarFolderRow: Identifiable {
     var hasChildren: Bool
 
     var id: AssetFolder.ID { folder.id }
+}
+
+private struct MomentoSidebarAssetDropDelegate: DropDelegate {
+    var currentLibraryID: AssetLibrary.ID?
+    var targetID: String
+    @Binding var targetedAssetDropID: String?
+    var onDropAssetIDs: (Set<AssetItem.ID>) -> Void
+
+    func validateDrop(info: DropInfo) -> Bool {
+        currentLibraryID != nil &&
+            info.hasItemsConforming(to: [AssetDragPasteboardWriter.assetIDsUTType])
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard validateDrop(info: info) else {
+            return
+        }
+
+        withAnimation(.smooth(duration: 0.12)) {
+            targetedAssetDropID = targetID
+        }
+    }
+
+    func dropExited(info: DropInfo) {
+        clearTargetIfNeeded()
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        guard validateDrop(info: info) else {
+            return nil
+        }
+
+        return DropProposal(operation: .copy)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        clearTargetIfNeeded()
+
+        guard validateDrop(info: info),
+              let provider = info.itemProviders(for: [AssetDragPasteboardWriter.assetIDsUTType]).first else {
+            return false
+        }
+
+        let expectedLibraryID = currentLibraryID
+        provider.loadDataRepresentation(forTypeIdentifier: AssetDragPasteboardWriter.assetIDsTypeIdentifier) { data, _ in
+            guard let data,
+                  let payload = try? JSONDecoder.momento.decode(AssetDragPasteboardPayload.self, from: data),
+                  payload.libraryID == expectedLibraryID else {
+                return
+            }
+
+            Task { @MainActor in
+                onDropAssetIDs(Set(payload.assetIDs))
+            }
+        }
+
+        return true
+    }
+
+    private func clearTargetIfNeeded() {
+        guard targetedAssetDropID == targetID else {
+            return
+        }
+
+        withAnimation(.smooth(duration: 0.12)) {
+            targetedAssetDropID = nil
+        }
+    }
 }
 
 private struct MomentoLibrarySwitcherMenu: View {

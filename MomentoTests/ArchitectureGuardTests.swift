@@ -104,6 +104,18 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(bridgeSource.contains("com.seaony.momento.asset-ids"))
     }
 
+    func testSidebarAcceptsInternalAssetDropsForOrganization() throws {
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+        let sidebarSource = try String(contentsOf: sidebarURL(), encoding: .utf8)
+
+        XCTAssertTrue(sidebarSource.contains("MomentoSidebarAssetDropDelegate"))
+        XCTAssertTrue(sidebarSource.contains("AssetDragPasteboardWriter.assetIDsUTType"))
+        XCTAssertTrue(sidebarSource.contains("onAssignDroppedAssetsToFolder(assetIDs, folder.id)"))
+        XCTAssertTrue(sidebarSource.contains("onAssignDroppedAssetsToTag(assetIDs, tag.id)"))
+        XCTAssertTrue(contentSource.contains("try store.assignAssets(ids: assetIDs, to: folderID)"))
+        XCTAssertTrue(contentSource.contains("try store.addTag(id: tagID, toAssets: assetIDs)"))
+    }
+
     private func repositoryRoot() -> URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -136,6 +148,10 @@ final class ArchitectureGuardTests: XCTestCase {
 
     private func assetGridURL() -> URL {
         repositoryRoot().appendingPathComponent("Momento/AppKitBridge/AssetCollectionGridView.swift")
+    }
+
+    private func sidebarURL() -> URL {
+        repositoryRoot().appendingPathComponent("Momento/Features/Sidebar/MomentoSidebarView.swift")
     }
 
     private func appKitBridgeSource() throws -> String {
