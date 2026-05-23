@@ -1,5 +1,6 @@
 // 中文注释：本类实现拖出到 Finder 的文件承诺写入，把库内素材复制到系统请求的位置。
 import AppKit
+import AudioToolbox
 import Foundation
 
 nonisolated final class AssetFilePromiseProvider: NSFilePromiseProvider, NSFilePromiseProviderDelegate {
@@ -166,14 +167,11 @@ nonisolated final class AssetDragExportBatch: @unchecked Sendable {
 }
 
 nonisolated enum AssetDeletionSoundPlayer {
-    private static let moveToTrashSoundPath =
-        "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/finder/move to trash.aif"
-    private static let playbackDurationNanoseconds: UInt64 = 500_000_000
+    private static let bundledSoundName = "MomentoActionSuccess"
+    private static let bundledSoundExtension = "wav"
 
     @MainActor
-    private static var successSound: NSSound?
-    @MainActor
-    private static var playbackToken = 0
+    private static var successSoundID: SystemSoundID?
 
     static func playDeletionSound() {
         Task { @MainActor in
@@ -183,28 +181,29 @@ nonisolated enum AssetDeletionSoundPlayer {
 
     @MainActor
     private static func playDeletionSoundOnMainActor() {
-        if successSound == nil {
-            successSound = NSSound(contentsOfFile: moveToTrashSoundPath, byReference: true)
+        if successSoundID == nil {
+            successSoundID = createBundledSoundID()
         }
 
-        playbackToken += 1
-        let currentPlaybackToken = playbackToken
-        successSound?.stop()
-        successSound?.currentTime = 0
-        successSound?.play()
-        schedulePlaybackStop(token: currentPlaybackToken)
+        if let successSoundID {
+            AudioServicesPlaySystemSound(successSoundID)
+        }
     }
 
-    @MainActor
-    private static func schedulePlaybackStop(token: Int) {
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: playbackDurationNanoseconds)
-            guard playbackToken == token else {
-                return
-            }
-
-            successSound?.stop()
-            successSound?.currentTime = 0
+    private static func createBundledSoundID() -> SystemSoundID? {
+        guard let soundURL = Bundle.main.url(
+            forResource: bundledSoundName,
+            withExtension: bundledSoundExtension
+        ) else {
+            return nil
         }
+
+        var soundID: SystemSoundID = 0
+        let status = AudioServicesCreateSystemSoundID(soundURL as CFURL, &soundID)
+        guard status == noErr else {
+            return nil
+        }
+
+        return soundID
     }
 }

@@ -144,16 +144,22 @@ final class ArchitectureGuardTests: XCTestCase {
     func testAssetDragOutPlaysTrashSoundOnceAfterDragBatchCompletes() throws {
         let assetGridSource = try String(contentsOf: assetGridURL(), encoding: .utf8)
         let bridgeSource = try appKitBridgeSource()
+        let soundURL = repositoryRoot().appendingPathComponent("Momento/Sounds/MomentoActionSuccess.wav")
 
         XCTAssertTrue(assetGridSource.contains("AssetDragExportBatch(expectedFileCount: selectedAssetIDs.count)"))
         XCTAssertTrue(assetGridSource.contains("exportBatch: exportBatch"))
         XCTAssertTrue(bridgeSource.contains("exportBatch.promiseDidFinish(success: success)"))
         XCTAssertTrue(bridgeSource.contains("AssetDeletionSoundPlayer.playDeletionSound()"))
-        XCTAssertTrue(bridgeSource.contains("move to trash.aif"))
-        XCTAssertTrue(bridgeSource.contains("NSSound(contentsOfFile: moveToTrashSoundPath, byReference: true)"))
-        XCTAssertTrue(bridgeSource.contains("playbackDurationNanoseconds: UInt64 = 500_000_000"))
-        XCTAssertTrue(bridgeSource.contains("schedulePlaybackStop(token: currentPlaybackToken)"))
-        XCTAssertFalse(bridgeSource.contains("NSSound(named: NSSound.Name(\"Pop\"))"))
+        XCTAssertTrue(bridgeSource.contains("import AudioToolbox"))
+        XCTAssertTrue(bridgeSource.contains("private static let bundledSoundName = \"MomentoActionSuccess\""))
+        XCTAssertTrue(bridgeSource.contains("Bundle.main.url("))
+        XCTAssertTrue(bridgeSource.contains("AudioServicesCreateSystemSoundID(soundURL as CFURL, &soundID)"))
+        XCTAssertTrue(bridgeSource.contains("AudioServicesPlaySystemSound(successSoundID)"))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: soundURL.path))
+        XCTAssertFalse(bridgeSource.contains("/System/Library/Components/CoreAudio.component"))
+        XCTAssertFalse(bridgeSource.contains("move to trash.aif"))
+        XCTAssertFalse(bridgeSource.contains("NSSound(contentsOfFile:"))
+        XCTAssertFalse(bridgeSource.contains("com.apple.audioanalyticsd"))
         XCTAssertTrue(bridgeSource.contains("completionHandler(nil)"))
     }
 
