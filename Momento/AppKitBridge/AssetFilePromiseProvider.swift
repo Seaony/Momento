@@ -70,6 +70,7 @@ nonisolated final class AssetFilePromiseProvider: NSFilePromiseProvider, NSFileP
         do {
             try FileManager.default.copyItem(at: sourceURL, to: availableDestinationURL(for: url))
             completionHandler(nil)
+            AssetDragExportSoundPlayer.playSuccessSound()
         } catch {
             completionHandler(error)
         }
@@ -114,5 +115,27 @@ nonisolated final class AssetFilePromiseProvider: NSFilePromiseProvider, NSFileP
         name
             .replacingOccurrences(of: "/", with: "-")
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+nonisolated private enum AssetDragExportSoundPlayer {
+    @MainActor
+    private static var successSound: NSSound?
+
+    static func playSuccessSound() {
+        Task { @MainActor in
+            playSuccessSoundOnMainActor()
+        }
+    }
+
+    @MainActor
+    private static func playSuccessSoundOnMainActor() {
+        if successSound == nil {
+            successSound = NSSound(named: NSSound.Name("Pop"))
+        }
+
+        successSound?.stop()
+        successSound?.currentTime = 0
+        successSound?.play()
     }
 }

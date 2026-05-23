@@ -113,6 +113,14 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertFalse(bridgeSource.contains("final class AssetDragPasteboardItem"))
     }
 
+    func testAssetDragOutPlaysCompletionSoundAfterSuccessfulPromiseWrite() throws {
+        let bridgeSource = try appKitBridgeSource()
+
+        XCTAssertTrue(bridgeSource.contains("AssetDragExportSoundPlayer.playSuccessSound()"))
+        XCTAssertTrue(bridgeSource.contains("NSSound(named: NSSound.Name(\"Pop\"))"))
+        XCTAssertTrue(bridgeSource.contains("completionHandler(nil)"))
+    }
+
     func testInternalAssetDragUTTypeIsDeclaredInInfoPlist() throws {
         let data = try Data(contentsOf: infoPlistURL())
         let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any])
