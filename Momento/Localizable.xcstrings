@@ -2842,23 +2842,6 @@
         }
       }
     },
-    "No commands found" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No commands found"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "没有找到命令"
-          }
-        }
-      }
-    },
     "No file types available" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -4317,40 +4300,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "废纸篓"
-          }
-        }
-      }
-    },
-    "Try a different action or keyword." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Try a different action or keyword."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "试试其他操作或关键词。"
-          }
-        }
-      }
-    },
-    "Type a command or search..." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Type a command or search..."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "输入命令或搜索..."
           }
         }
       }

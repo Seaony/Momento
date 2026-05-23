@@ -45,7 +45,6 @@ struct ContentView: View {
     @Bindable var store: LibraryStore
 
     @State private var isImporterPresented = false
-    @State private var isCommandPalettePresented = false
     @State private var isCreateLibraryDialogPresented = false
     @State private var editingLibrary: RecentLibraryReference?
     @State private var deletingLibrary: RecentLibraryReference?
@@ -169,16 +168,6 @@ struct ContentView: View {
             return true
         }
         .background {
-            Button("") {
-                withAnimation(.smooth(duration: 0.18)) {
-                    isCommandPalettePresented = true
-                }
-            }
-            .keyboardShortcut("k", modifiers: .command)
-            .frame(width: 0, height: 0)
-            .opacity(0)
-        }
-        .background {
             WindowTransparencyConfigurator()
         }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
@@ -201,7 +190,6 @@ struct ContentView: View {
         return MomentoShellView(
             sidebarSelection: sidebarSelection,
             searchQuery: $store.searchQuery,
-            isCommandPalettePresented: $isCommandPalettePresented,
             isInspectorPresented: $isInspectorPresented,
             libraryName: store.currentLibrary?.name,
             currentLibraryID: store.currentLibrary?.id,
@@ -233,9 +221,7 @@ struct ContentView: View {
             inspectorFolderIDs: selectedFolderIDs,
             inspectorFolders: store.folders,
             toastRequest: $shellToastRequest,
-            onRenameInspectorAsset: renameAssetTitle,
-            commands: commands,
-            onCommandSelected: handleCommand
+            onRenameInspectorAsset: renameAssetTitle
         ) {
             if isTagManagementSelected {
                 tagManagementContent
@@ -256,7 +242,7 @@ struct ContentView: View {
             .sharedBackgroundVisibility(.hidden)
         }
         .navigationTitle("")
-        .focusedSceneValue(\.momentoCommandAction, performFocusedCommand)
+        .focusedSceneValue(\.momentoMenuCommandAction, performFocusedCommand)
     }
 
     private var isTagManagementSelected: Bool {
@@ -1184,23 +1170,6 @@ struct ContentView: View {
         )
     }
 
-    private var commands: [MomentoCommand] {
-        [
-            MomentoCommand(id: "import", title: localization.string("Import Assets"), subtitle: localization.string("Choose files or folders"), systemImage: "square.and.arrow.down", shortcut: "I"),
-            MomentoCommand(id: "import-library", title: localization.string("Import Library"), subtitle: localization.string("Copy a library package into Momento"), systemImage: "square.and.arrow.down.on.square"),
-            MomentoCommand(id: "export-library", title: localization.string("Export Library"), subtitle: localization.string("Copy the current library package"), systemImage: "square.and.arrow.up.on.square"),
-            MomentoCommand(id: "view-masonry", title: localization.string("Masonry View"), subtitle: localization.string("Show adaptive visual grid"), systemImage: "circle.hexagongrid", shortcut: "1"),
-            MomentoCommand(id: "view-grid", title: localization.string("Grid View"), subtitle: localization.string("Show uniform thumbnails"), systemImage: "square.grid.2x2", shortcut: "2"),
-            MomentoCommand(id: "view-list", title: localization.string("List View"), subtitle: localization.string("Show compact rows"), systemImage: "rectangle.grid.1x2", shortcut: "3"),
-            MomentoCommand(id: "focus-search", title: localization.string("Focus Search"), subtitle: localization.string("Search image name"), systemImage: "magnifyingglass", shortcut: "⌘F"),
-            MomentoCommand(id: "toggle-filter", title: localization.string("Toggle Filter"), subtitle: localization.string("Filter"), systemImage: "line.3.horizontal.decrease.circle", shortcut: "⌥⌘F"),
-            MomentoCommand(id: "toggle-sort", title: localization.string("Toggle Sort"), subtitle: localization.string("Sort"), systemImage: "arrow.up.arrow.down.circle", shortcut: "⌥⌘S"),
-            MomentoCommand(id: "toggle-inspector", title: localization.string("Toggle Inspector"), subtitle: localization.string("Show or hide asset details"), systemImage: "sidebar.right", shortcut: "⌥⌘I"),
-            MomentoCommand(id: "quick-preview", title: localization.string("Quick Preview"), subtitle: localization.string("Preview the selected asset"), systemImage: "eye", shortcut: "Space"),
-            MomentoCommand(id: "move-to-trash", title: localization.string("Move to Trash"), subtitle: localization.string("Remove selected assets from the library"), systemImage: "trash", shortcut: "⌘⌫")
-        ]
-    }
-
     private var emptyGridState: some View {
         VStack(spacing: 12) {
             Image(systemName: "photo.on.rectangle.angled")
@@ -1403,11 +1372,7 @@ struct ContentView: View {
         return asset.originalURL
     }
 
-    private func handleCommand(_ command: MomentoCommand) {
-        performFocusedCommand(command.id)
-    }
-
-    private func performFocusedCommand(_ commandID: MomentoCommand.ID) {
+    private func performFocusedCommand(_ commandID: String) {
         switch commandID {
         case "import":
             isImporterPresented = true

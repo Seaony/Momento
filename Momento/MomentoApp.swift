@@ -85,16 +85,16 @@ struct MomentoApp: App {
     }
 }
 
-typealias MomentoCommandAction = (MomentoCommand.ID) -> Void
+typealias MomentoMenuCommandAction = (String) -> Void
 
 extension FocusedValues {
-    @Entry var momentoCommandAction: MomentoCommandAction?
+    @Entry var momentoMenuCommandAction: MomentoMenuCommandAction?
 }
 
 private struct MomentoMenuCommands: Commands {
     var localization: AppLocalization
 
-    @FocusedValue(\.momentoCommandAction) private var commandAction
+    @FocusedValue(\.momentoMenuCommandAction) private var commandAction
 
     var body: some Commands {
         CommandMenu(localization.string("Library")) {
@@ -132,7 +132,7 @@ private struct MomentoMenuCommands: Commands {
         }
     }
 
-    private func commandButton(_ title: String, id: MomentoCommand.ID) -> some View {
+    private func commandButton(_ title: String, id: String) -> some View {
         Button(title) {
             commandAction?(id)
         }

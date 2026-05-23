@@ -16,7 +16,6 @@ struct MomentoShellView<Content: View>: View {
 
     @Binding var sidebarSelection: String?
     @Binding var searchQuery: String
-    @Binding var isCommandPalettePresented: Bool
     @Binding var isInspectorPresented: Bool
 
     var libraryName: String?
@@ -51,8 +50,6 @@ struct MomentoShellView<Content: View>: View {
     var inspectorFolders: [AssetFolder]
     @Binding var toastRequest: MomentoToastRequest?
     var onRenameInspectorAsset: (MomentoInspectorAsset.ID, String) -> Void
-    var commands: [MomentoCommand]
-    var onCommandSelected: (MomentoCommand) -> Void
     var content: () -> Content
 
     @State private var sidebarWidth = MomentoTheme.sidebarWidth
@@ -66,7 +63,6 @@ struct MomentoShellView<Content: View>: View {
     init(
         sidebarSelection: Binding<String?>,
         searchQuery: Binding<String>,
-        isCommandPalettePresented: Binding<Bool>,
         isInspectorPresented: Binding<Bool> = .constant(true),
         libraryName: String? = nil,
         currentLibraryID: RecentLibraryReference.ID? = nil,
@@ -100,13 +96,10 @@ struct MomentoShellView<Content: View>: View {
         inspectorFolders: [AssetFolder] = [],
         toastRequest: Binding<MomentoToastRequest?> = .constant(nil),
         onRenameInspectorAsset: @escaping (MomentoInspectorAsset.ID, String) -> Void = { _, _ in },
-        commands: [MomentoCommand] = .momentoDefaultCommands,
-        onCommandSelected: @escaping (MomentoCommand) -> Void = { _ in },
         @ViewBuilder content: @escaping () -> Content
     ) {
         self._sidebarSelection = sidebarSelection
         self._searchQuery = searchQuery
-        self._isCommandPalettePresented = isCommandPalettePresented
         self._isInspectorPresented = isInspectorPresented
         self.libraryName = libraryName
         self.currentLibraryID = currentLibraryID
@@ -140,8 +133,6 @@ struct MomentoShellView<Content: View>: View {
         self.inspectorFolders = inspectorFolders
         self._toastRequest = toastRequest
         self.onRenameInspectorAsset = onRenameInspectorAsset
-        self.commands = commands
-        self.onCommandSelected = onCommandSelected
         self.content = content
     }
 
@@ -170,11 +161,6 @@ struct MomentoShellView<Content: View>: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .animation(.spring(response: 0.28, dampingFraction: 0.88), value: isInspectorPresented)
         .animation(.smooth(duration: 0.18), value: isSidebarCollapsed)
-        .momentoCommandPalette(
-            isPresented: $isCommandPalettePresented,
-            commands: commands,
-            onSelect: onCommandSelected
-        )
         .overlay {
             shellToast
         }
@@ -404,7 +390,6 @@ private extension CGFloat {
 private struct MomentoShellPreview: View {
     @State private var sidebarSelection: String? = "all-assets"
     @State private var searchQuery = ""
-    @State private var isCommandPalettePresented = false
     @State private var isInspectorPresented = true
     @State private var tags = ["UI", "Reference"]
 
@@ -412,7 +397,6 @@ private struct MomentoShellPreview: View {
         MomentoShellView(
             sidebarSelection: $sidebarSelection,
             searchQuery: $searchQuery,
-            isCommandPalettePresented: $isCommandPalettePresented,
             isInspectorPresented: $isInspectorPresented,
             inspectorAsset: MomentoInspectorAsset(
                 id: "preview",
