@@ -230,6 +230,8 @@ extension Array where Element == MomentoCommand {
     static func momentoDefaultCommands(localization: AppLocalization) -> [MomentoCommand] {
         [
             MomentoCommand(id: "import", title: localization.string("Import Assets"), subtitle: localization.string("Choose files or folders"), systemImage: "square.and.arrow.down", shortcut: "I"),
+            MomentoCommand(id: "import-library", title: localization.string("Import Library"), subtitle: localization.string("Copy a library package into Momento"), systemImage: "square.and.arrow.down.on.square"),
+            MomentoCommand(id: "export-library", title: localization.string("Export Library"), subtitle: localization.string("Copy the current library package"), systemImage: "square.and.arrow.up.on.square"),
             MomentoCommand(id: "new-folder", title: localization.string("New Folder"), subtitle: localization.string("Create a folder in the current library"), systemImage: "folder.badge.plus", shortcut: "N"),
             MomentoCommand(id: "toggle-inspector", title: localization.string("Toggle Inspector"), subtitle: localization.string("Show or hide asset details"), systemImage: "sidebar.right", shortcut: "⌥⌘I"),
             MomentoCommand(id: "quick-preview", title: localization.string("Quick Preview"), subtitle: localization.string("Preview the selected asset"), systemImage: "eye", shortcut: "Space"),

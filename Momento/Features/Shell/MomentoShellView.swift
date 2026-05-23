@@ -26,6 +26,8 @@ struct MomentoShellView<Content: View>: View {
     var sidebarCounts: MomentoSidebarAssetCounts
     var onCreateLibrary: () -> Void
     var onOpenLibrary: () -> Void
+    var onImportLibrary: () -> Void
+    var onExportLibrary: () -> Void
     var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
     var onRenameLibrary: (RecentLibraryReference.ID) -> Void
     var onDeleteLibrary: (RecentLibraryReference.ID) -> Void
@@ -73,6 +75,8 @@ struct MomentoShellView<Content: View>: View {
         sidebarCounts: MomentoSidebarAssetCounts = .empty,
         onCreateLibrary: @escaping () -> Void = {},
         onOpenLibrary: @escaping () -> Void = {},
+        onImportLibrary: @escaping () -> Void = {},
+        onExportLibrary: @escaping () -> Void = {},
         onSwitchLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
         onRenameLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
         onDeleteLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
@@ -112,6 +116,8 @@ struct MomentoShellView<Content: View>: View {
         self.sidebarCounts = sidebarCounts
         self.onCreateLibrary = onCreateLibrary
         self.onOpenLibrary = onOpenLibrary
+        self.onImportLibrary = onImportLibrary
+        self.onExportLibrary = onExportLibrary
         self.onSwitchLibrary = onSwitchLibrary
         self.onRenameLibrary = onRenameLibrary
         self.onDeleteLibrary = onDeleteLibrary
@@ -218,6 +224,8 @@ struct MomentoShellView<Content: View>: View {
             counts: sidebarCounts,
             onCreateLibrary: onCreateLibrary,
             onOpenLibrary: onOpenLibrary,
+            onImportLibrary: onImportLibrary,
+            onExportLibrary: onExportLibrary,
             onSwitchLibrary: onSwitchLibrary,
             onRenameLibrary: onRenameLibrary,
             onDeleteLibrary: onDeleteLibrary,

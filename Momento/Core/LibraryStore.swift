@@ -184,6 +184,41 @@ final class LibraryStore {
         try saveRecentLibrary(library)
     }
 
+    func importLibrary(from sourceURL: URL, destinationRootURL: URL? = nil) throws {
+        guard LibraryStorage.supportedPackageExtensions.contains(sourceURL.pathExtension) else {
+            throw LibraryStoreError.unsupportedLibraryURL
+        }
+
+        let sourceAccessScope = LibraryAccessScope(url: sourceURL)
+        let destinationAccessScope = destinationRootURL.map(LibraryAccessScope.init(url:))
+
+        try withExtendedLifetime((sourceAccessScope, destinationAccessScope)) {
+            let sourceLibrary = try storage.validateLibraryPackage(at: sourceURL)
+            guard currentLibrary?.id != sourceLibrary.id,
+                  !recentLibraries.contains(where: { $0.id == sourceLibrary.id }) else {
+                throw LibraryStoreError.duplicateLibraryID
+            }
+
+            let importedLibrary = try storage.importLibraryPackage(from: sourceURL, to: destinationRootURL)
+            try activateLibrary(
+                importedLibrary,
+                accessScope: LibraryAccessScope(url: storage.rootURL(for: importedLibrary))
+            )
+            try saveRecentLibrary(importedLibrary)
+        }
+    }
+
+    func exportCurrentLibrary(to destinationURL: URL) throws {
+        guard let currentLibrary else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        let destinationAccessScope = LibraryAccessScope(url: destinationURL)
+        try withExtendedLifetime(destinationAccessScope) {
+            _ = try storage.exportLibraryPackage(currentLibrary, to: destinationURL)
+        }
+    }
+
     func openRecentLibrary(id: RecentLibraryReference.ID) throws {
         guard let reference = recentLibraries.first(where: { $0.id == id }) else {
             throw LibraryStoreError.missingRecentLibrary
@@ -1262,6 +1297,7 @@ enum LibraryStoreError: LocalizedError {
     case noCurrentLibrary
     case missingRecentLibrary
     case unsupportedLibraryURL
+    case duplicateLibraryID
     case invalidLibraryName
     case invalidAssetName
     case invalidTagName
@@ -1276,6 +1312,8 @@ enum LibraryStoreError: LocalizedError {
             "This recent library is no longer available."
         case .unsupportedLibraryURL:
             "Choose a .momento package."
+        case .duplicateLibraryID:
+            "This library is already in your recent libraries."
         case .invalidLibraryName:
             "Enter a library name."
         case .invalidAssetName:

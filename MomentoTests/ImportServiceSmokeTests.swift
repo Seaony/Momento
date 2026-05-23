@@ -85,6 +85,111 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testExportingAndImportingLibraryPackages() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let storage = LibraryStorage(applicationSupportRoot: environment.rootURL)
+        let sourceStore = LibraryStore(
+            defaultViewMode: .grid,
+            storage: storage,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try sourceStore.createLibrary(at: environment.packageURL)
+        let sourceLibrary = try XCTUnwrap(sourceStore.currentLibrary)
+
+        let source = try environment.writeOnePixelPNG(named: "portable.png")
+        try await sourceStore.importItems(from: [source])
+
+        let previewURL = environment.packageURL
+            .appendingPathComponent("previews", isDirectory: true)
+            .appendingPathComponent("portable.preview")
+        try FileManager.default.createDirectory(at: previewURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data([1, 2, 3]).write(to: previewURL)
+
+        let exportURL = environment.rootURL.appendingPathComponent("Exported.momento", isDirectory: true)
+        let exportedURL = try storage.exportLibraryPackage(sourceLibrary, to: exportURL)
+
+        XCTAssertEqual(exportedURL, exportURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: exportedURL.appendingPathComponent("manifest.json").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: exportedURL.appendingPathComponent("database/library.sqlite").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: exportedURL.appendingPathComponent("assets").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: exportedURL.appendingPathComponent("thumbnails").path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: exportedURL.appendingPathComponent("previews/portable.preview").path))
+
+        let exportedManifest = try JSONDecoder.momento.decode(
+            LibraryManifest.self,
+            from: Data(contentsOf: exportedURL.appendingPathComponent("manifest.json"))
+        )
+        XCTAssertEqual(exportedManifest.libraryID, sourceLibrary.id)
+        XCTAssertEqual(try storage.validateLibraryPackage(at: exportedURL).id, sourceLibrary.id)
+
+        let importRoot = environment.rootURL.appendingPathComponent("Imported", isDirectory: true)
+        let importedLibrary = try storage.importLibraryPackage(from: exportedURL, to: importRoot)
+        let importedPackageURL = importRoot.appendingPathComponent(exportedURL.lastPathComponent, isDirectory: true)
+        XCTAssertEqual(importedLibrary.id, sourceLibrary.id)
+        XCTAssertEqual(importedLibrary.packageURL, importedPackageURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: importedPackageURL.appendingPathComponent("database/library.sqlite").path))
+
+        XCTAssertThrowsError(try storage.importLibraryPackage(from: exportedURL, to: importRoot)) { error in
+            guard case LibraryStorageError.libraryPackageAlreadyExists = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+
+        let badPackageURL = environment.rootURL.appendingPathComponent("Bad.momento", isDirectory: true)
+        try FileManager.default.createDirectory(at: badPackageURL, withIntermediateDirectories: true)
+        var badManifest = LibraryManifest(library: sourceLibrary)
+        badManifest.schemaVersion = 999
+        try JSONEncoder.momento.encode(badManifest)
+            .write(to: badPackageURL.appendingPathComponent("manifest.json"), options: .atomic)
+
+        XCTAssertThrowsError(
+            try storage.importLibraryPackage(
+                from: badPackageURL,
+                to: environment.rootURL.appendingPathComponent("BadImport", isDirectory: true)
+            )
+        ) { error in
+            guard case LibraryStorageError.unsupportedSchemaVersion(999) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+
+        XCTAssertThrowsError(
+            try sourceStore.importLibrary(
+                from: exportedURL,
+                destinationRootURL: environment.rootURL.appendingPathComponent("DuplicateImport", isDirectory: true)
+            )
+        ) { error in
+            guard case LibraryStoreError.duplicateLibraryID = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+
+        let importedDefaultsSuiteName = "\(environment.defaultsSuiteName).imported"
+        let importedDefaults = try XCTUnwrap(UserDefaults(suiteName: importedDefaultsSuiteName))
+        defer {
+            importedDefaults.removePersistentDomain(forName: importedDefaultsSuiteName)
+        }
+
+        let importedStore = LibraryStore(
+            defaultViewMode: .grid,
+            storage: storage,
+            recentStore: RecentLibraryStore(defaults: importedDefaults),
+            loadRecentLibrary: false
+        )
+        try importedStore.importLibrary(
+            from: exportedURL,
+            destinationRootURL: environment.rootURL.appendingPathComponent("StoreImport", isDirectory: true)
+        )
+
+        XCTAssertEqual(importedStore.currentLibrary?.id, sourceLibrary.id)
+        XCTAssertEqual(importedStore.recentLibraries.first?.id, sourceLibrary.id)
+        XCTAssertEqual(importedStore.assets.map(\.displayName), ["portable"])
+    }
+
+    @MainActor
     func testImportPersistsAndDeduplicatesAssets() async throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }

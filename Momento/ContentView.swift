@@ -161,6 +161,8 @@ struct ContentView: View {
             sidebarCounts: sidebarAssetCounts,
             onCreateLibrary: createLibrary,
             onOpenLibrary: openLibrary,
+            onImportLibrary: importLibrary,
+            onExportLibrary: exportLibrary,
             onSwitchLibrary: switchLibrary,
             onRenameLibrary: renameLibrary,
             onDeleteLibrary: deleteLibrary,
@@ -1044,6 +1046,8 @@ struct ContentView: View {
     private var commands: [MomentoCommand] {
         [
             MomentoCommand(id: "import", title: localization.string("Import Assets"), subtitle: localization.string("Choose files or folders"), systemImage: "square.and.arrow.down", shortcut: "I"),
+            MomentoCommand(id: "import-library", title: localization.string("Import Library"), subtitle: localization.string("Copy a library package into Momento"), systemImage: "square.and.arrow.down.on.square"),
+            MomentoCommand(id: "export-library", title: localization.string("Export Library"), subtitle: localization.string("Copy the current library package"), systemImage: "square.and.arrow.up.on.square"),
             MomentoCommand(id: "view-masonry", title: localization.string("Masonry View"), subtitle: localization.string("Show adaptive visual grid"), systemImage: "circle.hexagongrid", shortcut: "1"),
             MomentoCommand(id: "view-grid", title: localization.string("Grid View"), subtitle: localization.string("Show uniform thumbnails"), systemImage: "square.grid.2x2", shortcut: "2"),
             MomentoCommand(id: "view-list", title: localization.string("List View"), subtitle: localization.string("Show compact rows"), systemImage: "rectangle.grid.1x2", shortcut: "3"),
@@ -1168,6 +1172,10 @@ struct ContentView: View {
         switch command.id {
         case "import":
             isImporterPresented = true
+        case "import-library":
+            importLibrary()
+        case "export-library":
+            exportLibrary()
         case "view-masonry":
             store.setViewMode(.masonry)
         case "view-grid":
@@ -1402,6 +1410,47 @@ struct ContentView: View {
 
         do {
             try store.openLibrary(at: url)
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func importLibrary() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.momentoLibrary]
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = localization.string("Import Library")
+
+        guard panel.runModal() == .OK, let url = panel.url else {
+            return
+        }
+
+        do {
+            try store.importLibrary(from: url)
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func exportLibrary() {
+        guard let currentLibrary = store.currentLibrary else {
+            return
+        }
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.momentoLibrary]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "\(currentLibrary.name).\(LibraryStorage.packageExtension)"
+        panel.prompt = localization.string("Export Library")
+
+        guard panel.runModal() == .OK, let url = panel.url else {
+            return
+        }
+
+        do {
+            try store.exportCurrentLibrary(to: url)
         } catch {
             showImportError(error)
         }

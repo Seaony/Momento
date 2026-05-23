@@ -127,6 +127,50 @@ nonisolated struct LibraryStorage: Sendable {
         )
     }
 
+    nonisolated func validateLibraryPackage(at packageURL: URL) throws -> AssetLibrary {
+        let library = try openLibraryPackage(at: packageURL)
+        guard FileManager.default.fileExists(atPath: databaseURL(for: library).path) else {
+            throw LibraryStorageError.missingLibraryDatabase
+        }
+
+        _ = try MomentoCoreDataStack(library: library, storage: self)
+        return library
+    }
+
+    nonisolated func exportLibraryPackage(_ library: AssetLibrary, to destinationURL: URL) throws -> URL {
+        let sourceURL = rootURL(for: library)
+        _ = try validateLibraryPackage(at: sourceURL)
+
+        let normalizedDestinationURL = normalizedPackageURL(destinationURL)
+        guard !FileManager.default.fileExists(atPath: normalizedDestinationURL.path) else {
+            throw LibraryStorageError.libraryPackageAlreadyExists
+        }
+
+        try FileManager.default.createDirectory(
+            at: normalizedDestinationURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.copyItem(at: sourceURL, to: normalizedDestinationURL)
+        _ = try validateLibraryPackage(at: normalizedDestinationURL)
+        return normalizedDestinationURL
+    }
+
+    nonisolated func importLibraryPackage(from sourceURL: URL, to destinationRootURL: URL?) throws -> AssetLibrary {
+        _ = try validateLibraryPackage(at: sourceURL)
+
+        let destinationRootURL = destinationRootURL
+            ?? applicationSupportRoot.appendingPathComponent("Libraries", isDirectory: true)
+        let destinationURL = destinationRootURL.appendingPathComponent(sourceURL.lastPathComponent, isDirectory: true)
+
+        guard !FileManager.default.fileExists(atPath: destinationURL.path) else {
+            throw LibraryStorageError.libraryPackageAlreadyExists
+        }
+
+        try FileManager.default.createDirectory(at: destinationRootURL, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+        return try validateLibraryPackage(at: destinationURL)
+    }
+
     nonisolated func renameLibraryPackage(at packageURL: URL, to name: String) throws -> AssetLibrary {
         let library = try openLibraryPackage(at: packageURL)
         let renamedLibrary = AssetLibrary(
@@ -226,6 +270,12 @@ nonisolated struct LibraryStorage: Sendable {
         }
     }
 
+    nonisolated private func normalizedPackageURL(_ url: URL) -> URL {
+        Self.supportedPackageExtensions.contains(url.pathExtension)
+            ? url
+            : url.appendingPathExtension(Self.packageExtension)
+    }
+
     nonisolated private func pathWithTrailingSlash(_ url: URL) -> String {
         let path = url.standardizedFileURL.resolvingSymlinksInPath().path
         return path.hasSuffix("/") ? path : path + "/"
@@ -241,6 +291,7 @@ nonisolated struct LibraryStorage: Sendable {
 nonisolated enum LibraryStorageError: LocalizedError {
     case assetOutsideLibrary
     case libraryPackageAlreadyExists
+    case missingLibraryDatabase
     case missingLibraryPackage
     case unsupportedSchemaVersion(Int)
 
@@ -250,6 +301,8 @@ nonisolated enum LibraryStorageError: LocalizedError {
             "Asset storage must stay inside the selected library package."
         case .libraryPackageAlreadyExists:
             "A library already exists at the selected location."
+        case .missingLibraryDatabase:
+            "The selected library database is missing."
         case .missingLibraryPackage:
             "The selected library no longer exists."
         case .unsupportedSchemaVersion(let version):

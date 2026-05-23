@@ -151,6 +151,8 @@ struct AppLocalization: Equatable {
             string("This recent library is no longer available.")
         case .unsupportedLibraryURL:
             string("Choose a .momento package.")
+        case .duplicateLibraryID:
+            string("This library is already in your recent libraries.")
         case .invalidLibraryName:
             string("Enter a library name.")
         case .invalidAssetName:
@@ -181,6 +183,8 @@ struct AppLocalization: Equatable {
             string("Asset storage must stay inside the selected library package.")
         case .libraryPackageAlreadyExists:
             string("A library already exists at the selected location.")
+        case .missingLibraryDatabase:
+            string("The selected library database is missing.")
         case .missingLibraryPackage:
             string("The selected library no longer exists.")
         case .unsupportedSchemaVersion(let version):

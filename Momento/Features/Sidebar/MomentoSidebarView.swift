@@ -43,6 +43,8 @@ struct MomentoSidebarView: View {
     var counts: MomentoSidebarAssetCounts
     var onCreateLibrary: () -> Void
     var onOpenLibrary: () -> Void
+    var onImportLibrary: () -> Void
+    var onExportLibrary: () -> Void
     var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
     var onRenameLibrary: (RecentLibraryReference.ID) -> Void
     var onDeleteLibrary: (RecentLibraryReference.ID) -> Void
@@ -78,6 +80,8 @@ struct MomentoSidebarView: View {
         counts: MomentoSidebarAssetCounts = .empty,
         onCreateLibrary: @escaping () -> Void = {},
         onOpenLibrary: @escaping () -> Void = {},
+        onImportLibrary: @escaping () -> Void = {},
+        onExportLibrary: @escaping () -> Void = {},
         onSwitchLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
         onRenameLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
         onDeleteLibrary: @escaping (RecentLibraryReference.ID) -> Void = { _ in },
@@ -100,6 +104,8 @@ struct MomentoSidebarView: View {
         self.counts = counts
         self.onCreateLibrary = onCreateLibrary
         self.onOpenLibrary = onOpenLibrary
+        self.onImportLibrary = onImportLibrary
+        self.onExportLibrary = onExportLibrary
         self.onSwitchLibrary = onSwitchLibrary
         self.onRenameLibrary = onRenameLibrary
         self.onDeleteLibrary = onDeleteLibrary
@@ -163,6 +169,8 @@ struct MomentoSidebarView: View {
                 currentLibraryID: currentLibraryID,
                 onCreateLibrary: performLibrarySwitcherAction(onCreateLibrary),
                 onOpenLibrary: performLibrarySwitcherAction(onOpenLibrary),
+                onImportLibrary: performLibrarySwitcherAction(onImportLibrary),
+                onExportLibrary: performLibrarySwitcherAction(onExportLibrary),
                 onSwitchLibrary: { id in
                     dismissLibrarySwitcher()
                     onSwitchLibrary(id)
@@ -1009,6 +1017,8 @@ private struct MomentoLibrarySwitcherMenu: View {
     var currentLibraryID: RecentLibraryReference.ID?
     var onCreateLibrary: () -> Void
     var onOpenLibrary: () -> Void
+    var onImportLibrary: () -> Void
+    var onExportLibrary: () -> Void
     var onSwitchLibrary: (RecentLibraryReference.ID) -> Void
     var onRenameLibrary: (RecentLibraryReference.ID) -> Void
     var onDeleteLibrary: (RecentLibraryReference.ID) -> Void
@@ -1071,6 +1081,20 @@ private struct MomentoLibrarySwitcherMenu: View {
                     title: localization.string("Open Other Library"),
                     systemImage: "folder",
                     action: onOpenLibrary
+                )
+
+                actionRow(
+                    id: "import-library",
+                    title: localization.string("Import Library"),
+                    systemImage: "square.and.arrow.down.on.square",
+                    action: onImportLibrary
+                )
+
+                actionRow(
+                    id: "export-library",
+                    title: localization.string("Export Library"),
+                    systemImage: "square.and.arrow.up.on.square",
+                    action: onExportLibrary
                 )
 
                 actionRow(
