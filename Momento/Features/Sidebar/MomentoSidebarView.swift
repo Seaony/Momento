@@ -369,8 +369,7 @@ struct MomentoSidebarView: View {
                         }
                     }
                 }
-                .opacity(isFolderSectionHovered ? 1 : 0)
-                .allowsHitTesting(isFolderSectionHovered)
+                .opacity(isFolderSectionHovered ? 1 : 0.58)
             }
             .padding(.leading, 10)
             .padding(.trailing, 7)

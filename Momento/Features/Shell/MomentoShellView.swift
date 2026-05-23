@@ -61,6 +61,7 @@ struct MomentoShellView<Content: View>: View {
     @State private var activeToastMessage: String?
     @State private var isToastVisible = false
     @State private var toastToken = UUID()
+    @State private var isSidebarResizeHandleHovered = false
 
     init(
         sidebarSelection: Binding<String?>,
@@ -275,8 +276,20 @@ struct MomentoShellView<Content: View>: View {
         Rectangle()
             .fill(Color.clear)
             .frame(width: 14)
+            .overlay(alignment: .trailing) {
+                RoundedRectangle(cornerRadius: 1, style: .continuous)
+                    .fill(Color.white.opacity(0.16))
+                    .frame(width: 2)
+                    .padding(.vertical, 22)
+                    .opacity(isSidebarResizeHandleHovered || sidebarResizeStartWidth != nil ? 1 : 0)
+            }
             .contentShape(Rectangle())
             .pointerStyle(.columnResize(directions: .all))
+            .onHover { hovering in
+                withAnimation(.smooth(duration: 0.12)) {
+                    isSidebarResizeHandleHovered = hovering
+                }
+            }
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .global)
                     .onChanged { value in

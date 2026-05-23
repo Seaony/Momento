@@ -62,6 +62,7 @@ struct MomentoCommandPalette: View {
                         .textFieldStyle(.plain)
                         .font(.system(size: 16))
                         .focused($isSearchFocused)
+                        .onSubmit(selectSelectedCommand)
                 }
                 .padding(.horizontal, 16)
                 .frame(height: 54)
@@ -112,6 +113,7 @@ struct MomentoCommandPalette: View {
             }
         }
         .transition(.opacity)
+        .onMoveCommand(perform: moveSelection)
         .onExitCommand {
             dismiss()
         }
@@ -120,6 +122,43 @@ struct MomentoCommandPalette: View {
     private func select(_ command: MomentoCommand) {
         onSelect(command)
         dismiss()
+    }
+
+    private func selectSelectedCommand() {
+        guard let selectionID,
+              let command = filteredCommands.first(where: { $0.id == selectionID }) else {
+            return
+        }
+
+        select(command)
+    }
+
+    private func moveSelection(_ direction: MoveCommandDirection) {
+        let offset: Int
+        switch direction {
+        case .up:
+            offset = -1
+        case .down:
+            offset = 1
+        default:
+            return
+        }
+
+        moveSelection(by: offset)
+    }
+
+    private func moveSelection(by offset: Int) {
+        let commands = filteredCommands
+        guard !commands.isEmpty else {
+            selectionID = nil
+            return
+        }
+
+        let currentIndex = selectionID.flatMap { selectedID in
+            commands.firstIndex { $0.id == selectedID }
+        } ?? 0
+        let nextIndex = (currentIndex + offset + commands.count) % commands.count
+        selectionID = commands[nextIndex].id
     }
 
     private func dismiss() {

@@ -32,6 +32,9 @@ struct MomentoApp: App {
         .windowToolbarStyle(.unified)
         .defaultSize(width: MomentoTheme.defaultWindowWidth, height: MomentoTheme.defaultWindowHeight)
         .windowResizability(.contentMinSize)
+        .commands {
+            MomentoMenuCommands(localization: localization)
+        }
 
         Settings {
             MomentoSettingsView(appLanguage: appLanguageBinding)
@@ -79,5 +82,60 @@ struct MomentoApp: App {
         } catch {
             store.libraryErrorMessage = error.localizedDescription
         }
+    }
+}
+
+typealias MomentoCommandAction = (MomentoCommand.ID) -> Void
+
+extension FocusedValues {
+    @Entry var momentoCommandAction: MomentoCommandAction?
+}
+
+private struct MomentoMenuCommands: Commands {
+    var localization: AppLocalization
+
+    @FocusedValue(\.momentoCommandAction) private var commandAction
+
+    var body: some Commands {
+        CommandMenu(localization.string("Library")) {
+            commandButton(localization.string("Import Assets"), id: "import")
+                .keyboardShortcut("i", modifiers: .command)
+            commandButton(localization.string("Import Library"), id: "import-library")
+            commandButton(localization.string("Export Library"), id: "export-library")
+        }
+
+        CommandMenu(localization.string("View")) {
+            commandButton(localization.string("Masonry View"), id: "view-masonry")
+                .keyboardShortcut("1", modifiers: .command)
+            commandButton(localization.string("Grid View"), id: "view-grid")
+                .keyboardShortcut("2", modifiers: .command)
+            commandButton(localization.string("List View"), id: "view-list")
+                .keyboardShortcut("3", modifiers: .command)
+
+            Divider()
+
+            commandButton(localization.string("Focus Search"), id: "focus-search")
+                .keyboardShortcut("f", modifiers: .command)
+            commandButton(localization.string("Toggle Filter"), id: "toggle-filter")
+                .keyboardShortcut("f", modifiers: [.command, .option])
+            commandButton(localization.string("Toggle Sort"), id: "toggle-sort")
+                .keyboardShortcut("s", modifiers: [.command, .option])
+            commandButton(localization.string("Toggle Inspector"), id: "toggle-inspector")
+                .keyboardShortcut("i", modifiers: [.command, .option])
+        }
+
+        CommandMenu(localization.string("Asset")) {
+            commandButton(localization.string("Quick Preview"), id: "quick-preview")
+                .keyboardShortcut(.space, modifiers: [])
+            commandButton(localization.string("Move to Trash"), id: "move-to-trash")
+                .keyboardShortcut(.delete, modifiers: .command)
+        }
+    }
+
+    private func commandButton(_ title: String, id: MomentoCommand.ID) -> some View {
+        Button(title) {
+            commandAction?(id)
+        }
+        .disabled(commandAction == nil)
     }
 }

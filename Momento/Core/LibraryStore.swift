@@ -513,6 +513,33 @@ final class LibraryStore {
         tags = Self.uniqueTags(from: assets, libraryID: currentLibrary.id)
     }
 
+    func createTag(named name: String) throws {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            throw LibraryStoreError.invalidTagName
+        }
+
+        guard currentLibrary != nil else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        if let metadataStore {
+            _ = try metadataStore.resolveOrCreateTags(named: [trimmedName])
+            tags = try metadataStore.loadTags()
+            return
+        }
+
+        let normalizedName = trimmedName.lowercased()
+        guard !tags.contains(where: { $0.name.lowercased() == normalizedName }) else {
+            return
+        }
+
+        tags.append(TagItem(name: trimmedName))
+        tags.sort {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+    }
+
     func deleteTag(id tagID: TagItem.ID) throws {
         guard let currentLibrary else {
             throw LibraryStoreError.noCurrentLibrary

@@ -7,27 +7,36 @@ struct MomentoTagManagementView: View {
     private static let actionColumnWidth: CGFloat = 196
     private static let actionButtonCornerRadius: CGFloat = 13
     private static let actionButtonHeight: CGFloat = 34
+    private static let toolbarHeight: CGFloat = 38
 
     @Environment(\.appLocalization) private var localization
 
     var tags: [TagSummary]
+    var onCreateTag: (String) -> Void
     var onRenameTag: (TagItem.ID, String) -> Void
     var onDeleteTag: (TagItem.ID) -> Void
 
     @State private var editingTagID: TagItem.ID?
     @State private var draftTagName = ""
+    @State private var searchQuery = ""
+    @State private var isCreatingTag = false
+    @State private var draftNewTagName = ""
     @State private var deletingTag: TagSummary?
     @State private var hoveredRowID: TagItem.ID?
     @State private var hoveredMenuID: TagItem.ID?
     @State private var hoveredActionID: String?
+    @State private var isCreateButtonHovered = false
     @FocusState private var isNameFieldFocused: Bool
+    @FocusState private var isCreateFieldFocused: Bool
 
     var body: some View {
-        Group {
-            if tags.isEmpty {
+        VStack(alignment: .leading, spacing: 12) {
+            managementToolbar
+
+            if filteredTags.isEmpty && !isCreatingTag {
                 emptyState
             } else {
-                tagList
+                tagList(filteredTags)
             }
         }
         .padding(.horizontal, 20)
@@ -50,15 +59,74 @@ struct MomentoTagManagementView: View {
         }
     }
 
-    private var tagList: some View {
+    private var managementToolbar: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(MomentoTheme.secondaryText)
+
+                TextField(localization.string("Search tags"), text: $searchQuery)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .padding(.horizontal, 11)
+            .frame(maxWidth: 260)
+            .frame(height: Self.toolbarHeight)
+            .background {
+                MomentoGlassBackground(
+                    glass: .regular.interactive(true),
+                    cornerRadius: 13
+                )
+            }
+
+            Spacer(minLength: 12)
+
+            Button(action: beginCreatingTag) {
+                Label(localization.string("New Tag"), systemImage: "plus")
+                    .font(.system(size: 13, weight: .semibold))
+                    .labelStyle(.titleAndIcon)
+                    .padding(.horizontal, 14)
+                    .frame(height: Self.toolbarHeight)
+                    .background {
+                        MomentoGlassBackground(
+                            glass: .regular.tint(Color.white.opacity(isCreateButtonHovered ? 0.12 : 0.04)).interactive(true),
+                            cornerRadius: 13
+                        )
+                    }
+            }
+            .buttonStyle(.plain)
+            .pointerStyle(.link)
+            .accessibilityLabel(localization.string("New Tag"))
+            .onHover { hovering in
+                withAnimation(.smooth(duration: 0.12)) {
+                    isCreateButtonHovered = hovering
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func tagList(_ visibleTags: [TagSummary]) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 headerRow
 
-                ForEach(tags) { tag in
+                if isCreatingTag {
+                    tagCreationRow
+
+                    if !visibleTags.isEmpty {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.08))
+                            .frame(height: 1)
+                            .padding(.leading, 42)
+                    }
+                }
+
+                ForEach(visibleTags) { tag in
                     tagRow(tag)
 
-                    if tag.id != tags.last?.id {
+                    if tag.id != visibleTags.last?.id {
                         Rectangle()
                             .fill(Color.white.opacity(0.08))
                             .frame(height: 1)
@@ -68,7 +136,7 @@ struct MomentoTagManagementView: View {
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .scrollIndicators(.never)
+        .scrollIndicators(.automatic)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
@@ -88,6 +156,67 @@ struct MomentoTagManagementView: View {
         .padding(.horizontal, 14)
         .frame(height: 38)
         .frame(maxWidth: .infinity)
+    }
+
+    private var tagCreationRow: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "number")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(MomentoTheme.secondaryText)
+                .frame(width: 18)
+
+            TextField(localization.string("New Tag"), text: $draftNewTagName)
+                .textFieldStyle(.plain)
+                .font(.system(size: 13, weight: .medium))
+                .focused($isCreateFieldFocused)
+                .padding(.horizontal, 9)
+                .frame(height: 30)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+                .background {
+                    MomentoGlassBackground(
+                        glass: .regular.interactive(true),
+                        cornerRadius: 9
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .strokeBorder(Color.accentColor.opacity(0.75), lineWidth: 1)
+                    }
+                }
+                .onSubmit(commitNewTag)
+
+            Color.clear
+                .frame(width: Self.assetCountColumnWidth, alignment: .leading)
+
+            HStack(spacing: 8) {
+                actionButton(
+                    id: "new-tag-save",
+                    title: localization.string("Save Changes"),
+                    accessibilityLabel: localization.string("Save Changes"),
+                    isProminent: true
+                ) {
+                    commitNewTag()
+                }
+                .disabled(trimmedNewTagName.isEmpty)
+
+                actionButton(
+                    id: "new-tag-cancel",
+                    title: localization.string("Cancel"),
+                    accessibilityLabel: localization.string("Cancel"),
+                    isProminent: false
+                ) {
+                    cancelCreatingTag()
+                }
+            }
+            .frame(width: Self.actionColumnWidth, alignment: .trailing)
+        }
+        .foregroundStyle(MomentoTheme.primaryText)
+        .padding(.horizontal, 14)
+        .frame(height: 52)
+        .frame(maxWidth: .infinity)
+        .task {
+            isCreateFieldFocused = true
+        }
     }
 
     private func tagRow(_ summary: TagSummary) -> some View {
@@ -284,19 +413,28 @@ struct MomentoTagManagementView: View {
                 .font(.system(size: 34, weight: .regular))
                 .foregroundStyle(MomentoTheme.tertiaryText)
 
-            Text(localization.string("No tags"))
+            Text(tags.isEmpty ? localization.string("No tags") : localization.string("No matching tags"))
                 .font(.system(size: 15, weight: .semibold))
         }
         .padding(28)
-        .frame(maxWidth: 320)
-        .background {
-            MomentoGlassBackground(cornerRadius: 18)
-        }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var trimmedDraftTagName: String {
         draftTagName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var trimmedNewTagName: String {
+        draftNewTagName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var filteredTags: [TagSummary] {
+        let trimmedQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else { return tags }
+
+        return tags.filter {
+            $0.tag.name.localizedCaseInsensitiveContains(trimmedQuery)
+        }
     }
 
     private var deleteDialogIsPresented: Binding<Bool> {
@@ -310,6 +448,7 @@ struct MomentoTagManagementView: View {
     }
 
     private func beginEditing(_ summary: TagSummary) {
+        cancelCreatingTag()
         editingTagID = summary.id
         draftTagName = summary.tag.name
         isNameFieldFocused = true
@@ -336,6 +475,32 @@ struct MomentoTagManagementView: View {
         draftTagName = ""
         isNameFieldFocused = false
     }
+
+    private func beginCreatingTag() {
+        cancelEditing()
+        isCreatingTag = true
+        draftNewTagName = ""
+        isCreateFieldFocused = true
+    }
+
+    private func commitNewTag() {
+        let name = trimmedNewTagName
+        guard !name.isEmpty else {
+            return
+        }
+
+        onCreateTag(name)
+        isCreatingTag = false
+        draftNewTagName = ""
+        searchQuery = ""
+        isCreateFieldFocused = false
+    }
+
+    private func cancelCreatingTag() {
+        isCreatingTag = false
+        draftNewTagName = ""
+        isCreateFieldFocused = false
+    }
 }
 
 #Preview {
@@ -344,6 +509,7 @@ struct MomentoTagManagementView: View {
             TagSummary(tag: TagItem(name: "Travel"), assetCount: 18),
             TagSummary(tag: TagItem(name: "Reference"), assetCount: 7)
         ],
+        onCreateTag: { _ in },
         onRenameTag: { _, _ in },
         onDeleteTag: { _ in }
     )

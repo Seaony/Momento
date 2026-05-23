@@ -201,7 +201,7 @@ struct MomentoInspectorView: View {
                 }
                 .contentMargins(.top, 0, for: .scrollContent)
                 .ignoresSafeArea(.container, edges: .top)
-                .scrollIndicators(.never)
+                .scrollIndicators(.automatic)
             } else if let asset = currentAssets.first {
                 ScrollView {
                     VStack(alignment: .leading, spacing: Self.inspectorSectionSpacing) {
@@ -222,7 +222,7 @@ struct MomentoInspectorView: View {
                 }
                 .contentMargins(.top, 0, for: .scrollContent)
                 .ignoresSafeArea(.container, edges: .top)
-                .scrollIndicators(.never)
+                .scrollIndicators(.automatic)
             } else {
                 emptyState
             }
@@ -375,12 +375,16 @@ struct MomentoInspectorView: View {
                 .padding(.vertical, 4)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background {
-                    titleShape
-                        .fill(Color.white.opacity(0.08))
-                        .overlay {
-                            titleShape.strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
-                        }
+                    MomentoGlassBackground(
+                        glass: .regular.interactive(true),
+                        cornerRadius: 7
+                    )
+                    .overlay {
+                        titleShape.strokeBorder(Color.accentColor.opacity(0.65), lineWidth: 1)
+                    }
                 }
+                .accessibilityLabel(localization.string("Edit Title"))
+                .help(localization.string("Edit Title"))
                 .onSubmit {
                     commitTitleEditing(for: asset)
                 }
@@ -393,27 +397,45 @@ struct MomentoInspectorView: View {
                     isTitleFieldFocused = true
                 }
         } else {
-            Text(asset.title)
-                .font(.system(size: 13, weight: .regular))
-                .lineSpacing(Self.titleLineSpacing)
-                .lineLimit(nil)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 6)
-                .padding(.vertical, 4)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background {
-                    titleShape.fill(isHovered ? Color.white.opacity(0.06) : Color.clear)
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                Text(asset.title)
+                    .font(.system(size: 13, weight: .regular))
+                    .lineSpacing(Self.titleLineSpacing)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                if isHovered {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(MomentoTheme.secondaryText)
+                        .transition(.opacity.combined(with: .scale(scale: 0.92)))
                 }
-                .contentShape(titleShape)
-                .pointerStyle(.link)
-                .onTapGesture {
-                    beginTitleEditing(asset)
-                }
-                .onHover { hovering in
-                    withAnimation(.smooth(duration: 0.12)) {
-                        hoveredTitleID = hovering ? asset.id : nil
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                titleShape
+                    .fill(isHovered ? Color.white.opacity(0.06) : Color.clear)
+                    .overlay {
+                        if isHovered {
+                            titleShape.strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+                        }
                     }
+            }
+            .contentShape(titleShape)
+            .pointerStyle(.link)
+            .accessibilityLabel(localization.string("Edit Title"))
+            .help(localization.string("Edit Title"))
+            .onTapGesture {
+                beginTitleEditing(asset)
+            }
+            .onHover { hovering in
+                withAnimation(.smooth(duration: 0.12)) {
+                    hoveredTitleID = hovering ? asset.id : nil
                 }
+            }
         }
     }
 
@@ -706,7 +728,7 @@ struct MomentoInspectorView: View {
                     .padding(.bottom, shouldShowCreateTag ? 8 : 0)
                 }
                 .frame(height: tagPickerScrollHeight)
-                .scrollIndicators(.never)
+                .scrollIndicators(.automatic)
             }
         }
         .padding(Self.tagPickerContentHorizontalPadding)
@@ -756,7 +778,7 @@ struct MomentoInspectorView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(height: folderPickerScrollHeight)
-                .scrollIndicators(.never)
+                .scrollIndicators(.automatic)
             }
         }
         .padding(Self.tagPickerContentHorizontalPadding)
@@ -1051,7 +1073,7 @@ struct MomentoInspectorView: View {
             Text(value)
                 .font(.system(size: 12))
                 .textSelection(.enabled)
-                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -1066,7 +1088,7 @@ struct MomentoInspectorView: View {
                 Text(url.absoluteString)
                     .font(.system(size: 12))
                     .textSelection(.enabled)
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)

@@ -68,6 +68,7 @@ struct ContentView: View {
     @State private var activeImportID: UUID?
     @State private var importProgress: AssetImportProgress?
     @State private var pendingAssetExport: AssetExportRequest?
+    @FocusState private var isToolbarSearchFocused: Bool
 
     private var sidebarSelection: Binding<String?> {
         Binding {
@@ -250,11 +251,12 @@ struct ContentView: View {
                     .padding(.trailing, 6)
                 toolbarViewModeSwitcher
                     .padding(.trailing, 6)
-                toolbarSearchControl
+                toolbarSearchControl(resultCount: visibleAssets.count)
             }
             .sharedBackgroundVisibility(.hidden)
         }
         .navigationTitle("")
+        .focusedSceneValue(\.momentoCommandAction, performFocusedCommand)
     }
 
     private var isTagManagementSelected: Bool {
@@ -292,6 +294,7 @@ struct ContentView: View {
     private var tagManagementContent: some View {
         MomentoTagManagementView(
             tags: store.tagSummaries,
+            onCreateTag: createTag,
             onRenameTag: renameTag,
             onDeleteTag: deleteTag
         )
@@ -337,11 +340,11 @@ struct ContentView: View {
         }
     }
 
-    @ViewBuilder
-    private var toolbarSearchControl: some View {
+    private func toolbarSearchControl(resultCount: Int) -> some View {
         let placeholder = localization.string("Search image name")
+        let hasQuery = !store.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
-        HStack(spacing: 8) {
+        return HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: MomentoTheme.toolbarIconSize, weight: .semibold))
                 .foregroundStyle(MomentoTheme.primaryText)
@@ -349,6 +352,30 @@ struct ContentView: View {
             TextField(placeholder, text: $store.searchQuery)
                 .textFieldStyle(.plain)
                 .frame(maxWidth: .infinity)
+                .focused($isToolbarSearchFocused)
+                .accessibilityLabel(placeholder)
+
+            if hasQuery {
+                Text("\(resultCount)")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(MomentoTheme.secondaryText)
+                    .monospacedDigit()
+
+                Button {
+                    store.searchQuery = ""
+                    isToolbarSearchFocused = true
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(MomentoTheme.secondaryText)
+                        .frame(width: 16, height: 16)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .pointerStyle(.link)
+                .help(localization.string("Clear search"))
+                .accessibilityLabel(localization.string("Clear search"))
+            }
         }
         .padding(.horizontal, 11)
         .frame(
@@ -737,6 +764,7 @@ struct ContentView: View {
         .buttonStyle(.plain)
         .pointerStyle(.link)
         .help(localization.title(for: category))
+        .accessibilityLabel(localization.title(for: category))
         .onHover { hovering in
             updateFilterOptionHover(id: optionID, hovering: hovering)
         }
@@ -1164,8 +1192,12 @@ struct ContentView: View {
             MomentoCommand(id: "view-masonry", title: localization.string("Masonry View"), subtitle: localization.string("Show adaptive visual grid"), systemImage: "circle.hexagongrid", shortcut: "1"),
             MomentoCommand(id: "view-grid", title: localization.string("Grid View"), subtitle: localization.string("Show uniform thumbnails"), systemImage: "square.grid.2x2", shortcut: "2"),
             MomentoCommand(id: "view-list", title: localization.string("List View"), subtitle: localization.string("Show compact rows"), systemImage: "rectangle.grid.1x2", shortcut: "3"),
+            MomentoCommand(id: "focus-search", title: localization.string("Focus Search"), subtitle: localization.string("Search image name"), systemImage: "magnifyingglass", shortcut: "⌘F"),
+            MomentoCommand(id: "toggle-filter", title: localization.string("Toggle Filter"), subtitle: localization.string("Filter"), systemImage: "line.3.horizontal.decrease.circle", shortcut: "⌥⌘F"),
+            MomentoCommand(id: "toggle-sort", title: localization.string("Toggle Sort"), subtitle: localization.string("Sort"), systemImage: "arrow.up.arrow.down.circle", shortcut: "⌥⌘S"),
             MomentoCommand(id: "toggle-inspector", title: localization.string("Toggle Inspector"), subtitle: localization.string("Show or hide asset details"), systemImage: "sidebar.right", shortcut: "⌥⌘I"),
-            MomentoCommand(id: "quick-preview", title: localization.string("Quick Preview"), subtitle: localization.string("Preview the selected asset"), systemImage: "eye", shortcut: "Space")
+            MomentoCommand(id: "quick-preview", title: localization.string("Quick Preview"), subtitle: localization.string("Preview the selected asset"), systemImage: "eye", shortcut: "Space"),
+            MomentoCommand(id: "move-to-trash", title: localization.string("Move to Trash"), subtitle: localization.string("Remove selected assets from the library"), systemImage: "trash", shortcut: "⌘⌫")
         ]
     }
 
@@ -1372,7 +1404,11 @@ struct ContentView: View {
     }
 
     private func handleCommand(_ command: MomentoCommand) {
-        switch command.id {
+        performFocusedCommand(command.id)
+    }
+
+    private func performFocusedCommand(_ commandID: MomentoCommand.ID) {
+        switch commandID {
         case "import":
             isImporterPresented = true
         case "import-library":
@@ -1389,10 +1425,24 @@ struct ContentView: View {
             if let selectedAsset = store.selectedAsset {
                 preview(selectedAsset)
             }
+        case "focus-search":
+            isToolbarSearchFocused = true
+        case "toggle-filter":
+            withAnimation(.smooth(duration: 0.16)) {
+                isSortPopoverPresented = false
+                isFilterPopoverPresented.toggle()
+            }
+        case "toggle-sort":
+            withAnimation(.smooth(duration: 0.16)) {
+                isFilterPopoverPresented = false
+                isSortPopoverPresented.toggle()
+            }
         case "toggle-inspector":
             withAnimation(.smooth(duration: 0.18)) {
                 isInspectorPresented.toggle()
             }
+        case "move-to-trash":
+            _ = commandDeleteSelectedAssets(store.selectedAssetIDs)
         default:
             break
         }
@@ -1451,6 +1501,14 @@ struct ContentView: View {
     private func renameAssetTitle(_ assetID: AssetItem.ID, to title: String) {
         do {
             try store.renameAsset(id: assetID, to: title)
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func createTag(named name: String) {
+        do {
+            try store.createTag(named: name)
         } catch {
             showImportError(error)
         }
