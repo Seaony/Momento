@@ -466,7 +466,7 @@ struct MomentoSidebarView: View {
 
             countBadge(counts.folders[folder.id], foregroundStyle: foregroundStyle)
         }
-        .padding(.leading, CGFloat(row.depth) * 18 + 8)
+        .padding(.leading, CGFloat(row.depth) * 18 + 4)
         .padding(.trailing, 7)
         .frame(height: 30)
         .frame(maxWidth: .infinity, alignment: .leading)
