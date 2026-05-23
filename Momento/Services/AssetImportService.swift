@@ -33,19 +33,22 @@ struct AssetImportService: Sendable {
     nonisolated func importItems(
         from urls: [URL],
         into library: AssetLibrary,
-        excludingContentHashes existingContentHashes: Set<String>
+        excludingContentHashes existingContentHashes: Set<String>,
+        sourcePageURL: URL? = nil
     ) async throws -> [AssetItem] {
         try await importBatch(
             from: urls,
             into: library,
-            excludingContentHashes: existingContentHashes
+            excludingContentHashes: existingContentHashes,
+            sourcePageURL: sourcePageURL
         ).newAssets
     }
 
     nonisolated func importBatch(
         from urls: [URL],
         into library: AssetLibrary,
-        excludingContentHashes existingContentHashes: Set<String>
+        excludingContentHashes existingContentHashes: Set<String>,
+        sourcePageURL: URL? = nil
     ) async throws -> AssetImportBatch {
         // 用户从 Finder 选择的文件/文件夹可能来自 sandbox 外部。访问权限必须覆盖
         // 后面的 detached import task，所以 scope 在 await 之前创建，并在整个导入
@@ -122,6 +125,7 @@ struct AssetImportService: Sendable {
                         displayName: fileURL.deletingPathExtension().lastPathComponent,
                         originalFileName: fileURL.lastPathComponent,
                         originalURL: fileURL,
+                        sourcePageURL: sourcePageURL,
                         storageURL: destination,
                         kind: kind,
                         fileExtension: fileExtension,

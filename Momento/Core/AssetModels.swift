@@ -209,6 +209,7 @@ nonisolated struct AssetItem: Identifiable, Hashable, Codable, Sendable {
     var displayName: String
     var originalFileName: String
     var originalURL: URL?
+    var sourcePageURL: URL?
     var storageURL: URL
     var kind: AssetKind
     var fileExtension: String
@@ -236,6 +237,7 @@ nonisolated struct AssetItem: Identifiable, Hashable, Codable, Sendable {
         displayName: String,
         originalFileName: String? = nil,
         originalURL: URL?,
+        sourcePageURL: URL? = nil,
         storageURL: URL,
         kind: AssetKind,
         fileExtension: String,
@@ -264,6 +266,7 @@ nonisolated struct AssetItem: Identifiable, Hashable, Codable, Sendable {
             ?? originalURL?.lastPathComponent
             ?? storageURL.lastPathComponent
         self.originalURL = originalURL
+        self.sourcePageURL = sourcePageURL
         self.storageURL = storageURL
         self.kind = kind
         self.fileExtension = fileExtension

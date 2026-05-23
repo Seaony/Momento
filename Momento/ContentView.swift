@@ -1691,6 +1691,7 @@ private extension MomentoInspectorAsset {
             },
             filePath: fileURL?.path,
             fileSize: localization.fileSize(asset.byteSize),
+            sourcePageURL: asset.sourcePageURL,
             addedDate: asset.importedAt,
             kind: localization.kindTitle(for: asset.kind),
             exifItems: Self.exifItems(for: asset.exifMetadata, localization: localization)

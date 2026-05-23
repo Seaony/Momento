@@ -53,6 +53,7 @@ struct MomentoInspectorAsset: Identifiable, Hashable {
     var colors: [MomentoInspectorColor]
     var filePath: String?
     var fileSize: String?
+    var sourcePageURL: URL?
     var addedDate: Date?
     var kind: String?
     var exifItems: [MomentoInspectorInfoItem]
@@ -67,6 +68,7 @@ struct MomentoInspectorAsset: Identifiable, Hashable {
         colors: [MomentoInspectorColor]? = nil,
         filePath: String? = nil,
         fileSize: String? = nil,
+        sourcePageURL: URL? = nil,
         addedDate: Date? = nil,
         kind: String? = nil,
         exifItems: [MomentoInspectorInfoItem] = []
@@ -79,6 +81,7 @@ struct MomentoInspectorAsset: Identifiable, Hashable {
         self.colors = colors ?? colorHexes.map { MomentoInspectorColor(hex: $0, coverage: nil) }
         self.filePath = filePath
         self.fileSize = fileSize
+        self.sourcePageURL = sourcePageURL
         self.addedDate = addedDate
         self.kind = kind
         self.exifItems = exifItems
@@ -350,6 +353,9 @@ struct MomentoInspectorView: View {
             }
             if let addedDate = asset.addedDate {
                 infoRow(localization.string("Added"), localization.dateTime(addedDate))
+            }
+            if let sourcePageURL = asset.sourcePageURL {
+                linkRow(localization.string("Link"), sourcePageURL)
             }
         }
     }
@@ -934,6 +940,24 @@ struct MomentoInspectorView: View {
                 .textSelection(.enabled)
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func linkRow(_ label: String, _ url: URL) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundStyle(MomentoTheme.secondaryText)
+                .frame(width: 74, alignment: .leading)
+            Link(destination: url) {
+                Text(url.absoluteString)
+                    .font(.system(size: 12))
+                    .textSelection(.enabled)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(MomentoTheme.primaryText)
         }
     }
 

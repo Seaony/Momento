@@ -269,6 +269,34 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         XCTAssertEqual(reloaded.updatedAt.timeIntervalSince1970, favorited.updatedAt.timeIntervalSince1970, accuracy: 0.01)
     }
 
+    @MainActor
+    func testImportedAssetPersistsSourcePageURL() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        let source = try environment.writeOnePixelPNG(named: "linked-source.png")
+        let sourcePageURL = try XCTUnwrap(URL(string: "https://example.com/articles/reference"))
+        try await store.importItems(from: [source], sourcePageURL: sourcePageURL)
+
+        XCTAssertEqual(store.assets.first?.sourcePageURL, sourcePageURL)
+
+        let reopened = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try reopened.openLibrary(at: environment.packageURL)
+
+        XCTAssertEqual(reopened.assets.first?.sourcePageURL, sourcePageURL)
+    }
+
     func testOpeningPreV3LibraryMigratesMetadata() throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }

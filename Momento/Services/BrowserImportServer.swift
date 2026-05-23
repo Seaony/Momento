@@ -17,7 +17,7 @@ nonisolated enum BrowserImportServerError: LocalizedError, Sendable {
 
 nonisolated enum BrowserImportRoute: Equatable, Sendable {
     case status
-    case importImage(URL)
+    case importImage(BrowserImageImportRequest)
 }
 
 nonisolated enum BrowserImportParseResult: Equatable, Sendable {
@@ -26,19 +26,24 @@ nonisolated enum BrowserImportParseResult: Equatable, Sendable {
     case invalid
 }
 
+nonisolated struct BrowserImageImportRequest: Equatable, Sendable {
+    var imageURL: URL
+    var sourcePageURL: URL?
+}
+
 nonisolated final class BrowserImportServer: @unchecked Sendable {
     static let port: UInt16 = 47641
 
     private let queue = DispatchQueue(label: "com.seaony.Momento.browser-import-server")
     private let listenPort: UInt16
     private var listener: NWListener?
-    private var importHandler: (@MainActor @Sendable (URL) async throws -> Void)?
+    private var importHandler: (@MainActor @Sendable (BrowserImageImportRequest) async throws -> Void)?
 
     init(port: UInt16 = BrowserImportServer.port) {
         listenPort = port
     }
 
-    func start(importHandler: @escaping @MainActor @Sendable (URL) async throws -> Void) throws {
+    func start(importHandler: @escaping @MainActor @Sendable (BrowserImageImportRequest) async throws -> Void) throws {
         self.importHandler = importHandler
         guard listener == nil else {
             return
@@ -103,7 +108,7 @@ nonisolated final class BrowserImportServer: @unchecked Sendable {
         switch route {
         case .status:
             respond(on: connection, statusCode: 200, body: ["ok": true, "status": "ready"])
-        case .importImage(let url):
+        case .importImage(let request):
             guard let importHandler else {
                 respond(on: connection, statusCode: 503, body: ["ok": false, "error": "Momento is not ready."])
                 return
@@ -111,7 +116,7 @@ nonisolated final class BrowserImportServer: @unchecked Sendable {
 
             Task {
                 do {
-                    try await importHandler(url)
+                    try await importHandler(request)
                     respond(on: connection, statusCode: 200, body: ["ok": true])
                 } catch {
                     respond(on: connection, statusCode: 500, body: ["ok": false, "error": error.localizedDescription])
@@ -184,7 +189,10 @@ nonisolated enum BrowserImportHTTP {
             return .invalid
         }
 
-        return .request(.importImage(url))
+        return .request(.importImage(BrowserImageImportRequest(
+            imageURL: url,
+            sourcePageURL: optionalURL(from: payload.pageUrl)
+        )))
     }
 
     static func response(statusCode: Int, body: [String: Any]) -> Data {
@@ -222,8 +230,18 @@ nonisolated enum BrowserImportHTTP {
             "OK"
         }
     }
+
+    private static func optionalURL(from value: String?) -> URL? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else {
+            return nil
+        }
+
+        return URL(string: value)
+    }
 }
 
 nonisolated private struct BrowserImportImagePayload: Decodable {
     var url: String
+    var pageUrl: String?
 }

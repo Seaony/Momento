@@ -97,10 +97,20 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
 
             for importedAsset in batch.newAssets {
                 if let existingRecord = try assetRecord(contentHash: importedAsset.contentHash) {
+                    var didUpdateExistingRecord = false
+                    let now = Date()
+
                     if (existingRecord.value(forKey: "isTrashed") as? Bool) == true {
-                        let now = Date()
                         existingRecord.setValue(false, forKey: "isTrashed")
                         existingRecord.setValue(nil, forKey: "trashedAt")
+                        didUpdateExistingRecord = true
+                    }
+                    if storedURL(existingRecord.value(forKey: "sourcePageURL")) == nil,
+                       let sourcePageURL = importedAsset.sourcePageURL {
+                        existingRecord.setValue(sourcePageURL.absoluteString, forKey: "sourcePageURL")
+                        didUpdateExistingRecord = true
+                    }
+                    if didUpdateExistingRecord {
                         existingRecord.setValue(now, forKey: "updatedAt")
                     }
                     if let existingID = existingRecord.value(forKey: "id") as? String {
@@ -114,6 +124,7 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
                 record.setValue(importedAsset.libraryID, forKey: "libraryID")
                 record.setValue(importedAsset.displayName, forKey: "displayName")
                 record.setValue(importedAsset.originalFileName, forKey: "originalFileName")
+                record.setValue(importedAsset.sourcePageURL?.absoluteString, forKey: "sourcePageURL")
                 // 数据库只保存库包内的相对路径。用户移动整个 .momento 包后，
                 // 只要 manifest 和 database 仍在同一个包里，资源路径仍可重新解析。
                 record.setValue(try storage.relativePath(for: importedAsset.storageURL, in: library), forKey: "storageRelativePath")
@@ -896,6 +907,7 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
             displayName: displayName,
             originalFileName: originalFileName,
             originalURL: nil,
+            sourcePageURL: storedURL(record.value(forKey: "sourcePageURL")),
             storageURL: storageURL,
             kind: kind,
             fileExtension: fileExtension,
@@ -942,6 +954,14 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         }
 
         return "public.data"
+    }
+
+    private func storedURL(_ value: Any?) -> URL? {
+        guard let value = value as? String, !value.isEmpty else {
+            return nil
+        }
+
+        return URL(string: value)
     }
 
     private func loadMemberships() throws -> [NSManagedObject] {
