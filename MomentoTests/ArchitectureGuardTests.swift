@@ -123,6 +123,8 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(bridgeSource.contains("AssetDragExportSoundPlayer.playSuccessSound()"))
         XCTAssertTrue(bridgeSource.contains("move to trash.aif"))
         XCTAssertTrue(bridgeSource.contains("NSSound(contentsOfFile: moveToTrashSoundPath, byReference: true)"))
+        XCTAssertTrue(bridgeSource.contains("playbackDurationNanoseconds: UInt64 = 500_000_000"))
+        XCTAssertTrue(bridgeSource.contains("schedulePlaybackStop(token: currentPlaybackToken)"))
         XCTAssertFalse(bridgeSource.contains("NSSound(named: NSSound.Name(\"Pop\"))"))
         XCTAssertTrue(bridgeSource.contains("completionHandler(nil)"))
     }

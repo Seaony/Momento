@@ -167,9 +167,12 @@ nonisolated final class AssetDragExportBatch: @unchecked Sendable {
 nonisolated private enum AssetDragExportSoundPlayer {
     private static let moveToTrashSoundPath =
         "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/finder/move to trash.aif"
+    private static let playbackDurationNanoseconds: UInt64 = 500_000_000
 
     @MainActor
     private static var successSound: NSSound?
+    @MainActor
+    private static var playbackToken = 0
 
     static func playSuccessSound() {
         Task { @MainActor in
@@ -183,8 +186,24 @@ nonisolated private enum AssetDragExportSoundPlayer {
             successSound = NSSound(contentsOfFile: moveToTrashSoundPath, byReference: true)
         }
 
+        playbackToken += 1
+        let currentPlaybackToken = playbackToken
         successSound?.stop()
         successSound?.currentTime = 0
         successSound?.play()
+        schedulePlaybackStop(token: currentPlaybackToken)
+    }
+
+    @MainActor
+    private static func schedulePlaybackStop(token: Int) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: playbackDurationNanoseconds)
+            guard playbackToken == token else {
+                return
+            }
+
+            successSound?.stop()
+            successSound?.currentTime = 0
+        }
     }
 }
