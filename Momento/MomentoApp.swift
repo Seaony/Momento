@@ -11,6 +11,7 @@ import SwiftUI
 struct MomentoApp: App {
     @NSApplicationDelegateAdaptor(AppOpenHandler.self) private var appOpenHandler
     @State private var store = LibraryStore(defaultViewMode: AppSettings.defaultViewMode())
+    @State private var browserImportServer = BrowserImportServer()
     @AppStorage(AppSettingsKeys.appLanguage) private var appLanguageRawValue = AppLanguage.system.rawValue
 
     var body: some Scene {
@@ -24,6 +25,7 @@ struct MomentoApp: App {
                 .onAppear {
                     appOpenHandler.onOpenLibraryURLs = openLibraryURLs
                     appOpenHandler.flushPendingLibraryURLs()
+                    startBrowserImportServer()
                 }
         }
         .windowToolbarStyle(.unified)
@@ -62,5 +64,15 @@ struct MomentoApp: App {
         }
 
         return didOpenLibrary
+    }
+
+    private func startBrowserImportServer() {
+        do {
+            try browserImportServer.start { url in
+                try await store.importRemoteImage(from: url)
+            }
+        } catch {
+            store.libraryErrorMessage = error.localizedDescription
+        }
     }
 }
