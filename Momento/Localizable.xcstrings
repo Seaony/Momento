@@ -1122,6 +1122,23 @@
         }
       }
     },
+    "Delete asset permanently warning: %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” will be permanently deleted. This cannot be undone."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” 将被永久删除，此操作无法撤销。"
+          }
+        }
+      }
+    },
     "Delete Permanently" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1135,6 +1152,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "永久删除"
+          }
+        }
+      }
+    },
+    "Delete selected assets permanently warning: %d" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d selected assets will be permanently deleted. This cannot be undone."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d 个选中的图片将被永久删除，此操作无法撤销。"
           }
         }
       }

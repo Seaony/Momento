@@ -116,7 +116,7 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(assetGridSource.contains("parent.onCommandDelete(selectedIDs)"))
         XCTAssertTrue(contentSource.contains("onCommandDelete: commandDeleteSelectedAssets"))
         XCTAssertTrue(contentSource.contains("if case .trash = store.sidebarSelection"))
-        XCTAssertTrue(contentSource.contains("return deleteSelectedAssetsPermanently(assetIDs)"))
+        XCTAssertTrue(contentSource.contains("return presentPermanentAssetDeletionConfirmation(for: assetIDs)"))
         XCTAssertTrue(contentSource.contains("return moveSelectedAssetsToTrash(assetIDs)"))
         XCTAssertTrue(contentSource.contains("try store.moveAssetsToTrash(ids: Set(selectedAssets.map(\\.id)))"))
         XCTAssertTrue(contentSource.contains("try store.deleteAssetPermanently(id: asset.id)"))
@@ -153,6 +153,23 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(contentSource.contains("try store.moveAssetsToTrash(ids: Set(selectedAssets.map(\\.id)))"))
         XCTAssertTrue(contentSource.contains("try store.deleteAssetPermanently(id: asset.id)"))
         XCTAssertTrue(contentSource.contains("AssetDeletionSoundPlayer.playDeletionSound()"))
+    }
+
+    func testPermanentAssetDeletionRequiresConfirmationBeforeStoreDelete() throws {
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+
+        XCTAssertTrue(contentSource.contains("private struct PermanentAssetDeletionRequest: Identifiable"))
+        XCTAssertTrue(contentSource.contains("@State private var pendingPermanentAssetDeletion: PermanentAssetDeletionRequest?"))
+        XCTAssertTrue(contentSource.contains(".alert("))
+        XCTAssertTrue(contentSource.contains("presenting: pendingPermanentAssetDeletion"))
+        XCTAssertTrue(contentSource.contains("Button(localization.string(\"Cancel\"), role: .cancel)"))
+        XCTAssertTrue(contentSource.contains("Button(localization.string(\"Delete Permanently\"), role: .destructive)"))
+        XCTAssertTrue(contentSource.contains("confirmPermanentAssetDeletion(request)"))
+        XCTAssertTrue(contentSource.contains("presentPermanentAssetDeletionConfirmation(for: assetIDs)"))
+        XCTAssertTrue(contentSource.contains("presentPermanentAssetDeletionConfirmation(for: asset)"))
+        XCTAssertTrue(contentSource.contains("pendingPermanentAssetDeletion = PermanentAssetDeletionRequest(assets: selectedAssets)"))
+        XCTAssertTrue(contentSource.contains("private func confirmPermanentAssetDeletion(_ request: PermanentAssetDeletionRequest)"))
+        XCTAssertTrue(contentSource.contains("deleteSelectedAssetsPermanently(request.assets)"))
     }
 
     func testInternalAssetDragUTTypeIsDeclaredInInfoPlist() throws {

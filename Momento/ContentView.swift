@@ -8,6 +8,11 @@ private struct FolderCreationRequest: Identifiable {
     var parentID: AssetFolder.ID?
 }
 
+private struct PermanentAssetDeletionRequest: Identifiable {
+    let id = UUID()
+    var assets: [AssetItem]
+}
+
 private enum AssetFilterFacet: String, CaseIterable, Hashable, Identifiable {
     case colors
     case tags
@@ -54,6 +59,7 @@ struct ContentView: View {
     @State private var isFilterPopoverPresented = false
     @State private var isSortPopoverPresented = false
     @State private var shellToastRequest: MomentoToastRequest?
+    @State private var pendingPermanentAssetDeletion: PermanentAssetDeletionRequest?
 
     private var sidebarSelection: Binding<String?> {
         Binding {
@@ -118,6 +124,18 @@ struct ContentView: View {
             allowsMultipleSelection: true,
             onCompletion: handleImportResult
         )
+        .alert(
+            Text(localization.string("Delete Permanently")),
+            isPresented: permanentAssetDeletionAlertIsPresented,
+            presenting: pendingPermanentAssetDeletion
+        ) { request in
+            Button(localization.string("Cancel"), role: .cancel) {}
+            Button(localization.string("Delete Permanently"), role: .destructive) {
+                confirmPermanentAssetDeletion(request)
+            }
+        } message: { request in
+            Text(permanentAssetDeletionMessage(for: request))
+        }
         .dropDestination(for: URL.self) { urls, _ in
             importURLs(urls)
             return true
@@ -987,6 +1005,16 @@ struct ContentView: View {
         }
     }
 
+    private var permanentAssetDeletionAlertIsPresented: Binding<Bool> {
+        Binding {
+            pendingPermanentAssetDeletion != nil
+        } set: { isPresented in
+            if !isPresented {
+                pendingPermanentAssetDeletion = nil
+            }
+        }
+    }
+
     private var defaultViewMode: AssetViewMode {
         AssetViewMode(rawValue: defaultViewModeRawValue) ?? .masonry
     }
@@ -1222,9 +1250,7 @@ struct ContentView: View {
                 showAssetActionToast(action)
             }
         case .deletePermanently:
-            if deleteAssetPermanently(asset) {
-                showAssetActionToast(action)
-            }
+            _ = presentPermanentAssetDeletionConfirmation(for: asset)
         }
     }
 
@@ -1339,7 +1365,7 @@ struct ContentView: View {
 
     private func commandDeleteSelectedAssets(_ assetIDs: Set<AssetItem.ID>) -> Bool {
         if case .trash = store.sidebarSelection {
-            return deleteSelectedAssetsPermanently(assetIDs)
+            return presentPermanentAssetDeletionConfirmation(for: assetIDs)
         }
 
         return moveSelectedAssetsToTrash(assetIDs)
@@ -1377,10 +1403,41 @@ struct ContentView: View {
         }
     }
 
-    private func deleteSelectedAssetsPermanently(_ assetIDs: Set<AssetItem.ID>) -> Bool {
+    private func presentPermanentAssetDeletionConfirmation(for assetIDs: Set<AssetItem.ID>) -> Bool {
         let selectedAssets = store.visibleAssets.filter { asset in
             assetIDs.contains(asset.id) && asset.isTrashed
         }
+        guard !selectedAssets.isEmpty else {
+            return false
+        }
+
+        pendingPermanentAssetDeletion = PermanentAssetDeletionRequest(assets: selectedAssets)
+        return true
+    }
+
+    private func presentPermanentAssetDeletionConfirmation(for asset: AssetItem) -> Bool {
+        guard asset.isTrashed else {
+            return false
+        }
+
+        pendingPermanentAssetDeletion = PermanentAssetDeletionRequest(assets: [asset])
+        return true
+    }
+
+    private func confirmPermanentAssetDeletion(_ request: PermanentAssetDeletionRequest) {
+        _ = deleteSelectedAssetsPermanently(request.assets)
+    }
+
+    private func permanentAssetDeletionMessage(for request: PermanentAssetDeletionRequest) -> String {
+        if request.assets.count == 1, let asset = request.assets.first {
+            return localization.format("Delete asset permanently warning: %@", asset.displayName)
+        }
+
+        return localization.format("Delete selected assets permanently warning: %d", request.assets.count)
+    }
+
+    private func deleteSelectedAssetsPermanently(_ assets: [AssetItem]) -> Bool {
+        let selectedAssets = assets.filter(\.isTrashed)
         guard !selectedAssets.isEmpty else {
             return false
         }
@@ -1392,17 +1449,6 @@ struct ContentView: View {
             }
             AssetDeletionSoundPlayer.playDeletionSound()
             showAssetActionToast(.deletePermanently)
-            return true
-        } catch {
-            showImportError(error)
-            return false
-        }
-    }
-
-    private func deleteAssetPermanently(_ asset: AssetItem) -> Bool {
-        do {
-            AssetCollectionGridView.invalidatePreviewCache(for: asset)
-            try store.deleteAssetPermanently(id: asset.id)
             return true
         } catch {
             showImportError(error)
