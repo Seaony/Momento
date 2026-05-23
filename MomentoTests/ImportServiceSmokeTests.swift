@@ -720,6 +720,38 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testMovingMultipleAssetsToTrashSoftDeletesInBatch() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        let firstSource = try environment.writeOnePixelPNG(named: "batch-trash-1.png")
+        let secondSource = try environment.writeOnePixelPNG(named: "batch-trash-2.png")
+        try await store.importItems(from: [firstSource, secondSource])
+        let assetIDs = Set(store.assets.map(\.id))
+        store.selectSidebarItem(id: "all-assets")
+        store.selectAssets(ids: assetIDs)
+
+        try store.moveAssetsToTrash(ids: assetIDs)
+
+        XCTAssertEqual(Set(store.assets.map(\.id)), assetIDs)
+        XCTAssertTrue(store.assets.allSatisfy(\.isTrashed))
+        XCTAssertTrue(store.assets.allSatisfy { $0.trashedAt != nil })
+        XCTAssertTrue(store.visibleAssets.isEmpty)
+        XCTAssertTrue(store.selectedAssetIDs.isEmpty)
+        XCTAssertNil(store.selectedAssetID)
+
+        store.selectSidebarItem(id: "trash")
+        XCTAssertEqual(Set(store.visibleAssets.map(\.id)), assetIDs)
+    }
+
+    @MainActor
     func testTrashedAssetReimportRestoresExistingRecord() async throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }

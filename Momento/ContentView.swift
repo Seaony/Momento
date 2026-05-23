@@ -229,6 +229,7 @@ struct ContentView: View {
                 onSpacePreviewStart: previewWhileSpaceIsPressed,
                 onSpacePreviewEnd: endSpacePreview,
                 onFavoriteToggle: toggleFavorite,
+                onMoveSelectedToTrash: moveSelectedAssetsToTrash,
                 onContextMenuAction: handleAssetContextMenuAction
             )
 
@@ -1328,6 +1329,27 @@ struct ContentView: View {
         do {
             AssetCollectionGridView.invalidatePreviewCache(for: asset)
             try store.moveAssetToTrash(id: asset.id)
+            return true
+        } catch {
+            showImportError(error)
+            return false
+        }
+    }
+
+    private func moveSelectedAssetsToTrash(_ assetIDs: Set<AssetItem.ID>) -> Bool {
+        let selectedAssets = store.visibleAssets.filter { asset in
+            assetIDs.contains(asset.id) && !asset.isTrashed
+        }
+        guard !selectedAssets.isEmpty else {
+            return false
+        }
+
+        do {
+            for asset in selectedAssets {
+                AssetCollectionGridView.invalidatePreviewCache(for: asset)
+            }
+            try store.moveAssetsToTrash(ids: Set(selectedAssets.map(\.id)))
+            showAssetActionToast(.moveToTrash)
             return true
         } catch {
             showImportError(error)

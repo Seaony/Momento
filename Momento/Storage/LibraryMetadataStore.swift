@@ -588,6 +588,28 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         }
     }
 
+    func moveAssetsToTrash(ids assetIDs: Set<AssetItem.ID>) throws -> [AssetItem] {
+        try context.performAndWait {
+            let records = try assetRecords(ids: assetIDs)
+            guard records.count == assetIDs.count else {
+                throw LibraryMetadataError.missingAsset
+            }
+
+            let now = Date()
+            for record in records where (record.value(forKey: "isTrashed") as? Bool) != true {
+                record.setValue(true, forKey: "isTrashed")
+                record.setValue(now, forKey: "trashedAt")
+                record.setValue(now, forKey: "updatedAt")
+            }
+
+            if context.hasChanges {
+                try context.save()
+            }
+
+            return try assets(ids: assetIDs)
+        }
+    }
+
     func restoreAssets(ids assetIDs: Set<AssetItem.ID>) throws -> [AssetItem] {
         try context.performAndWait {
             let records = try assetRecords(ids: assetIDs)

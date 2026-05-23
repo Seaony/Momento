@@ -726,6 +726,23 @@ final class LibraryStore {
         pruneSelectedAssetsIfNeeded()
     }
 
+    func moveAssetsToTrash(ids assetIDs: Set<AssetItem.ID>) throws {
+        guard let metadataStore,
+              let currentLibrary else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        let validAssetIDs = Set(assets.compactMap { asset in
+            assetIDs.contains(asset.id) && asset.libraryID == currentLibrary.id && !asset.isTrashed ? asset.id : nil
+        })
+        guard !validAssetIDs.isEmpty else {
+            return
+        }
+
+        mergeAssets(try metadataStore.moveAssetsToTrash(ids: validAssetIDs))
+        pruneSelectedAssetsIfNeeded()
+    }
+
     func restoreAssets(ids assetIDs: Set<AssetItem.ID>) throws {
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary

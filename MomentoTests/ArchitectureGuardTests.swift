@@ -104,6 +104,19 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(bridgeSource.contains("com.seaony.momento.asset-ids"))
     }
 
+    func testAssetGridSupportsCommandDeleteMoveToTrashShortcut() throws {
+        let assetGridSource = try String(contentsOf: assetGridURL(), encoding: .utf8)
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+
+        XCTAssertTrue(assetGridSource.contains("onMoveSelectedToTrashShortcut"))
+        XCTAssertTrue(assetGridSource.contains("isCommandDelete(event)"))
+        XCTAssertTrue(assetGridSource.contains("modifiers == .command"))
+        XCTAssertTrue(assetGridSource.contains("event.keyCode == Self.deleteKeyCode"))
+        XCTAssertTrue(assetGridSource.contains("parent.onMoveSelectedToTrash(selectedIDs)"))
+        XCTAssertTrue(contentSource.contains("onMoveSelectedToTrash: moveSelectedAssetsToTrash"))
+        XCTAssertTrue(contentSource.contains("try store.moveAssetsToTrash(ids: Set(selectedAssets.map(\\.id)))"))
+    }
+
     func testAssetDragWriterIsFilePromiseProviderItself() throws {
         let assetGridSource = try String(contentsOf: assetGridURL(), encoding: .utf8)
         let bridgeSource = try appKitBridgeSource()
