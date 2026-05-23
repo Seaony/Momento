@@ -94,6 +94,16 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertFalse(inspectorSource.contains("localization.string(\"Notes\")"))
     }
 
+    func testAssetGridSupportsDraggingAndFilePromises() throws {
+        let assetGridSource = try String(contentsOf: assetGridURL(), encoding: .utf8)
+        let bridgeSource = try appKitBridgeSource()
+
+        XCTAssertTrue(assetGridSource.contains("collectionView(_ collectionView: NSCollectionView, canDragItemsAt indexPaths: Set<IndexPath>, with event: NSEvent)"))
+        XCTAssertTrue(assetGridSource.contains("collectionView(_ collectionView: NSCollectionView, pasteboardWriterForItemAt indexPath: IndexPath)"))
+        XCTAssertTrue(bridgeSource.contains("NSFilePromiseProvider"))
+        XCTAssertTrue(bridgeSource.contains("com.seaony.momento.asset-ids"))
+    }
+
     private func repositoryRoot() -> URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -122,6 +132,24 @@ final class ArchitectureGuardTests: XCTestCase {
 
     private func inspectorURL() -> URL {
         repositoryRoot().appendingPathComponent("Momento/Features/Inspector/MomentoInspectorView.swift")
+    }
+
+    private func assetGridURL() -> URL {
+        repositoryRoot().appendingPathComponent("Momento/AppKitBridge/AssetCollectionGridView.swift")
+    }
+
+    private func appKitBridgeSource() throws -> String {
+        let bridgeURL = repositoryRoot().appendingPathComponent("Momento/AppKitBridge", isDirectory: true)
+        let urls = try FileManager.default.contentsOfDirectory(
+            at: bridgeURL,
+            includingPropertiesForKeys: nil
+        )
+
+        return try urls
+            .filter { $0.pathExtension == "swift" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            .map { try String(contentsOf: $0, encoding: .utf8) }
+            .joined(separator: "\n")
     }
 
     private func windowTransparencyURL() -> URL {

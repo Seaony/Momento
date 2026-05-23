@@ -9,6 +9,7 @@ final class LibraryStore {
     var assets: [AssetItem]
     var folders: [AssetFolder]
     var tags: [TagItem]
+    var selectedAssetIDs: Set<AssetItem.ID>
     var selectedAssetID: AssetItem.ID?
     var searchQuery = ""
     var viewMode: AssetViewMode = .masonry
@@ -41,6 +42,7 @@ final class LibraryStore {
         self.assets = []
         self.folders = []
         self.tags = []
+        self.selectedAssetIDs = []
         self.selectedAssetID = nil
         self.viewMode = defaultViewMode
         self.importService = importService
@@ -59,6 +61,7 @@ final class LibraryStore {
             self.assets = initialAssets
             self.folders = []
             self.tags = Self.uniqueTags(from: initialAssets, libraryID: currentLibrary.id)
+            self.selectedAssetIDs = []
             self.selectedAssetID = nil
             self.sidebarSelection = .library(currentLibrary.id)
         } else if loadRecentLibrary, let reference = recentLibraries.first {
@@ -114,7 +117,8 @@ final class LibraryStore {
     }
 
     var selectedAsset: AssetItem? {
-        guard let selectedAssetID else {
+        guard let selectedAssetID,
+              selectedAssetIDs.contains(selectedAssetID) else {
             return nil
         }
         guard visibleAssets.contains(where: { $0.id == selectedAssetID }) else {
@@ -271,11 +275,23 @@ final class LibraryStore {
     }
 
     func selectAsset(_ asset: AssetItem?) {
-        selectedAssetID = asset?.id
+        selectAssets(ids: asset.map { [$0.id] } ?? [])
     }
 
     func selectAsset(id: AssetItem.ID?) {
-        selectedAssetID = id
+        selectAssets(ids: id.map { [$0] } ?? [])
+    }
+
+    func selectAssets(ids: Set<AssetItem.ID>) {
+        guard currentLibrary != nil else {
+            selectedAssetIDs = []
+            selectedAssetID = nil
+            return
+        }
+
+        let visibleAssetIDs = Set(visibleAssets.map(\.id))
+        selectedAssetIDs = ids.intersection(visibleAssetIDs)
+        selectedAssetID = primarySelectedAssetID(from: selectedAssetIDs)
     }
 
     func setViewMode(_ mode: AssetViewMode) {
@@ -288,7 +304,7 @@ final class LibraryStore {
         } else {
             filterState.colorCategories.insert(category)
         }
-        pruneSelectedAssetIfNeeded()
+        pruneSelectedAssetsIfNeeded()
     }
 
     func toggleFilterTag(id tagID: TagItem.ID) {
@@ -297,7 +313,7 @@ final class LibraryStore {
         } else {
             filterState.tagIDs.insert(tagID)
         }
-        pruneSelectedAssetIfNeeded()
+        pruneSelectedAssetsIfNeeded()
     }
 
     func toggleFilterFileExtension(_ fileExtension: String) {
@@ -311,12 +327,12 @@ final class LibraryStore {
         } else {
             filterState.fileExtensions.insert(normalized)
         }
-        pruneSelectedAssetIfNeeded()
+        pruneSelectedAssetsIfNeeded()
     }
 
     func clearAssetFilters() {
         filterState = AssetFilterState()
-        pruneSelectedAssetIfNeeded()
+        pruneSelectedAssetsIfNeeded()
     }
 
     func setSortOption(_ option: AssetSortOption) {
@@ -340,6 +356,7 @@ final class LibraryStore {
         assets = []
         folders = []
         tags = []
+        selectedAssetIDs = []
         selectedAssetID = nil
         searchQuery = ""
         filterState = AssetFilterState()
@@ -371,9 +388,7 @@ final class LibraryStore {
             sidebarSelection = .library(currentLibrary?.id ?? "")
         }
 
-        if let selectedAssetID, !visibleAssets.contains(where: { $0.id == selectedAssetID }) {
-            self.selectedAssetID = nil
-        }
+        pruneSelectedAssetsIfNeeded()
     }
 
     func sidebarItemID() -> String {
@@ -433,7 +448,7 @@ final class LibraryStore {
             if case .tag(let selectedTagID) = sidebarSelection, selectedTagID == tagID {
                 sidebarSelection = .tag(tagID)
             }
-            pruneSelectedAssetIfNeeded()
+            pruneSelectedAssetsIfNeeded()
             return
         }
 
@@ -474,7 +489,7 @@ final class LibraryStore {
             if case .tag(let selectedTagID) = sidebarSelection, selectedTagID == tagID {
                 sidebarSelection = .tagManagement
             }
-            pruneSelectedAssetIfNeeded()
+            pruneSelectedAssetsIfNeeded()
             return
         }
 
@@ -506,6 +521,7 @@ final class LibraryStore {
         )
         folders = try metadataStore.loadFolders()
         sidebarSelection = .folder(folder.id)
+        selectedAssetIDs = []
         selectedAssetID = nil
     }
 
@@ -531,9 +547,7 @@ final class LibraryStore {
             sidebarSelection = .library(currentLibrary?.id ?? "")
         }
 
-        if let selectedAssetID, !visibleAssets.contains(where: { $0.id == selectedAssetID }) {
-            self.selectedAssetID = nil
-        }
+        pruneSelectedAssetsIfNeeded()
     }
 
     func assignAssets(ids: Set<AssetItem.ID>, to folderID: AssetFolder.ID) throws {
@@ -563,9 +577,7 @@ final class LibraryStore {
         }
 
         mergeAssets([try metadataStore.setFavorite(!asset.isFavorite, forAssetID: asset.id)])
-        if let selectedAssetID, !visibleAssets.contains(where: { $0.id == selectedAssetID }) {
-            self.selectedAssetID = nil
-        }
+        pruneSelectedAssetsIfNeeded()
     }
 
     func renameAsset(id assetID: AssetItem.ID, to displayName: String) throws {
@@ -584,9 +596,7 @@ final class LibraryStore {
         }
 
         mergeAssets([try metadataStore.renameAsset(id: assetID, to: trimmedName)])
-        if let selectedAssetID, !visibleAssets.contains(where: { $0.id == selectedAssetID }) {
-            self.selectedAssetID = nil
-        }
+        pruneSelectedAssetsIfNeeded()
     }
 
     func updateSelectedNote(_ note: String) throws {
@@ -608,7 +618,7 @@ final class LibraryStore {
         }
 
         mergeAssets([try metadataStore.updateNote(note, forAssetID: assetID)])
-        pruneSelectedAssetIfNeeded()
+        pruneSelectedAssetsIfNeeded()
     }
 
     func refreshThumbnail(for assetID: AssetItem.ID) throws -> AssetItem? {
@@ -665,7 +675,7 @@ final class LibraryStore {
         }
 
         mergeAssets([try metadataStore.moveAssetToTrash(id: asset.id)])
-        pruneSelectedAssetIfNeeded()
+        pruneSelectedAssetsIfNeeded()
     }
 
     func restoreAssets(ids assetIDs: Set<AssetItem.ID>) throws {
@@ -674,7 +684,7 @@ final class LibraryStore {
         }
 
         mergeAssets(try metadataStore.restoreAssets(ids: assetIDs))
-        pruneSelectedAssetIfNeeded()
+        pruneSelectedAssetsIfNeeded()
     }
 
     func deleteAssetPermanently(id assetID: AssetItem.ID) throws {
@@ -690,7 +700,7 @@ final class LibraryStore {
         try storage.removeStoredAssetFiles(for: asset, in: currentLibrary)
         try metadataStore.deleteAsset(id: assetID)
         assets.removeAll { $0.id == assetID }
-        pruneSelectedAssetIfNeeded()
+        pruneSelectedAssetsIfNeeded()
     }
 
     func emptyTrash() throws {
@@ -706,7 +716,7 @@ final class LibraryStore {
 
         let deletedIDs = Set(try metadataStore.emptyTrash())
         assets.removeAll { deletedIDs.contains($0.id) }
-        pruneSelectedAssetIfNeeded()
+        pruneSelectedAssetsIfNeeded()
     }
 
     func importItems(from urls: [URL]) async throws {
@@ -731,7 +741,7 @@ final class LibraryStore {
         }
 
         mergeAssets(savedAssets)
-        pruneSelectedAssetIfNeeded()
+        pruneSelectedAssetsIfNeeded()
     }
 
     private func openRecentLibrary(_ reference: RecentLibraryReference) throws {
@@ -833,10 +843,32 @@ final class LibraryStore {
         }
     }
 
-    private func pruneSelectedAssetIfNeeded() {
-        if let selectedAssetID, !visibleAssets.contains(where: { $0.id == selectedAssetID }) {
-            self.selectedAssetID = nil
+    private func pruneSelectedAssetsIfNeeded() {
+        let visibleIDs = Set(visibleAssets.map(\.id))
+        selectedAssetIDs.formIntersection(visibleIDs)
+
+        if selectedAssetIDs.isEmpty {
+            selectedAssetID = nil
+            return
         }
+
+        if let selectedAssetID, selectedAssetIDs.contains(selectedAssetID) {
+            return
+        }
+
+        selectedAssetID = primarySelectedAssetID(from: selectedAssetIDs)
+    }
+
+    private func primarySelectedAssetID(from ids: Set<AssetItem.ID>) -> AssetItem.ID? {
+        if let selectedAssetID, ids.contains(selectedAssetID) {
+            return selectedAssetID
+        }
+
+        for asset in visibleAssets where ids.contains(asset.id) {
+            return asset.id
+        }
+
+        return ids.sorted().first
     }
 
     private func activateLibrary(_ library: AssetLibrary, accessScope: LibraryAccessScope) throws {
@@ -852,6 +884,7 @@ final class LibraryStore {
         assets = loadedAssets
         folders = loadedFolders
         tags = loadedTags
+        selectedAssetIDs = []
         selectedAssetID = nil
         searchQuery = ""
         filterState = AssetFilterState()
@@ -915,9 +948,7 @@ final class LibraryStore {
             }
         }
 
-        if let selectedAssetID, !visibleAssets.contains(where: { $0.id == selectedAssetID }) {
-            self.selectedAssetID = nil
-        }
+        pruneSelectedAssetsIfNeeded()
     }
 
     private func deduplicatedTags(_ tags: [TagItem]) -> [TagItem] {

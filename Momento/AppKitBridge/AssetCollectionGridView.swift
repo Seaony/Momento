@@ -204,6 +204,8 @@ struct AssetCollectionGridView: NSViewRepresentable {
         collectionView.allowsEmptySelection = false
         collectionView.dataSource = context.coordinator
         collectionView.delegate = context.coordinator
+        collectionView.setDraggingSourceOperationMask(.copy, forLocal: false)
+        collectionView.setDraggingSourceOperationMask(.copy, forLocal: true)
         collectionView.register(
             AssetCollectionViewItem.self,
             forItemWithIdentifier: AssetCollectionViewItem.reuseIdentifier
@@ -390,6 +392,7 @@ extension AssetCollectionGridView {
         private var isSyncingSelection = false
         private var hoveredPreviewAssetID: AssetItem.ID?
         private var assetIndexByID: [AssetItem.ID: Int]
+        private var activeDragPrimaryAssetID: AssetItem.ID?
 
         init(_ parent: AssetCollectionGridView) {
             self.parent = parent
@@ -468,6 +471,56 @@ extension AssetCollectionGridView {
             didDeselectItemsAt indexPaths: Set<IndexPath>
         ) {
             publishSelection(from: collectionView)
+        }
+
+        func collectionView(_ collectionView: NSCollectionView, canDragItemsAt indexPaths: Set<IndexPath>, with event: NSEvent) -> Bool {
+            let location = collectionView.convert(event.locationInWindow, from: nil)
+            guard let indexPath = collectionView.indexPathForItem(at: location),
+                  parent.assets.indices.contains(indexPath.item) else {
+                return false
+            }
+
+            let asset = parent.assets[indexPath.item]
+            guard !asset.isTrashed else {
+                return false
+            }
+
+            activeDragPrimaryAssetID = asset.id
+            if !collectionView.selectionIndexPaths.contains(indexPath) {
+                collectionView.selectionIndexPaths = [indexPath]
+                publishSelection(from: collectionView)
+            }
+
+            return true
+        }
+
+        func collectionView(_ collectionView: NSCollectionView, pasteboardWriterForItemAt indexPath: IndexPath) -> NSPasteboardWriting? {
+            guard parent.assets.indices.contains(indexPath.item) else {
+                return nil
+            }
+
+            let asset = parent.assets[indexPath.item]
+            guard !asset.isTrashed else {
+                return nil
+            }
+
+            let primaryAssetID = activeDragPrimaryAssetID ?? asset.id
+            let selectedAssetIDs = orderedDragAssetIDs(primaryAssetID: primaryAssetID, in: collectionView)
+            return AssetDragPasteboardItem(
+                asset: asset,
+                libraryID: asset.libraryID,
+                assetIDs: selectedAssetIDs,
+                primaryAssetID: primaryAssetID
+            )
+        }
+
+        func collectionView(
+            _ collectionView: NSCollectionView,
+            draggingSession session: NSDraggingSession,
+            endedAt screenPoint: NSPoint,
+            dragOperation operation: NSDragOperation
+        ) {
+            activeDragPrimaryAssetID = nil
         }
 
         func syncSelection() {
@@ -596,6 +649,18 @@ extension AssetCollectionGridView {
             })
 
             parent.onSelectionChange(selectedIDs)
+        }
+
+        private func orderedDragAssetIDs(
+            primaryAssetID: AssetItem.ID,
+            in collectionView: NSCollectionView
+        ) -> [AssetItem.ID] {
+            let selectedIndexPaths = collectionView.selectionIndexPaths
+            let orderedIDs = parent.assets.enumerated().compactMap { index, asset in
+                selectedIndexPaths.contains(IndexPath(item: index, section: 0)) && !asset.isTrashed ? asset.id : nil
+            }
+
+            return orderedIDs.isEmpty ? [primaryAssetID] : orderedIDs
         }
 
         private func sourceFrameForPreview(at indexPath: IndexPath, in collectionView: NSCollectionView) -> NSRect? {

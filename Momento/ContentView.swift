@@ -63,10 +63,7 @@ struct ContentView: View {
     }
 
     private var selectedAssetIDs: Set<AssetItem.ID> {
-        if let selectedAssetID = store.selectedAssetID {
-            return [selectedAssetID]
-        }
-        return []
+        store.selectedAssetIDs
     }
 
     private var selectedTags: Binding<[String]> {
@@ -1102,11 +1099,11 @@ struct ContentView: View {
     }
 
     private func selectAssets(_ ids: Set<AssetItem.ID>) {
-        guard let id = ids.first else {
+        guard !ids.isEmpty else {
             return
         }
 
-        store.selectAsset(id: id)
+        store.selectAssets(ids: ids)
 
         if !isInspectorPresented {
             withAnimation(.smooth(duration: 0.22)) {
