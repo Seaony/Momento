@@ -90,6 +90,7 @@ private struct AssetColumnLayout {
 
 enum AssetContextMenuAction: CaseIterable {
     case previewOriginal
+    case export
     case refreshThumbnail
     case reanalyzeColors
     case revealInFinder
@@ -99,16 +100,18 @@ enum AssetContextMenuAction: CaseIterable {
 
     static func actions(for asset: AssetItem) -> [AssetContextMenuAction] {
         if asset.isTrashed {
-            return [.previewOriginal, .revealInFinder, .restore, .deletePermanently]
+            return [.previewOriginal, .export, .revealInFinder, .restore, .deletePermanently]
         }
 
-        return [.previewOriginal, .refreshThumbnail, .reanalyzeColors, .revealInFinder, .moveToTrash]
+        return [.previewOriginal, .export, .refreshThumbnail, .reanalyzeColors, .revealInFinder, .moveToTrash]
     }
 
     var titleKey: String {
         switch self {
         case .previewOriginal:
             "Preview Original"
+        case .export:
+            "Export"
         case .refreshThumbnail:
             "Refresh Thumbnail"
         case .reanalyzeColors:
@@ -128,6 +131,8 @@ enum AssetContextMenuAction: CaseIterable {
         switch self {
         case .previewOriginal:
             "eye"
+        case .export:
+            "square.and.arrow.up"
         case .refreshThumbnail:
             "arrow.clockwise"
         case .reanalyzeColors:
@@ -148,7 +153,7 @@ enum AssetContextMenuAction: CaseIterable {
     }
 
     var showsSeparatorAfter: Bool {
-        self == .previewOriginal || self == .revealInFinder
+        self == .export || self == .revealInFinder
     }
 }
 
@@ -163,7 +168,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
     var onSpacePreviewEnd: () -> Void
     var onFavoriteToggle: (AssetItem) -> Void
     var onCommandDelete: (Set<AssetItem.ID>) -> Bool
-    var onContextMenuAction: (AssetItem, AssetContextMenuAction) -> Void
+    var onContextMenuAction: (AssetItem, [AssetItem], AssetContextMenuAction) -> Void
 
     static func invalidatePreviewCache(for asset: AssetItem) {
         AssetPreviewImageProvider.shared.invalidateImage(for: asset)
@@ -180,7 +185,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
         onSpacePreviewEnd: @escaping () -> Void = {},
         onFavoriteToggle: @escaping (AssetItem) -> Void = { _ in },
         onCommandDelete: @escaping (Set<AssetItem.ID>) -> Bool = { _ in false },
-        onContextMenuAction: @escaping (AssetItem, AssetContextMenuAction) -> Void = { _, _ in }
+        onContextMenuAction: @escaping (AssetItem, [AssetItem], AssetContextMenuAction) -> Void = { _, _, _ in }
     ) {
         self.assets = assets
         self.selectedAssetIDs = selectedAssetIDs
@@ -644,7 +649,32 @@ extension AssetCollectionGridView {
                 return
             }
 
-            parent.onContextMenuAction(parent.assets[index], action)
+            let primaryAsset = parent.assets[index]
+            parent.onContextMenuAction(primaryAsset, contextAssets(primaryAssetID: assetID), action)
+        }
+
+        private func contextAssets(primaryAssetID: AssetItem.ID) -> [AssetItem] {
+            guard let collectionView,
+                  let primaryIndex = assetIndexByID[primaryAssetID],
+                  parent.assets.indices.contains(primaryIndex) else {
+                return []
+            }
+
+            let primaryIndexPath = IndexPath(item: primaryIndex, section: 0)
+            guard collectionView.selectionIndexPaths.contains(primaryIndexPath) else {
+                return [parent.assets[primaryIndex]]
+            }
+
+            let selectedAssets = collectionView.selectionIndexPaths
+                .sorted { $0.item < $1.item }
+                .compactMap { indexPath -> AssetItem? in
+                    guard parent.assets.indices.contains(indexPath.item) else {
+                        return nil
+                    }
+                    return parent.assets[indexPath.item]
+                }
+
+            return selectedAssets.isEmpty ? [parent.assets[primaryIndex]] : selectedAssets
         }
 
         private func toggleFavorite(assetID: AssetItem.ID) {

@@ -13,6 +13,11 @@ private struct PermanentAssetDeletionRequest: Identifiable {
     var assets: [AssetItem]
 }
 
+private struct AssetExportRequest: Identifiable {
+    let id = UUID()
+    var assets: [AssetItem]
+}
+
 private enum AssetFilterFacet: String, CaseIterable, Hashable, Identifiable {
     case colors
     case tags
@@ -62,6 +67,7 @@ struct ContentView: View {
     @State private var pendingPermanentAssetDeletion: PermanentAssetDeletionRequest?
     @State private var activeImportID: UUID?
     @State private var importProgress: AssetImportProgress?
+    @State private var pendingAssetExport: AssetExportRequest?
 
     private var sidebarSelection: Binding<String?> {
         Binding {
@@ -961,6 +967,17 @@ struct ContentView: View {
             )
             .zIndex(35)
         }
+
+        if let pendingAssetExport {
+            MomentoAssetExportDialog(
+                isPresented: assetExportDialogIsPresented,
+                assetCount: pendingAssetExport.assets.count,
+                onSubmit: { configuration in
+                    exportAssets(pendingAssetExport.assets, configuration: configuration)
+                }
+            )
+            .zIndex(36)
+        }
     }
 
     @ViewBuilder
@@ -1019,6 +1036,16 @@ struct ContentView: View {
         } set: { isPresented in
             if !isPresented {
                 deletingFolder = nil
+            }
+        }
+    }
+
+    private var assetExportDialogIsPresented: Binding<Bool> {
+        Binding {
+            pendingAssetExport != nil
+        } set: { isPresented in
+            if !isPresented {
+                pendingAssetExport = nil
             }
         }
     }
@@ -1341,12 +1368,18 @@ struct ContentView: View {
         }
     }
 
-    private func handleAssetContextMenuAction(_ asset: AssetItem, action: AssetContextMenuAction) {
+    private func handleAssetContextMenuAction(
+        _ asset: AssetItem,
+        contextAssets: [AssetItem],
+        action: AssetContextMenuAction
+    ) {
         switch action {
         case .previewOriginal:
             if preview(asset) {
                 showAssetActionToast(action)
             }
+        case .export:
+            presentAssetExportDialog(for: contextAssets.isEmpty ? [asset] : contextAssets)
         case .refreshThumbnail:
             if refreshThumbnail(for: asset) {
                 showAssetActionToast(action)
@@ -1576,6 +1609,85 @@ struct ContentView: View {
 
     private func showAssetActionToast(_ action: AssetContextMenuAction) {
         shellToastRequest = MomentoToastRequest(message: localization.string(action.titleKey))
+    }
+
+    private func presentAssetExportDialog(for assets: [AssetItem]) {
+        let exportableAssets = assets.filter { !$0.isTrashed || FileManager.default.fileExists(atPath: $0.storageURL.path) }
+        guard !exportableAssets.isEmpty else {
+            return
+        }
+
+        withAnimation(.smooth(duration: 0.16)) {
+            pendingAssetExport = AssetExportRequest(assets: exportableAssets)
+        }
+    }
+
+    private func exportAssets(_ assets: [AssetItem], configuration: AssetExportConfiguration) {
+        guard let destinationURL = chooseAssetExportDestination(for: assets, configuration: configuration) else {
+            return
+        }
+
+        let didStartAccessing = destinationURL.startAccessingSecurityScopedResource()
+        Task {
+            defer {
+                if didStartAccessing {
+                    destinationURL.stopAccessingSecurityScopedResource()
+                }
+            }
+
+            do {
+                let exportedURLs = try await Task.detached(priority: .userInitiated) {
+                    let exportService = AssetExportService()
+                    if assets.count == 1, let asset = assets.first {
+                        return try [exportService.export(asset, configuration: configuration, to: destinationURL)]
+                    }
+                    return try exportService.export(
+                        assets,
+                        configuration: configuration,
+                        toDirectory: destinationURL
+                    )
+                }.value
+
+                await MainActor.run {
+                    shellToastRequest = MomentoToastRequest(
+                        message: exportSuccessMessage(exportedCount: exportedURLs.count)
+                    )
+                }
+            } catch {
+                await MainActor.run {
+                    showImportError(error)
+                }
+            }
+        }
+    }
+
+    private func chooseAssetExportDestination(
+        for assets: [AssetItem],
+        configuration: AssetExportConfiguration
+    ) -> URL? {
+        if assets.count == 1, let asset = assets.first {
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [configuration.format.contentType(for: asset)]
+            panel.canCreateDirectories = true
+            panel.nameFieldStringValue = AssetExportService.fileName(for: asset, format: configuration.format)
+            panel.prompt = localization.string("Export")
+            return panel.runModal() == .OK ? panel.url : nil
+        }
+
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = true
+        panel.title = localization.string("Choose Export Folder")
+        panel.prompt = localization.string("Export")
+        return panel.runModal() == .OK ? panel.url : nil
+    }
+
+    private func exportSuccessMessage(exportedCount: Int) -> String {
+        exportedCount == 1
+            ? localization.string("Exported 1 asset")
+            : localization.format("Exported %d assets", exportedCount)
     }
 
     private func createLibrary() {

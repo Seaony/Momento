@@ -142,6 +142,9 @@ struct AppLocalization: Equatable {
             if let remoteImageError = error as? RemoteImageImportError {
                 return errorMessage(remoteImageError)
             }
+            if let assetExportError = error as? AssetExportError {
+                return errorMessage(assetExportError)
+            }
             return error.localizedDescription
         }
 
@@ -164,6 +167,15 @@ struct AppLocalization: Equatable {
             string("This asset is no longer available.")
         case .missingTag:
             string("This tag is no longer available.")
+        }
+    }
+
+    private func errorMessage(_ error: AssetExportError) -> String {
+        switch error {
+        case .emptySelection:
+            string("Select one or more assets to export.")
+        case .unsupportedFormat:
+            string("The selected asset cannot be exported in that format.")
         }
     }
 
