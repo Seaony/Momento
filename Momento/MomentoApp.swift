@@ -74,11 +74,7 @@ struct MomentoApp: App {
                     from: request.imageURL,
                     sourcePageURL: request.sourcePageURL
                 )
-                let localization = AppLocalization(language: appLanguage)
-                await BrowserImportNotificationService.notifyImageSaved(
-                    title: localization.string("Saved to Momento"),
-                    body: localization.string("The image has been imported into your current library.")
-                )
+                BrowserImportNotificationService.playImageSavedFeedback()
             }
         } catch {
             store.libraryErrorMessage = error.localizedDescription

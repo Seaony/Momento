@@ -157,6 +157,18 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(bridgeSource.contains("completionHandler(nil)"))
     }
 
+    func testBrowserImportSuccessPlaysSoundInsteadOfNotification() throws {
+        let appSource = try String(contentsOf: appURL(), encoding: .utf8)
+        let feedbackSource = try String(contentsOf: browserImportFeedbackURL(), encoding: .utf8)
+
+        XCTAssertTrue(appSource.contains("BrowserImportNotificationService.playImageSavedFeedback()"))
+        XCTAssertTrue(feedbackSource.contains("AssetDeletionSoundPlayer.playDeletionSound()"))
+        XCTAssertFalse(feedbackSource.contains("import UserNotifications"))
+        XCTAssertFalse(feedbackSource.contains("UNUserNotificationCenter"))
+        XCTAssertFalse(feedbackSource.contains("UNNotificationRequest"))
+        XCTAssertFalse(feedbackSource.contains("requestAuthorization"))
+    }
+
     func testCommandDeletePlaysDeletionSoundAfterSuccessfulDeleteActions() throws {
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
 
@@ -247,6 +259,10 @@ final class ArchitectureGuardTests: XCTestCase {
 
     private func sidebarURL() -> URL {
         repositoryRoot().appendingPathComponent("Momento/Features/Sidebar/MomentoSidebarView.swift")
+    }
+
+    private func browserImportFeedbackURL() -> URL {
+        repositoryRoot().appendingPathComponent("Momento/Services/BrowserImportNotificationService.swift")
     }
 
     private func appKitBridgeSource() throws -> String {
