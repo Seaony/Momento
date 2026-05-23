@@ -138,6 +138,9 @@ struct AppLocalization: Equatable {
             if let storageError = error as? LibraryStorageError {
                 return errorMessage(storageError)
             }
+            if let remoteImageError = error as? RemoteImageImportError {
+                return errorMessage(remoteImageError)
+            }
             return error.localizedDescription
         }
 
@@ -158,6 +161,17 @@ struct AppLocalization: Equatable {
             string("This asset is no longer available.")
         case .missingTag:
             string("This tag is no longer available.")
+        }
+    }
+
+    private func errorMessage(_ error: RemoteImageImportError) -> String {
+        switch error {
+        case .unsupportedURLScheme:
+            string("Only HTTP or HTTPS image URLs can be imported from Chrome.")
+        case .downloadFailed:
+            string("Momento could not download the image from Chrome.")
+        case .unsupportedImageContent:
+            string("The selected Chrome image is not a supported image format.")
         }
     }
 

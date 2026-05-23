@@ -1207,6 +1207,54 @@
         }
       }
     },
+    "Momento could not download the image from Chrome." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Momento could not download the image from Chrome."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Momento 无法下载 Chrome 中的图片。"
+          }
+        }
+      }
+    },
+    "Only HTTP or HTTPS image URLs can be imported from Chrome." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Only HTTP or HTTPS image URLs can be imported from Chrome."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只能从 Chrome 导入 HTTP 或 HTTPS 图片 URL。"
+          }
+        }
+      }
+    },
+    "The selected Chrome image is not a supported image format." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The selected Chrome image is not a supported image format."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选中的 Chrome 图片不是 Momento 支持的图片格式。"
+          }
+        }
+      }
+    },
     "Create or open a Momento library to start organizing assets." : {
       "extractionState" : "stale",
       "localizations" : {

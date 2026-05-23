@@ -138,6 +138,7 @@ struct ContentView: View {
         .onAppear {
             validateCurrentLibraryAvailability()
         }
+        .onOpenURL(perform: handleExternalURL)
         .onChange(of: defaultViewMode) { _, newValue in
             store.setViewMode(newValue)
         }
@@ -1568,6 +1569,27 @@ struct ContentView: View {
         Task {
             do {
                 try await store.importItems(from: urls)
+            } catch {
+                showImportError(error)
+            }
+        }
+    }
+
+    private func handleExternalURL(_ url: URL) {
+        guard let request = MomentoExternalImportRequest(url: url) else {
+            return
+        }
+
+        switch request {
+        case .remoteImage(let sourceURL):
+            importRemoteImage(sourceURL)
+        }
+    }
+
+    private func importRemoteImage(_ sourceURL: URL) {
+        Task {
+            do {
+                try await store.importRemoteImage(from: sourceURL)
             } catch {
                 showImportError(error)
             }

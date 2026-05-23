@@ -758,6 +758,15 @@ final class LibraryStore {
         pruneSelectedAssetsIfNeeded()
     }
 
+    func importRemoteImage(from url: URL) async throws {
+        let downloadedURL = try await RemoteImageImportService().downloadImage(from: url)
+        defer {
+            try? FileManager.default.removeItem(at: downloadedURL)
+        }
+
+        try await importItems(from: [downloadedURL])
+    }
+
     private func openRecentLibrary(_ reference: RecentLibraryReference) throws {
         let resolved: (url: URL, isStale: Bool)
         do {
