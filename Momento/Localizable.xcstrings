@@ -31,6 +31,23 @@
         }
       }
     },
+    "%d imported, %d skipped" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%d imported, %d skipped"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已导入 %d，已跳过 %d"
+          }
+        }
+      }
+    },
     "%d items" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1003,6 +1020,23 @@
         }
       }
     },
+    "Current file: %@" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Current file: %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前文件：%@"
+          }
+        }
+      }
+    },
     "Cyan" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1050,6 +1084,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "删除"
+          }
+        }
+      }
+    },
+    "Delete asset permanently warning: %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” will be permanently deleted. This cannot be undone."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” 将被永久删除，此操作无法撤销。"
           }
         }
       }
@@ -1118,23 +1169,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "“%@” 将被永久删除，并从 Momento 的最近资源库列表中移除。"
-          }
-        }
-      }
-    },
-    "Delete asset permanently warning: %@" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“%@” will be permanently deleted. This cannot be undone."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“%@” 将被永久删除，此操作无法撤销。"
           }
         }
       }
@@ -1870,6 +1904,23 @@
         }
       }
     },
+    "Import already in progress" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Import already in progress"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在导入，请稍候"
+          }
+        }
+      }
+    },
     "Import Assets" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1934,6 +1985,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "导入资源库"
+          }
+        }
+      }
+    },
+    "Importing Assets" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importing Assets"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在导入资源"
           }
         }
       }
@@ -2126,6 +2194,7 @@
       }
     },
     "Link" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -2307,40 +2376,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Momento 无法下载 Chrome 中的图片。"
-          }
-        }
-      }
-    },
-    "Saved to Momento" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Saved to Momento"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已保存到 Momento"
-          }
-        }
-      }
-    },
-    "The image has been imported into your current library." : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The image has been imported into your current library."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "图片已导入当前资源库。"
           }
         }
       }
@@ -2634,6 +2669,23 @@
         }
       }
     },
+    "No supported files found" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No supported files found"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有找到支持的文件"
+          }
+        }
+      }
+    },
     "No tags" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2923,6 +2975,23 @@
         }
       }
     },
+    "Preparing import..." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Preparing import..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在准备导入..."
+          }
+        }
+      }
+    },
     "Preview Original" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2953,6 +3022,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "预览所选资源"
+          }
+        }
+      }
+    },
+    "Processed %d of %d files" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Processed %d of %d files"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已处理 %d / %d 个文件"
           }
         }
       }
@@ -3208,6 +3294,57 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保存更改"
+          }
+        }
+      }
+    },
+    "Saved to Momento" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved to Momento"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已保存到 Momento"
+          }
+        }
+      }
+    },
+    "Saving imported assets..." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saving imported assets..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在保存导入结果..."
+          }
+        }
+      }
+    },
+    "Scanning selected folders..." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scanning selected folders..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在扫描选中的文件夹..."
           }
         }
       }
@@ -3616,6 +3753,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "青色"
+          }
+        }
+      }
+    },
+    "The image has been imported into your current library." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The image has been imported into your current library."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "图片已导入当前资源库。"
           }
         }
       }

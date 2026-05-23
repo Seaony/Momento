@@ -9,6 +9,34 @@ nonisolated struct AssetImportBatch: Sendable {
     var folderAssignmentsByContentHash: [String: [[String]]]
 }
 
+nonisolated enum AssetImportProgressPhase: Sendable, Equatable {
+    case preparing
+    case importing
+    case finalizing
+}
+
+nonisolated struct AssetImportProgress: Sendable, Equatable {
+    var phase: AssetImportProgressPhase
+    var totalFileCount: Int?
+    var processedFileCount: Int
+    var importedFileCount: Int
+    var skippedFileCount: Int
+    var currentFileName: String?
+
+    static func preparing() -> AssetImportProgress {
+        AssetImportProgress(
+            phase: .preparing,
+            totalFileCount: nil,
+            processedFileCount: 0,
+            importedFileCount: 0,
+            skippedFileCount: 0,
+            currentFileName: nil
+        )
+    }
+}
+
+typealias AssetImportProgressHandler = @Sendable (AssetImportProgress) async -> Void
+
 nonisolated private struct AssetImportCandidate: Sendable {
     var sourceURL: URL
     var rootURL: URL?
@@ -35,13 +63,15 @@ struct AssetImportService: Sendable {
         from urls: [URL],
         into library: AssetLibrary,
         excludingContentHashes existingContentHashes: Set<String>,
-        sourcePageURL: URL? = nil
+        sourcePageURL: URL? = nil,
+        progressHandler: AssetImportProgressHandler? = nil
     ) async throws -> [AssetItem] {
         try await importBatch(
             from: urls,
             into: library,
             excludingContentHashes: existingContentHashes,
-            sourcePageURL: sourcePageURL
+            sourcePageURL: sourcePageURL,
+            progressHandler: progressHandler
         ).newAssets
     }
 
@@ -49,7 +79,8 @@ struct AssetImportService: Sendable {
         from urls: [URL],
         into library: AssetLibrary,
         excludingContentHashes existingContentHashes: Set<String>,
-        sourcePageURL: URL? = nil
+        sourcePageURL: URL? = nil,
+        progressHandler: AssetImportProgressHandler? = nil
     ) async throws -> AssetImportBatch {
         // 用户从 Finder 选择的文件/文件夹可能来自 sandbox 外部。访问权限必须覆盖
         // 后面的 detached import task，所以 scope 在 await 之前创建，并在整个导入
@@ -60,16 +91,46 @@ struct AssetImportService: Sendable {
         }
 
         return try await Task.detached(priority: .userInitiated) {
+            await reportImportProgress(.preparing(), using: progressHandler)
             try storage.prepareLibraryDirectories(for: library)
 
             let candidates = try collectImportCandidates(from: urls)
             var imported: [AssetItem] = []
             var folderAssignmentsByContentHash: [String: [[String]]] = [:]
             var seenHashes = existingContentHashes
+            var processedFileCount = 0
+            var importedFileCount = 0
+            var skippedFileCount = 0
+            let totalFileCount = candidates.count
+
+            await reportImportProgress(
+                AssetImportProgress(
+                    phase: .importing,
+                    totalFileCount: totalFileCount,
+                    processedFileCount: processedFileCount,
+                    importedFileCount: importedFileCount,
+                    skippedFileCount: skippedFileCount,
+                    currentFileName: candidates.first?.sourceURL.lastPathComponent
+                ),
+                using: progressHandler
+            )
 
             for candidate in candidates {
                 let fileURL = candidate.sourceURL
                 guard let kind = assetKind(for: fileURL) else {
+                    processedFileCount += 1
+                    skippedFileCount += 1
+                    await reportImportProgress(
+                        AssetImportProgress(
+                            phase: .importing,
+                            totalFileCount: totalFileCount,
+                            processedFileCount: processedFileCount,
+                            importedFileCount: importedFileCount,
+                            skippedFileCount: skippedFileCount,
+                            currentFileName: nextFileName(after: processedFileCount, in: candidates)
+                        ),
+                        using: progressHandler
+                    )
                     continue
                 }
 
@@ -85,6 +146,19 @@ struct AssetImportService: Sendable {
                 // 导入阶段先用 hash 做一次批内和库内去重，避免重复复制物理文件；
                 // Core Data 层仍有唯一约束，负责处理并发或历史数据带来的最终一致性。
                 guard seenHashes.insert(hash).inserted else {
+                    processedFileCount += 1
+                    skippedFileCount += 1
+                    await reportImportProgress(
+                        AssetImportProgress(
+                            phase: .importing,
+                            totalFileCount: totalFileCount,
+                            processedFileCount: processedFileCount,
+                            importedFileCount: importedFileCount,
+                            skippedFileCount: skippedFileCount,
+                            currentFileName: nextFileName(after: processedFileCount, in: candidates)
+                        ),
+                        using: progressHandler
+                    )
                     continue
                 }
 
@@ -144,7 +218,32 @@ struct AssetImportService: Sendable {
                         updatedAt: importedAt
                     )
                 )
+                processedFileCount += 1
+                importedFileCount += 1
+                await reportImportProgress(
+                    AssetImportProgress(
+                        phase: .importing,
+                        totalFileCount: totalFileCount,
+                        processedFileCount: processedFileCount,
+                        importedFileCount: importedFileCount,
+                        skippedFileCount: skippedFileCount,
+                        currentFileName: nextFileName(after: processedFileCount, in: candidates)
+                    ),
+                    using: progressHandler
+                )
             }
+
+            await reportImportProgress(
+                AssetImportProgress(
+                    phase: .finalizing,
+                    totalFileCount: totalFileCount,
+                    processedFileCount: processedFileCount,
+                    importedFileCount: importedFileCount,
+                    skippedFileCount: skippedFileCount,
+                    currentFileName: nil
+                ),
+                using: progressHandler
+            )
 
             return AssetImportBatch(
                 newAssets: imported,
@@ -152,6 +251,28 @@ struct AssetImportService: Sendable {
             )
         }.value
     }
+}
+
+nonisolated private func reportImportProgress(
+    _ progress: AssetImportProgress,
+    using progressHandler: AssetImportProgressHandler?
+) async {
+    guard let progressHandler else {
+        return
+    }
+
+    await progressHandler(progress)
+}
+
+nonisolated private func nextFileName(
+    after processedFileCount: Int,
+    in candidates: [AssetImportCandidate]
+) -> String? {
+    guard processedFileCount < candidates.count else {
+        return nil
+    }
+
+    return candidates[processedFileCount].sourceURL.lastPathComponent
 }
 
 nonisolated private final class SourceAccessScope: @unchecked Sendable {

@@ -784,7 +784,11 @@ final class LibraryStore {
         pruneSelectedAssetsIfNeeded()
     }
 
-    func importItems(from urls: [URL], sourcePageURL: URL? = nil) async throws {
+    func importItems(
+        from urls: [URL],
+        sourcePageURL: URL? = nil,
+        progressHandler: AssetImportProgressHandler? = nil
+    ) async throws {
         guard let currentLibrary, let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
@@ -799,7 +803,8 @@ final class LibraryStore {
             from: urls,
             into: currentLibrary,
             excludingContentHashes: metadataStore.existingContentHashes(),
-            sourcePageURL: sourcePageURL
+            sourcePageURL: sourcePageURL,
+            progressHandler: progressHandler
         )
         let savedAssets = try metadataStore.saveImportedBatch(imported)
         guard self.currentLibrary?.id == importingLibraryID else {
@@ -811,13 +816,21 @@ final class LibraryStore {
         pruneSelectedAssetsIfNeeded()
     }
 
-    func importRemoteImage(from url: URL, sourcePageURL: URL? = nil) async throws {
+    func importRemoteImage(
+        from url: URL,
+        sourcePageURL: URL? = nil,
+        progressHandler: AssetImportProgressHandler? = nil
+    ) async throws {
         let downloadedURL = try await RemoteImageImportService().downloadImage(from: url)
         defer {
             try? FileManager.default.removeItem(at: downloadedURL)
         }
 
-        try await importItems(from: [downloadedURL], sourcePageURL: sourcePageURL)
+        try await importItems(
+            from: [downloadedURL],
+            sourcePageURL: sourcePageURL,
+            progressHandler: progressHandler
+        )
     }
 
     private func openRecentLibrary(_ reference: RecentLibraryReference) throws {

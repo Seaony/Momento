@@ -298,6 +298,47 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         XCTAssertEqual(reopened.assets.first?.sourcePageURL, sourcePageURL)
     }
 
+    @MainActor
+    func testImportItemsReportsProgressForFolderImport() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        let folderURL = environment.inputURL.appendingPathComponent("Batch", isDirectory: true)
+        _ = try environment.writeOnePixelPNG(named: "first.png", in: folderURL)
+        _ = try environment.writeOnePixelJPEGWithExif(named: "second.jpg", in: folderURL)
+        let recorder = ImportProgressRecorder()
+
+        try await store.importItems(
+            from: [folderURL],
+            progressHandler: { progress in
+                await recorder.append(progress)
+            }
+        )
+
+        let values = await recorder.snapshot()
+        XCTAssertEqual(values.first?.phase, .preparing)
+        XCTAssertTrue(values.contains { progress in
+            progress.phase == .importing
+                && progress.totalFileCount == 2
+                && progress.processedFileCount == 0
+        })
+
+        let finalImportingProgress = try XCTUnwrap(values.last { $0.phase == .importing })
+        XCTAssertEqual(finalImportingProgress.totalFileCount, 2)
+        XCTAssertEqual(finalImportingProgress.processedFileCount, 2)
+        XCTAssertEqual(finalImportingProgress.importedFileCount, 2)
+        XCTAssertEqual(finalImportingProgress.skippedFileCount, 0)
+        XCTAssertEqual(values.last?.phase, .finalizing)
+        XCTAssertEqual(store.assets.count, 2)
+    }
+
     func testOpeningPreV3LibraryMigratesMetadata() throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }
@@ -1412,6 +1453,18 @@ final class LibraryPackagePersistenceTests: XCTestCase {
             isFavorite: false,
             importedAt: importedAt
         )
+    }
+}
+
+private actor ImportProgressRecorder {
+    private var values: [AssetImportProgress] = []
+
+    func append(_ progress: AssetImportProgress) {
+        values.append(progress)
+    }
+
+    func snapshot() -> [AssetImportProgress] {
+        values
     }
 }
 

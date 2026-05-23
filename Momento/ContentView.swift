@@ -60,6 +60,8 @@ struct ContentView: View {
     @State private var isSortPopoverPresented = false
     @State private var shellToastRequest: MomentoToastRequest?
     @State private var pendingPermanentAssetDeletion: PermanentAssetDeletionRequest?
+    @State private var activeImportID: UUID?
+    @State private var importProgress: AssetImportProgress?
 
     private var sidebarSelection: Binding<String?> {
         Binding {
@@ -117,6 +119,9 @@ struct ContentView: View {
         }
         .overlay {
             libraryDialogOverlay
+        }
+        .overlay {
+            importProgressOverlay
         }
         .fileImporter(
             isPresented: $isImporterPresented,
@@ -958,6 +963,16 @@ struct ContentView: View {
         }
     }
 
+    @ViewBuilder
+    private var importProgressOverlay: some View {
+        if let importProgress {
+            importProgressPanel(importProgress)
+                .transition(.scale(scale: 0.96).combined(with: .opacity))
+                .zIndex(60)
+                .allowsHitTesting(false)
+        }
+    }
+
     private var editingLibraryDialogIsPresented: Binding<Bool> {
         Binding {
             editingLibrary != nil
@@ -1145,6 +1160,96 @@ struct ContentView: View {
         .background {
             MomentoGlassBackground(cornerRadius: 11)
         }
+    }
+
+    private func importProgressPanel(_ progress: AssetImportProgress) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Image(systemName: "square.and.arrow.down")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(MomentoTheme.primaryText)
+                    .frame(width: 38, height: 38)
+                    .background {
+                        MomentoGlassBackground(
+                            glass: .regular.tint(Color.white.opacity(0.08)),
+                            cornerRadius: 12
+                        )
+                    }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(importProgressTitle(progress))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(MomentoTheme.primaryText)
+                    Text(importProgressSummary(progress))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(MomentoTheme.secondaryText)
+                }
+            }
+
+            if let totalFileCount = progress.totalFileCount, totalFileCount > 0 {
+                ProgressView(
+                    value: Double(progress.processedFileCount),
+                    total: Double(totalFileCount)
+                )
+                .progressViewStyle(.linear)
+            } else {
+                ProgressView()
+                    .controlSize(.small)
+            }
+
+            Text(importProgressDetail(progress))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(MomentoTheme.secondaryText)
+                .lineLimit(1)
+
+            if let currentFileName = progress.currentFileName {
+                Text(localization.format("Current file: %@", currentFileName))
+                    .font(.system(size: 11))
+                    .foregroundStyle(MomentoTheme.secondaryText)
+                    .lineLimit(1)
+            }
+        }
+        .padding(18)
+        .frame(width: 360, alignment: .leading)
+        .background {
+            MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.18)), cornerRadius: 18)
+        }
+        .shadow(color: .black.opacity(0.22), radius: 24, x: 0, y: 12)
+    }
+
+    private func importProgressTitle(_ progress: AssetImportProgress) -> String {
+        switch progress.phase {
+        case .preparing:
+            localization.string("Preparing import...")
+        case .importing:
+            localization.string("Importing Assets")
+        case .finalizing:
+            localization.string("Saving imported assets...")
+        }
+    }
+
+    private func importProgressSummary(_ progress: AssetImportProgress) -> String {
+        guard let totalFileCount = progress.totalFileCount else {
+            return localization.string("Scanning selected folders...")
+        }
+
+        guard totalFileCount > 0 else {
+            return localization.string("No supported files found")
+        }
+
+        return localization.format(
+            "Processed %d of %d files",
+            progress.processedFileCount,
+            totalFileCount
+        )
+    }
+
+    private func importProgressDetail(_ progress: AssetImportProgress) -> String {
+        localization.format(
+            "%d imported, %d skipped",
+            progress.importedFileCount,
+            progress.skippedFileCount
+        )
     }
 
     private func selectAssets(_ ids: Set<AssetItem.ID>) {
@@ -1717,13 +1822,52 @@ struct ContentView: View {
         guard !urls.isEmpty else {
             return
         }
+        guard activeImportID == nil else {
+            shellToastRequest = MomentoToastRequest(message: localization.string("Import already in progress"))
+            return
+        }
 
+        let importID = UUID()
+        activeImportID = importID
+        withAnimation(.smooth(duration: 0.16)) {
+            importProgress = .preparing()
+        }
         Task {
             do {
-                try await store.importItems(from: urls)
+                try await store.importItems(
+                    from: urls,
+                    progressHandler: { progress in
+                        await MainActor.run {
+                            guard activeImportID == importID else {
+                                return
+                            }
+
+                            withAnimation(.smooth(duration: 0.12)) {
+                                importProgress = progress
+                            }
+                        }
+                    }
+                )
+                await MainActor.run {
+                    finishImportProgress(importID)
+                }
             } catch {
-                showImportError(error)
+                await MainActor.run {
+                    finishImportProgress(importID)
+                    showImportError(error)
+                }
             }
+        }
+    }
+
+    private func finishImportProgress(_ importID: UUID) {
+        guard activeImportID == importID else {
+            return
+        }
+
+        activeImportID = nil
+        withAnimation(.smooth(duration: 0.16)) {
+            importProgress = nil
         }
     }
 
