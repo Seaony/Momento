@@ -1,5 +1,6 @@
 // 中文注释：本视图绘制素材预览浮层，具体窗口生命周期由 AppKit 面板控制器管理。
 import AppKit
+import ImageIO
 import SwiftUI
 
 private enum MomentoAssetPreviewMetrics {
@@ -18,6 +19,7 @@ struct MomentoAssetPreviewOverlay: View {
     var onDismiss: () -> Void
 
     @State private var previewImage: NSImage?
+    @State private var previewImageTask: Task<Void, Never>?
     @State private var isPresented = false
     @State private var isClosing = false
 
@@ -46,10 +48,11 @@ struct MomentoAssetPreviewOverlay: View {
                 .frame(width: 0, height: 0)
         }
         .onAppear {
-            previewImage = NSImage(contentsOf: previewURL) ?? NSWorkspace.shared.icon(forFile: previewURL.path)
-            withAnimation(.spring(response: 0.24, dampingFraction: 0.86)) {
-                isPresented = true
-            }
+            loadPreviewImage()
+        }
+        .onDisappear {
+            previewImageTask?.cancel()
+            previewImageTask = nil
         }
     }
 
@@ -138,6 +141,33 @@ struct MomentoAssetPreviewOverlay: View {
         return previewURL.lastPathComponent
     }
 
+    private func loadPreviewImage() {
+        previewImageTask?.cancel()
+        previewImage = nil
+
+        let url = previewURL
+        let maxPixelSize = previewMaxPixelSize
+        previewImageTask = Task {
+            let image = await PreviewImageLoader.image(for: url, maxPixelSize: maxPixelSize)
+
+            guard !Task.isCancelled else {
+                return
+            }
+
+            previewImage = image ?? NSWorkspace.shared.icon(forFile: url.path)
+            withAnimation(.spring(response: 0.24, dampingFraction: 0.86)) {
+                isPresented = true
+            }
+        }
+    }
+
+    private var previewMaxPixelSize: Int {
+        let screen = NSScreen.main
+        let scale = screen?.backingScaleFactor ?? 2
+        let visibleFrame = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1600, height: 1000)
+        return max(Int(max(visibleFrame.width * 0.86, visibleFrame.height * 0.82) * scale), 1)
+    }
+
     private func dismiss() {
         guard !isClosing else {
             return
@@ -156,6 +186,34 @@ struct MomentoAssetPreviewOverlay: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
             onDismiss()
         }
+    }
+}
+
+private enum PreviewImageLoader {
+    static func image(for url: URL, maxPixelSize: Int) async -> NSImage? {
+        await Task.detached(priority: .userInitiated) {
+            guard let source = CGImageSourceCreateWithURL(url as CFURL, [
+                kCGImageSourceShouldCache: false
+            ] as CFDictionary) else {
+                return nil
+            }
+
+            let options = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceShouldCacheImmediately: true,
+                kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+            ] as CFDictionary
+
+            guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options) else {
+                return nil
+            }
+
+            return NSImage(
+                cgImage: image,
+                size: NSSize(width: image.width, height: image.height)
+            )
+        }.value
     }
 }
 

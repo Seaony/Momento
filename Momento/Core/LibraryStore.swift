@@ -112,11 +112,7 @@ final class LibraryStore {
             return sortAssets(filteredAssets)
         }
 
-        return sortAssets(filteredAssets.filter { asset in
-            asset.displayName.localizedCaseInsensitiveContains(query)
-                || asset.fileExtension.localizedCaseInsensitiveContains(query)
-                || asset.tags.contains { $0.name.localizedCaseInsensitiveContains(query) }
-        })
+        return sortAssets(filteredAssets.filter { assetMatchesSearch($0, query: query) })
     }
 
     var selectedAsset: AssetItem? {
@@ -124,10 +120,11 @@ final class LibraryStore {
               selectedAssetIDs.contains(selectedAssetID) else {
             return nil
         }
-        guard visibleAssets.contains(where: { $0.id == selectedAssetID }) else {
+        guard let asset = assets.first(where: { $0.id == selectedAssetID }),
+              isAssetVisible(asset) else {
             return nil
         }
-        return assets.first { $0.id == selectedAssetID }
+        return asset
     }
 
     func folder(id: AssetFolder.ID) -> AssetFolder? {
@@ -889,18 +886,58 @@ final class LibraryStore {
             return assets
         }
 
-        return assets.filter { asset in
-            let colorCategories = Self.colorCategories(for: asset)
-            let matchesColors = filterState.colorCategories.isEmpty
-                || colorCategories.contains { filterState.colorCategories.contains($0) }
-            let matchesTags = filterState.tagIDs.isEmpty || asset.tags.contains { tag in
-                filterState.tagIDs.contains(tag.id)
-            }
-            let matchesFileTypes = filterState.fileExtensions.isEmpty
-                || filterState.fileExtensions.contains(Self.normalizedFileExtension(asset.fileExtension))
+        return assets.filter(assetMatchesFilters)
+    }
 
-            return matchesColors && matchesTags && matchesFileTypes
+    private func isAssetVisible(_ asset: AssetItem) -> Bool {
+        guard let currentLibrary, asset.libraryID == currentLibrary.id else {
+            return false
         }
+
+        switch sidebarSelection {
+        case .library:
+            guard !asset.isTrashed else { return false }
+        case .favorites:
+            guard !asset.isTrashed, asset.isFavorite else { return false }
+        case .uncategorized:
+            guard !asset.isTrashed, asset.folderIDs.isEmpty else { return false }
+        case .untagged:
+            guard !asset.isTrashed, asset.tags.isEmpty else { return false }
+        case .tagManagement, .folderManagement:
+            return false
+        case .folder(let folderID):
+            guard !asset.isTrashed, asset.folderIDs.contains(folderID) else { return false }
+        case .tag(let tagID):
+            guard !asset.isTrashed, asset.tags.contains(where: { $0.id == tagID }) else { return false }
+        case .trash:
+            guard asset.isTrashed else { return false }
+        }
+
+        guard assetMatchesFilters(asset) else {
+            return false
+        }
+
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        return query.isEmpty || assetMatchesSearch(asset, query: query)
+    }
+
+    private func assetMatchesFilters(_ asset: AssetItem) -> Bool {
+        let colorCategories = Self.colorCategories(for: asset)
+        let matchesColors = filterState.colorCategories.isEmpty
+            || colorCategories.contains { filterState.colorCategories.contains($0) }
+        let matchesTags = filterState.tagIDs.isEmpty || asset.tags.contains { tag in
+            filterState.tagIDs.contains(tag.id)
+        }
+        let matchesFileTypes = filterState.fileExtensions.isEmpty
+            || filterState.fileExtensions.contains(Self.normalizedFileExtension(asset.fileExtension))
+
+        return matchesColors && matchesTags && matchesFileTypes
+    }
+
+    private func assetMatchesSearch(_ asset: AssetItem, query: String) -> Bool {
+        asset.displayName.localizedCaseInsensitiveContains(query)
+            || asset.fileExtension.localizedCaseInsensitiveContains(query)
+            || asset.tags.contains { $0.name.localizedCaseInsensitiveContains(query) }
     }
 
     private func sortAssets(_ assets: [AssetItem]) -> [AssetItem] {

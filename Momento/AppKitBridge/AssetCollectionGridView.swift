@@ -379,8 +379,11 @@ struct AssetCollectionGridView: NSViewRepresentable {
         comparableOldAsset.tags = newAsset.tags
         comparableOldAsset.folderIDs = newAsset.folderIDs
         comparableOldAsset.paletteColors = newAsset.paletteColors
+        comparableOldAsset.note = newAsset.note
+        comparableOldAsset.sourcePageURL = newAsset.sourcePageURL
         comparableOldAsset.isFavorite = newAsset.isFavorite
         comparableOldAsset.importedAt = newAsset.importedAt
+        comparableOldAsset.updatedAt = newAsset.updatedAt
         return comparableOldAsset == newAsset
     }
 
@@ -1124,6 +1127,7 @@ private final class AssetPreviewImageProvider {
 
     private init() {
         cache.countLimit = 512
+        cache.totalCostLimit = 96 * 1024 * 1024
     }
 
     func identity(for asset: AssetItem) -> String {
@@ -1143,7 +1147,7 @@ private final class AssetPreviewImageProvider {
         }
 
         let image = loadImage(for: asset)
-        cache.setObject(image, forKey: key)
+        cache.setObject(image, forKey: key, cost: cacheCost(for: image))
         return image
     }
 
@@ -1172,6 +1176,12 @@ private final class AssetPreviewImageProvider {
         }
 
         return NSWorkspace.shared.icon(for: .data)
+    }
+
+    private func cacheCost(for image: NSImage) -> Int {
+        let width = max(Int(image.size.width.rounded(.up)), 1)
+        let height = max(Int(image.size.height.rounded(.up)), 1)
+        return width * height * 4
     }
 }
 
