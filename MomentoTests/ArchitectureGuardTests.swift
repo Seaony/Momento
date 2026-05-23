@@ -104,6 +104,19 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(bridgeSource.contains("com.seaony.momento.asset-ids"))
     }
 
+    func testInternalAssetDragUTTypeIsDeclaredInInfoPlist() throws {
+        let data = try Data(contentsOf: infoPlistURL())
+        let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any])
+        let exportedTypes = try XCTUnwrap(plist["UTExportedTypeDeclarations"] as? [[String: Any]])
+        let matchingType: [String: Any]? = exportedTypes.first { type in
+            type["UTTypeIdentifier"] as? String == "com.seaony.momento.asset-ids"
+        }
+        let assetIDsType = try XCTUnwrap(matchingType)
+
+        XCTAssertEqual(assetIDsType["UTTypeDescription"] as? String, "Momento Asset Drag Payload")
+        XCTAssertEqual(assetIDsType["UTTypeConformsTo"] as? [String], ["public.json"])
+    }
+
     func testSidebarAcceptsInternalAssetDropsForOrganization() throws {
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
         let sidebarSource = try String(contentsOf: sidebarURL(), encoding: .utf8)
@@ -128,6 +141,10 @@ final class ArchitectureGuardTests: XCTestCase {
 
     private func contentViewURL() -> URL {
         repositoryRoot().appendingPathComponent("Momento/ContentView.swift")
+    }
+
+    private func infoPlistURL() -> URL {
+        repositoryRoot().appendingPathComponent("Momento/Info.plist")
     }
 
     private func designSystemURL() -> URL {

@@ -55,6 +55,16 @@
 		<dict>
 			<key>UTTypeConformsTo</key>
 			<array>
+				<string>public.json</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Momento Asset Drag Payload</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.seaony.momento.asset-ids</string>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
 				<string>com.apple.package</string>
 			</array>
 			<key>UTTypeDescription</key>
