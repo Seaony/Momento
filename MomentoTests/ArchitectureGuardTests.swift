@@ -104,17 +104,21 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(bridgeSource.contains("com.seaony.momento.asset-ids"))
     }
 
-    func testAssetGridSupportsCommandDeleteMoveToTrashShortcut() throws {
+    func testAssetGridSupportsCommandDeleteAssetShortcut() throws {
         let assetGridSource = try String(contentsOf: assetGridURL(), encoding: .utf8)
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
 
-        XCTAssertTrue(assetGridSource.contains("onMoveSelectedToTrashShortcut"))
+        XCTAssertTrue(assetGridSource.contains("onCommandDeleteShortcut"))
         XCTAssertTrue(assetGridSource.contains("isCommandDelete(event)"))
         XCTAssertTrue(assetGridSource.contains("modifiers == .command"))
         XCTAssertTrue(assetGridSource.contains("event.keyCode == Self.deleteKeyCode"))
-        XCTAssertTrue(assetGridSource.contains("parent.onMoveSelectedToTrash(selectedIDs)"))
-        XCTAssertTrue(contentSource.contains("onMoveSelectedToTrash: moveSelectedAssetsToTrash"))
+        XCTAssertTrue(assetGridSource.contains("parent.onCommandDelete(selectedIDs)"))
+        XCTAssertTrue(contentSource.contains("onCommandDelete: commandDeleteSelectedAssets"))
+        XCTAssertTrue(contentSource.contains("if case .trash = store.sidebarSelection"))
+        XCTAssertTrue(contentSource.contains("return deleteSelectedAssetsPermanently(assetIDs)"))
+        XCTAssertTrue(contentSource.contains("return moveSelectedAssetsToTrash(assetIDs)"))
         XCTAssertTrue(contentSource.contains("try store.moveAssetsToTrash(ids: Set(selectedAssets.map(\\.id)))"))
+        XCTAssertTrue(contentSource.contains("try store.deleteAssetPermanently(id: asset.id)"))
     }
 
     func testAssetDragWriterIsFilePromiseProviderItself() throws {
@@ -133,13 +137,21 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(assetGridSource.contains("AssetDragExportBatch(expectedFileCount: selectedAssetIDs.count)"))
         XCTAssertTrue(assetGridSource.contains("exportBatch: exportBatch"))
         XCTAssertTrue(bridgeSource.contains("exportBatch.promiseDidFinish(success: success)"))
-        XCTAssertTrue(bridgeSource.contains("AssetDragExportSoundPlayer.playSuccessSound()"))
+        XCTAssertTrue(bridgeSource.contains("AssetDeletionSoundPlayer.playDeletionSound()"))
         XCTAssertTrue(bridgeSource.contains("move to trash.aif"))
         XCTAssertTrue(bridgeSource.contains("NSSound(contentsOfFile: moveToTrashSoundPath, byReference: true)"))
         XCTAssertTrue(bridgeSource.contains("playbackDurationNanoseconds: UInt64 = 500_000_000"))
         XCTAssertTrue(bridgeSource.contains("schedulePlaybackStop(token: currentPlaybackToken)"))
         XCTAssertFalse(bridgeSource.contains("NSSound(named: NSSound.Name(\"Pop\"))"))
         XCTAssertTrue(bridgeSource.contains("completionHandler(nil)"))
+    }
+
+    func testCommandDeletePlaysDeletionSoundAfterSuccessfulDeleteActions() throws {
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+
+        XCTAssertTrue(contentSource.contains("try store.moveAssetsToTrash(ids: Set(selectedAssets.map(\\.id)))"))
+        XCTAssertTrue(contentSource.contains("try store.deleteAssetPermanently(id: asset.id)"))
+        XCTAssertTrue(contentSource.contains("AssetDeletionSoundPlayer.playDeletionSound()"))
     }
 
     func testInternalAssetDragUTTypeIsDeclaredInInfoPlist() throws {

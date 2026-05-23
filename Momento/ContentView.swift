@@ -229,7 +229,7 @@ struct ContentView: View {
                 onSpacePreviewStart: previewWhileSpaceIsPressed,
                 onSpacePreviewEnd: endSpacePreview,
                 onFavoriteToggle: toggleFavorite,
-                onMoveSelectedToTrash: moveSelectedAssetsToTrash,
+                onCommandDelete: commandDeleteSelectedAssets,
                 onContextMenuAction: handleAssetContextMenuAction
             )
 
@@ -1336,6 +1336,14 @@ struct ContentView: View {
         }
     }
 
+    private func commandDeleteSelectedAssets(_ assetIDs: Set<AssetItem.ID>) -> Bool {
+        if case .trash = store.sidebarSelection {
+            return deleteSelectedAssetsPermanently(assetIDs)
+        }
+
+        return moveSelectedAssetsToTrash(assetIDs)
+    }
+
     private func moveSelectedAssetsToTrash(_ assetIDs: Set<AssetItem.ID>) -> Bool {
         let selectedAssets = store.visibleAssets.filter { asset in
             assetIDs.contains(asset.id) && !asset.isTrashed
@@ -1349,6 +1357,7 @@ struct ContentView: View {
                 AssetCollectionGridView.invalidatePreviewCache(for: asset)
             }
             try store.moveAssetsToTrash(ids: Set(selectedAssets.map(\.id)))
+            AssetDeletionSoundPlayer.playDeletionSound()
             showAssetActionToast(.moveToTrash)
             return true
         } catch {
@@ -1360,6 +1369,28 @@ struct ContentView: View {
     private func restoreAsset(_ asset: AssetItem) -> Bool {
         do {
             try store.restoreAssets(ids: [asset.id])
+            return true
+        } catch {
+            showImportError(error)
+            return false
+        }
+    }
+
+    private func deleteSelectedAssetsPermanently(_ assetIDs: Set<AssetItem.ID>) -> Bool {
+        let selectedAssets = store.visibleAssets.filter { asset in
+            assetIDs.contains(asset.id) && asset.isTrashed
+        }
+        guard !selectedAssets.isEmpty else {
+            return false
+        }
+
+        do {
+            for asset in selectedAssets {
+                AssetCollectionGridView.invalidatePreviewCache(for: asset)
+                try store.deleteAssetPermanently(id: asset.id)
+            }
+            AssetDeletionSoundPlayer.playDeletionSound()
+            showAssetActionToast(.deletePermanently)
             return true
         } catch {
             showImportError(error)

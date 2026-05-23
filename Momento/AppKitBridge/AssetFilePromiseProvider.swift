@@ -87,7 +87,7 @@ nonisolated final class AssetFilePromiseProvider: NSFilePromiseProvider, NSFileP
 
     private func notifyExportBatch(success: Bool) {
         if exportBatch.promiseDidFinish(success: success) {
-            AssetDragExportSoundPlayer.playSuccessSound()
+            AssetDeletionSoundPlayer.playDeletionSound()
         }
     }
 
@@ -164,7 +164,7 @@ nonisolated final class AssetDragExportBatch: @unchecked Sendable {
     }
 }
 
-nonisolated private enum AssetDragExportSoundPlayer {
+nonisolated enum AssetDeletionSoundPlayer {
     private static let moveToTrashSoundPath =
         "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/finder/move to trash.aif"
     private static let playbackDurationNanoseconds: UInt64 = 500_000_000
@@ -174,14 +174,14 @@ nonisolated private enum AssetDragExportSoundPlayer {
     @MainActor
     private static var playbackToken = 0
 
-    static func playSuccessSound() {
+    static func playDeletionSound() {
         Task { @MainActor in
-            playSuccessSoundOnMainActor()
+            playDeletionSoundOnMainActor()
         }
     }
 
     @MainActor
-    private static func playSuccessSoundOnMainActor() {
+    private static func playDeletionSoundOnMainActor() {
         if successSound == nil {
             successSound = NSSound(contentsOfFile: moveToTrashSoundPath, byReference: true)
         }

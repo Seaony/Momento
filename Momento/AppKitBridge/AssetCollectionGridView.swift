@@ -161,7 +161,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
     var onSpacePreviewStart: (AssetItem, NSRect?) -> Void
     var onSpacePreviewEnd: () -> Void
     var onFavoriteToggle: (AssetItem) -> Void
-    var onMoveSelectedToTrash: (Set<AssetItem.ID>) -> Bool
+    var onCommandDelete: (Set<AssetItem.ID>) -> Bool
     var onContextMenuAction: (AssetItem, AssetContextMenuAction) -> Void
 
     static func invalidatePreviewCache(for asset: AssetItem) {
@@ -178,7 +178,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
         onSpacePreviewStart: @escaping (AssetItem, NSRect?) -> Void = { _, _ in },
         onSpacePreviewEnd: @escaping () -> Void = {},
         onFavoriteToggle: @escaping (AssetItem) -> Void = { _ in },
-        onMoveSelectedToTrash: @escaping (Set<AssetItem.ID>) -> Bool = { _ in false },
+        onCommandDelete: @escaping (Set<AssetItem.ID>) -> Bool = { _ in false },
         onContextMenuAction: @escaping (AssetItem, AssetContextMenuAction) -> Void = { _, _ in }
     ) {
         self.assets = assets
@@ -190,7 +190,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
         self.onSpacePreviewStart = onSpacePreviewStart
         self.onSpacePreviewEnd = onSpacePreviewEnd
         self.onFavoriteToggle = onFavoriteToggle
-        self.onMoveSelectedToTrash = onMoveSelectedToTrash
+        self.onCommandDelete = onCommandDelete
         self.onContextMenuAction = onContextMenuAction
     }
 
@@ -222,8 +222,8 @@ struct AssetCollectionGridView: NSViewRepresentable {
         collectionView.onFavoriteShortcut = { [weak coordinator = context.coordinator] in
             coordinator?.toggleHoveredFavorite() ?? false
         }
-        collectionView.onMoveSelectedToTrashShortcut = { [weak coordinator = context.coordinator] in
-            coordinator?.moveSelectedAssetsToTrash() ?? false
+        collectionView.onCommandDeleteShortcut = { [weak coordinator = context.coordinator] in
+            coordinator?.commandDeleteSelectedAssets() ?? false
         }
 
         let doubleClickRecognizer = NSClickGestureRecognizer(
@@ -659,7 +659,7 @@ extension AssetCollectionGridView {
             return true
         }
 
-        func moveSelectedAssetsToTrash() -> Bool {
+        func commandDeleteSelectedAssets() -> Bool {
             guard let collectionView else {
                 return false
             }
@@ -669,15 +669,14 @@ extension AssetCollectionGridView {
                     return nil
                 }
 
-                let asset = parent.assets[indexPath.item]
-                return asset.isTrashed ? nil : asset.id
+                return parent.assets[indexPath.item].id
             })
 
             guard !selectedIDs.isEmpty else {
                 return false
             }
 
-            return parent.onMoveSelectedToTrash(selectedIDs)
+            return parent.onCommandDelete(selectedIDs)
         }
 
         private func previewIndexPath(in collectionView: NSCollectionView) -> IndexPath? {
@@ -764,7 +763,7 @@ private final class AssetPreviewCollectionView: NSCollectionView {
     var onSpacePreviewStart: (() -> Void)?
     var onSpacePreviewEnd: (() -> Void)?
     var onFavoriteShortcut: (() -> Bool)?
-    var onMoveSelectedToTrashShortcut: (() -> Bool)?
+    var onCommandDeleteShortcut: (() -> Bool)?
 
     override var acceptsFirstResponder: Bool {
         true
@@ -787,7 +786,7 @@ private final class AssetPreviewCollectionView: NSCollectionView {
 
         if isCommandDelete(event),
            !event.isARepeat,
-           onMoveSelectedToTrashShortcut?() == true {
+           onCommandDeleteShortcut?() == true {
             return
         }
 
