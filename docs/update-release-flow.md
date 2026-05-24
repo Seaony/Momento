@@ -28,27 +28,50 @@ SPARKLE_BIN="$(find "$HOME/Library/Developer/Xcode/DerivedData" -path '*/SourceP
 
 ## 发布新版本
 
-1. 更新 Xcode build settings 里的 `MARKETING_VERSION` 和 `CURRENT_PROJECT_VERSION`。
-2. 用 Release 配置构建、签名、notarize 并打包 DMG。
-3. 准备 appcast 输入目录。
+推荐使用仓库里的发布准备脚本。脚本只准备本地发布产物，不会自动 commit、tag、push，也不会创建 GitHub Release。
 
 ```bash
-mkdir -p dist/appcast
-cp dist/Momento.dmg "dist/appcast/Momento-${MARKETING_VERSION}.dmg"
+scripts/prepare-release.sh 1.0.1 2
 ```
 
-4. 生成或更新 appcast。
+脚本会完成：
+
+- 更新 Xcode build settings 里的 `MARKETING_VERSION` 和 `CURRENT_PROJECT_VERSION`
+- 用 Release 配置构建 App
+- 生成 `dist/Momento-<version>.dmg`
+- 使用 Sparkle `sign_update` 生成更新包签名
+- 更新根目录 `appcast.xml`
+- 校验 DMG、签名、App 内版本、`appcast.xml` 和 `git diff --check`
+
+脚本通过后，再执行：
 
 ```bash
-SPARKLE_BIN="$(find "$HOME/Library/Developer/Xcode/DerivedData" -path '*/SourcePackages/artifacts/sparkle/Sparkle/bin' -type d | head -n 1)"
-"$SPARKLE_BIN/generate_appcast" \
-  --download-url-prefix "https://github.com/Seaony/Momento/releases/download/v${MARKETING_VERSION}/" \
-  dist/appcast
+git add Momento.xcodeproj/project.pbxproj appcast.xml
+git commit -m "chore: release 1.0.1"
+git tag 1.0.1
+git push origin master
+git push origin 1.0.1
 ```
 
-5. 在 GitHub Releases 创建 `v${MARKETING_VERSION}`，上传同名 DMG。
-6. 把 `dist/appcast/appcast.xml` 发布到 GitHub Pages 对应的 `https://seaony.github.io/Momento/appcast.xml`。
-7. 启动旧版本 Momento，使用 `Momento > Check for Updates...` 验证能发现新版本。
+然后在 GitHub Releases 创建 `1.0.1`，上传：
+
+```text
+dist/Momento-1.0.1.dmg
+```
+
+GitHub Pages 刷新后，确认 feed 可访问：
+
+```bash
+curl -fsSL https://seaony.github.io/Momento/appcast.xml
+```
+
+最后启动旧版本 Momento，使用 `Momento > Check for Updates...` 或等待自动检查，验证能发现新版本。
+
+如果需要把 Release tag 改成带 `v` 的格式，可以临时传环境变量：
+
+```bash
+MOMENTO_RELEASE_TAG=v1.0.1 scripts/prepare-release.sh 1.0.1 2
+```
 
 ## 注意事项
 
