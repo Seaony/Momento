@@ -1,62 +1,122 @@
-# Momento
+<div align="center">
+  <br />
+  <img src="Momento/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" width="128" alt="Momento App Icon" />
+  <h1>Momento</h1>
+  <p><strong>一个安静、漂亮、原生的 macOS 图片素材库。</strong></p>
+  <p>
+    把散落在 Finder、浏览器和项目文件夹里的灵感图片收进一个本地素材库，
+    用标签、文件夹、颜色和视图把它们重新整理好。
+  </p>
+  <p>
+    <a href="https://github.com/Seaony/Momento/releases/latest"><strong>下载最新版</strong></a>
+    ·
+    <a href="#功能亮点">功能亮点</a>
+    ·
+    <a href="#适合谁">适合谁</a>
+    ·
+    <a href="#自动更新">自动更新</a>
+  </p>
+  <p>
+    <img alt="macOS 26+" src="https://img.shields.io/badge/macOS-26%2B-111111?style=flat-square&labelColor=222222" />
+    <img alt="Swift" src="https://img.shields.io/badge/Swift-6-FA7343?style=flat-square&labelColor=222222" />
+    <img alt="Native App" src="https://img.shields.io/badge/Native-macOS-0A84FF?style=flat-square&labelColor=222222" />
+    <img alt="Updates" src="https://img.shields.io/badge/Updates-Sparkle-7A6FF0?style=flat-square&labelColor=222222" />
+  </p>
+  <br />
+</div>
 
-Momento 是一个原生 macOS 素材管理应用，用来集中保存、浏览、筛选、整理和导出本地图片素材。项目目标是保持 macOS 原生体验：SwiftUI 负责主要界面，AppKit 负责高性能素材列表、系统拖拽、Quick Look 和窗口细节。
+## 为什么是 Momento
 
-当前版本重点覆盖图片素材管理，不是 Electron / Web App 壳，也不依赖远端服务保存用户素材。
+Momento 想解决的是一个很日常的问题：图片素材越来越多，但真正要找的时候却总是散在下载目录、桌面、聊天记录和项目文件夹里。
 
-## 功能概览
+它把素材管理做成本地优先的 macOS App。素材保存在你自己的磁盘上，界面尽量克制，操作尽量直接：导入、浏览、筛选、整理、预览、导出，都围绕图片素材的日常工作流展开。
 
-- 素材库管理：创建、打开、导入、导出、重命名、删除、最近素材库列表。
-- 图片导入：支持 macOS `UTType` / ImageIO 可识别的图片与 GIF，支持文件夹导入并映射原始目录层级。
-- 去重存储：导入时计算 SHA-256，按内容寻址保存原始文件，重复文件不重复复制。
-- 元数据：导入时提取尺寸、文件信息、EXIF、颜色调色板和 24 个颜色分类。
-- 浏览模式：瀑布流、网格、列表三种视图，基于 `NSCollectionView` 渲染大规模素材。
-- 整理能力：收藏、文件夹归类、标签关联、标签管理、软删除回收站。
-- 筛选和排序：按颜色、标签、文件类型筛选；按添加时间、文件名称、文件大小排序。
-- 检查器：查看预览图、调色板、标题、标签、文件夹、基础信息和 EXIF 信息。
-- 导出：支持拖出到 Finder / 桌面，也支持导出原文件、JPEG、PNG。
-- 快速预览：支持 Quick Look / 空格预览。
-- 浏览器导入：App 内启动本机导入服务，供 Chrome 扩展把远程图片发送到 Momento。
-- 自动更新：集成 Sparkle 2，通过 GitHub Releases 托管 DMG 和 appcast。
+## 功能亮点
 
-## 当前边界
+<table>
+  <tr>
+    <td width="33%">
+      <h3>集中收纳</h3>
+      <p>创建独立素材库，把图片、GIF 和文件夹里的素材批量导入。相同文件会自动去重，不会反复占用空间。</p>
+    </td>
+    <td width="33%">
+      <h3>三种视图</h3>
+      <p>瀑布流适合灵感浏览，网格适合快速扫描，列表适合查看名称、尺寸和信息。不同整理场景可以随时切换。</p>
+    </td>
+    <td width="33%">
+      <h3>快速整理</h3>
+      <p>用收藏、标签和文件夹整理图片。导入文件夹时会保留原始层级，后续也可以继续手动归类。</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="33%">
+      <h3>颜色筛选</h3>
+      <p>导入时自动分析图片调色板，并归入 24 个常用色系。找黑色、蓝色、橙色或绿色氛围图时更直接。</p>
+    </td>
+    <td width="33%">
+      <h3>详细信息</h3>
+      <p>检查器展示预览、标题、色板、标签、文件夹、基础信息和 EXIF。能读到的相机、镜头、曝光数据会自动展示。</p>
+    </td>
+    <td width="33%">
+      <h3>拖拽导出</h3>
+      <p>选中图片后可以直接拖到 Finder 或桌面。也可以通过导出面板选择原文件、JPEG 或 PNG。</p>
+    </td>
+  </tr>
+</table>
 
-- 当前导入范围是图片与 GIF；SVG / PDF / 视频暂不作为素材导入格式。
-- RAW 是否可导入取决于当前系统的 `UTType` / ImageIO 支持，项目内没有单独的 RAW 工作流。
-- 缩略图和预览图是可重建缓存，原始素材文件和 Core Data 数据库才是权威数据。
-- UI 主要面向 macOS 26 Liquid Glass 视觉；旧系统不是当前主要兼容目标。
+## 适合谁
 
-## 技术栈
+- 设计师：管理参考图、Moodboard、界面截图、品牌素材。
+- 摄影师：快速筛选样片、查看 EXIF、按颜色和标签归类。
+- 内容创作者：保存封面参考、素材图、灵感图片和可复用视觉资产。
+- 独立开发者：整理 App 截图、产品素材、社媒配图和发布资源。
+
+## 日常体验
+
+- 从 Finder 选择图片或文件夹导入。
+- 从浏览器右键把远程图片保存到 Momento。
+- 用瀑布流浏览整组素材，用搜索快速定位图片名称。
+- 用颜色、标签、文件类型筛选当前素材库。
+- 用空格快速预览，用 `Command + Delete` 删除选中的图片。
+- 把选中的图片直接拖出到桌面或项目文件夹。
+
+## 支持的内容
+
+当前版本聚焦图片素材：
+
+- 支持 macOS 可识别的常见图片格式和 GIF。
+- RAW 是否可导入取决于当前系统的图片解码能力。
+- SVG、PDF、视频暂不作为素材导入格式。
+
+素材库是本地 package，扩展名为 `.momento`。原始文件、缩略图和数据库都保存在素材库里，不需要云端账号。
+
+## 自动更新
+
+Momento 集成 Sparkle 2。发布新版本后，App 可以通过 GitHub Releases 和 appcast 检查更新、下载更新包并完成安装。
+
+如果你只是使用 App，直接下载最新版 DMG 即可：
+
+<p align="center">
+  <a href="https://github.com/Seaony/Momento/releases/latest"><strong>前往 Releases 下载 Momento</strong></a>
+</p>
+
+<details>
+  <summary>开发者信息</summary>
+
+### 技术栈
 
 - Swift 6
 - SwiftUI + AppKit
-- Observation / async-await
 - Core Data + SQLite
 - ImageIO / UniformTypeIdentifiers
 - Sparkle 2
 - XCTest
 
-## 环境要求
-
-- macOS 26 或更新版本
-- Xcode 17 或更新版本
-- Git
-- 发布版本需要 GitHub CLI：
-
-```bash
-brew install gh
-gh auth login
-```
-
-## 快速开始
-
-克隆仓库后，直接用 Xcode 打开工程：
+### 本地构建
 
 ```bash
 open Momento.xcodeproj
 ```
-
-也可以使用命令行构建：
 
 ```bash
 xcodebuild \
@@ -67,7 +127,7 @@ xcodebuild \
   build
 ```
 
-运行测试：
+### 测试
 
 ```bash
 xcodebuild \
@@ -77,137 +137,19 @@ xcodebuild \
   test
 ```
 
-基础 diff 校验：
+### 发布
 
 ```bash
-git diff --check
-```
-
-## 目录结构
-
-```text
-.
-├── Momento/                         # App 源码
-│   ├── AppKitBridge/                # NSCollectionView、Quick Look、拖拽、窗口桥接
-│   ├── Core/                        # 值类型模型、本地化、应用设置
-│   ├── DesignSystem/                # Liquid Glass 样式和视觉 token
-│   ├── Features/                    # Sidebar、Shell、Inspector、Settings 等功能界面
-│   ├── Services/                    # 导入、导出、缩略图、颜色分析、更新、浏览器导入
-│   └── Storage/                     # 素材库包、Core Data、manifest、security-scoped access
-├── MomentoTests/                    # XCTest 测试和架构护栏
-├── docs/                            # 设计、review、发布流程文档
-├── scripts/                         # 发布脚本
-├── appcast.xml                      # Sparkle 更新 feed
-├── FEATURE.md                       # 产品和架构目标
-└── AGENTS.md                        # 当前仓库的 agent 工作约束
-```
-
-## 素材库结构
-
-Momento 素材库是一个本地 package，扩展名为 `.momento`，并兼容旧的 `.momentolibrary`。
-
-```text
-<LibraryName>.momento/
-├── manifest.json
-├── database/
-│   └── library.sqlite
-├── assets/
-│   └── ab/
-│       └── <sha256>.<ext>
-├── thumbnails/
-├── previews/
-└── metadata/
-    └── import-sessions/
-```
-
-规则：
-
-- `manifest.json` 保存库级信息，例如库 ID、展示名称、schema 版本和创建时间。
-- `database/library.sqlite` 是素材 metadata 的唯一权威来源。
-- `assets/` 保存原始素材副本，路径由内容 SHA-256 决定。
-- `thumbnails/` 和 `previews/` 是缓存，可以删除后重建。
-- 最近素材库通过 security-scoped bookmark 重新获得访问权限。
-
-## 核心数据模型
-
-当前 Core Data 模型围绕这些概念组织：
-
-- `AssetRecord`：素材条目、文件路径、尺寸、EXIF、颜色、收藏、回收站状态等。
-- `TagRecord` / `AssetTagRecord`：标签和素材的多对多关系。
-- `FolderRecord` / `AssetFolderMembershipRecord`：文件夹树和素材归类关系。
-- `AssetColorRecord`：调色板颜色与颜色筛选数据。
-
-UI 层使用 `AssetItem`、`TagItem`、`AssetFolder` 等值类型，避免 SwiftUI 直接持有 Core Data 对象。
-
-## 开发说明
-
-常用入口：
-
-- 主窗口协调层：[Momento/ContentView.swift](Momento/ContentView.swift)
-- 全局状态聚合：[Momento/Core/LibraryStore.swift](Momento/Core/LibraryStore.swift)
-- 素材列表：[Momento/AppKitBridge/AssetCollectionGridView.swift](Momento/AppKitBridge/AssetCollectionGridView.swift)
-- 右侧检查器：[Momento/Features/Inspector/MomentoInspectorView.swift](Momento/Features/Inspector/MomentoInspectorView.swift)
-- 视觉 token：[Momento/DesignSystem/MomentoGlass.swift](Momento/DesignSystem/MomentoGlass.swift)
-- 导入服务：[Momento/Services/AssetImportService.swift](Momento/Services/AssetImportService.swift)
-- 持久化层：[Momento/Storage/LibraryMetadataStore.swift](Momento/Storage/LibraryMetadataStore.swift)
-
-开发原则：
-
-- 保持 SwiftUI 为主，AppKit 只用于 SwiftUI 不适合承载的能力。
-- 视觉组件优先复用 `DesignSystem` 中的 Liquid Glass 样式。
-- 不把缩略图、预览图当作源数据保存。
-- 数据安全路径优先使用软删除，再由用户确认永久删除。
-- 纯视觉微调不新增过细测试；数据、导入、删除、更新、架构护栏需要保留测试覆盖。
-
-## 自动更新和发布
-
-Momento 使用 Sparkle 2 做 App 内更新：
-
-- appcast: `https://seaony.github.io/Momento/appcast.xml`
-- Release 托管：GitHub Releases
-- 发布产物：`dist/Momento-<version>.dmg`
-
-发布脚本：
-
-```bash
-scripts/prepare-release.sh 1.0.1 2
-```
-
-脚本会自动完成：
-
-- 如有未提交的非忽略改动，先自动提交。
-- 更新 Xcode 版本号和 build number。
-- 构建 Release App。
-- 生成 DMG。
-- 使用 Sparkle `sign_update` 签名更新包。
-- 更新 `appcast.xml`。
-- 提交 release metadata、创建 tag、push 当前分支和 tag。
-- 创建 GitHub Release 并上传 DMG。
-
-更多细节见 [docs/update-release-flow.md](docs/update-release-flow.md)。
-
-## 常用命令
-
-```bash
-# 构建 Debug
-xcodebuild -project Momento.xcodeproj -scheme Momento -configuration Debug -destination 'platform=macOS' build
-
-# 运行全部测试
-xcodebuild -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' test
-
-# 只跑架构护栏测试
-xcodebuild -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' -only-testing:MomentoTests/ArchitectureGuardTests test
-
-# 检查 whitespace / conflict marker
-git diff --check
-
-# 准备并发布新版本
 scripts/prepare-release.sh <marketing-version> <build-number>
 ```
 
-## 相关文档
+发布脚本会构建 Release、生成 DMG、签名 Sparkle 更新包、更新 `appcast.xml`，并创建 GitHub Release。
 
-- [FEATURE.md](FEATURE.md)：产品目标、架构目标和长期功能范围。
-- [docs/full-project-review-report.md](docs/full-project-review-report.md)：当前实现质量 review。
-- [docs/update-release-flow.md](docs/update-release-flow.md)：Sparkle + GitHub Release 发布流程。
-- [AGENTS.md](AGENTS.md)：当前仓库的工程约束。
+### 相关文档
+
+- [FEATURE.md](FEATURE.md)
+- [docs/update-release-flow.md](docs/update-release-flow.md)
+- [docs/full-project-review-report.md](docs/full-project-review-report.md)
+- [AGENTS.md](AGENTS.md)
+
+</details>
