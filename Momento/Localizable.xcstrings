@@ -139,22 +139,6 @@
         }
       }
     },
-    "App Updates" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "App Updates"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "应用更新"
-          }
-        }
-      }
-    },
     "Action program" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -372,6 +356,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "应用语言"
+          }
+        }
+      }
+    },
+    "App Updates" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "App Updates"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用更新"
           }
         }
       }
@@ -648,6 +649,23 @@
         }
       }
     },
+    "Check for Updates..." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check for Updates..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检查更新..."
+          }
+        }
+      }
+    },
     "Choose a .momento package." : {
       "extractionState" : "stale",
       "localizations" : {
@@ -746,22 +764,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "为这个资源选择导出格式。"
-          }
-        }
-      }
-    },
-    "Check for Updates..." : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Check for Updates..."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "检查更新..."
           }
         }
       }
@@ -1531,6 +1533,23 @@
         }
       }
     },
+    "Edit Title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit Title"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑标题"
+          }
+        }
+      }
+    },
     "Empty Trash" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1663,23 +1682,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "EXIF"
-          }
-        }
-      }
-    },
-    "Edit Title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Edit Title"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "编辑标题"
           }
         }
       }
@@ -1956,23 +1958,6 @@
         }
       }
     },
-    "Focus Search" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Focus Search"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "聚焦搜索"
-          }
-        }
-      }
-    },
     "Flash" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2003,6 +1988,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "焦距"
+          }
+        }
+      }
+    },
+    "Focus Search" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Focus Search"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聚焦搜索"
           }
         }
       }
@@ -4438,6 +4440,74 @@
         }
       }
     },
+    "Update" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新"
+          }
+        }
+      }
+    },
+    "Update Available" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update Available"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有可用更新"
+          }
+        }
+      }
+    },
+    "Update to %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update to %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新到 %@"
+          }
+        }
+      }
+    },
+    "Updates" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Updates"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新"
+          }
+        }
+      }
+    },
     "Version" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -4451,22 +4521,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "版本"
-          }
-        }
-      }
-    },
-    "Updates" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Updates"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "更新"
           }
         }
       }

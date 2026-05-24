@@ -56,6 +56,8 @@
 	<true/>
 	<key>SUFeedURL</key>
 	<string>https://seaony.github.io/Momento/appcast.xml</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 	<key>SUPublicEDKey</key>
 	<string>GPqtCAsJ50slxZrQHqwhjvY5V6XTjxhFQFNnLq8sNu0=</string>
 	<key>UTExportedTypeDeclarations</key>

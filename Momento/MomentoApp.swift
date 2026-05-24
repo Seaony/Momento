@@ -21,7 +21,7 @@ struct MomentoApp: App {
         let localization = AppLocalization(language: language)
 
         WindowGroup {
-            ContentView(store: store)
+            ContentView(store: store, updateService: updateService)
                 .environment(\.locale, language.locale)
                 .environment(\.appLocalization, localization)
                 .onAppear {

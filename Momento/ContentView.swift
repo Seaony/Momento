@@ -32,6 +32,7 @@ private enum ContentToolbarMetrics {
     static let searchControlMinWidth: CGFloat = 140
     static let searchControlMaxWidth: CGFloat = 214
     static let iconButtonWidth: CGFloat = 38
+    static let updateButtonWidth: CGFloat = 82
     static let viewModeSwitcherWidth: CGFloat = 112
     static let filterPopoverWidth: CGFloat = 340
     static let filterScrollableContentMaxHeight: CGFloat = 220
@@ -43,6 +44,7 @@ struct ContentView: View {
     @Environment(\.appLocalization) private var localization
     @AppStorage(AppSettingsKeys.defaultViewMode) private var defaultViewModeRawValue = AssetViewMode.masonry.rawValue
     @Bindable var store: LibraryStore
+    @ObservedObject var updateService: AppUpdateService
 
     @State private var isImporterPresented = false
     @State private var isCreateLibraryDialogPresented = false
@@ -232,6 +234,10 @@ struct ContentView: View {
         .toolbar {
             ToolbarSpacer(.flexible)
             ToolbarItemGroup(placement: .automatic) {
+                if updateService.availableUpdateDisplayVersion != nil {
+                    toolbarUpdateButton
+                        .padding(.trailing, 6)
+                }
                 toolbarFilterButton
                 toolbarSortButton
                     .padding(.trailing, 6)
@@ -243,6 +249,50 @@ struct ContentView: View {
         }
         .navigationTitle("")
         .focusedSceneValue(\.momentoMenuCommandAction, performFocusedCommand)
+    }
+
+    private var toolbarUpdateButton: some View {
+        let version = updateService.availableUpdateDisplayVersion
+        let isHovered = hoveredToolbarActionID == "update"
+        let shape = RoundedRectangle(cornerRadius: MomentoTheme.toolbarControlRadius, style: .continuous)
+
+        return Button {
+            updateService.checkForUpdates()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.system(size: MomentoTheme.toolbarIconSize, weight: .semibold))
+
+                Text(localization.string("Update"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(MomentoTheme.primaryText)
+            .frame(width: ContentToolbarMetrics.updateButtonWidth, height: MomentoTheme.toolbarControlHeight)
+            .background {
+                MomentoGlassBackground(glass: .regular.interactive(true), cornerRadius: MomentoTheme.toolbarControlRadius)
+            }
+            .overlay {
+                if isHovered {
+                    shape.fill(MomentoTheme.sidebarIconHoverBackground)
+                }
+            }
+            .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .disabled(!updateService.canCheckForUpdates)
+        .help(version.map { localization.format("Update to %@", $0) } ?? localization.string("Update Available"))
+        .accessibilityLabel(localization.string("Update Available"))
+        .onHover { hovering in
+            withAnimation(.smooth(duration: 0.14)) {
+                if hovering {
+                    hoveredToolbarActionID = "update"
+                } else if hoveredToolbarActionID == "update" {
+                    hoveredToolbarActionID = nil
+                }
+            }
+        }
     }
 
     private var isTagManagementSelected: Bool {
@@ -2397,6 +2447,9 @@ private extension Color {
 }
 
 #Preview {
-    ContentView(store: LibraryStore(libraries: [.defaultLibrary]))
+    ContentView(
+        store: LibraryStore(libraries: [.defaultLibrary]),
+        updateService: AppUpdateService()
+    )
         .environment(\.appLocalization, AppLocalization(language: .system))
 }
