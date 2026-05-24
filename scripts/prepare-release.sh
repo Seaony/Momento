@@ -70,10 +70,18 @@ require_command hdiutil
 require_command plutil
 require_command xmllint
 require_command perl
+require_command gh
+require_command curl
 
 step "Checking working tree"
 git --no-pager diff --quiet || fail "working tree has unstaged changes; commit or stash them first"
 git --no-pager diff --cached --quiet || fail "working tree has staged changes; commit or unstage them first"
+CURRENT_BRANCH="$(git branch --show-current)"
+[[ -n "$CURRENT_BRANCH" ]] || fail "not on a branch"
+git rev-parse --verify --quiet "$RELEASE_TAG" >/dev/null && fail "local tag already exists: $RELEASE_TAG"
+git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1 && fail "remote tag already exists: $RELEASE_TAG"
+gh auth status --active --hostname github.com >/dev/null
+gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && fail "GitHub Release already exists: $RELEASE_TAG"
 
 printf 'Preparing %s %s (%s)\n' "$PROJECT_NAME" "$MARKETING_VERSION" "$BUILD_NUMBER"
 
@@ -160,25 +168,37 @@ git --no-pager diff --check
 
 rm -rf "$DMG_ROOT"
 
+step "Committing release metadata"
+git add "$PBXPROJ_FILE" "$APPCAST_FILE"
+git --no-pager diff --cached --check
+git commit -m "chore: release $MARKETING_VERSION"
+git tag "$RELEASE_TAG"
+
+step "Pushing branch and tag"
+git push origin "$CURRENT_BRANCH"
+git push origin "$RELEASE_TAG"
+
+step "Creating GitHub Release"
+gh release create "$RELEASE_TAG" "$DMG_PATH" \
+  --repo "$GITHUB_REPOSITORY" \
+  --title "$PROJECT_NAME $MARKETING_VERSION" \
+  --generate-notes \
+  --latest
+
+step "Checking GitHub Pages feed"
+if curl -fsSL https://seaony.github.io/Momento/appcast.xml >/dev/null; then
+  printf 'GitHub Pages feed is reachable.\n'
+else
+  printf 'GitHub Pages feed is not updated yet; it may need a short refresh window.\n'
+fi
+
 cat <<EOF
 
-Prepared release artifacts:
+Published release:
   Version:  $MARKETING_VERSION
   Build:    $BUILD_NUMBER
   DMG:      $DMG_PATH
   Appcast:  $APPCAST_FILE
   Tag:      $RELEASE_TAG
-
-Next steps:
-  git add $PBXPROJ_FILE $APPCAST_FILE
-  git commit -m "chore: release $MARKETING_VERSION"
-  git tag $RELEASE_TAG
-  git push origin master
-  git push origin $RELEASE_TAG
-
-Then create a GitHub Release for tag "$RELEASE_TAG" and upload:
-  $DMG_PATH
-
-After GitHub Pages refreshes, verify:
-  curl -fsSL https://seaony.github.io/Momento/appcast.xml
+  Release:  https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG
 EOF

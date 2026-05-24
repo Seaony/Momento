@@ -28,7 +28,14 @@ SPARKLE_BIN="$(find "$HOME/Library/Developer/Xcode/DerivedData" -path '*/SourceP
 
 ## 发布新版本
 
-推荐使用仓库里的发布准备脚本。脚本只准备本地发布产物，不会自动 commit、tag、push，也不会创建 GitHub Release。
+推荐使用仓库里的发布脚本。脚本会准备本地发布产物，并自动 commit、tag、push、创建 GitHub Release、上传 DMG。
+
+首次使用前需要安装并登录 GitHub CLI：
+
+```bash
+brew install gh
+gh auth login
+```
 
 ```bash
 scripts/prepare-release.sh 1.0.1 2
@@ -42,22 +49,10 @@ scripts/prepare-release.sh 1.0.1 2
 - 使用 Sparkle `sign_update` 生成更新包签名
 - 更新根目录 `appcast.xml`
 - 校验 DMG、签名、App 内版本、`appcast.xml` 和 `git diff --check`
-
-脚本通过后，再执行：
-
-```bash
-git add Momento.xcodeproj/project.pbxproj appcast.xml
-git commit -m "chore: release 1.0.1"
-git tag 1.0.1
-git push origin master
-git push origin 1.0.1
-```
-
-然后在 GitHub Releases 创建 `1.0.1`，上传：
-
-```text
-dist/Momento-1.0.1.dmg
-```
+- 提交 `Momento.xcodeproj/project.pbxproj` 和 `appcast.xml`
+- 创建并推送 tag
+- 推送当前分支
+- 创建 GitHub Release 并上传 `dist/Momento-<version>.dmg`
 
 GitHub Pages 刷新后，确认 feed 可访问：
 
