@@ -25,6 +25,7 @@ Example:
 Environment:
   MOMENTO_RELEASE_REPOSITORY  GitHub repository used in appcast URLs. Default: Seaony/Momento
   MOMENTO_RELEASE_TAG         Release tag used in appcast URLs. Default: <marketing-version>
+  MOMENTO_PRE_RELEASE_COMMIT  Commit message for pending local changes. Default: chore: save pending changes before release
 EOF
 }
 
@@ -74,14 +75,19 @@ require_command gh
 require_command curl
 
 step "Checking working tree"
-git --no-pager diff --quiet || fail "working tree has unstaged changes; commit or stash them first"
-git --no-pager diff --cached --quiet || fail "working tree has staged changes; commit or unstage them first"
 CURRENT_BRANCH="$(git branch --show-current)"
 [[ -n "$CURRENT_BRANCH" ]] || fail "not on a branch"
 git rev-parse --verify --quiet "$RELEASE_TAG" >/dev/null && fail "local tag already exists: $RELEASE_TAG"
 git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1 && fail "remote tag already exists: $RELEASE_TAG"
 gh auth status --active --hostname github.com >/dev/null
 gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && fail "GitHub Release already exists: $RELEASE_TAG"
+
+if [[ -n "$(git status --porcelain=v1)" ]]; then
+  step "Committing pending local changes"
+  git add --all
+  git --no-pager diff --cached --check
+  git commit -m "${MOMENTO_PRE_RELEASE_COMMIT:-chore: save pending changes before release}"
+fi
 
 printf 'Preparing %s %s (%s)\n' "$PROJECT_NAME" "$MARKETING_VERSION" "$BUILD_NUMBER"
 

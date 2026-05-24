@@ -43,6 +43,7 @@ scripts/prepare-release.sh 1.0.1 2
 
 脚本会完成：
 
+- 如果工作区有未提交的非忽略文件，先执行 `git add --all` 并提交为 `chore: save pending changes before release`
 - 更新 Xcode build settings 里的 `MARKETING_VERSION` 和 `CURRENT_PROJECT_VERSION`
 - 用 Release 配置构建 App
 - 生成 `dist/Momento-<version>.dmg`
@@ -66,6 +67,12 @@ curl -fsSL https://seaony.github.io/Momento/appcast.xml
 
 ```bash
 MOMENTO_RELEASE_TAG=v1.0.1 scripts/prepare-release.sh 1.0.1 2
+```
+
+如果需要修改“发版前自动保存改动”的提交信息，可以临时传环境变量：
+
+```bash
+MOMENTO_PRE_RELEASE_COMMIT="chore: save local changes" scripts/prepare-release.sh 1.0.1 2
 ```
 
 ## 注意事项
