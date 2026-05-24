@@ -405,12 +405,6 @@ struct MomentoInspectorView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                if isHovered {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(MomentoTheme.secondaryText)
-                        .transition(.opacity.combined(with: .scale(scale: 0.92)))
-                }
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
