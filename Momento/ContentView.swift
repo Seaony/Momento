@@ -2220,7 +2220,7 @@ private extension MomentoInspectorAsset {
             id: asset.id,
             title: asset.displayName,
             fileName: fileURL?.lastPathComponent ?? asset.displayName,
-            previewImage: previewURL.flatMap { asset.kind == .image || asset.kind == .gif ? NSImage(contentsOf: $0) : nil },
+            previewImage: Self.cachedPreviewImage(for: asset, previewURL: previewURL),
             dimensions: asset.dimensions.map { "\($0.width) × \($0.height)" },
             colors: asset.paletteColors.map { color in
                 MomentoInspectorColor(hex: color.hex, coverage: color.coverage)
@@ -2232,6 +2232,15 @@ private extension MomentoInspectorAsset {
             kind: localization.kindTitle(for: asset.kind),
             exifItems: Self.exifItems(for: asset.exifMetadata, localization: localization)
         )
+    }
+
+    private static func cachedPreviewImage(for asset: AssetItem, previewURL: URL?) -> NSImage? {
+        guard previewURL != nil,
+              asset.kind == .image || asset.kind == .gif else {
+            return nil
+        }
+
+        return AssetPreviewImageProvider.shared.image(for: asset)
     }
 
     private static func exifItems(

@@ -213,6 +213,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
         collectionView.allowsEmptySelection = false
         collectionView.dataSource = context.coordinator
         collectionView.delegate = context.coordinator
+        collectionView.prefetchDataSource = context.coordinator
         collectionView.setDraggingSourceOperationMask(.copy, forLocal: false)
         collectionView.setDraggingSourceOperationMask(.copy, forLocal: true)
         collectionView.register(
@@ -402,7 +403,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
 }
 
 extension AssetCollectionGridView {
-    final class Coordinator: NSObject, NSCollectionViewDataSource, NSCollectionViewDelegateFlowLayout {
+    final class Coordinator: NSObject, NSCollectionViewDataSource, NSCollectionViewDelegateFlowLayout, NSCollectionViewPrefetching {
         var parent: AssetCollectionGridView
         weak var collectionView: NSCollectionView?
         var currentViewMode: AssetViewMode
@@ -459,6 +460,14 @@ extension AssetCollectionGridView {
             assetItem.configure(with: asset, viewMode: parent.viewMode, localization: parent.localization)
             return assetItem
         }
+
+        func collectionView(_ collectionView: NSCollectionView, prefetchItemsAt indexPaths: [IndexPath]) {
+            for indexPath in indexPaths where parent.assets.indices.contains(indexPath.item) {
+                AssetPreviewImageProvider.shared.prefetchImage(for: parent.assets[indexPath.item])
+            }
+        }
+
+        func collectionView(_ collectionView: NSCollectionView, cancelPrefetchingForItemsAt indexPaths: [IndexPath]) {}
 
         func collectionView(
             _ collectionView: NSCollectionView,
@@ -1150,7 +1159,7 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
     }
 }
 
-private final class AssetPreviewImageProvider {
+final class AssetPreviewImageProvider {
     static let shared = AssetPreviewImageProvider()
 
     private let cache = NSCache<NSString, NSImage>()
@@ -1179,6 +1188,10 @@ private final class AssetPreviewImageProvider {
         let image = loadImage(for: asset)
         cache.setObject(image, forKey: key, cost: cacheCost(for: image))
         return image
+    }
+
+    func prefetchImage(for asset: AssetItem) {
+        _ = image(for: asset)
     }
 
     func invalidateImage(for asset: AssetItem) {
@@ -1457,7 +1470,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         previewImageView.setImage(
             previewProvider.image(for: asset),
             identity: "\(viewMode.rawValue):\(previewIdentity)",
-            animated: true
+            animated: false
         )
         previewImageView.contentMode = imageContentMode(for: asset, viewMode: viewMode)
         applyModeLayout()
