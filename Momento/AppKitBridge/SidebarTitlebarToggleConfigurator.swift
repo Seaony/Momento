@@ -181,10 +181,13 @@ extension SidebarTitlebarToggleConfigurator {
 
         private func titlebarControlsWidth(configuration: Configuration) -> CGFloat {
             if configuration.importAction == nil {
-                return MomentoTheme.sidebarTitlebarButtonSize
+                return MomentoTheme.titlebarControlHitSize
             }
 
-            return importButtonOffset(configuration: configuration) + MomentoTheme.toolbarIconButtonWidth
+            return importButtonOffset(configuration: configuration)
+                + MomentoTheme.sidebarTitlebarButtonHitInset
+                - MomentoTheme.toolbarIconButtonHitInset
+                + MomentoTheme.titlebarControlHitSize
         }
 
         private func importButtonOffset(configuration: Configuration) -> CGFloat {
@@ -223,7 +226,11 @@ private struct SidebarTitlebarToggleAccessoryView: View {
 
             if let importAction, let importLabel {
                 importButton(action: importAction, label: importLabel)
-                    .offset(x: importButtonOffset)
+                    .offset(
+                        x: importButtonOffset
+                            + MomentoTheme.sidebarTitlebarButtonHitInset
+                            - MomentoTheme.toolbarIconButtonHitInset
+                    )
             }
         }
         .frame(width: titlebarControlsWidth, height: titlebarControlsHeight, alignment: .leading)
@@ -247,8 +254,8 @@ private struct SidebarTitlebarToggleAccessoryView: View {
                 }
         }
         .buttonStyle(.plain)
-        .frame(width: MomentoTheme.sidebarTitlebarButtonSize, height: MomentoTheme.sidebarTitlebarButtonSize)
-        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .frame(width: MomentoTheme.titlebarControlHitSize, height: MomentoTheme.titlebarControlHitSize)
+        .contentShape(RoundedRectangle(cornerRadius: MomentoTheme.titlebarControlHitSize / 2, style: .continuous))
         .pointerStyle(.link)
         .onHover { hovering in
             withAnimation(.smooth(duration: 0.14)) {
@@ -273,7 +280,7 @@ private struct SidebarTitlebarToggleAccessoryView: View {
                 }
         }
         .buttonStyle(.plain)
-        .frame(width: MomentoTheme.toolbarIconButtonWidth, height: MomentoTheme.toolbarControlHeight)
+        .frame(width: MomentoTheme.titlebarControlHitSize, height: MomentoTheme.titlebarControlHitSize)
         .contentShape(RoundedRectangle(cornerRadius: MomentoTheme.toolbarControlRadius, style: .continuous))
         .pointerStyle(.link)
         .help(label)
@@ -282,26 +289,25 @@ private struct SidebarTitlebarToggleAccessoryView: View {
 
     private var titlebarControlsWidth: CGFloat {
         if importAction == nil {
-            return MomentoTheme.sidebarTitlebarButtonSize
+            return MomentoTheme.titlebarControlHitSize
         }
 
-        return importButtonOffset + MomentoTheme.toolbarIconButtonWidth
+        return importButtonOffset
+            + MomentoTheme.sidebarTitlebarButtonHitInset
+            - MomentoTheme.toolbarIconButtonHitInset
+            + MomentoTheme.titlebarControlHitSize
     }
 
     private var titlebarControlsHeight: CGFloat {
-        if importAction == nil {
-            return MomentoTheme.sidebarTitlebarButtonSize
-        }
-
-        return MomentoTheme.toolbarControlHeight
+        MomentoTheme.titlebarControlHitSize
     }
 }
 
 private final class SidebarTitlebarToggleContainerView: NSView {
     private let hostingView: SidebarTitlebarToggleHostingView
     private var buttonMinX: CGFloat = 0
-    private var controlsWidth: CGFloat = MomentoTheme.sidebarTitlebarButtonSize
-    private var controlsHeight: CGFloat = MomentoTheme.sidebarTitlebarButtonSize
+    private var controlsWidth: CGFloat = MomentoTheme.titlebarControlHitSize
+    private var controlsHeight: CGFloat = MomentoTheme.titlebarControlHitSize
     private var importButtonOffset: CGFloat?
 
     override var isFlipped: Bool {
@@ -323,7 +329,7 @@ private final class SidebarTitlebarToggleContainerView: NSView {
         hostingView.rootView = rootView
         self.buttonMinX = buttonMinX
         self.controlsWidth = controlsWidth
-        self.controlsHeight = rootView.importAction == nil ? MomentoTheme.sidebarTitlebarButtonSize : MomentoTheme.toolbarControlHeight
+        self.controlsHeight = MomentoTheme.titlebarControlHitSize
         self.importButtonOffset = rootView.importAction == nil ? nil : rootView.importButtonOffset
         needsLayout = true
     }
@@ -335,7 +341,7 @@ private final class SidebarTitlebarToggleContainerView: NSView {
         // 先把当前容器原点转换到窗口坐标，再用外部传入的 buttonMinX 抵消偏移，
         // 才能保证按钮展开/收起时始终和左侧玻璃侧边栏的右上角对齐。
         let titlebarOriginX = convert(.zero, to: nil).x
-        let buttonX = max(0, buttonMinX - titlebarOriginX)
+        let buttonX = max(0, buttonMinX - titlebarOriginX - MomentoTheme.sidebarTitlebarButtonHitInset)
         let buttonY = (MomentoTheme.floatingSidebarTitlebarContentInset - controlsHeight) / 2
         let nextFrame = NSRect(
             x: buttonX,
@@ -353,16 +359,19 @@ private final class SidebarTitlebarToggleContainerView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         let toggleFrame = NSRect(
             x: hostingView.frame.minX,
-            y: hostingView.frame.minY + (controlsHeight - MomentoTheme.sidebarTitlebarButtonSize) / 2,
-            width: MomentoTheme.sidebarTitlebarButtonSize,
-            height: MomentoTheme.sidebarTitlebarButtonSize
+            y: hostingView.frame.minY,
+            width: MomentoTheme.titlebarControlHitSize,
+            height: MomentoTheme.titlebarControlHitSize
         )
         let importFrame = importButtonOffset.map { offset in
             NSRect(
-                x: hostingView.frame.minX + offset,
+                x: hostingView.frame.minX
+                    + offset
+                    + MomentoTheme.sidebarTitlebarButtonHitInset
+                    - MomentoTheme.toolbarIconButtonHitInset,
                 y: hostingView.frame.minY,
-                width: MomentoTheme.toolbarIconButtonWidth,
-                height: MomentoTheme.toolbarControlHeight
+                width: MomentoTheme.titlebarControlHitSize,
+                height: MomentoTheme.titlebarControlHitSize
             )
         }
 

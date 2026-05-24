@@ -60,6 +60,16 @@ enum MomentoTheme {
     static let librarySelectorHeight: CGFloat = 26
     static let librarySwitcherVerticalGap: CGFloat = 8
     static let sidebarTitlebarButtonSize: CGFloat = 26
+    static let titlebarControlHitSize: CGFloat = 44
+    static var sidebarTitlebarButtonHitInset: CGFloat {
+        (titlebarControlHitSize - sidebarTitlebarButtonSize) / 2
+    }
+    static var toolbarIconButtonHitInset: CGFloat {
+        (titlebarControlHitSize - toolbarIconButtonWidth) / 2
+    }
+    static var toolbarControlHitInset: CGFloat {
+        (titlebarControlHitSize - toolbarControlHeight) / 2
+    }
     static let sidebarTitlebarButtonTopInset: CGFloat = 14
     static let sidebarTitlebarButtonTrailingInset: CGFloat = 14
     static let collapsedSidebarToggleLeadingInset: CGFloat = 92

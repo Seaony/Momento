@@ -182,7 +182,7 @@ private struct InspectorTitlebarControlAccessoryView: View {
                 }
         }
         .buttonStyle(.plain)
-        .frame(width: MomentoTheme.toolbarIconButtonWidth, height: MomentoTheme.toolbarControlHeight)
+        .frame(width: MomentoTheme.titlebarControlHitSize, height: MomentoTheme.titlebarControlHitSize)
         .contentShape(RoundedRectangle(cornerRadius: MomentoTheme.toolbarControlRadius, style: .continuous))
         .pointerStyle(.link)
         .onHover { hovering in
@@ -226,16 +226,16 @@ private final class InspectorTitlebarControlContainerView: NSView {
             bounds.width
                 - MomentoTheme.sidebarTitlebarButtonTrailingInset
                 - MomentoTheme.toolbarIconButtonWidth
-        )
+        ) - MomentoTheme.toolbarIconButtonHitInset
         let buttonY = (
             MomentoTheme.floatingSidebarTitlebarContentInset
                 - MomentoTheme.toolbarControlHeight
-        ) / 2
+        ) / 2 - MomentoTheme.toolbarControlHitInset
         let nextFrame = NSRect(
             x: buttonX,
             y: buttonY,
-            width: MomentoTheme.toolbarIconButtonWidth,
-            height: MomentoTheme.toolbarControlHeight
+            width: MomentoTheme.titlebarControlHitSize,
+            height: MomentoTheme.titlebarControlHitSize
         )
 
         if hostingView.frame != nextFrame {
