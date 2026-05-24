@@ -11,6 +11,9 @@ DMG_ROOT="$DIST_DIR/dmg-root"
 APPCAST_FILE="appcast.xml"
 GITHUB_REPOSITORY="${MOMENTO_RELEASE_REPOSITORY:-Seaony/Momento}"
 
+export GIT_PAGER=cat
+export PAGER=cat
+
 usage() {
   cat <<EOF
 Usage:
@@ -32,6 +35,10 @@ fail() {
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "missing required command: $1"
+}
+
+step() {
+  printf '\n==> %s\n' "$1"
 }
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
@@ -64,17 +71,20 @@ require_command plutil
 require_command xmllint
 require_command perl
 
-git diff --quiet || fail "working tree has unstaged changes; commit or stash them first"
-git diff --cached --quiet || fail "working tree has staged changes; commit or unstage them first"
+step "Checking working tree"
+git --no-pager diff --quiet || fail "working tree has unstaged changes; commit or stash them first"
+git --no-pager diff --cached --quiet || fail "working tree has staged changes; commit or unstage them first"
 
 printf 'Preparing %s %s (%s)\n' "$PROJECT_NAME" "$MARKETING_VERSION" "$BUILD_NUMBER"
 
+step "Updating Xcode version settings"
 perl -0pi -e "s/CURRENT_PROJECT_VERSION = [^;]+;/CURRENT_PROJECT_VERSION = $BUILD_NUMBER;/g; s/MARKETING_VERSION = [^;]+;/MARKETING_VERSION = $MARKETING_VERSION;/g" "$PBXPROJ_FILE"
 
 rm -rf "$DERIVED_DATA" "$DMG_ROOT"
 rm -f "$DMG_PATH"
 mkdir -p "$DMG_ROOT"
 
+step "Building Release app"
 xcodebuild \
   -project "$PROJECT_FILE" \
   -scheme "$SCHEME_NAME" \
@@ -97,12 +107,16 @@ MINIMUM_SYSTEM_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVers
 [[ "$APP_MARKETING_VERSION" == "$MARKETING_VERSION" ]] || fail "built app version is $APP_MARKETING_VERSION, expected $MARKETING_VERSION"
 [[ "$APP_BUILD_NUMBER" == "$BUILD_NUMBER" ]] || fail "built app build is $APP_BUILD_NUMBER, expected $BUILD_NUMBER"
 
+step "Creating DMG"
 cp -R "$APP_PATH" "$DMG_ROOT/"
 ln -s /Applications "$DMG_ROOT/Applications"
 hdiutil create -volname "$PROJECT_NAME" -srcfolder "$DMG_ROOT" -ov -format UDZO "$DMG_PATH"
+
+step "Verifying DMG and code signature"
 hdiutil verify "$DMG_PATH"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
+step "Signing update archive for Sparkle"
 SIGN_OUTPUT="$("$SPARKLE_BIN/sign_update" "$DMG_PATH")"
 ED_SIGNATURE="$(printf '%s\n' "$SIGN_OUTPUT" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')"
 CONTENT_LENGTH="$(printf '%s\n' "$SIGN_OUTPUT" | sed -n 's/.*length="\([^"]*\)".*/\1/p')"
@@ -114,6 +128,7 @@ CONTENT_LENGTH="$(printf '%s\n' "$SIGN_OUTPUT" | sed -n 's/.*length="\([^"]*\)".
 
 PUB_DATE="$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')"
 
+step "Writing appcast"
 cat > "$APPCAST_FILE" <<EOF
 <?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
@@ -139,8 +154,9 @@ cat > "$APPCAST_FILE" <<EOF
 </rss>
 EOF
 
+step "Validating release files"
 xmllint --noout "$APPCAST_FILE"
-git diff --check
+git --no-pager diff --check
 
 rm -rf "$DMG_ROOT"
 
