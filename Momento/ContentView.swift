@@ -501,12 +501,10 @@ struct ContentView: View {
     }
 
     private var filterPopover: some View {
-        GlassEffectContainer(spacing: 10) {
-            VStack(alignment: .leading, spacing: 14) {
-                filterFacetPicker
-                filterFacetContent
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-            }
+        VStack(alignment: .leading, spacing: 14) {
+            filterFacetPicker
+            filterFacetContent
+                .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .padding(14)
         .frame(width: ContentToolbarMetrics.filterPopoverWidth)
