@@ -82,6 +82,35 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertFalse(source.contains(".blur(radius: isModalOverlayVisible"))
     }
 
+    func testSparkleUpdatesAreConfiguredForGitHubAppcast() throws {
+        let infoData = try Data(contentsOf: infoPlistURL())
+        let infoPlist = try XCTUnwrap(PropertyListSerialization.propertyList(from: infoData, options: [], format: nil) as? [String: Any])
+        let entitlementsData = try Data(contentsOf: entitlementsURL())
+        let entitlements = try XCTUnwrap(PropertyListSerialization.propertyList(from: entitlementsData, options: [], format: nil) as? [String: Any])
+        let projectSource = try String(contentsOf: projectURL(), encoding: .utf8)
+        let appSource = try String(contentsOf: appURL(), encoding: .utf8)
+        let settingsSource = try String(contentsOf: settingsURL(), encoding: .utf8)
+
+        XCTAssertEqual(infoPlist["SUFeedURL"] as? String, "https://seaony.github.io/Momento/appcast.xml")
+        XCTAssertEqual(infoPlist["SUPublicEDKey"] as? String, "GPqtCAsJ50slxZrQHqwhjvY5V6XTjxhFQFNnLq8sNu0=")
+        XCTAssertEqual(infoPlist["SUEnableInstallerLauncherService"] as? Bool, true)
+        XCTAssertEqual(infoPlist["SUEnableAutomaticChecks"] as? Bool, true)
+        XCTAssertTrue(projectSource.contains("https://github.com/sparkle-project/Sparkle"))
+        XCTAssertTrue(projectSource.contains("productName = Sparkle;"))
+        XCTAssertTrue(projectSource.contains("CODE_SIGN_ENTITLEMENTS = Momento/Momento.entitlements;"))
+        XCTAssertEqual(entitlements["com.apple.security.app-sandbox"] as? Bool, true)
+        XCTAssertEqual(entitlements["com.apple.security.network.client"] as? Bool, true)
+        XCTAssertEqual(entitlements["com.apple.security.network.server"] as? Bool, true)
+        let machLookupExceptions = try XCTUnwrap(
+            entitlements["com.apple.security.temporary-exception.mach-lookup.global-name"] as? [String]
+        )
+        XCTAssertTrue(machLookupExceptions.contains("$(PRODUCT_BUNDLE_IDENTIFIER)-spks"))
+        XCTAssertTrue(machLookupExceptions.contains("$(PRODUCT_BUNDLE_IDENTIFIER)-spki"))
+        XCTAssertTrue(appSource.contains("@StateObject private var updateService = AppUpdateService()"))
+        XCTAssertTrue(appSource.contains("MomentoUpdateCommands(localization: localization, updateService: updateService)"))
+        XCTAssertTrue(settingsSource.contains("updateService.checkForUpdates()"))
+    }
+
     func testInspectorDoesNotExposeNotesEditor() throws {
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
         let shellSource = try String(contentsOf: shellURL(), encoding: .utf8)
@@ -242,6 +271,14 @@ final class ArchitectureGuardTests: XCTestCase {
         repositoryRoot().appendingPathComponent("Momento/Info.plist")
     }
 
+    private func entitlementsURL() -> URL {
+        repositoryRoot().appendingPathComponent("Momento/Momento.entitlements")
+    }
+
+    private func projectURL() -> URL {
+        repositoryRoot().appendingPathComponent("Momento.xcodeproj/project.pbxproj")
+    }
+
     private func designSystemURL() -> URL {
         repositoryRoot().appendingPathComponent("Momento/DesignSystem/MomentoGlass.swift")
     }
@@ -256,6 +293,10 @@ final class ArchitectureGuardTests: XCTestCase {
 
     private func inspectorURL() -> URL {
         repositoryRoot().appendingPathComponent("Momento/Features/Inspector/MomentoInspectorView.swift")
+    }
+
+    private func settingsURL() -> URL {
+        repositoryRoot().appendingPathComponent("Momento/Features/Settings/MomentoSettingsView.swift")
     }
 
     private func assetGridURL() -> URL {

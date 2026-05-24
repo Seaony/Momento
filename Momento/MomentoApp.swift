@@ -11,6 +11,7 @@ import SwiftUI
 @main
 struct MomentoApp: App {
     @NSApplicationDelegateAdaptor(AppOpenHandler.self) private var appOpenHandler
+    @StateObject private var updateService = AppUpdateService()
     @State private var store = LibraryStore(defaultViewMode: AppSettings.defaultViewMode())
     @State private var browserImportServer = BrowserImportServer()
     @AppStorage(AppSettingsKeys.appLanguage) private var appLanguageRawValue = AppLanguage.system.rawValue
@@ -34,10 +35,14 @@ struct MomentoApp: App {
         .windowResizability(.contentMinSize)
         .commands {
             MomentoMenuCommands(localization: localization)
+            MomentoUpdateCommands(localization: localization, updateService: updateService)
         }
 
         Settings {
-            MomentoSettingsView(appLanguage: appLanguageBinding)
+            MomentoSettingsView(
+                appLanguage: appLanguageBinding,
+                updateService: updateService
+            )
             .environment(\.locale, language.locale)
             .environment(\.appLocalization, localization)
         }
@@ -81,6 +86,20 @@ struct MomentoApp: App {
             }
         } catch {
             store.libraryErrorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct MomentoUpdateCommands: Commands {
+    var localization: AppLocalization
+    @ObservedObject var updateService: AppUpdateService
+
+    var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            Button(localization.string("Check for Updates...")) {
+                updateService.checkForUpdates()
+            }
+            .disabled(!updateService.canCheckForUpdates)
         }
     }
 }

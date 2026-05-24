@@ -5,6 +5,7 @@ struct MomentoSettingsView: View {
     @Environment(\.appLocalization) private var localization
 
     @Binding var appLanguage: AppLanguage
+    @ObservedObject var updateService: AppUpdateService
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -20,6 +21,16 @@ struct MomentoSettingsView: View {
                     .pickerStyle(.menu)
                     .buttonStyle(.glass(.clear))
                     .frame(width: 190)
+                }
+            }
+
+            settingsSection(localization.string("Updates")) {
+                settingsRow(label: localization.string("App Updates")) {
+                    Button(localization.string("Check for Updates...")) {
+                        updateService.checkForUpdates()
+                    }
+                    .buttonStyle(.glass)
+                    .disabled(!updateService.canCheckForUpdates)
                 }
             }
 
@@ -104,6 +115,9 @@ struct MomentoSettingsView: View {
 #Preview {
     @Previewable @State var language = AppLanguage.system
 
-    MomentoSettingsView(appLanguage: $language)
+    MomentoSettingsView(
+        appLanguage: $language,
+        updateService: AppUpdateService()
+    )
         .environment(\.appLocalization, AppLocalization(language: language))
 }
