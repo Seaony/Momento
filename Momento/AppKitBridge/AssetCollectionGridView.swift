@@ -5,6 +5,7 @@
 
 // 中文注释：本文件封装高性能素材列表的 AppKit NSCollectionView 渲染、选择、预览、拖拽和快捷键桥接。
 import AppKit
+import ImageIO
 import QuartzCore
 import SwiftUI
 import UniformTypeIdentifiers
@@ -1217,10 +1218,14 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
     }
 }
 
-final class AssetPreviewImageProvider {
+nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
     static let shared = AssetPreviewImageProvider()
 
+    private static let previewDecodeMaxPixelSize = 512
+
     private let cache = NSCache<NSString, NSImage>()
+    private let prefetchLock = NSLock()
+    private var prefetchingIdentities: Set<String> = []
 
     private init() {
         cache.countLimit = 512
@@ -1237,6 +1242,10 @@ final class AssetPreviewImageProvider {
         ].joined(separator: ":")
     }
 
+    func cachedImage(for asset: AssetItem) -> NSImage? {
+        cache.object(forKey: identity(for: asset) as NSString)
+    }
+
     func image(for asset: AssetItem) -> NSImage {
         let key = identity(for: asset) as NSString
         if let cachedImage = cache.object(forKey: key) {
@@ -1248,8 +1257,70 @@ final class AssetPreviewImageProvider {
         return image
     }
 
+    func imageAsync(for asset: AssetItem) async -> NSImage {
+        let identity = identity(for: asset)
+        let key = identity as NSString
+        if let cachedImage = cache.object(forKey: key) {
+            return cachedImage
+        }
+
+        if shouldDecodeThumbnail(for: asset) {
+            let image = await Task.detached(priority: .userInitiated) {
+                autoreleasepool {
+                    Self.decodedThumbnailImage(for: asset)
+                }
+            }.value
+
+            if let image {
+                cache.setObject(image, forKey: key, cost: cacheCost(for: image))
+                return image
+            }
+        }
+
+        let image = fallbackIcon(for: asset)
+        cache.setObject(image, forKey: key, cost: cacheCost(for: image))
+        return image
+    }
+
+    func shouldLoadImageAsync(for asset: AssetItem) -> Bool {
+        shouldDecodeThumbnail(for: asset)
+    }
+
+    func placeholderImage(for asset: AssetItem) -> NSImage {
+        if shouldDecodeThumbnail(for: asset),
+           let type = UTType(filenameExtension: asset.fileExtension) {
+            return NSWorkspace.shared.icon(for: type)
+        }
+
+        return fallbackIcon(for: asset)
+    }
+
     func prefetchImage(for asset: AssetItem) {
-        _ = image(for: asset)
+        let identity = identity(for: asset)
+        let key = identity as NSString
+        guard cache.object(forKey: key) == nil,
+              shouldDecodeThumbnail(for: asset),
+              beginPrefetching(identity) else {
+            return
+        }
+
+        Task.detached(priority: .utility) { [self] in
+            defer {
+                endPrefetching(identity)
+            }
+
+            guard cache.object(forKey: key) == nil else {
+                return
+            }
+
+            let image = autoreleasepool {
+                Self.decodedThumbnailImage(for: asset)
+            }
+
+            if let image {
+                cache.setObject(image, forKey: key, cost: cacheCost(for: image))
+            }
+        }
     }
 
     func invalidateImage(for asset: AssetItem) {
@@ -1258,12 +1329,15 @@ final class AssetPreviewImageProvider {
 
     private func loadImage(for asset: AssetItem) -> NSImage {
         if asset.kind == .image || asset.kind == .gif {
-            if let thumbnailURL = asset.thumbnailURL,
-               let image = NSImage(contentsOf: thumbnailURL) {
+            if let image = Self.decodedThumbnailImage(for: asset) {
                 return image
             }
         }
 
+        return fallbackIcon(for: asset)
+    }
+
+    private func fallbackIcon(for asset: AssetItem) -> NSImage {
         if FileManager.default.fileExists(atPath: asset.storageURL.path) {
             return NSWorkspace.shared.icon(forFile: asset.storageURL.path)
         }
@@ -1277,6 +1351,53 @@ final class AssetPreviewImageProvider {
         }
 
         return NSWorkspace.shared.icon(for: .data)
+    }
+
+    private func shouldDecodeThumbnail(for asset: AssetItem) -> Bool {
+        (asset.kind == .image || asset.kind == .gif) && asset.thumbnailURL != nil
+    }
+
+    private func beginPrefetching(_ identity: String) -> Bool {
+        prefetchLock.lock()
+        defer { prefetchLock.unlock() }
+
+        guard !prefetchingIdentities.contains(identity) else {
+            return false
+        }
+
+        prefetchingIdentities.insert(identity)
+        return true
+    }
+
+    private func endPrefetching(_ identity: String) {
+        prefetchLock.lock()
+        prefetchingIdentities.remove(identity)
+        prefetchLock.unlock()
+    }
+
+    private static func decodedThumbnailImage(for asset: AssetItem) -> NSImage? {
+        guard let thumbnailURL = asset.thumbnailURL,
+              let source = CGImageSourceCreateWithURL(thumbnailURL as CFURL, [
+                kCGImageSourceShouldCache: false
+              ] as CFDictionary) else {
+            return nil
+        }
+
+        let options = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: Self.previewDecodeMaxPixelSize
+        ] as CFDictionary
+
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options) else {
+            return nil
+        }
+
+        return NSImage(
+            cgImage: image,
+            size: NSSize(width: image.width, height: image.height)
+        )
     }
 
     private func cacheCost(for image: NSImage) -> Int {
@@ -1309,6 +1430,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     private var mode: AssetViewMode = .grid
     private var asset: AssetItem?
     private var localization = AppLocalization(language: .system)
+    private var previewImageTask: Task<Void, Never>?
     private let gridTitleHeight: CGFloat = 16
     private let gridSubtitleHeight: CGFloat = 14
 
@@ -1491,6 +1613,8 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
 
     override func prepareForReuse() {
         super.prepareForReuse()
+        previewImageTask?.cancel()
+        previewImageTask = nil
         previewImageView.resetImage()
         fileNameLabel.stringValue = ""
         subtitleLabel.stringValue = ""
@@ -1515,6 +1639,8 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     }
 
     func configure(with asset: AssetItem, viewMode: AssetViewMode, localization: AppLocalization) {
+        previewImageTask?.cancel()
+        previewImageTask = nil
         self.asset = asset
         self.localization = localization
         mode = viewMode
@@ -1525,11 +1651,32 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         dimensionBadgeView.stringValue = dimensionsSubtitle(for: asset)
         let previewProvider = AssetPreviewImageProvider.shared
         let previewIdentity = previewProvider.identity(for: asset)
+        let viewImageIdentity = "\(viewMode.rawValue):\(previewIdentity)"
+        let cachedImage = previewProvider.cachedImage(for: asset)
+        let canLoadImageAsync = previewProvider.shouldLoadImageAsync(for: asset)
         previewImageView.setImage(
-            previewProvider.image(for: asset),
-            identity: "\(viewMode.rawValue):\(previewIdentity)",
+            cachedImage ?? (canLoadImageAsync ? previewProvider.placeholderImage(for: asset) : previewProvider.image(for: asset)),
+            identity: cachedImage == nil && canLoadImageAsync ? "\(viewImageIdentity):placeholder" : viewImageIdentity,
             animated: false
         )
+        if cachedImage == nil && canLoadImageAsync {
+            previewImageTask = Task { @MainActor [weak self, asset, viewMode, viewImageIdentity] in
+                let image = await AssetPreviewImageProvider.shared.imageAsync(for: asset)
+                guard !Task.isCancelled,
+                      let self,
+                      self.asset?.id == asset.id,
+                      self.mode == viewMode else {
+                    return
+                }
+
+                self.previewImageView.setImage(
+                    image,
+                    identity: viewImageIdentity,
+                    animated: false
+                )
+                self.previewImageTask = nil
+            }
+        }
         previewImageView.contentMode = imageContentMode(for: asset, viewMode: viewMode)
         applyModeLayout()
         updateFavoriteButton(animated: false)
