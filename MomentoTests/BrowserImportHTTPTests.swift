@@ -53,6 +53,31 @@ final class BrowserImportHTTPTests: XCTestCase {
         )
     }
 
+    func testParsesChromeExtensionImageImportFeedbackFlag() throws {
+        let body = #"{"url":"https://example.com/source.png","playFeedback":false}"#
+        let imageURL = try XCTUnwrap(URL(string: "https://example.com/source.png"))
+        let request = httpRequest(
+            method: "POST",
+            path: "/api/v1/import/image",
+            headers: [
+                "Host": "127.0.0.1:47641",
+                "Origin": "chrome-extension://example/",
+                "Content-Type": "application/json",
+                "Content-Length": "\(Data(body.utf8).count)"
+            ],
+            body: body
+        )
+
+        XCTAssertEqual(
+            BrowserImportHTTP.parseRequest(Data(request.utf8)),
+            .request(.importImage(BrowserImageImportRequest(
+                imageURL: imageURL,
+                sourcePageURL: nil,
+                playFeedback: false
+            )))
+        )
+    }
+
     func testRejectsWebPageOrigin() {
         let body = #"{"url":"https://example.com/source.png"}"#
         let request = httpRequest(

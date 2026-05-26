@@ -82,7 +82,9 @@ struct MomentoApp: App {
                     from: request.imageURL,
                     sourcePageURL: request.sourcePageURL
                 )
-                BrowserImportNotificationService.playImageSavedFeedback()
+                if request.playFeedback {
+                    BrowserImportNotificationService.playImageSavedFeedback()
+                }
             }
         } catch {
             store.libraryErrorMessage = error.localizedDescription

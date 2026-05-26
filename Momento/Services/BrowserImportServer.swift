@@ -30,6 +30,7 @@ nonisolated enum BrowserImportParseResult: Equatable, Sendable {
 nonisolated struct BrowserImageImportRequest: Equatable, Sendable {
     var imageURL: URL
     var sourcePageURL: URL?
+    var playFeedback: Bool = true
 }
 
 nonisolated final class BrowserImportServer: @unchecked Sendable {
@@ -192,7 +193,8 @@ nonisolated enum BrowserImportHTTP {
 
         return .request(.importImage(BrowserImageImportRequest(
             imageURL: url,
-            sourcePageURL: optionalURL(from: payload.pageUrl)
+            sourcePageURL: optionalURL(from: payload.pageUrl),
+            playFeedback: payload.playFeedback ?? true
         )))
     }
 
@@ -245,4 +247,5 @@ nonisolated enum BrowserImportHTTP {
 nonisolated private struct BrowserImportImagePayload: Decodable {
     var url: String
     var pageUrl: String?
+    var playFeedback: Bool?
 }
