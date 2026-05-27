@@ -202,6 +202,8 @@ struct AppLocalization: Equatable {
             string("The selected library database is missing.")
         case .missingLibraryPackage:
             string("The selected library no longer exists.")
+        case .ubiquitousLibraryPackageUnsupported:
+            string("iCloud Drive .momento packages cannot be used as live libraries.")
         case .unsupportedSchemaVersion(let version):
             format("Unsupported library schema version: %d.", version)
         }

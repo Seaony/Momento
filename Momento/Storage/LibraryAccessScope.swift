@@ -8,11 +8,14 @@ enum LibraryStorageMode: String, Codable, Sendable {
 
 enum RecentLibraryStoreError: LocalizedError {
     case invalidCloudLibraryDescriptor
+    case duplicateLibraryDescriptorID
 
     var errorDescription: String? {
         switch self {
         case .invalidCloudLibraryDescriptor:
             "Cloud library descriptors require a cloud library ID and iCloud account ID."
+        case .duplicateLibraryDescriptorID:
+            "A recent library already uses this registry ID."
         }
     }
 }
@@ -174,6 +177,13 @@ struct RecentLibraryStore {
             return
         }
 
+        let loadedReferences = load()
+        guard !loadedReferences.contains(where: { reference in
+            reference.storageMode != .local && reference.id == library.id
+        }) else {
+            throw RecentLibraryStoreError.duplicateLibraryDescriptorID
+        }
+
         let bookmarkData = try packageURL.bookmarkData(
             options: [.withSecurityScope],
             includingResourceValuesForKeys: nil,
@@ -188,7 +198,7 @@ struct RecentLibraryStore {
             lastOpenedAt: Date(),
             lastKnownSyncState: nil
         )
-        var references = load().filter { reference in
+        var references = loadedReferences.filter { reference in
             reference.storageMode != .local || reference.id != library.id
         }
         references.insert(reference, at: 0)
@@ -224,15 +234,17 @@ struct RecentLibraryStore {
         }
         let loadedReferences = load()
         guard !loadedReferences.contains(where: { existingReference in
-            guard existingReference.storageMode == .cloud,
-                  existingReference.id == trimmedID else {
+            guard existingReference.id == trimmedID else {
                 return false
+            }
+            guard existingReference.storageMode == .cloud else {
+                return true
             }
             let existingCloudLibraryID = Self.normalizedIdentifier(existingReference.cloudLibraryID)
             let existingCloudAccountID = Self.normalizedIdentifier(existingReference.cloudAccountID)
             return existingCloudLibraryID != trimmedCloudLibraryID || existingCloudAccountID != trimmedCloudAccountID
         }) else {
-            throw RecentLibraryStoreError.invalidCloudLibraryDescriptor
+            throw RecentLibraryStoreError.duplicateLibraryDescriptorID
         }
         var references = loadedReferences.filter { existingReference in
             guard existingReference.storageMode == .cloud else {

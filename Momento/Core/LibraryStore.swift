@@ -179,6 +179,7 @@ final class LibraryStore {
         }
 
         let accessScope = LibraryAccessScope(url: packageURL)
+        try storage.validateLiveLocalLibraryLocation(at: packageURL)
         let library = try storage.openLibraryPackage(at: packageURL)
         try activateLibrary(library, accessScope: accessScope)
         try saveRecentLibrary(library)
@@ -197,6 +198,10 @@ final class LibraryStore {
             guard currentLibrary?.id != sourceLibrary.id,
                   !recentLibraries.contains(where: { $0.id == sourceLibrary.id }) else {
                 throw LibraryStoreError.duplicateLibraryID
+            }
+            if let destinationRootURL {
+                let destinationURL = destinationRootURL.appendingPathComponent(sourceURL.lastPathComponent, isDirectory: true)
+                try storage.validateLiveLocalLibraryLocation(at: destinationURL)
             }
 
             let importedLibrary = try storage.importLibraryPackage(from: sourceURL, to: destinationRootURL)
@@ -955,6 +960,7 @@ final class LibraryStore {
         let accessScope = LibraryAccessScope(url: resolved.url)
         let library: AssetLibrary
         do {
+            try storage.validateLiveLocalLibraryLocation(at: resolved.url)
             library = try storage.openLibraryPackage(at: resolved.url)
         } catch LibraryStorageError.missingLibraryPackage {
             try removeRecentLibrary(reference)

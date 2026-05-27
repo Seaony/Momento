@@ -122,6 +122,23 @@
         }
       }
     },
+    "iCloud Drive .momento packages cannot be used as live libraries." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud Drive .momento packages cannot be used as live libraries."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud Drive 中的 .momento 包不能作为实时资源库使用。"
+          }
+        }
+      }
+    },
     "About" : {
       "extractionState" : "stale",
       "localizations" : {

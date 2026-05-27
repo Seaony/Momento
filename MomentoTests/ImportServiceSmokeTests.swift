@@ -66,6 +66,23 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         XCTAssertEqual(manifest.displayName, "Test")
     }
 
+    func testLibraryPackageCreationRejectsUbiquitousDestinationRoot() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let blockedPath = environment.rootURL.standardizedFileURL.path
+        let storage = LibraryStorage(isUbiquitousItem: { url in
+            url.standardizedFileURL.path == blockedPath
+        })
+
+        XCTAssertThrowsError(try storage.createLibraryPackage(at: environment.packageURL, name: "Test")) { error in
+            guard case LibraryStorageError.ubiquitousLibraryPackageUnsupported = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: environment.packageURL.path))
+    }
+
     func testOpeningUnsupportedManifestVersionFails() throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }
@@ -1197,6 +1214,40 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testOpeningUbiquitousRecentLibraryDoesNotPruneReference() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let recentStore = RecentLibraryStore(defaults: environment.defaults)
+        let safeStore = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: recentStore,
+            loadRecentLibrary: false
+        )
+        try safeStore.createLibrary(at: environment.packageURL)
+        let recentID = try XCTUnwrap(safeStore.recentLibraries.first?.id)
+
+        let blockedPath = environment.packageURL.standardizedFileURL.path
+        let blockedStorage = LibraryStorage(isUbiquitousItem: { url in
+            url.standardizedFileURL.path == blockedPath
+        })
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            storage: blockedStorage,
+            recentStore: recentStore,
+            loadRecentLibrary: false
+        )
+
+        XCTAssertThrowsError(try store.openRecentLibrary(id: recentID)) { error in
+            guard case LibraryStorageError.ubiquitousLibraryPackageUnsupported = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+        XCTAssertNil(store.currentLibrary)
+        XCTAssertEqual(store.recentLibraries.map(\.id), [recentID])
+    }
+
+    @MainActor
     func testCreatingLibraryStoresLocalStorageModeInRecentReference() throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }
@@ -1554,6 +1605,64 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testSavingCloudPlaceholderRejectsLocalLibraryIDCollision() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let library = try LibraryStorage().createLibraryPackage(at: environment.packageURL, name: "Local")
+        let recentStore = RecentLibraryStore(defaults: environment.defaults)
+        try recentStore.save(library)
+
+        XCTAssertThrowsError(
+            try recentStore.saveCloudPlaceholder(
+                id: library.id,
+                name: "Cloud Library",
+                cloudLibraryID: "cloud-library",
+                accountState: testCloudAccountState()
+            )
+        ) { error in
+            guard let registryError = error as? RecentLibraryStoreError,
+                  case .duplicateLibraryDescriptorID = registryError else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+
+        XCTAssertEqual(recentStore.load().map(\.id), [library.id])
+        XCTAssertEqual(recentStore.load().first?.storageMode, .local)
+    }
+
+    @MainActor
+    func testSavingLocalLibraryRejectsCloudPlaceholderIDCollision() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let recentStore = RecentLibraryStore(defaults: environment.defaults)
+        try recentStore.saveCloudPlaceholder(
+            id: "shared-registry-id",
+            name: "Cloud Library",
+            cloudLibraryID: "cloud-library",
+            accountState: testCloudAccountState()
+        )
+
+        let localLibrary = AssetLibrary(
+            id: "shared-registry-id",
+            name: "Local",
+            createdAt: Date(),
+            packageURL: environment.packageURL
+        )
+
+        XCTAssertThrowsError(try recentStore.save(localLibrary)) { error in
+            guard let registryError = error as? RecentLibraryStoreError,
+                  case .duplicateLibraryDescriptorID = registryError else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+
+        XCTAssertEqual(recentStore.load().map(\.id), ["shared-registry-id"])
+        XCTAssertEqual(recentStore.load().first?.storageMode, .cloud)
+    }
+
+    @MainActor
     func testSavingCloudPlaceholderReplacesSameCloudLibraryID() throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }
@@ -1626,7 +1735,7 @@ final class LibraryPackagePersistenceTests: XCTestCase {
             )
         ) { error in
             guard let registryError = error as? RecentLibraryStoreError,
-                  case .invalidCloudLibraryDescriptor = registryError else {
+                  case .duplicateLibraryDescriptorID = registryError else {
                 return XCTFail("Unexpected error: \(error)")
             }
         }

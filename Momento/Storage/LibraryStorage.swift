@@ -8,10 +8,16 @@ nonisolated struct LibraryStorage: Sendable {
 
     var applicationSupportRoot: URL
     var trashURLs: [URL]
+    private var isUbiquitousItem: @Sendable (URL) -> Bool
 
-    init(applicationSupportRoot: URL? = nil, trashURLs: [URL]? = nil) {
+    init(
+        applicationSupportRoot: URL? = nil,
+        trashURLs: [URL]? = nil,
+        isUbiquitousItem: @escaping @Sendable (URL) -> Bool = { FileManager.default.isUbiquitousItem(at: $0) }
+    ) {
         self.applicationSupportRoot = applicationSupportRoot ?? Self.defaultApplicationSupportRoot()
         self.trashURLs = trashURLs ?? FileManager.default.urls(for: .trashDirectory, in: .userDomainMask)
+        self.isUbiquitousItem = isUbiquitousItem
     }
 
     nonisolated func rootURL(for library: AssetLibrary) -> URL {
@@ -90,6 +96,7 @@ nonisolated struct LibraryStorage: Sendable {
         guard !FileManager.default.fileExists(atPath: normalizedURL.path) else {
             throw LibraryStorageError.libraryPackageAlreadyExists
         }
+        try validateLiveLocalLibraryLocation(at: normalizedURL)
 
         try FileManager.default.createDirectory(at: normalizedURL, withIntermediateDirectories: true)
         let library = AssetLibrary(id: UUID().uuidString, name: name, createdAt: Date(), packageURL: normalizedURL)
@@ -166,10 +173,21 @@ nonisolated struct LibraryStorage: Sendable {
         guard !FileManager.default.fileExists(atPath: destinationURL.path) else {
             throw LibraryStorageError.libraryPackageAlreadyExists
         }
+        try validateLiveLocalLibraryLocation(at: destinationURL)
 
         try FileManager.default.createDirectory(at: destinationRootURL, withIntermediateDirectories: true)
         try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
         return try validateLibraryPackage(at: destinationURL)
+    }
+
+    nonisolated func validateLiveLocalLibraryLocation(at packageURL: URL) throws {
+        let normalizedURL = normalizedPackageURL(packageURL)
+        let locationURL = FileManager.default.fileExists(atPath: normalizedURL.path)
+            ? normalizedURL
+            : normalizedURL.deletingLastPathComponent()
+        guard !isUbiquitousItem(locationURL) else {
+            throw LibraryStorageError.ubiquitousLibraryPackageUnsupported
+        }
     }
 
     nonisolated func renameLibraryPackage(at packageURL: URL, to name: String) throws -> AssetLibrary {
@@ -294,6 +312,7 @@ nonisolated enum LibraryStorageError: LocalizedError {
     case libraryPackageAlreadyExists
     case missingLibraryDatabase
     case missingLibraryPackage
+    case ubiquitousLibraryPackageUnsupported
     case unsupportedSchemaVersion(Int)
 
     var errorDescription: String? {
@@ -306,6 +325,8 @@ nonisolated enum LibraryStorageError: LocalizedError {
             "The selected library database is missing."
         case .missingLibraryPackage:
             "The selected library no longer exists."
+        case .ubiquitousLibraryPackageUnsupported:
+            "iCloud Drive .momento packages cannot be used as live libraries."
         case .unsupportedSchemaVersion(let version):
             "Unsupported library schema version: \(version)."
         }
