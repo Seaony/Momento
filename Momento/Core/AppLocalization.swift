@@ -153,6 +153,8 @@ struct AppLocalization: Equatable {
             string("Create or open a Momento library before importing assets.")
         case .missingRecentLibrary:
             string("This recent library is no longer available.")
+        case .cloudLibraryUnavailable:
+            string("Cloud libraries are not available yet.")
         case .unsupportedLibraryURL:
             string("Choose a .momento package.")
         case .duplicateLibraryID:

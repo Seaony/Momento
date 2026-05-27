@@ -1197,6 +1197,147 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testCreatingLibraryStoresLocalStorageModeInRecentReference() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+
+        try store.createLibrary(at: environment.packageURL)
+
+        let reference = try XCTUnwrap(store.recentLibraries.first)
+        XCTAssertEqual(reference.storageMode, .local)
+        XCTAssertNotNil(reference.localPackageBookmarkData)
+        XCTAssertNil(reference.cloudLibraryID)
+        XCTAssertNotNil(reference.lastOpenedAt)
+    }
+
+    @MainActor
+    func testRecentLibraryStoreMigratesLegacyBookmarksToLocalDescriptors() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let library = try LibraryStorage().createLibraryPackage(at: environment.packageURL, name: "Legacy")
+        let bookmarkData = try environment.packageURL.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+        let legacyReference = LegacyRecentLibraryReference(
+            id: library.id,
+            name: library.name,
+            bookmarkData: bookmarkData
+        )
+        let data = try JSONEncoder.momento.encode([legacyReference])
+        environment.defaults.set(data, forKey: "recentLibraries")
+
+        let recentStore = RecentLibraryStore(defaults: environment.defaults)
+        let references = recentStore.load()
+
+        let reference = try XCTUnwrap(references.first)
+        XCTAssertEqual(reference.id, library.id)
+        XCTAssertEqual(reference.name, "Legacy")
+        XCTAssertEqual(reference.storageMode, .local)
+        XCTAssertEqual(reference.bookmarkData, bookmarkData)
+        XCTAssertNil(reference.cloudLibraryID)
+        let resolved = try recentStore.resolve(reference)
+        XCTAssertEqual(resolved.url.path, environment.packageURL.path)
+    }
+
+    @MainActor
+    func testCloudRecentLibraryIsNotOpenedAsLocalPackageOnLaunch() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let recentStore = RecentLibraryStore(defaults: environment.defaults)
+        try recentStore.saveCloudPlaceholder(
+            id: "cloud-library",
+            name: "Cloud Library",
+            cloudLibraryID: "cloud-library"
+        )
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: recentStore
+        )
+
+        XCTAssertNil(store.currentLibrary)
+        XCTAssertNil(store.libraryErrorMessage)
+        XCTAssertEqual(store.recentLibraries.first?.storageMode, .cloud)
+    }
+
+    @MainActor
+    func testOpeningCloudRecentLibraryThrowsUnavailableWithoutPruningReference() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let recentStore = RecentLibraryStore(defaults: environment.defaults)
+        try recentStore.saveCloudPlaceholder(
+            id: "cloud-library",
+            name: "Cloud Library",
+            cloudLibraryID: "cloud-library"
+        )
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: recentStore,
+            loadRecentLibrary: false
+        )
+
+        XCTAssertThrowsError(try store.openRecentLibrary(id: "cloud-library")) { error in
+            guard let storeError = error as? LibraryStoreError,
+                  case .cloudLibraryUnavailable = storeError else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+        XCTAssertThrowsError(try store.recentLibraryURL(id: "cloud-library")) { error in
+            guard let storeError = error as? LibraryStoreError,
+                  case .cloudLibraryUnavailable = storeError else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+        XCTAssertThrowsError(try store.renameRecentLibrary(id: "cloud-library", to: "Renamed")) { error in
+            guard let storeError = error as? LibraryStoreError,
+                  case .cloudLibraryUnavailable = storeError else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+        XCTAssertThrowsError(try store.deleteRecentLibrary(id: "cloud-library")) { error in
+            guard let storeError = error as? LibraryStoreError,
+                  case .cloudLibraryUnavailable = storeError else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+        XCTAssertEqual(store.recentLibraries.count, 1)
+        XCTAssertEqual(store.recentLibraries.first?.name, "Cloud Library")
+        XCTAssertEqual(store.recentLibraries.first?.storageMode, .cloud)
+    }
+
+    @MainActor
+    func testRecentLibraryStoreCanFilterOutLocalLibrariesForCloudOnlyCodePaths() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let library = try LibraryStorage().createLibraryPackage(at: environment.packageURL, name: "Local")
+        let recentStore = RecentLibraryStore(defaults: environment.defaults)
+        try recentStore.save(library)
+        try recentStore.saveCloudPlaceholder(
+            id: "cloud-library",
+            name: "Cloud Library",
+            cloudLibraryID: "cloud-library"
+        )
+
+        XCTAssertEqual(recentStore.load().map(\.storageMode), [.cloud, .local])
+
+        let cloudVisibleReferences = recentStore.load(includeLocalLibraries: false)
+        XCTAssertEqual(cloudVisibleReferences.map(\.id), ["cloud-library"])
+        XCTAssertEqual(cloudVisibleReferences.first?.storageMode, .cloud)
+    }
+
+    @MainActor
     func testValidatingMissingCurrentLibraryClosesLibraryAndReportsError() throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }
@@ -1743,4 +1884,10 @@ private struct TestEnvironment {
         defaults.removePersistentDomain(forName: defaultsSuiteName)
         try? FileManager.default.removeItem(at: rootURL)
     }
+}
+
+private struct LegacyRecentLibraryReference: Codable {
+    let id: String
+    let name: String
+    let bookmarkData: Data
 }

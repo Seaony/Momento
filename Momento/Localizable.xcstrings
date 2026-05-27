@@ -683,6 +683,23 @@
         }
       }
     },
+    "Cloud libraries are not available yet." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cloud libraries are not available yet."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud 资源库暂不可用。"
+          }
+        }
+      }
+    },
     "Choose Export Folder" : {
       "extractionState" : "manual",
       "localizations" : {

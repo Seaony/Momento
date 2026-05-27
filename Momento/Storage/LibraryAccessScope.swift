@@ -1,10 +1,90 @@
 // 中文注释：本文件封装资源库 security-scoped bookmark 的解析和访问生命周期。
 import Foundation
 
+enum LibraryStorageMode: String, Codable, Sendable {
+    case local
+    case cloud
+}
+
 struct RecentLibraryReference: Identifiable, Hashable, Codable, Sendable {
     var id: String
     var name: String
-    var bookmarkData: Data
+    var storageMode: LibraryStorageMode
+    var localPackageBookmarkData: Data?
+    var cloudLibraryID: String?
+    var lastOpenedAt: Date?
+    var lastKnownSyncState: String?
+
+    var bookmarkData: Data? {
+        localPackageBookmarkData
+    }
+
+    init(id: String, name: String, bookmarkData: Data) {
+        self.init(
+            id: id,
+            name: name,
+            storageMode: .local,
+            localPackageBookmarkData: bookmarkData,
+            cloudLibraryID: nil,
+            lastOpenedAt: nil,
+            lastKnownSyncState: nil
+        )
+    }
+
+    init(
+        id: String,
+        name: String,
+        storageMode: LibraryStorageMode,
+        localPackageBookmarkData: Data?,
+        cloudLibraryID: String?,
+        lastOpenedAt: Date?,
+        lastKnownSyncState: String?
+    ) {
+        self.id = id
+        self.name = name
+        self.storageMode = storageMode
+        self.localPackageBookmarkData = localPackageBookmarkData
+        self.cloudLibraryID = cloudLibraryID
+        self.lastOpenedAt = lastOpenedAt
+        self.lastKnownSyncState = lastKnownSyncState
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case storageMode
+        case localPackageBookmarkData
+        case cloudLibraryID
+        case lastOpenedAt
+        case lastKnownSyncState
+        case bookmarkData
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        storageMode = try container.decodeIfPresent(LibraryStorageMode.self, forKey: .storageMode) ?? .local
+        localPackageBookmarkData = try container.decodeIfPresent(Data.self, forKey: .localPackageBookmarkData)
+            ?? container.decodeIfPresent(Data.self, forKey: .bookmarkData)
+        cloudLibraryID = try container.decodeIfPresent(String.self, forKey: .cloudLibraryID)
+        lastOpenedAt = try container.decodeIfPresent(Date.self, forKey: .lastOpenedAt)
+        lastKnownSyncState = try container.decodeIfPresent(String.self, forKey: .lastKnownSyncState)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(storageMode, forKey: .storageMode)
+        try container.encodeIfPresent(localPackageBookmarkData, forKey: .localPackageBookmarkData)
+        try container.encodeIfPresent(cloudLibraryID, forKey: .cloudLibraryID)
+        try container.encodeIfPresent(lastOpenedAt, forKey: .lastOpenedAt)
+        try container.encodeIfPresent(lastKnownSyncState, forKey: .lastKnownSyncState)
+        if storageMode == .local {
+            try container.encodeIfPresent(localPackageBookmarkData, forKey: .bookmarkData)
+        }
+    }
 }
 
 final class LibraryAccessScope {
@@ -34,12 +114,15 @@ struct RecentLibraryStore {
         self.defaults = defaults
     }
 
-    func load() -> [RecentLibraryReference] {
+    func load(includeLocalLibraries: Bool = true) -> [RecentLibraryReference] {
         guard let data = defaults.data(forKey: key),
               let references = try? JSONDecoder.momento.decode([RecentLibraryReference].self, from: data) else {
             return []
         }
-        return references
+        guard !includeLocalLibraries else {
+            return references
+        }
+        return references.filter { $0.storageMode != .local }
     }
 
     func save(_ library: AssetLibrary) throws {
@@ -52,8 +135,36 @@ struct RecentLibraryStore {
             includingResourceValuesForKeys: nil,
             relativeTo: nil
         )
-        let reference = RecentLibraryReference(id: library.id, name: library.name, bookmarkData: bookmarkData)
+        let reference = RecentLibraryReference(
+            id: library.id,
+            name: library.name,
+            storageMode: .local,
+            localPackageBookmarkData: bookmarkData,
+            cloudLibraryID: nil,
+            lastOpenedAt: Date(),
+            lastKnownSyncState: nil
+        )
         var references = load().filter { $0.id != library.id }
+        references.insert(reference, at: 0)
+        try saveReferences(Array(references.prefix(10)))
+    }
+
+    func saveCloudPlaceholder(
+        id: String,
+        name: String,
+        cloudLibraryID: String,
+        lastKnownSyncState: String? = nil
+    ) throws {
+        let reference = RecentLibraryReference(
+            id: id,
+            name: name,
+            storageMode: .cloud,
+            localPackageBookmarkData: nil,
+            cloudLibraryID: cloudLibraryID,
+            lastOpenedAt: nil,
+            lastKnownSyncState: lastKnownSyncState
+        )
+        var references = load().filter { $0.id != id }
         references.insert(reference, at: 0)
         try saveReferences(Array(references.prefix(10)))
     }
@@ -103,9 +214,13 @@ struct RecentLibraryStore {
     }
 
     func resolve(_ reference: RecentLibraryReference) throws -> (url: URL, isStale: Bool) {
+        guard reference.storageMode == .local, let bookmarkData = reference.localPackageBookmarkData else {
+            throw CocoaError(.fileReadUnsupportedScheme)
+        }
+
         var isStale = false
         let url = try URL(
-            resolvingBookmarkData: reference.bookmarkData,
+            resolvingBookmarkData: bookmarkData,
             options: [.withSecurityScope],
             relativeTo: nil,
             bookmarkDataIsStale: &isStale

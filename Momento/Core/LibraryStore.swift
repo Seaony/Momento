@@ -65,7 +65,7 @@ final class LibraryStore {
             self.selectedAssetIDs = []
             self.selectedAssetID = nil
             self.sidebarSelection = .library(currentLibrary.id)
-        } else if loadRecentLibrary, let reference = recentLibraries.first {
+        } else if loadRecentLibrary, let reference = recentLibraries.first(where: { $0.storageMode == .local }) {
             do {
                 try openRecentLibrary(reference)
             } catch {
@@ -279,6 +279,9 @@ final class LibraryStore {
     func recentLibraryURL(id: RecentLibraryReference.ID) throws -> URL {
         guard let reference = recentLibraries.first(where: { $0.id == id }) else {
             throw LibraryStoreError.missingRecentLibrary
+        }
+        guard reference.storageMode == .local else {
+            throw LibraryStoreError.cloudLibraryUnavailable
         }
 
         return try recentStore.resolve(reference).url
@@ -937,6 +940,10 @@ final class LibraryStore {
     }
 
     private func openRecentLibrary(_ reference: RecentLibraryReference) throws {
+        guard reference.storageMode == .local else {
+            throw LibraryStoreError.cloudLibraryUnavailable
+        }
+
         let resolved: (url: URL, isStale: Bool)
         do {
             resolved = try recentStore.resolve(reference)
@@ -970,6 +977,10 @@ final class LibraryStore {
         _ reference: RecentLibraryReference,
         perform action: (URL) throws -> T
     ) throws -> T {
+        guard reference.storageMode == .local else {
+            throw LibraryStoreError.cloudLibraryUnavailable
+        }
+
         let resolved = try recentStore.resolve(reference)
         let accessScope = LibraryAccessScope(url: resolved.url)
         return try withExtendedLifetime(accessScope) {
@@ -1474,6 +1485,7 @@ final class LibraryStore {
 enum LibraryStoreError: LocalizedError {
     case noCurrentLibrary
     case missingRecentLibrary
+    case cloudLibraryUnavailable
     case unsupportedLibraryURL
     case duplicateLibraryID
     case invalidLibraryName
@@ -1488,6 +1500,8 @@ enum LibraryStoreError: LocalizedError {
             "Create or open a Momento library before importing assets."
         case .missingRecentLibrary:
             "This recent library is no longer available."
+        case .cloudLibraryUnavailable:
+            "Cloud libraries are not available yet."
         case .unsupportedLibraryURL:
             "Choose a .momento package."
         case .duplicateLibraryID:
