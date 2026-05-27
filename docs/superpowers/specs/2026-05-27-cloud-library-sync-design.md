@@ -62,6 +62,9 @@ The design below is based on Apple documentation checked during this review:
 - CloudKit schema and indexes need production planning. Apple documents that production schemas can only evolve forward, and queryable fields need indexes.
   - Source: [Designing apps using CloudKit](https://developer.apple.com/icloud/cloudkit/designing/)
   - Source: [Inspecting and Editing an iCloud Container's Schema](https://developer.apple.com/documentation/cloudkit/inspecting-and-editing-an-icloud-container-s-schema)
+- CloudKit custom zones are intended to encapsulate related records and allow zone-by-zone syncing. Deleting a zone deletes its records. Sharing later also requires custom zones or record hierarchies.
+  - Source: [CKRecordZone](https://developer.apple.com/documentation/cloudkit/ckrecordzone)
+  - Source: [Local Records](https://developer.apple.com/documentation/cloudkit/local-records)
 - Cloud libraries need explicit account-state checks. `CKContainer.accountStatus` reports whether the system can access the user's iCloud account, and account changes must block cloud writes until revalidated.
   - Source: [CKContainer](https://developer.apple.com/documentation/cloudkit/ckcontainer)
 - `CKSyncEngine` is Apple's current sync helper for local/remote CloudKit records. It requires persisting sync-engine state, CloudKit and remote notification entitlements, and accepting that background sync timing is indeterminate.
@@ -173,22 +176,33 @@ Rules:
 - The library picker should visually separate "On This Mac" and "iCloud" libraries.
 - Creating a library must ask for storage mode up front. Converting a local library to cloud should be an explicit "copy to iCloud" operation, not an in-place mutation.
 
-### CloudKit Scope
+### CloudKit Zones
 
 Use the user's private CloudKit database. This matches the requested behavior: the same Apple ID sees the same cloud libraries on Mac and iOS.
 
-Use one custom private zone for Momento cloud data in the first version:
+Use a small two-level zone model:
 
 ```text
-zone: MomentoCloud
+zone: MomentoCatalog
+- CloudLibrary records only
+
+zone: MomentoLibrary-<libraryID>
+- CloudAsset
+- CloudAssetBlob
+- CloudFolder
+- CloudTag
+- CloudFolderMembership
+- CloudTagMembership
 ```
 
 Reasons:
 
-- One zone keeps discovery and subscription setup simpler.
-- All cloud libraries are listed by querying/syncing `CloudLibrary` records.
-- Deleting a library can be represented by tombstoning the library and cascading records through app logic.
-- Per-library zones can be revisited later if library sharing becomes a product goal. Sharing is not part of this requirement.
+- `MomentoCatalog` is small and lets devices discover cloud libraries without syncing every asset record.
+- Each library zone is the sync unit for that library's assets, folders, tags, blobs, and memberships.
+- Opening a cloud library can start syncing its library zone; listing libraries only needs the catalog zone.
+- Deleting a cloud library first tombstones its `CloudLibrary` record, then deletes the per-library zone after the delete grace period and local export/recovery windows have passed.
+- Per-library zones also keep the future sharing path open without implementing sharing in v1.
+- This adds more zone setup than a single-zone model, but it is aligned with the product's library boundary and avoids syncing all libraries as one undifferentiated dataset.
 
 ### Local Cache
 
@@ -221,6 +235,7 @@ Use explicit CloudKit records rather than mirrored Core Data entities.
 CloudLibrary
 - id
 - displayName
+- libraryZoneName
 - createdAt
 - updatedAt
 - deletedAt?
@@ -300,7 +315,8 @@ CloudTagMembership
 Design choices:
 
 - Record names should be deterministic, ASCII-only, and no longer than 255 characters. Use user-independent identifiers only, never user-visible names. If a composed ID risks exceeding the limit, hash the composed key.
-- Record names should include `libraryID` where needed, for example `library:<uuid>`, `asset:<libraryID>:<contentHash>`, `blob:<libraryID>:<contentHash>`, and `folder-membership:<hash(libraryID,assetID,folderID)>`.
+- Record names should include `libraryID` where needed, for example `library:<uuid>` in `MomentoCatalog`, and `asset:<contentHash>`, `blob:<contentHash>`, and `folder-membership:<hash(assetID,folderID)>` inside a per-library zone.
+- Do not use `CKReference` across zones. Store `libraryID`, `assetID`, `folderID`, and `tagID` as scalar fields because CloudKit references must stay in the same zone.
 - Do not store large blobs on `CloudAsset`. Metadata updates should not require touching the original file.
 - Use membership records instead of arrays on `CloudAsset`; this reduces conflicts and avoids large-array update problems.
 - Keep `deletedAt` tombstones for sync correctness. Hard deletion can be delayed.
@@ -361,6 +377,7 @@ Responsibilities:
 
 - Initialize the sync engine early for the private database.
 - Persist sync-engine state in the local cache.
+- Ensure `MomentoCatalog` and any opened library zones exist before writing records.
 - Use CKSyncEngine pending record-zone changes as the CloudKit upload queue.
 - Track local dirty/error state per affected record so UI can explain pending work and failures.
 - Map local changes to CloudKit records in `nextRecordZoneChangeBatch`.
@@ -483,9 +500,10 @@ Supported first path:
 1. User chooses "Copy Library to iCloud".
 2. App opens the local package.
 3. App creates a new cloud library with a new `libraryID`.
-4. App imports local assets into the cloud cache using existing content hashes.
-5. App uploads metadata and blobs.
-6. The original local library remains unchanged.
+4. App creates the `MomentoLibrary-<libraryID>` zone.
+5. App imports local assets into the cloud cache using existing content hashes.
+6. App uploads metadata and blobs.
+7. The original local library remains unchanged.
 
 Why:
 
@@ -502,6 +520,7 @@ Export remains the inverse: cloud library can be exported to a local `.momento` 
 
 - Confirm iOS deployment target and CKSyncEngine availability.
 - Confirm CloudKit container identifier, entitlements, remote notifications, and provisioning setup.
+- Validate catalog-zone plus per-library-zone creation, deletion, and sync behavior.
 - Measure CKAsset upload/download behavior with realistic file sizes and failure modes.
 - Measure initial sync and local cache behavior with large synthetic libraries.
 - Define first-release cloud limits for file type, file size, library asset count, and total cloud bytes.
@@ -516,7 +535,7 @@ Export remains the inverse: cloud library can be exported to a local `.momento` 
 
 ### Phase 2: Cloud Metadata Sync
 
-- Add CloudKit schema and one private custom zone.
+- Add CloudKit schema, catalog zone, and per-library zone creation.
 - Add local cloud cache and sync-engine state persistence.
 - Sync libraries, folders, tags, and asset metadata without original download beyond thumbnails.
 - Add deterministic record IDs and tombstones.
@@ -543,6 +562,7 @@ Minimum validation for the design implementation later:
 - Spike evidence for CKSyncEngine availability, CKAsset file behavior, and large-library scale before enabling cloud import broadly.
 - Unit tests for storage-mode registry: local libraries stay local; cloud libraries are discovered from cloud cache.
 - Unit tests for deterministic record IDs and dedupe.
+- Unit tests for zone naming and library-zone lifecycle.
 - Unit tests for tombstone rules: delete vs restore, folder delete vs membership arrival, blob GC grace period.
 - Unit tests for dirty-state retry and partial failure handling.
 - Unit tests for record-name generation: ASCII-only, deterministic, under 255 characters.
@@ -610,16 +630,17 @@ Fix in design:
 
 - Use independent `CloudFolderMembership` and `CloudTagMembership` records.
 
-### Finding 6: Per-library zones may be premature
+### Finding 6: A single CloudKit zone conflicts with the library boundary
 
 Counter case:
 
-- A user creates many libraries. Per-library zones and subscriptions increase operational overhead before sharing is needed.
+- The user has several cloud libraries but only opens one on iOS. With one zone, the device has to process one large mixed change stream for every library's assets, folders, tags, and blobs.
 
 Fix in design:
 
-- Use one custom private zone for the first version.
-- Keep per-library zones as a future option only if sharing or performance requires it.
+- Use a small `MomentoCatalog` zone for library discovery.
+- Use one per-library custom zone for each cloud library's records.
+- Keep sharing deferred, but do not choose a zone layout that makes future library sharing or selective sync harder.
 
 ### Finding 7: Offline-first writes can hide sync failures
 
