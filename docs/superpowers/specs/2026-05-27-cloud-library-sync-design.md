@@ -55,9 +55,15 @@ The design below is based on Apple documentation checked during this review:
   - Source: [CKAsset](https://developer.apple.com/documentation/cloudkit/ckasset)
 - CloudKit fetch/query APIs support `desiredKeys`, which should be used to avoid fetching large asset fields when only metadata is needed.
   - Source: [Local Records](https://developer.apple.com/documentation/cloudkit/local-records)
+- CloudKit record IDs are made from a record name and zone ID. Custom record names should be ASCII strings no longer than 255 characters, and record IDs must be unique within the zone.
+  - Source: [CKRecord.ID](https://developer.apple.com/documentation/cloudkit/ckrecord/id)
+- CloudKit errors such as `limitExceeded` require splitting oversized operations. Some errors expose retry timing; sync code must classify retryable and non-retryable failures instead of retrying blindly.
+  - Source: [CKError.limitExceeded](https://developer.apple.com/documentation/cloudkit/ckerror/limitexceeded)
 - CloudKit schema and indexes need production planning. Apple documents that production schemas can only evolve forward, and queryable fields need indexes.
   - Source: [Designing apps using CloudKit](https://developer.apple.com/icloud/cloudkit/designing/)
   - Source: [Inspecting and Editing an iCloud Container's Schema](https://developer.apple.com/documentation/cloudkit/inspecting-and-editing-an-icloud-container-s-schema)
+- Cloud libraries need explicit account-state checks. `CKContainer.accountStatus` reports whether the system can access the user's iCloud account, and account changes must block cloud writes until revalidated.
+  - Source: [CKContainer](https://developer.apple.com/documentation/cloudkit/ckcontainer)
 - `CKSyncEngine` is Apple's current sync helper for local/remote CloudKit records. It requires persisting sync-engine state, CloudKit and remote notification entitlements, and accepting that background sync timing is indeterminate.
   - Source: [CKSyncEngine](https://developer.apple.com/documentation/cloudkit/cksyncengine-5sie5)
   - Source: [Apple CKSyncEngine sample](https://github.com/apple/sample-cloudkit-sync-engine)
@@ -112,10 +118,36 @@ Benefits:
 Costs:
 
 - More initial design work than iCloud Drive package sync.
-- Requires a local pending-change queue and conflict handling.
+- Requires durable local dirty/error state and conflict handling.
 - Requires CloudKit entitlements, schema deployment, telemetry, and real multi-device tests.
 
 Verdict: use this.
+
+## First Shippable Scope
+
+The first cloud-library release should be intentionally narrow:
+
+Included:
+
+- Per-library storage mode: local or cloud.
+- Cloud library creation, discovery, open, rename, and tombstone delete.
+- Mac and iOS import of common image formats that pass a documented cloud upload eligibility check.
+- Metadata sync for display name, favorite, note, trash, folder structure, tags, and memberships.
+- Local thumbnail generation and optional small uploaded thumbnail for remote browsing.
+- On-demand original download for preview/export/drag.
+- Visible sync state and explicit upload/download failure states.
+
+Deferred:
+
+- Sharing a library with another Apple ID.
+- Cross-library blob dedupe.
+- Chunked upload protocol for very large files.
+- CRDT-level merge logic.
+- RAW/video/PDF cloud support beyond whatever the large-file spike explicitly validates.
+- iCloud Drive package editing as a cloud-library backend.
+- Automatic conversion of very large existing libraries before scale testing proves the path.
+
+This boundary keeps the design aligned with the user's concrete goal: some libraries sync across the user's own Mac/iOS devices, while some remain local-only.
 
 ## Recommended Architecture
 
@@ -168,8 +200,7 @@ Application Support/Momento/CloudLibraries/<libraryID>/
 ├── assets/<hashPrefix>/<sha256>.<ext>       # downloaded originals only
 ├── thumbnails/<sha256>.png                  # downloaded/generated cache
 └── sync/
-    ├── engine-state
-    └── pending-operations
+    └── engine-state
 ```
 
 This cache is not a user-facing `.momento` package. It is an implementation detail for offline support and fast UI.
@@ -177,9 +208,10 @@ This cache is not a user-facing `.momento` package. It is an implementation deta
 Rules:
 
 - UI reads local cache through the same value-model boundary as local packages.
-- Writes first apply to local cache in a transaction, then enqueue a sync operation.
+- Writes first apply to local cache in a transaction, then register the affected CloudKit record IDs with `CKSyncEngine`.
 - A failed upload must leave a visible pending/error state. No silent success.
 - Cached originals can be evicted later, but metadata and thumbnails needed for browsing should remain.
+- Do not introduce a separate general-purpose operation log in the first version. Start with per-record dirty/error state plus persisted CKSyncEngine state. Add a semantic operation table only if a real recovery case cannot be represented by dirty records and tombstones.
 
 ### Cloud Record Schema
 
@@ -267,12 +299,14 @@ CloudTagMembership
 
 Design choices:
 
-- Record names should be deterministic and include `libraryID` where needed, for example `library:<uuid>`, `asset:<libraryID>:<contentHash>`, `blob:<libraryID>:<contentHash>`, and `folder-membership:<libraryID>:<assetID>:<folderID>`.
+- Record names should be deterministic, ASCII-only, and no longer than 255 characters. Use user-independent identifiers only, never user-visible names. If a composed ID risks exceeding the limit, hash the composed key.
+- Record names should include `libraryID` where needed, for example `library:<uuid>`, `asset:<libraryID>:<contentHash>`, `blob:<libraryID>:<contentHash>`, and `folder-membership:<hash(libraryID,assetID,folderID)>`.
 - Do not store large blobs on `CloudAsset`. Metadata updates should not require touching the original file.
 - Use membership records instead of arrays on `CloudAsset`; this reduces conflicts and avoids large-array update problems.
 - Keep `deletedAt` tombstones for sync correctness. Hard deletion can be delayed.
 - Keep color analysis local initially. Palette colors can be added later if needed, but they are derived and should not block first sync.
 - Define queryable/sortable CloudKit indexes before production promotion for fields used in discovery and sync-related queries, especially `libraryID`, `deletedAt`, `updatedAt`, `contentHash`, and normalized tag/folder names where queried.
+- Deduplicate blobs only within one cloud library in the first version. Cross-library blob dedupe would complicate ownership, delete rules, and future sharing, and it is not required for the Mac/iOS sync goal.
 
 ### Local Model Adjustments for Cloud Mode
 
@@ -301,11 +335,23 @@ Default cloud blob storage uses `CKAsset` because it is Apple's CloudKit binary-
 However, large image workflows need an explicit guardrail:
 
 - Before shipping cloud import, run a spike with realistic images, GIFs, and RAW files to verify native CloudKit upload behavior, limits, latency, retry behavior, and quota impact.
-- If a file is too large or CloudKit rejects it, do not create a fake synced asset. Mark the local import as "not uploaded" and surface the failure.
+- If a file fails local upload eligibility checks, reject it before creating a normal cloud asset.
+- If CloudKit rejects an otherwise eligible upload after local import, keep the asset in `uploadFailed` state and surface the failure. Do not create a fake synced asset.
 - The first production version may restrict cloud libraries to common image formats and a documented maximum file size.
 - Do not implement chunked uploads until there is a proven requirement. Chunking would add substantial complexity to dedupe, retry, delete, and download behavior.
 
 This is a deliberate correction to the earlier simple "store every original as CKAsset" idea. CKAsset is still the default, but upload eligibility must be enforced.
+
+### Scale Policy
+
+Momento's local UI is designed for large libraries, but cloud sync must prove its own scale separately.
+
+Rules:
+
+- Do not promise 100k-asset cloud libraries until initial sync, incremental sync, local cache size, iOS memory, and CloudKit operation behavior are measured.
+- "Copy Library to iCloud" must be resumable and cancellable before it is exposed for non-trivial libraries.
+- The first cloud release may set conservative limits for cloud-library import count, total byte size, and per-file byte size. These limits should be documented in the UI and adjusted only after measurement.
+- Cloud browsing should support metadata pagination/incremental loading from the local cache. Do not block opening a cloud library until every original has downloaded.
 
 ### Sync Engine
 
@@ -315,10 +361,11 @@ Responsibilities:
 
 - Initialize the sync engine early for the private database.
 - Persist sync-engine state in the local cache.
-- Maintain a local pending-change queue.
+- Use CKSyncEngine pending record-zone changes as the CloudKit upload queue.
+- Track local dirty/error state per affected record so UI can explain pending work and failures.
 - Map local changes to CloudKit records in `nextRecordZoneChangeBatch`.
 - Apply remote record changes into local cache.
-- Handle account changes, zone deletion, partial failures, retries, and server conflicts.
+- Handle account changes, zone deletion, partial failures, retryable errors, non-retryable errors, and server conflicts.
 - Provide observable sync state for UI.
 
 Fallback if CKSyncEngine is unavailable on the chosen iOS target:
@@ -340,9 +387,9 @@ All user writes should use the same command pattern on Mac and iOS.
 4. App creates or reuses local `Asset` by `contentHash`.
 5. App creates thumbnail locally.
 6. App writes metadata/blob state in one local transaction.
-7. App enqueues `save CloudAsset` and, if missing remotely, `save CloudAssetBlob`.
+7. App marks `CloudAsset` dirty and, if missing remotely, marks `CloudAssetBlob` dirty.
 8. UI shows the asset immediately with sync status.
-9. Sync uploads metadata and blob.
+9. CKSyncEngine asks for pending records and uploads metadata/blob records.
 10. Other devices receive metadata first, then download thumbnail/original on demand.
 
 ### Edit Metadata
@@ -352,7 +399,7 @@ Examples: rename asset, edit note, favorite/unfavorite, tag changes.
 Rules:
 
 - Apply locally first.
-- Enqueue a semantic record save.
+- Mark the affected record dirty and let CKSyncEngine request the CloudKit record save.
 - Use CloudKit record metadata / change tags to detect server conflicts.
 - Merge simple scalar conflicts with last-writer-wins using `updatedAt`.
 - Keep membership changes as independent records so adding a tag on one device does not overwrite another tag added elsewhere.
@@ -404,7 +451,7 @@ More advanced CRDT-style merging is not justified for the first implementation. 
 Cases:
 
 - No iCloud account: cloud libraries cannot be created or synced.
-- Same iCloud account, offline network: allow local cloud-library writes and queue uploads.
+- Same iCloud account, offline network: allow local cloud-library writes and keep CKSyncEngine pending changes until network returns.
 - Account temporarily unavailable: keep cached cloud libraries visible, but show sync blocked state.
 - Account switched: do not open previous account's cloud cache as writable. Require resync or explicit cache reset.
 - iCloud quota exceeded: keep local changes pending, show quota/upload failure, and do not claim sync success.
@@ -419,6 +466,13 @@ The UI needs at least these sync states:
 - Download failed
 - Quota/storage blocked
 - Conflict resolved
+
+Retry policy:
+
+- Retry network and service-throttle failures using CloudKit-provided retry timing when available.
+- Split oversized record batches on `limitExceeded`.
+- Treat missing entitlements, bad container/database, unsupported file type, and account mismatch as blocking errors that require user or build/configuration action.
+- Never mark a record as synced until the relevant CKSyncEngine send event confirms success.
 
 ## Migration and Conversion
 
@@ -444,6 +498,15 @@ Export remains the inverse: cloud library can be exported to a local `.momento` 
 
 ## Implementation Phasing
 
+### Phase 0: Technical Spikes and Release Gates
+
+- Confirm iOS deployment target and CKSyncEngine availability.
+- Confirm CloudKit container identifier, entitlements, remote notifications, and provisioning setup.
+- Measure CKAsset upload/download behavior with realistic file sizes and failure modes.
+- Measure initial sync and local cache behavior with large synthetic libraries.
+- Define first-release cloud limits for file type, file size, library asset count, and total cloud bytes.
+- Define CloudKit schema/index checklist before production promotion.
+
 ### Phase 1: Storage Mode Foundation
 
 - Add storage-mode concept to library descriptors.
@@ -457,6 +520,7 @@ Export remains the inverse: cloud library can be exported to a local `.momento` 
 - Add local cloud cache and sync-engine state persistence.
 - Sync libraries, folders, tags, and asset metadata without original download beyond thumbnails.
 - Add deterministic record IDs and tombstones.
+- Add CloudKit schema/index checklist and a development-to-production promotion gate.
 
 ### Phase 3: Blob Upload/Download
 
@@ -476,10 +540,12 @@ Export remains the inverse: cloud library can be exported to a local `.momento` 
 
 Minimum validation for the design implementation later:
 
+- Spike evidence for CKSyncEngine availability, CKAsset file behavior, and large-library scale before enabling cloud import broadly.
 - Unit tests for storage-mode registry: local libraries stay local; cloud libraries are discovered from cloud cache.
 - Unit tests for deterministic record IDs and dedupe.
 - Unit tests for tombstone rules: delete vs restore, folder delete vs membership arrival, blob GC grace period.
-- Unit tests for pending operation retry and partial failure handling.
+- Unit tests for dirty-state retry and partial failure handling.
+- Unit tests for record-name generation: ASCII-only, deterministic, under 255 characters.
 - Integration tests using CloudKit test environment or protocol-backed fake CloudKit service.
 - Manual tests on two devices with the same Apple ID: Mac import, iOS import, concurrent rename, concurrent folder move, offline edits, account sign-out, quota/upload failure.
 - `git diff --check`, targeted tests, and build/typecheck for each implementation phase.
@@ -563,7 +629,7 @@ Counter case:
 
 Fix in design:
 
-- Every local cloud-library write creates a durable pending operation.
+- Every local cloud-library write creates durable dirty/error state and a CKSyncEngine pending record change.
 - UI must show sync status and failures.
 - No silent success.
 
@@ -600,6 +666,52 @@ Fix in design:
 
 - Add schema/index planning to the design.
 - Treat production schema promotion as a release gate, not a background setup task.
+
+### Finding 11: A custom operation log is unnecessary until proven
+
+Counter case:
+
+- The first implementation builds a domain-specific pending operation queue plus CKSyncEngine state. The two queues diverge after a partial failure, making it unclear which source owns retry decisions.
+
+Fix in design:
+
+- Use CKSyncEngine pending changes as the CloudKit upload queue.
+- Keep only per-record dirty/error state for UI and recovery in the first version.
+- Add a semantic operation table later only if dirty records and tombstones cannot represent a real failure mode.
+
+### Finding 12: Cross-library blob dedupe is a hidden sharing/delete problem
+
+Counter case:
+
+- Two cloud libraries reference the same global blob. The user deletes one library, later adds sharing to the other, and blob ownership becomes ambiguous.
+
+Fix in design:
+
+- Deduplicate only within a cloud library for v1.
+- Defer cross-library dedupe until sharing and storage pressure justify the added ownership model.
+
+### Finding 13: Large local libraries can make a "correct" cloud design unusable
+
+Counter case:
+
+- A user copies a 100k-asset local library to iCloud. The app creates huge upload work, iOS receives a massive first sync, and the user cannot tell whether the process is progressing or stuck.
+
+Fix in design:
+
+- Add Phase 0 scale spikes.
+- Require resumable/cancellable conversion before large-library copy is exposed.
+- Allow conservative first-release cloud limits until measured behavior supports larger libraries.
+
+### Finding 14: Creating metadata before eligibility checks can create broken cloud assets
+
+Counter case:
+
+- The user imports a file that is locally known to be outside the cloud-library limits. The app creates `CloudAsset` metadata anyway, so other devices see an item that will never upload.
+
+Fix in design:
+
+- Reject locally ineligible files before creating normal cloud assets.
+- Reserve `uploadFailed` for files that pass local checks but fail during actual CloudKit upload.
 
 ## Final Recommendation
 
