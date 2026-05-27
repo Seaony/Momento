@@ -142,6 +142,7 @@ Steps:
   - 资源从 `NSCollectionView` 拖到文件夹 row。
 - 观察是 drop target 完全不激活，还是激活后 `performDrop` 没写入。
 - 如需临时诊断，只在本地加 Debug-only logging；诊断日志不提交，除非后续决定做正式 telemetry。
+- 如果执行者无法启动 App 做手动复现，不要停在这里；先执行 Task 1-4 的自动化修复和测试，最后把手动 QA 作为交付前验证项。
 
 Gate:
 
@@ -179,7 +180,8 @@ Files:
 
 Implementation:
 
-- 把现有 `MomentoSidebarFolderDropDelegate.moveCommand` 的规则抽成同文件内小型 resolver，例如 `MomentoSidebarFolderDropResolver`。
+- 把现有 `MomentoSidebarFolderDropDelegate.moveCommand` 的规则抽成小型 resolver，例如 `MomentoSidebarFolderDropResolver`。
+- resolver 和测试需要用到的 placement/command 值类型保持 `internal`，让 `@testable import Momento` 能覆盖规则；SwiftUI delegate 和 row 视图仍保持 `private`。
 - 输入：
   - dragged folder id
   - target row folder，可选
@@ -224,10 +226,11 @@ Implementation:
   - 显示一条底部 drop line。
 - `dropUpdated` 只做同步可得的 state/placement 判断，不解码 `NSItemProvider`。
 - `performDrop` 再读取 provider，并回到 `MainActor` 调用 `onMoveFolder`。
-- drop 完成、退出、取消时清空：
+- drop 完成、退出和已知失败路径清空：
   - `draggingFolderID`
   - `targetedFolderDrop`
   - `pendingFolderExpansionID`
+- SwiftUI `onDrag` 没有可靠的全局 drag ended 回调，因此不要把 `draggingFolderID` 当作最终权限判断；`performDrop` 解码出的 payload 和 storage 层校验才是最终事实。
 
 Validation:
 
@@ -248,7 +251,7 @@ Manual QA:
 Files:
 
 - Modify: `Momento/Features/Sidebar/MomentoSidebarView.swift`
-- Modify: `Momento/AppKitBridge/AssetFilePromiseProvider.swift`
+- Inspect/Test: `Momento/AppKitBridge/AssetFilePromiseProvider.swift`
 - Create: `MomentoTests/DragPasteboardWriterTests.swift`
 
 Implementation:
@@ -256,6 +259,7 @@ Implementation:
 - 先不新增 AppKit receiver。
 - 确认 `AssetFilePromiseProvider.writableTypes(for:)` 包含 `AssetDragPasteboardWriter.assetIDsPasteboardType`。
 - 确认 `pasteboardPropertyList(forType:)` 返回的 Data 能解码为 `AssetDragPasteboardPayload`。
+- 只有测试证明 payload 写入不完整时才修改 `AssetFilePromiseProvider`；如果现有实现已经正确，不做无关改动。
 - `MomentoSidebarAssetDropDelegate.performDrop` 继续只在 `performDrop` 中读取 provider。
 - 解码后必须校验：
   - payload.libraryID == currentLibraryID
@@ -356,5 +360,6 @@ git diff --check
 - 自动测试覆盖 UTI 声明、folder resolver、payload 编解码、持久化写入。
 - 手动 QA 覆盖文件夹排序、嵌套、root drop、悬停展开、图片拖到文件夹。
 - 没有新增 schema、依赖或缓存。
+- 没有扩大业务 API、store public contract 或持久化格式。
 - 没有两个 drop handler 同时处理同一种 payload。
 - `xcodebuild build` 和 `git diff --check` 通过。
