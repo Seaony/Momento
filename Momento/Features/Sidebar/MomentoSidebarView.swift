@@ -30,7 +30,6 @@ private enum MomentoSidebarMenuMetrics {
     static let folderDisclosureHitHeight: CGFloat = 30
     static let folderRowHeight: CGFloat = 30
     static let folderDropEdgeZoneHeight: CGFloat = 8
-    static let folderDropInsertionTargetHeight: CGFloat = 4
     static let folderDropIndicatorHeight: CGFloat = 2
     static let folderRootDropTargetHeight: CGFloat = 18
     static let libraryMoreMenuWidth: CGFloat = 176
@@ -72,7 +71,6 @@ struct MomentoSidebarView: View {
     @State private var isRootFolderDropTargeted = false
     @State private var draggingFolderID: AssetFolder.ID?
     @State private var pendingFolderExpansionID: AssetFolder.ID?
-    @State private var springLoadedFolderDropID: AssetFolder.ID?
     @State private var isFolderSectionHovered = false
     @State private var isFolderSectionExpanded = true
     @State private var expandedFolderIDs: Set<AssetFolder.ID> = []
@@ -400,13 +398,11 @@ struct MomentoSidebarView: View {
                     emptyFolderPlaceholder
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 } else {
-                    let rows = visibleFolderRows
-                    let rowsByID = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0) })
-
                     VStack(alignment: .leading, spacing: 0) {
-                        ForEach(MomentoSidebarFolderDropSurfaceResolver.surfaces(folderIDs: rows.map(\.id))) { surface in
-                            folderDropSurface(surface, rowsByID: rowsByID)
+                        ForEach(visibleFolderRows) { row in
+                            folderRow(row)
                         }
+                        folderRootDropTarget
                     }
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
@@ -439,45 +435,6 @@ struct MomentoSidebarView: View {
             return lhs.createdAt < rhs.createdAt
         }
         return lhs.sortIndex < rhs.sortIndex
-    }
-
-    @ViewBuilder
-    private func folderDropSurface(
-        _ surface: MomentoSidebarFolderDropSurface,
-        rowsByID: [AssetFolder.ID: MomentoSidebarFolderRow]
-    ) -> some View {
-        switch surface {
-        case .insertionBefore(let folderID):
-            if let row = rowsByID[folderID] {
-                folderInsertionDropTarget(before: row)
-            }
-        case .folder(let folderID):
-            if let row = rowsByID[folderID] {
-                folderRow(row)
-            }
-        case .rootEnd:
-            folderRootDropTarget
-        }
-    }
-
-    private func folderInsertionDropTarget(before row: MomentoSidebarFolderRow) -> some View {
-        Color.clear
-            .frame(height: MomentoSidebarMenuMetrics.folderDropInsertionTargetHeight)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .onDrop(of: [FolderDragPasteboardWriter.folderIDUTType], delegate: MomentoSidebarFolderDropDelegate(
-                currentLibraryID: currentLibraryID,
-                row: row,
-                folders: folders,
-                fixedPlacement: .before,
-                draggingFolderID: $draggingFolderID,
-                targetedFolderDrop: $targetedFolderDrop,
-                springLoadedFolderDropID: $springLoadedFolderDropID,
-                onScheduleExpansion: scheduleFolderExpansionAfterDropHover,
-                onClearExpansion: clearPendingFolderExpansion,
-                onExpandFolder: expandFolderAfterDrop,
-                onMoveFolder: onMoveFolder
-            ))
     }
 
     private func folderRow(_ row: MomentoSidebarFolderRow) -> some View {
@@ -578,21 +535,28 @@ struct MomentoSidebarView: View {
         } preview: {
             folderDragPreview(row)
         }
-        .onDrop(of: [FolderDragPasteboardWriter.folderIDUTType], delegate: MomentoSidebarFolderDropDelegate(
-            currentLibraryID: currentLibraryID,
-            row: row,
-            folders: folders,
-            fixedPlacement: nil,
-            draggingFolderID: $draggingFolderID,
-            targetedFolderDrop: $targetedFolderDrop,
-            springLoadedFolderDropID: $springLoadedFolderDropID,
-            onScheduleExpansion: scheduleFolderExpansionAfterDropHover,
-            onClearExpansion: clearPendingFolderExpansion,
-            onExpandFolder: expandFolderAfterDrop,
-            onMoveFolder: onMoveFolder
-        ))
+        .overlay {
+            folderDropOverlay(row)
+        }
         .help(folder.name)
         .accessibilityLabel(folder.name)
+    }
+
+    private func folderDropOverlay(_ row: MomentoSidebarFolderRow) -> some View {
+        Color.clear
+            .contentShape(Rectangle())
+            .onDrop(of: [FolderDragPasteboardWriter.folderIDUTType], delegate: MomentoSidebarFolderDropDelegate(
+                currentLibraryID: currentLibraryID,
+                row: row,
+                folders: folders,
+                draggingFolderID: $draggingFolderID,
+                targetedFolderDrop: $targetedFolderDrop,
+                onScheduleExpansion: scheduleFolderExpansionAfterDropHover,
+                onClearExpansion: clearPendingFolderExpansion,
+                onExpandFolder: expandFolderAfterDrop,
+                onMoveFolder: onMoveFolder
+            ))
+            .allowsHitTesting(draggingFolderID != nil && draggingFolderID != row.folder.id)
     }
 
     private var folderRootDropTarget: some View {
@@ -613,15 +577,15 @@ struct MomentoSidebarView: View {
             ))
     }
 
-    @ViewBuilder
     private func folderDropIndicator(depth: Int, isVisible: Bool) -> some View {
-        if isVisible {
-            Capsule()
-                .fill(Color.accentColor)
-                .frame(height: MomentoSidebarMenuMetrics.folderDropIndicatorHeight)
-                .padding(.leading, CGFloat(depth) * 18 + 28)
-                .padding(.trailing, 8)
-        }
+        Capsule()
+            .fill(Color.accentColor)
+            .frame(height: MomentoSidebarMenuMetrics.folderDropIndicatorHeight)
+            .padding(.leading, CGFloat(depth) * 18 + 28)
+            .padding(.trailing, 8)
+            .opacity(isVisible ? 1 : 0)
+            .allowsHitTesting(false)
+            .animation(.smooth(duration: 0.12), value: isVisible)
     }
 
     private func folderDragPreview(_ row: MomentoSidebarFolderRow) -> some View {
@@ -658,7 +622,6 @@ struct MomentoSidebarView: View {
 
             withAnimation(.smooth(duration: 0.16)) {
                 _ = expandedFolderIDs.insert(folderID)
-                springLoadedFolderDropID = folderID
             }
         }
     }
@@ -666,10 +629,6 @@ struct MomentoSidebarView: View {
     private func clearPendingFolderExpansion(_ folderID: AssetFolder.ID?) {
         if folderID == nil || pendingFolderExpansionID == folderID {
             pendingFolderExpansionID = nil
-        }
-
-        if folderID == nil || springLoadedFolderDropID == folderID {
-            springLoadedFolderDropID = nil
         }
     }
 
@@ -1020,34 +979,6 @@ private struct MomentoSidebarFolderRow: Identifiable {
     var id: AssetFolder.ID { folder.id }
 }
 
-nonisolated enum MomentoSidebarFolderDropSurface: Equatable, Identifiable {
-    case insertionBefore(AssetFolder.ID)
-    case folder(AssetFolder.ID)
-    case rootEnd
-
-    var id: String {
-        switch self {
-        case .insertionBefore(let folderID):
-            return "insert-before-\(folderID)"
-        case .folder(let folderID):
-            return "folder-\(folderID)"
-        case .rootEnd:
-            return "root-end"
-        }
-    }
-}
-
-nonisolated enum MomentoSidebarFolderDropSurfaceResolver {
-    static func surfaces(folderIDs: [AssetFolder.ID]) -> [MomentoSidebarFolderDropSurface] {
-        folderIDs.flatMap { folderID in
-            [
-                MomentoSidebarFolderDropSurface.insertionBefore(folderID),
-                MomentoSidebarFolderDropSurface.folder(folderID)
-            ]
-        } + [.rootEnd]
-    }
-}
-
 nonisolated enum MomentoSidebarFolderDropPlacement: Equatable {
     case before
     case into
@@ -1071,52 +1002,6 @@ nonisolated enum MomentoSidebarFolderDropPlacementResolver {
         }
 
         return .into
-    }
-
-    static func effectivePlacement(
-        rawPlacement: MomentoSidebarFolderDropPlacement,
-        draggedID: AssetFolder.ID,
-        targetFolder: AssetFolder,
-        folders: [AssetFolder],
-        prefersNesting: Bool
-    ) -> MomentoSidebarFolderDropPlacement {
-        guard rawPlacement == .into else {
-            return rawPlacement
-        }
-
-        if prefersNesting {
-            return .into
-        }
-
-        guard let draggedFolder = folders.first(where: { $0.id == draggedID }),
-              draggedFolder.parentID == targetFolder.parentID,
-              let draggedIndex = siblingIndex(folderID: draggedID, folders: folders),
-              let targetIndex = siblingIndex(folderID: targetFolder.id, folders: folders),
-              draggedIndex != targetIndex else {
-            return rawPlacement
-        }
-
-        return draggedIndex < targetIndex ? .after : .before
-    }
-
-    private static func siblingIndex(
-        folderID: AssetFolder.ID,
-        folders: [AssetFolder]
-    ) -> Int? {
-        let parentID = folders.first(where: { $0.id == folderID })?.parentID
-        let siblings = folders
-            .filter { $0.parentID == parentID }
-            .sorted { lhs, rhs in
-                if lhs.sortIndex != rhs.sortIndex {
-                    return lhs.sortIndex < rhs.sortIndex
-                }
-                if lhs.createdAt != rhs.createdAt {
-                    return lhs.createdAt < rhs.createdAt
-                }
-                return false
-            }
-
-        return siblings.firstIndex(where: { $0.id == folderID })
     }
 }
 
@@ -1211,10 +1096,8 @@ private struct MomentoSidebarFolderDropDelegate: DropDelegate {
     var currentLibraryID: AssetLibrary.ID?
     var row: MomentoSidebarFolderRow
     var folders: [AssetFolder]
-    var fixedPlacement: MomentoSidebarFolderDropPlacement?
     @Binding var draggingFolderID: AssetFolder.ID?
     @Binding var targetedFolderDrop: MomentoSidebarFolderDropTarget?
-    @Binding var springLoadedFolderDropID: AssetFolder.ID?
     var onScheduleExpansion: (AssetFolder.ID) -> Void
     var onClearExpansion: (AssetFolder.ID?) -> Void
     var onExpandFolder: (AssetFolder.ID) -> Void
@@ -1278,8 +1161,7 @@ private struct MomentoSidebarFolderDropDelegate: DropDelegate {
     }
 
     private func updateTarget(info: DropInfo) -> Bool {
-        let rawPlacement = rawDropPlacement(info: info)
-        let placement = dropPlacement(rawPlacement: rawPlacement)
+        let placement = dropPlacement(info: info)
         guard validateDrop(info: info),
               let draggingFolderID,
               moveCommand(for: draggingFolderID, placement: placement) != nil else {
@@ -1288,11 +1170,9 @@ private struct MomentoSidebarFolderDropDelegate: DropDelegate {
             return false
         }
 
-        withAnimation(.smooth(duration: 0.12)) {
-            targetedFolderDrop = MomentoSidebarFolderDropTarget(folderID: row.folder.id, placement: placement)
-        }
+        targetedFolderDrop = MomentoSidebarFolderDropTarget(folderID: row.folder.id, placement: placement)
 
-        if rawPlacement == .into {
+        if placement == .into {
             onScheduleExpansion(row.folder.id)
         } else {
             onClearExpansion(row.folder.id)
@@ -1306,39 +1186,14 @@ private struct MomentoSidebarFolderDropDelegate: DropDelegate {
             return
         }
 
-        withAnimation(.smooth(duration: 0.12)) {
-            targetedFolderDrop = nil
-        }
+        targetedFolderDrop = nil
     }
 
     private func dropPlacement(info: DropInfo) -> MomentoSidebarFolderDropPlacement {
-        dropPlacement(rawPlacement: rawDropPlacement(info: info))
-    }
-
-    private func rawDropPlacement(info: DropInfo) -> MomentoSidebarFolderDropPlacement {
-        if let fixedPlacement {
-            return fixedPlacement
-        }
-
-        return MomentoSidebarFolderDropPlacementResolver.placement(
+        MomentoSidebarFolderDropPlacementResolver.placement(
             localY: info.location.y,
             rowHeight: MomentoSidebarMenuMetrics.folderRowHeight,
             edgeZoneHeight: MomentoSidebarMenuMetrics.folderDropEdgeZoneHeight
-        )
-    }
-
-    private func dropPlacement(rawPlacement: MomentoSidebarFolderDropPlacement) -> MomentoSidebarFolderDropPlacement {
-        guard let draggingFolderID else {
-            return rawPlacement
-        }
-
-        let prefersNesting = rawPlacement == .into && springLoadedFolderDropID == row.folder.id
-        return MomentoSidebarFolderDropPlacementResolver.effectivePlacement(
-            rawPlacement: rawPlacement,
-            draggedID: draggingFolderID,
-            targetFolder: row.folder,
-            folders: folders,
-            prefersNesting: prefersNesting
         )
     }
 
@@ -1426,9 +1281,7 @@ private struct MomentoSidebarRootFolderDropDelegate: DropDelegate {
         }
 
         onClearExpansion(nil)
-        withAnimation(.smooth(duration: 0.12)) {
-            isTargeted = true
-        }
+        isTargeted = true
         return true
     }
 
@@ -1437,9 +1290,7 @@ private struct MomentoSidebarRootFolderDropDelegate: DropDelegate {
             return
         }
 
-        withAnimation(.smooth(duration: 0.12)) {
-            isTargeted = false
-        }
+        isTargeted = false
     }
 
     private func moveCommand(for draggedID: AssetFolder.ID) -> MomentoSidebarFolderMoveCommand? {

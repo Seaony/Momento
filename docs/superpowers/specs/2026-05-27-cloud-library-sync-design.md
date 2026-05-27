@@ -17,7 +17,7 @@ The recommended design is a CloudKit-backed library model:
 - A local SQLite/Core Data cache keeps each device usable offline and keeps the existing UI model mostly intact.
 - Original files are immutable content-addressed blobs keyed by SHA-256.
 - Thumbnails/previews are caches. A cloud thumbnail may be uploaded for first-screen speed, but it is never authoritative.
-- Local libraries continue to use the existing `.momento` package with no iCloud behavior.
+- Local libraries continue to use the existing `.momento` package with no iCloud behavior. iOS does not implement `.momento` package opening in v1; iOS only consumes cloud libraries.
 
 ## Current Project Baseline
 
@@ -237,6 +237,65 @@ Rules:
 - Each cached record stores the latest known CloudKit record change tag needed for conflict detection.
 - Do not introduce a separate general-purpose operation log in the first version. Start with per-record dirty/error state plus persisted CKSyncEngine state. Add a semantic operation table only if a real recovery case cannot be represented by dirty records and tombstones.
 
+### Local Cache Schema
+
+The cloud cache uses a dedicated Core Data model `MomentoCloudModel.xcdatamodeld`, separate from the existing local-package `MomentoModel`. This separation is required because:
+
+- CloudKit-mirrored data cannot use Core Data uniqueness constraints (Apple documents this restriction for `NSPersistentCloudKitContainer`-compatible models). The current `MomentoModel` relies on `(libraryID, contentHash)` uniqueness; keeping it for local packages and using a constraint-free schema for the cloud cache avoids destabilizing the local path.
+- The cloud cache needs additional columns (availability, dirty/error state, record change tag, system field blob) that do not exist on the local-package model. Adding them to a shared schema would force migrations on existing local libraries for no reason.
+
+Cloud cache entities mirror cloud records one-to-one, plus per-record sync state. Indexed fields are noted; nothing has a uniqueness constraint.
+
+```text
+CachedCloudLibrary
+- libraryID (indexed)
+- displayName, zoneName, createdAt, updatedAt, deletedAt?, schemaVersion
+- syncState: synced | syncing | error
+- lastError?
+
+CachedCloudAsset
+- libraryID (indexed)
+- assetID = contentHash (indexed, NOT a constraint; dedupe enforced at insert time)
+- displayName, originalFileName, fileExtension, utiIdentifier, kind
+- byteSize, pixelWidth?, pixelHeight?, orientation?, colorProfileName?
+- sourcePageURL?, note?, isFavorite, isTrashed, trashedAt?
+- importedAt, updatedAt, deletedAt?
+- ckRecordChangeTag?         // refreshed after every successful save
+- ckSystemFieldsBlob?        // encoded CKRecord system fields
+- isDirty                    // set on local edit, cleared on CKSyncEngine confirmation
+- dirtyFields                // comma-joined field names since last sync (for LWW merge)
+- lastError?
+- originalAvailability       // local | downloading | remoteOnly | uploadPending | uploadFailed | missing
+- thumbnailAvailability      // local | downloading | remoteOnly | generationPending | failed | missing
+
+CachedCloudAssetBlob
+- libraryID, contentHash (composite index)
+- byteSize, fileExtension, utiIdentifier
+- originalLocalPath?         // assets/<prefix>/<hash>.<ext> when downloaded
+- thumbnailLocalPath?
+- createdAt, lastReferencedAt
+- ckRecordChangeTag?, ckSystemFieldsBlob?, isDirty, lastError?
+
+CachedCloudFolder / CachedCloudTag
+- mirror the cloud schema fields exactly
+- plus: ckRecordChangeTag?, ckSystemFieldsBlob?, isDirty, dirtyFields, lastError?
+
+CachedCloudFolderMembership / CachedCloudTagMembership
+- mirror the cloud schema fields exactly
+- plus: ckRecordChangeTag?, ckSystemFieldsBlob?, isDirty, lastError?
+- no dirtyFields column: memberships are insert-or-tombstone, no scalar merge
+```
+
+Rules:
+
+- `ckSystemFieldsBlob` stores `CKRecord.encodeSystemFields(with:)` output; CKSyncEngine requires it to reconstruct records after app relaunch without refetching from the server.
+- `ckRecordChangeTag` is read for `.ifServerRecordUnchanged` save policy on every save (see "LWW Merge Algorithm").
+- `isDirty` plus `dirtyFields` are read by both the UI (to show pending state) and the sync code (to know what to merge on conflict).
+- `originalAvailability` / `thumbnailAvailability` are persisted (not derived) so UI does not need to re-stat the filesystem on every list refresh.
+- Deletions are tombstones (`deletedAt`), not row removals; GC is co-scheduled with the corresponding cloud record GC after the grace period.
+
+UI continues to read value-type `AssetItem`s through a cloud-aware reader (see "Local Model Adjustments for Cloud Mode" below).
+
 ### Cloud Record Schema
 
 Use explicit CloudKit records rather than mirrored Core Data entities.
@@ -334,6 +393,17 @@ Design choices:
 - Define queryable/sortable CloudKit indexes before production promotion for fields used in discovery and sync-related queries, especially `libraryID`, `deletedAt`, `updatedAt`, `contentHash`, and normalized tag/folder names where queried.
 - Deduplicate blobs only within one cloud library in the first version. Cross-library blob dedupe would complicate ownership, delete rules, and future sharing, and it is not required for the Mac/iOS sync goal.
 
+### Schema Forward Compatibility
+
+CloudKit production schemas can only evolve forward (see Official Documentation Findings). Multiple Momento versions will coexist on the user's devices; the schema rules below ensure an older client meeting a newer record does not corrupt or drop data.
+
+- **Unknown record types**: render as inert placeholder in lists ("This asset requires a newer Momento") and never apply local mutations. CloudKit retains unknown record types as-is on the server.
+- **Unknown fields on known record types**: CloudKit preserves unknown fields automatically **only when the save policy is `.ifServerRecordUnchanged`** and the client merges into the server record. Save policies `.allKeys` and `.changedKeys` discard unknown fields. The implementation must use `.ifServerRecordUnchanged` for all saves; this is a hard rule, not a default. See "LWW Merge Algorithm" for the exact merge procedure.
+- **Per-library schema version**: the `schemaVersion` field on `CloudLibrary` is the per-library schema. If `library.schemaVersion > clientMaxSupportedSchemaVersion`, the library is read-only on this client with a UI warning ("Open <Library> on a newer Momento to edit").
+- **Field deprecation**: removing a field from the cloud production schema is not allowed by CloudKit. Deprecate semantically (stop writing, document the move) but keep the field readable.
+- **Index changes**: adding queryable/sortable indexes is allowed and must go through the Phase 2 schema/index checklist before production promotion.
+- **Breaking changes**: would require a new container identifier and explicit data migration; treat this as a v2-major version, not a routine schema change.
+
 ### Local Model Adjustments for Cloud Mode
 
 The current UI-facing `AssetItem` has `storageURL` and optional `thumbnailURL`, which works for local packages because the original file exists inside the opened `.momento` package. Cloud metadata can arrive before the original file is downloaded, so cloud mode needs an explicit availability layer.
@@ -368,6 +438,27 @@ However, large image workflows need an explicit guardrail:
 
 This is a deliberate correction to the earlier simple "store every original as CKAsset" idea. CKAsset is still the default, but upload eligibility must be enforced.
 
+#### CKAsset Lifecycle Rules
+
+CKAsset file handling has narrow contracts. The implementation must enforce all of the following:
+
+**Upload**
+
+- `CKAsset(fileURL:)` requires the file to remain readable at the supplied URL until `CKModifyRecordsOperation` completes. Point `CKAsset` at the canonical `assets/<prefix>/<hash>.<ext>` path inside the cloud cache, not a temporary copy that may be deleted concurrently.
+- If a `CachedCloudAssetBlob` row is deleted or replaced mid-upload, the upload must either complete or fail atomically before the underlying file is removed. Wrap delete with a check on `isDirty` / in-flight upload state.
+
+**Download**
+
+- CloudKit downloads stage asset files in a system-managed temporary location. The `fileURL` returned in `recordChanged` events is **not persistent across app launches** and may be cleaned up by the system at any time.
+- Synchronously copy downloaded `CKAsset` files into `assets/<prefix>/<hash>.<ext>` inside the cloud cache during the same `recordChanged` callback, before signalling `originalAvailability = local`.
+- After copy, recompute SHA-256 and verify it matches the `contentHash` field on the cloud record. CloudKit does not guarantee binary integrity end-to-end; a mismatched download must be discarded and re-fetched.
+
+**Failure handling**
+
+- Hash mismatch on download: discard the file, keep `originalAvailability = downloading` with a `lastError`, schedule retry with backoff.
+- Download timeout: keep `originalAvailability = remoteOnly`; surface the failure only if the user explicitly triggered the download (preview/export/drag).
+- Upload failure after the local file is created: set `originalAvailability = uploadFailed` with a `lastError`. Do not silently retry — wait for next CKSyncEngine send event or user-triggered retry.
+
 ### Scale Policy
 
 Momento's local UI is designed for large libraries, but cloud sync must prove its own scale separately.
@@ -379,13 +470,54 @@ Rules:
 - The first cloud release may set conservative limits for cloud-library count, per-library asset count, total byte size, and per-file byte size. These limits should be documented in the UI and adjusted only after measurement.
 - Cloud browsing should support metadata pagination/incremental loading from the local cache. Do not block opening a cloud library until every original has downloaded.
 
+### Entitlements & CloudKit Container
+
+CloudKit access requires explicit entitlements on both macOS and iOS app targets. The current `Momento.entitlements` only has sandbox/network keys; cloud mode is blocked until the following are wired up. This is a Phase 1 prerequisite.
+
+CloudKit container:
+
+- Container identifier: `iCloud.com.seaony.Momento` (single container shared by Mac + iOS).
+- Configured in Xcode → Signing & Capabilities → iCloud → CloudKit, and managed in the CloudKit Console.
+- Container schema must be promoted from Development to Production before public release; this is a one-way operation and a hard release gate.
+
+Required entitlements (both macOS and iOS targets):
+
+```xml
+<key>com.apple.developer.icloud-services</key>
+<array>
+    <string>CloudKit</string>
+</array>
+<key>com.apple.developer.icloud-container-identifiers</key>
+<array>
+    <string>iCloud.com.seaony.Momento</string>
+</array>
+<key>aps-environment</key>
+<string>development</string>
+```
+
+For release builds the `aps-environment` value becomes `production`. This is done at build configuration level, not at runtime.
+
+Sandbox interaction:
+
+- macOS keeps `com.apple.security.app-sandbox`. CloudKit access is compatible with App Sandbox; no additional exception is needed.
+- `com.apple.security.network.client` is already present and is required for CloudKit traffic.
+
+Provisioning:
+
+- The CloudKit container must be added to both macOS and iOS app IDs in the developer portal.
+- Provisioning profile regeneration is required whenever the entitlements change.
+
+Background remote notifications:
+
+- Required for CKSyncEngine to receive push-driven sync. See "Remote Notifications Setup" below.
+
 ### Sync Engine
 
-Use `CKSyncEngine` for cloud libraries when deployment targets allow it.
+Deployment targets are macOS 26 and iOS 26, both confirmed before Phase 0. `CKSyncEngine` is the sole sync transport; no manual `CKFetchRecordZoneChangesOperation`+token fallback is implemented.
 
 Responsibilities:
 
-- Initialize the sync engine early for the private database.
+- Initialize the sync engine early for the private database, after `ubiquityIdentityToken` validation (see "Account Identity Binding").
 - Use one sync engine for the user's private database in production. Do not create one engine per library zone.
 - Persist sync-engine state at the account/private-database level, not inside an individual library cache.
 - Ensure `MomentoCatalog` and any opened library zones exist before writing records.
@@ -396,12 +528,28 @@ Responsibilities:
 - Handle account changes, zone deletion, partial failures, retryable errors, non-retryable errors, and server conflicts.
 - Provide observable sync state for UI.
 
-Fallback if CKSyncEngine is unavailable on the chosen iOS target:
+If a future deployment-target reduction ever makes CKSyncEngine unavailable, that would be a separate v2 design — do not stub the manual transport into v1 "just in case".
 
-- Use `CKFetchDatabaseChangesOperation`, `CKFetchRecordZoneChangesOperation`, server change tokens, and record-zone subscriptions manually.
-- Keep the same local cache and record schema.
+### Remote Notifications Setup
 
-Given the current macOS target is modern, CKSyncEngine should be the default unless the iOS deployment target forces otherwise. Do not implement CKSyncEngine and the manual fallback in parallel for v1; Phase 0 must choose one sync transport.
+CKSyncEngine relies on silent remote notifications to drive incremental sync. This is a Phase 2 prerequisite.
+
+Setup:
+
+- `aps-environment` entitlement (see "Entitlements & CloudKit Container").
+- macOS: call `NSApplication.shared.registerForRemoteNotifications()` after app launch. Implement `application(_:didRegisterForRemoteNotificationsWithDeviceToken:)` (CloudKit does not require the token to be forwarded anywhere, but registration must complete).
+- iOS: same registration via `UIApplication`, plus `UIBackgroundModes` in `Info.plist` containing `remote-notification`.
+- Both targets: implement `application(_:didReceiveRemoteNotification:fetchCompletionHandler:)` and forward the payload to CKSyncEngine via its standard push handler.
+
+Subscriptions:
+
+- CKSyncEngine creates and maintains database/zone subscriptions automatically when sync engine state is persisted. Do not create `CKQuerySubscription` or `CKRecordZoneSubscription` manually in v1.
+- If CKSyncEngine reports a missing subscription error, treat it as a recoverable initialization step, not a hard failure — let the engine recreate it.
+
+User permission:
+
+- Silent CloudKit pushes do not require the user-facing notification permission. The app must not prompt for notification permission solely for sync purposes.
+- If the app later adds user-visible notifications, that requires a separate permission flow.
 
 ## Mutation Flow
 
@@ -475,15 +623,86 @@ The first version should use simple, explicit conflict rules:
 
 More advanced CRDT-style merging is not justified for the first implementation. It would be over-designed for this product stage and would complicate debugging. The design instead chooses smaller records and clear tombstones.
 
+### LWW Merge Algorithm
+
+Server-versioned last-writer-wins is implemented through CloudKit's `.ifServerRecordUnchanged` save policy plus field-level merging. The algorithm is identical for every scalar conflict (display name, note, favorite, folder rename/move, trash flag):
+
+```text
+saveDirtyRecord(localRecord):
+  for attempt in 1...3:
+    ckRecord = localRecord.toCKRecord(systemFieldsBlob: localRecord.ckSystemFieldsBlob)
+    operation = CKModifyRecordsOperation(recordsToSave: [ckRecord])
+    operation.savePolicy = .ifServerRecordUnchanged
+
+    on success(savedRecord):
+      localRecord.ckRecordChangeTag = savedRecord.recordChangeTag
+      localRecord.ckSystemFieldsBlob = encode(savedRecord)
+      localRecord.isDirty = false
+      localRecord.dirtyFields = []
+      localRecord.lastError = nil
+      return
+
+    on CKError.serverRecordChanged(serverRecord, _):
+      # take server as base, apply only locally-dirty fields
+      merged = serverRecord.copy()
+      for field in localRecord.dirtyFields:
+        merged[field] = localRecord[field]
+      ckRecord = merged
+      # loop continues with refreshed change tag
+
+    on retryable error (network, throttle, zoneBusy):
+      schedule retry after CKError.retryAfterSeconds (or default backoff)
+      return  # CKSyncEngine will re-drive
+
+    on non-retryable error (quotaExceeded, badContainer, permissionFailure):
+      localRecord.isDirty = true  (keep)
+      localRecord.lastError = error
+      surface in UI
+      return
+
+  # exhausted attempts
+  localRecord.lastError = "merge conflict, please retry"
+  surface in UI for manual intervention
+```
+
+Required invariants:
+
+- **Save policy is always `.ifServerRecordUnchanged`.** Never use `.allKeys` or `.changedKeys`; those discard unknown fields and break schema forward compatibility.
+- **Field-level dirty tracking is required.** A record cannot just save "everything I have" because that clobbers server fields the client never observed. Each `CachedCloud*` entity stores `dirtyFields` and clears it on success.
+- **Unknown fields on the server record pass through unchanged** because the merge only writes locally-dirty fields and leaves the rest as the server returned them.
+- **Membership records skip this algorithm.** `CloudFolderMembership` / `CloudTagMembership` are insert-with-tombstone, so concurrent inserts/deletes commute naturally — no field merging needed.
+
 ## iCloud Account and Offline Behavior
+
+### Account Identity Binding
+
+Cloud cache and CKSyncEngine state must be bound to the signed-in iCloud account so that switching accounts cannot mix identities. The binding key is `FileManager.default.ubiquityIdentityToken`:
+
+- The token is an opaque `NSCoding` value that uniquely identifies the iCloud account on the device.
+- Serialize via `NSKeyedArchiver` to `Application Support/Momento/CloudSync/account-identity.bin`.
+- On every app launch and on `NSUbiquityIdentityDidChangeNotification`, compare the current token against the persisted one.
+- `CKContainer.userRecordID()` is **not** used as the binding key — it is async, container-scoped, slower than the system token, and unavailable before CloudKit network calls succeed.
+
+State transitions:
+
+| Persisted token | Current token | Behavior |
+|---|---|---|
+| absent | present | First sign-in. Persist token, create cloud cache directory and sync engine state. |
+| present, A | present, A | Continue as normal. |
+| present, A | present, B | Account switched. Block cloud writes immediately. Surface "iCloud account changed" UI with two options: "Sign back in to <previous>" (read-only access to existing cache until restored) or "Reset cloud cache" (destructive, clearly labeled). |
+| present, A | absent | Signed out. Block cloud writes. Keep cloud cache read-only and visible. Restore on re-sign-in if token matches. |
+
+`NSUbiquityIdentityDidChangeNotification` must be observed for the entire app lifetime, not just at launch. Mid-session account changes must trigger the same block.
+
+### Connectivity and Quota Cases
 
 Cases:
 
 - No iCloud account: cloud libraries cannot be created or synced.
 - Same iCloud account, offline network: allow local cloud-library writes and keep CKSyncEngine pending changes until network returns.
 - Account temporarily unavailable: keep cached cloud libraries visible, but show sync blocked state.
-- Account switched: do not open previous account's cloud cache as writable. Require resync or explicit cache reset.
-- iCloud quota exceeded: keep local changes pending, show quota/upload failure, and do not claim sync success.
+- Account switched: do not open previous account's cloud cache as writable. See Account Identity Binding table above.
+- iCloud quota exceeded: keep local changes pending, show quota/upload failure, and do not claim sync success. Note: CloudKit does not provide a quota query API; quota state is detected only on `CKError.quotaExceeded` from a write attempt.
 
 The UI needs at least these sync states:
 
@@ -524,20 +743,31 @@ Why:
 - Makes failures recoverable.
 - Keeps local and cloud lifecycle rules separate.
 
-Export remains the inverse: cloud library can be exported to a local `.momento` package after all required originals are downloaded.
+Export remains the inverse: cloud library can be exported to a local `.momento` package after all required originals are downloaded. Export is Mac-only in v1, matching local library access scope.
 
 ## Implementation Phasing
 
 ### Phase 0: Technical Spikes and Release Gates
 
-- Confirm iOS deployment target and CKSyncEngine availability.
-- Confirm CloudKit container identifier, entitlements, remote notifications, and provisioning setup.
-- Confirm the account identity key used to bind cloud caches and sync-engine state to the signed-in iCloud account.
+Pre-Phase-0 decisions (already made, recorded here for traceability):
+
+- macOS deployment target: 26.
+- iOS deployment target: 26.
+- CKSyncEngine is the only sync transport.
+- iOS v1 consumes cloud libraries only; iOS does not implement `.momento` package opening.
+- Account identity binding key: `FileManager.default.ubiquityIdentityToken`.
+- CloudKit container identifier: `iCloud.com.seaony.Momento`.
+
+Phase 0 spikes:
+
+- Wire up CloudKit entitlements, container, remote notifications, and provisioning on both macOS and iOS targets; verify a smoke-test record save/load round-trips between the two.
 - Validate catalog-zone plus per-library-zone creation, deletion, and sync behavior.
 - Validate one private-database sync engine handling catalog and per-library zones.
-- Measure CKAsset upload/download behavior with realistic file sizes and failure modes.
+- Validate `ubiquityIdentityToken` binding flow: sign in, sign out, account switch, mid-session change via `NSUbiquityIdentityDidChangeNotification`.
+- Measure CKAsset upload/download behavior with realistic file sizes and failure modes (including CKAsset re-hash verification after download).
 - Measure initial sync and local cache behavior with large synthetic libraries.
-- Define first-release cloud limits for file type, file size, cloud-library count, per-library asset count, and total cloud bytes.
+- Measure multi-library zone behavior (not just one big library) — see Finding 18.
+- Define first-release cloud limits for file type, file size, cloud-library count, per-library asset count, and total cloud bytes. Recommended starting baselines (revise after spike): ≤ 5k assets per library, ≤ 100 MB per file, ≤ 20 cloud libraries per account.
 - Define CloudKit schema/index checklist before production promotion.
 
 ### Phase 1: Storage Mode Foundation
@@ -781,9 +1011,9 @@ Counter case:
 
 Fix in design:
 
-- Phase 0 chooses one sync transport based on deployment target.
-- Prefer CKSyncEngine when available.
-- Keep the manual operation/token path as a documented fallback only if the chosen iOS target cannot use CKSyncEngine.
+- iOS 26 deployment target is confirmed pre-Phase-0; CKSyncEngine is the only transport.
+- The manual `CKFetchRecordZoneChangesOperation`+token path is not implemented in v1.
+- If a future minimum-OS reduction ever requires the manual path, treat it as a separate v2 design.
 
 ### Finding 18: Per-library zones need a library-count release gate
 
