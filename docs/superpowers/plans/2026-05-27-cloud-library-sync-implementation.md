@@ -17,20 +17,33 @@ This plan must not enable the iCloud create option until the Phase 0 gates pass.
 Current repository facts:
 
 - macOS target exists and uses `MACOSX_DEPLOYMENT_TARGET = 26.0`.
-- No iOS target exists in this repository.
+- No iOS target exists in this repository. The iOS app is a separate worktree at `/Users/seaony/code/Momento-iOS`.
+- `/Users/seaony/code/Momento-iOS` has an iOS `Momento` target with `IPHONEOS_DEPLOYMENT_TARGET = 26.5` and existing CloudKit model/service code.
+- `/Users/seaony/code/Momento-iOS/Momento/Core/CloudLibrarySyncTypes.swift` currently defines `CloudKitConfiguration.containerIdentifier = "iCloud.com.seaony.Momento"` and is the compatibility source for record names and schema fields.
 - `Momento/Momento.entitlements` has no CloudKit, iCloud container, or `aps-environment` key.
 - `Momento/Features/Library/MomentoCreateLibraryDialog.swift` intentionally disables the iCloud row.
 - `Momento/Core/LibraryStore.swift` rejects `.cloud` libraries with `cloudLibraryUnavailable`.
 
 External facts that code cannot safely invent:
 
-- Final CloudKit container identifier.
+- Final CloudKit container identifier in Apple Developer portal and Xcode Signing & Capabilities. The iOS code value alone is not enough.
 - Apple Developer portal container/app ID setup.
 - Provisioning profile regeneration.
-- iOS target name, bundle identifier, deployment target, and entitlements file.
+- iOS entitlements/provisioning status in `/Users/seaony/code/Momento-iOS`.
 - Real-device smoke test evidence.
 
 Stop and ask the user before changing entitlements or project signing settings if those values are not confirmed.
+
+## Cross-Repo Compatibility Rule
+
+macOS and iOS must write identical CloudKit record names, record types, zones, and field keys.
+
+Rules:
+
+- Treat `/Users/seaony/code/Momento-iOS/Momento/Core/CloudLibrarySyncTypes.swift` as the current iOS compatibility source until the shared model is extracted.
+- Do not modify `/Users/seaony/code/Momento-iOS` from this macOS implementation branch unless the user explicitly asks for cross-repo edits.
+- Any macOS CloudKit schema change must include a compatibility test proving it matches the iOS record naming behavior.
+- iOS currently has a dirty worktree. Read it for compatibility, but do not overwrite or revert its changes.
 
 ## Official Sources Checked
 
@@ -201,7 +214,7 @@ Key constraints from the sources:
 - Create: `docs/cloudkit-schema-checklist.md`
 - Test: `MomentoTests/CloudRecordIDBuilderTests.swift`
 
-- [ ] Step 1: Write tests for record names.
+- [x] Step 1: Write tests for record names.
 
   Cover:
 
@@ -212,7 +225,7 @@ Key constraints from the sources:
   - Catalog library records live in `MomentoCatalog`.
   - Asset/blob/folder/tag/membership records live in `MomentoLibrary-<libraryID>`.
 
-- [ ] Step 2: Implement record ID builder.
+- [x] Step 2: Implement record ID builder.
 
   Required functions:
 
@@ -228,7 +241,7 @@ Key constraints from the sources:
   static func tagMembershipRecordID(libraryID: String, assetID: String, tagID: String) -> CKRecord.ID
   ```
 
-- [ ] Step 3: Add schema constants.
+- [x] Step 3: Add schema constants.
 
   Record types:
 
@@ -240,11 +253,11 @@ Key constraints from the sources:
   - `CloudFolderMembership`
   - `CloudTagMembership`
 
-- [ ] Step 4: Write CloudKit schema checklist.
+- [x] Step 4: Write CloudKit schema checklist.
 
   Include every record type, field name, field type, queryable index, sortable index, and production-promotion gate.
 
-- [ ] Step 5: Run tests.
+- [x] Step 5: Run tests.
 
   ```bash
   xcodebuild test -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' -only-testing:MomentoTests/CloudRecordIDBuilderTests -derivedDataPath /tmp/MomentoDerivedData-cloud-records
@@ -782,7 +795,7 @@ Manual matrix:
 
 Risk: pretending this can be fully completed in the current macOS-only project would produce a Mac-only CloudKit path that does not prove the user's Mac/iOS requirement.
 
-Fix in plan: Phase 0 requires an iOS target decision and real cross-platform smoke test before cloud library UI is enabled.
+Fix in plan: iOS is tracked as a separate repo at `/Users/seaony/code/Momento-iOS`; Phase 0 now requires cross-repo compatibility checks plus real Mac/iOS smoke tests before cloud library UI is enabled.
 
 ### Finding 2: Entitlements and provisioning are external release gates.
 

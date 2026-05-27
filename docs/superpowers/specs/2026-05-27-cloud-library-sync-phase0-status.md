@@ -12,10 +12,10 @@ release-ready CloudKit integration.
 | Gate | Current evidence | Status |
 | --- | --- | --- |
 | macOS deployment target | `Momento.xcodeproj` targets macOS 26. | Known |
-| iOS target and deployment target | No iOS target is present in this repository. | Missing |
-| Final CloudKit container identifier | Proposed value is `iCloud.com.seaony.Momento`; not verified in Xcode or Apple Developer portal. | Missing |
+| iOS target and deployment target | iOS is in separate repo `/Users/seaony/code/Momento-iOS`; `xcodebuild -list` shows target `Momento`, and `project.pbxproj` has `IPHONEOS_DEPLOYMENT_TARGET = 26.5`. | Partial |
+| Final CloudKit container identifier | `/Users/seaony/code/Momento-iOS/Momento/Core/CloudLibrarySyncTypes.swift` uses `iCloud.com.seaony.Momento`; still not verified in Xcode Signing & Capabilities or Apple Developer portal. | Partial |
 | macOS CloudKit entitlements | `Momento/Momento.entitlements` has sandbox, file access, network, and Sparkle helper keys only. | Missing |
-| iOS CloudKit entitlements | No iOS target exists yet. | Missing |
+| iOS CloudKit entitlements | No `.entitlements` file or `CODE_SIGN_ENTITLEMENTS` setting was found in `/Users/seaony/code/Momento-iOS`; CloudKit code exists but signing capability is not verified. | Missing |
 | Remote-notification entitlement | `aps-environment` is not present. | Missing |
 | Provisioning profiles | Not verified. | Missing |
 | CKSyncEngine availability for iOS target | Cannot be confirmed until the iOS deployment target exists. | Missing |
@@ -25,7 +25,7 @@ release-ready CloudKit integration.
 | Large-library scale behavior | Not measured. | Missing |
 | Multi-library zone behavior | Not measured. | Missing |
 | First-release cloud limits | Seed values exist in the design only; no measured limits. | Missing |
-| CloudKit schema/index checklist | Not written. | Missing |
+| CloudKit schema/index checklist | Draft exists at `docs/cloudkit-schema-checklist.md`; CloudKit Console indexes are not verified. | Partial |
 
 ## Current Implementation Boundary
 
@@ -34,13 +34,16 @@ release-ready CloudKit integration.
 - Cloud library creation remains disabled in the create-library dialog.
 - `LibraryStore` still rejects opening, renaming, revealing, or deleting cloud
   placeholders as real libraries.
-- No CloudKit metadata records, zones, assets, subscriptions, or CKSyncEngine
-  state are implemented.
+- macOS now has CloudKit record naming/schema constants for compatibility with
+  the iOS repo. No CloudKit metadata records, zones, assets, subscriptions, or
+  CKSyncEngine state are implemented on macOS yet.
 - Local `.momento` package storage remains the only writable library backend.
 
 ## Required Before Enabling Cloud Libraries
 
-1. Add or confirm the iOS target and deployment target.
+1. Keep `/Users/seaony/code/Momento-iOS` as the iOS implementation source and
+   do not edit its dirty worktree from the macOS repo task unless explicitly
+   requested.
 2. Confirm the final CloudKit container identifier in Xcode and Apple Developer
    portal.
 3. Wire CloudKit and remote-notification entitlements on both macOS and iOS
