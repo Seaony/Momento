@@ -30,6 +30,7 @@ private enum MomentoSidebarMenuMetrics {
     static let folderDisclosureHitHeight: CGFloat = 30
     static let folderRowHeight: CGFloat = 30
     static let folderDropEdgeZoneHeight: CGFloat = 8
+    static let folderDropInsertionTargetHeight: CGFloat = 4
     static let folderDropIndicatorHeight: CGFloat = 2
     static let folderRootDropTargetHeight: CGFloat = 18
     static let libraryMoreMenuWidth: CGFloat = 176
@@ -399,12 +400,13 @@ struct MomentoSidebarView: View {
                     emptyFolderPlaceholder
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 } else {
-                    VStack(alignment: .leading, spacing: 2) {
-                        ForEach(visibleFolderRows) { row in
-                            folderRow(row)
-                        }
+                    let rows = visibleFolderRows
+                    let rowsByID = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0) })
 
-                        folderRootDropTarget
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(MomentoSidebarFolderDropSurfaceResolver.surfaces(folderIDs: rows.map(\.id))) { surface in
+                            folderDropSurface(surface, rowsByID: rowsByID)
+                        }
                     }
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
@@ -437,6 +439,45 @@ struct MomentoSidebarView: View {
             return lhs.createdAt < rhs.createdAt
         }
         return lhs.sortIndex < rhs.sortIndex
+    }
+
+    @ViewBuilder
+    private func folderDropSurface(
+        _ surface: MomentoSidebarFolderDropSurface,
+        rowsByID: [AssetFolder.ID: MomentoSidebarFolderRow]
+    ) -> some View {
+        switch surface {
+        case .insertionBefore(let folderID):
+            if let row = rowsByID[folderID] {
+                folderInsertionDropTarget(before: row)
+            }
+        case .folder(let folderID):
+            if let row = rowsByID[folderID] {
+                folderRow(row)
+            }
+        case .rootEnd:
+            folderRootDropTarget
+        }
+    }
+
+    private func folderInsertionDropTarget(before row: MomentoSidebarFolderRow) -> some View {
+        Color.clear
+            .frame(height: MomentoSidebarMenuMetrics.folderDropInsertionTargetHeight)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onDrop(of: [FolderDragPasteboardWriter.folderIDUTType], delegate: MomentoSidebarFolderDropDelegate(
+                currentLibraryID: currentLibraryID,
+                row: row,
+                folders: folders,
+                fixedPlacement: .before,
+                draggingFolderID: $draggingFolderID,
+                targetedFolderDrop: $targetedFolderDrop,
+                springLoadedFolderDropID: $springLoadedFolderDropID,
+                onScheduleExpansion: scheduleFolderExpansionAfterDropHover,
+                onClearExpansion: clearPendingFolderExpansion,
+                onExpandFolder: expandFolderAfterDrop,
+                onMoveFolder: onMoveFolder
+            ))
     }
 
     private func folderRow(_ row: MomentoSidebarFolderRow) -> some View {
@@ -541,6 +582,7 @@ struct MomentoSidebarView: View {
             currentLibraryID: currentLibraryID,
             row: row,
             folders: folders,
+            fixedPlacement: nil,
             draggingFolderID: $draggingFolderID,
             targetedFolderDrop: $targetedFolderDrop,
             springLoadedFolderDropID: $springLoadedFolderDropID,
@@ -978,6 +1020,34 @@ private struct MomentoSidebarFolderRow: Identifiable {
     var id: AssetFolder.ID { folder.id }
 }
 
+nonisolated enum MomentoSidebarFolderDropSurface: Equatable, Identifiable {
+    case insertionBefore(AssetFolder.ID)
+    case folder(AssetFolder.ID)
+    case rootEnd
+
+    var id: String {
+        switch self {
+        case .insertionBefore(let folderID):
+            return "insert-before-\(folderID)"
+        case .folder(let folderID):
+            return "folder-\(folderID)"
+        case .rootEnd:
+            return "root-end"
+        }
+    }
+}
+
+nonisolated enum MomentoSidebarFolderDropSurfaceResolver {
+    static func surfaces(folderIDs: [AssetFolder.ID]) -> [MomentoSidebarFolderDropSurface] {
+        folderIDs.flatMap { folderID in
+            [
+                MomentoSidebarFolderDropSurface.insertionBefore(folderID),
+                MomentoSidebarFolderDropSurface.folder(folderID)
+            ]
+        } + [.rootEnd]
+    }
+}
+
 nonisolated enum MomentoSidebarFolderDropPlacement: Equatable {
     case before
     case into
@@ -1010,7 +1080,11 @@ nonisolated enum MomentoSidebarFolderDropPlacementResolver {
         folders: [AssetFolder],
         prefersNesting: Bool
     ) -> MomentoSidebarFolderDropPlacement {
-        if rawPlacement == .into, prefersNesting {
+        guard rawPlacement == .into else {
+            return rawPlacement
+        }
+
+        if prefersNesting {
             return .into
         }
 
@@ -1137,6 +1211,7 @@ private struct MomentoSidebarFolderDropDelegate: DropDelegate {
     var currentLibraryID: AssetLibrary.ID?
     var row: MomentoSidebarFolderRow
     var folders: [AssetFolder]
+    var fixedPlacement: MomentoSidebarFolderDropPlacement?
     @Binding var draggingFolderID: AssetFolder.ID?
     @Binding var targetedFolderDrop: MomentoSidebarFolderDropTarget?
     @Binding var springLoadedFolderDropID: AssetFolder.ID?
@@ -1241,7 +1316,11 @@ private struct MomentoSidebarFolderDropDelegate: DropDelegate {
     }
 
     private func rawDropPlacement(info: DropInfo) -> MomentoSidebarFolderDropPlacement {
-        MomentoSidebarFolderDropPlacementResolver.placement(
+        if let fixedPlacement {
+            return fixedPlacement
+        }
+
+        return MomentoSidebarFolderDropPlacementResolver.placement(
             localY: info.location.y,
             rowHeight: MomentoSidebarMenuMetrics.folderRowHeight,
             edgeZoneHeight: MomentoSidebarMenuMetrics.folderDropEdgeZoneHeight

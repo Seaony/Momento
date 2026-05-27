@@ -2,6 +2,19 @@ import XCTest
 @testable import Momento
 
 final class SidebarFolderDropPlacementResolverTests: XCTestCase {
+    func testFolderDropSurfacesIncludeInsertionTargetBeforeEachVisibleFolder() {
+        XCTAssertEqual(
+            MomentoSidebarFolderDropSurfaceResolver.surfaces(folderIDs: ["alpha", "beta"]),
+            [
+                .insertionBefore("alpha"),
+                .folder("alpha"),
+                .insertionBefore("beta"),
+                .folder("beta"),
+                .rootEnd
+            ]
+        )
+    }
+
     func testTopEdgeMapsToBeforePlacement() {
         XCTAssertEqual(
             MomentoSidebarFolderDropPlacementResolver.placement(
@@ -53,7 +66,7 @@ final class SidebarFolderDropPlacementResolverTests: XCTestCase {
         )
     }
 
-    func testSameParentDragFromLowerSiblingKeepsBeforeTargetWhenRawPlacementIsAfter() {
+    func testExplicitAfterPlacementIsPreservedForSiblingDrop() {
         let folders = [
             folder(id: "alpha", sortIndex: 0),
             folder(id: "beta", sortIndex: 1)
@@ -64,6 +77,25 @@ final class SidebarFolderDropPlacementResolverTests: XCTestCase {
                 rawPlacement: .after,
                 draggedID: "beta",
                 targetFolder: folders[0],
+                folders: folders,
+                prefersNesting: false
+            ),
+            .after
+        )
+    }
+
+    func testExplicitBeforePlacementIsPreservedForSiblingDrop() {
+        let folders = [
+            folder(id: "alpha", sortIndex: 0),
+            folder(id: "beta", sortIndex: 1),
+            folder(id: "gamma", sortIndex: 2)
+        ]
+
+        XCTAssertEqual(
+            MomentoSidebarFolderDropPlacementResolver.effectivePlacement(
+                rawPlacement: .before,
+                draggedID: "alpha",
+                targetFolder: folders[2],
                 folders: folders,
                 prefersNesting: false
             ),
