@@ -1535,16 +1535,25 @@ private struct MomentoLibrarySwitcherMenu: View {
         }
     }
 
+    @ViewBuilder
     private func libraryRow(_ library: RecentLibraryReference) -> some View {
         let isSelected = library.id == currentLibraryID
         let isHovered = hoveredLibraryID == library.id
+        let canSwitchLibrary = library.storageMode == .local
 
-        return HStack(spacing: 8) {
-            libraryDragHandle(isActive: isSelected || isHovered)
-                .contentShape(Rectangle())
-                .dragHandleCursor()
+        let row = HStack(spacing: 8) {
+            if canSwitchLibrary {
+                libraryDragHandle(isActive: isSelected || isHovered)
+                    .contentShape(Rectangle())
+                    .dragHandleCursor()
+            } else {
+                libraryDragHandle(isActive: false)
+            }
 
             Button {
+                guard canSwitchLibrary else {
+                    return
+                }
                 onSwitchLibrary(library.id)
             } label: {
                 HStack(spacing: 8) {
@@ -1582,6 +1591,8 @@ private struct MomentoLibrarySwitcherMenu: View {
             }
             .buttonStyle(.plain)
             .pointerStyle(.link)
+            .disabled(!canSwitchLibrary)
+            .help(canSwitchLibrary ? "" : localization.string("Cloud libraries are not available yet."))
 
             if library.storageMode == .local {
                 Button {
@@ -1610,23 +1621,29 @@ private struct MomentoLibrarySwitcherMenu: View {
             menuRowBackground(isHovered: isHovered, isSelected: isSelected)
         }
         .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .onDrag {
-            draggingLibraryID = library.id
-            activeMoreLibraryID = nil
-            return NSItemProvider(object: library.id as NSString)
-        } preview: {
-            libraryDragPreview(library)
-        }
-        .onDrop(of: [.plainText], delegate: LibraryReorderDropDelegate(
-            targetLibrary: library,
-            displayedLibraries: $displayedLibraries,
-            draggingLibraryID: $draggingLibraryID,
-            onMoveLibrary: onMoveLibrary
-        ))
         .zIndex(activeMoreLibraryID == library.id ? 50 : 0)
         .onHover { hovering in
             updateLibraryHover(library.id, hovering: hovering)
+        }
+
+        if canSwitchLibrary {
+            row
+                .contentShape(.dragPreview, RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .onDrag {
+                    draggingLibraryID = library.id
+                    activeMoreLibraryID = nil
+                    return NSItemProvider(object: library.id as NSString)
+                } preview: {
+                    libraryDragPreview(library)
+                }
+                .onDrop(of: [.plainText], delegate: LibraryReorderDropDelegate(
+                    targetLibrary: library,
+                    displayedLibraries: $displayedLibraries,
+                    draggingLibraryID: $draggingLibraryID,
+                    onMoveLibrary: onMoveLibrary
+                ))
+        } else {
+            row
         }
     }
 

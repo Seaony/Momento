@@ -83,6 +83,10 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("localization.string(\"iCloud\")"))
         XCTAssertTrue(source.contains("if library.storageMode == .local {"))
         XCTAssertTrue(source.contains("displayedLibraries[sourceIndex].storageMode == targetLibrary.storageMode"))
+        XCTAssertTrue(source.contains("let canSwitchLibrary = library.storageMode == .local"))
+        XCTAssertTrue(source.contains("guard canSwitchLibrary else {"))
+        XCTAssertTrue(source.contains(".disabled(!canSwitchLibrary)"))
+        XCTAssertTrue(source.contains("if canSwitchLibrary {"))
     }
 
     func testCreateLibraryDialogKeepsCloudModeDisabledUntilSyncExists() throws {
