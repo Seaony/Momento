@@ -21,6 +21,24 @@
 - 不为纯视觉问题新增脆弱的 UI 结构测试。
 - 不用无限并发、静默 fallback 或空 catch 掩盖生命周期问题。
 - 不提前实现完整的持久化 SearchIndex/FTS，除非后续数据证明内存过滤已成为瓶颈。
+- 不因为“可能会快”就新增缓存或索引。任何缓存都必须有明确 owner、key、invalidation、容量边界和验证方式。
+
+## 执行门槛
+
+后续每个性能优化任务都必须先写清楚这 5 件事：
+
+- Hypothesis：当前卡顿具体怀疑发生在哪里，例如 repeated `visibleAssets` sort、masonry layout prepare、thumbnail decode、Core Data fetch。
+- Baseline：改动前用同一数据规模和操作路径记录耗时、主线程阻塞、内存或 hit rate。
+- Change：只改一个热点路径，不把滚动、导入、Core Data、Shell layout 混在同一个 PR。
+- Validation：改动后用同一场景复测，并运行对应测试、build 或 `git diff --check`。
+- Stop condition：如果复测没有收益，回退或停止扩展，不继续堆缓存、索引或并发。
+
+Phase 的进入条件也必须明确：
+
+- Phase 0 是必做前置，除非是纯文档或明显幂等的小改动。
+- Phase 1 只处理已经有代码证据且风险低的重复计算、重复 IO、重复 UI 更新。
+- Phase 2 只有在 Phase 1 后仍能稳定复现瓶颈时进入，并且需要覆盖一致性测试。
+- Phase 3 只有 50k-100k asset 的测量数据证明现有架构无法达标时进入。
 
 ## 当前结论
 
@@ -75,6 +93,8 @@ Momento 的主要性能风险不是单一问题，而是几个路径叠加：
 - `AssetImportService.importBatch`：记录 enumerate/hash/copy/thumbnail/color/metadata/save。
 - `AssetPreviewImageProvider.image`：记录 cache hit、in-flight hit、decode latency、cancellation。
 
+这些高频打点应只在 Debug、diagnostic build 或明确的采样开关下启用。滚动和缩略图路径优先记录 aggregate counter，避免打点本身影响 trace。
+
 ### 手动验证矩阵
 
 | 场景 | 数据规模 | 关注指标 |
@@ -87,6 +107,21 @@ Momento 的主要性能风险不是单一问题，而是几个路径叠加：
 | 搜索输入 | 10 字连续输入 | 每次输入响应时间、visibleAssets 耗时 |
 | 批量导入 | 100 / 1000 images | UI progress 刷新频率、后台 CPU、主线程阻塞 |
 | Inspector 切换 | 单选/多选 100 个 | 选择响应时间、重复 visibleAssets 次数 |
+
+### 量化验收指标
+
+第一轮 baseline 可以校准下面的目标，但后续优化不能只写“更流畅”，必须能落到同一套指标上。
+
+| 路径 | 初始目标 | 不接受的结果 |
+| --- | --- | --- |
+| 瀑布流滚动 | 10k asset 下连续滚动没有 Momento 代码造成的重复 >50ms 主线程阻塞 | 优化后 hitch 数量不降反升，或 thumbnail decode 抢占当前可见图片 |
+| 窗口和侧栏 resize | resize 期间不重复执行全量 filter/sort；layout prepare 耗时可解释 | 为了降频导致拖拽反馈明显滞后 |
+| `visibleAssets` | 10k asset 常用筛选/排序一次计算 p95 目标 <16ms；如果 localized name sort 超出目标，至少必须消除同一输入下的重复计算 | 同一输入在一次 UI 更新中重复计算多次 |
+| 搜索输入 | 输入期间可交互，必要时 debounce；结果更新不阻塞连续输入 | 每个字符都触发不可取消的全量重排且造成停顿 |
+| 视图切换 | 10k asset 下 masonry/grid/list 切换目标 <200ms，50k asset 记录基线 | 引入 batch update 后选择状态或滚动位置错乱 |
+| 批量导入 | progress UI 更新不超过约 10 次/秒，最终状态和错误立即上报 | 为了节流吞掉最后进度、错误或取消状态 |
+| 缩略图缓存 | 维持现有 bounded cache 思路，记录 hit rate 和 decode latency | 新增无上限缓存，或缓存 key 无法随文件变化失效 |
+| 资源库打开 | 大库打开有阶段化 loading，首屏 shell 先可见 | 为了异步化改变公开调用契约或隐藏加载失败 |
 
 ## 优化路线
 
@@ -108,14 +143,18 @@ Momento 的主要性能风险不是单一问题，而是几个路径叠加：
 
 这些改动不改变外部行为，也不需要大重构，建议优先做。
 
-1. 缓存 `visibleAssets` 的派生结果
-   - 给 assets/filter/search/sort/sidebar scope 增加版本输入。
-   - 同一轮状态不变时返回缓存数组，避免 body、Inspector、选择逻辑重复 filter/sort。
-   - 先在 `LibraryStore` 内完成，不改变调用方契约。
-
-2. 减少 ContentView 中重复可见资产访问
+1. 收敛 `visibleAssets` 的调用边界
    - `libraryBody` 已经拿到 `visibleAssets` 后，尽量继续向子视图和派生逻辑传递同一份结果。
    - `selectedInspectorAssets` 和批量操作优先使用 id map 或当前 visible snapshot，避免再次读计算属性。
+   - 这是缓存前的第一步：如果减少重复访问已经解决卡顿，不继续新增缓存。
+
+2. 仅在测量后添加 `visibleAssets` memoization
+   - 只有 baseline 证明 repeated `visibleAssets` filter/sort 是热点时才做。
+   - 缓存字段必须对 SwiftUI Observation 隐藏，例如使用 `@ObservationIgnored` 的私有存储，避免 getter 写入触发新的观察刷新。
+   - 缓存 key 至少覆盖 current library、assets 版本、sidebar selection、filter state、normalized search query、sort option、sort direction。
+   - assets 版本必须由导入、删除、移入废纸篓、恢复、收藏、重命名、移动文件夹、标签更新等 mutation path 明确推进，不能依赖隐式数组 identity。
+   - getter 不得改变任何可观察业务状态；缓存 miss 只能更新不可观察缓存。
+   - 必须补一组 invalidation 测试，覆盖搜索、筛选、排序、文件夹、标签、收藏、废纸篓和导入后的结果变化。
 
 3. 让 `configureScrollView` 幂等
    - 只在值变化时写 scroller/clipView/display 相关属性。
@@ -144,9 +183,11 @@ Momento 的主要性能风险不是单一问题，而是几个路径叠加：
 这些改动需要更多测试，但仍应保持在现有架构内。
 
 1. 建立资源内存索引
+   - 进入条件：Phase 1 后仍能证明候选集合筛选是热点，而不是 thumbnail decode、layout 或 Core Data fetch。
    - 维护 `assetsByID`、`assetIDsByFolderID`、`assetIDsByTagID`、favorite/trash 集合。
+   - `assets` 仍是 source of truth，索引只能是派生结构，并且必须能从 `assets` 完整重建。
    - `visibleAssets` 先缩小候选集合，再执行搜索和排序。
-   - 更新路径必须和导入、删除、移动、标签、收藏状态保持一致。
+   - 更新路径必须和导入、删除、移动、标签、收藏状态保持一致；每条 mutation path 需要测试或断言覆盖。
 
 2. 改善 live resize
    - resize 期间避免触发无意义的 filter/sort。
@@ -154,8 +195,10 @@ Momento 的主要性能风险不是单一问题，而是几个路径叠加：
    - 侧栏宽度拖拽时限制状态提交频率，同时保持拖拽视觉连续。
 
 3. CollectionView batch update
+   - 进入条件：trace 证明 `reloadData` 是视图切换、搜索或筛选的主要卡顿来源。
    - 对同一批 asset 的排序/筛选变化，优先考虑 batch update 或 diffable snapshot，而不是盲目 `reloadData`。
    - 先覆盖搜索/筛选/排序三个高频路径，不扩散到所有更新。
+   - 必须验证 selection、hover、preview、scroll position 和右侧 Inspector 不出现错位。
 
 4. 缩略图 decode cancellation
    - 当前 in-flight task 可以合并请求，但 cell 复用后旧 decode 仍可能继续跑。
@@ -169,6 +212,8 @@ Momento 的主要性能风险不是单一问题，而是几个路径叠加：
 ### Phase 3：只有数据证明需要时再做
 
 这些是大库长期方向，不应作为第一轮优化。
+
+Phase 3 的任何任务都需要单独设计文档。没有 50k-100k asset 的可复现 profile，不进入这个阶段。
 
 1. Core Data 热查询索引
    - 根据 Instruments 和 SQLite query profile 添加索引。
@@ -191,6 +236,9 @@ Momento 的主要性能风险不是单一问题，而是几个路径叠加：
 
 - 每轮只优化一个热点路径，避免滚动、导入、Core Data、Shell layout 同时变化。
 - 所有性能 cache 必须有清晰 invalidation 输入，不用“看起来能用”的隐式状态。
+- 缓存必须有容量上限或生命周期边界；不能新增全局永久缓存。
+- 索引必须是派生结构，source of truth 仍然是现有 store / metadata 数据。
+- 不改变 `visibleAssets`、导入、资源库打开等现有同步/异步调用契约，除非单独设计迁移方案。
 - 并发只做 bounded concurrency，不用 unbounded task group。
 - 导入和存储路径不吞错误，不做 silent success。
 - 涉及数据生命周期的改动必须跑现有导入、去重、删除、资源库测试。
@@ -199,12 +247,39 @@ Momento 的主要性能风险不是单一问题，而是几个路径叠加：
 ## 推荐实施顺序
 
 1. 加 signpost 和 `visibleAssets` 性能测试。
-2. 缓存 `visibleAssets`，并减少 ContentView/Inspector 重复访问。
-3. 节流导入 progress，合并图片属性读取。
-4. 让 `configureScrollView` 和 resize 相关更新更幂等。
-5. 根据测量结果调整缩略图 decode cancellation 和并发。
-6. 如果 10k-50k 数据仍卡，再做内存索引和 collection batch update。
-7. 只有 50k-100k 数据仍无法达标时，再进入 DB paging、SearchIndex、Core Data 索引和多尺寸缩略图。
+2. 减少 ContentView/Inspector 对 `visibleAssets` 的重复访问。
+3. 只有 repeated filter/sort 仍是热点时，才加受约束的 `visibleAssets` memoization。
+4. 节流导入 progress，合并图片属性读取。
+5. 让 `configureScrollView` 和 resize 相关更新更幂等。
+6. 根据测量结果调整缩略图 decode cancellation 和并发。
+7. 如果 10k-50k 数据仍卡，再做内存索引和 collection batch update。
+8. 只有 50k-100k 数据仍无法达标时，再进入 DB paging、SearchIndex、Core Data 索引和多尺寸缩略图。
+
+## 单项执行模板
+
+每个后续性能 PR 或任务说明建议使用这个模板：
+
+```text
+Hypothesis:
+- <本次只验证一个性能假设>
+
+Baseline:
+- dataset: <asset 数量、文件类型、视图模式>
+- action: <滚动/resize/搜索/导入/打开资源库>
+- measurement: <耗时、主线程阻塞、内存、hit rate>
+
+Change:
+- <具体修改文件和逻辑>
+- not doing: <明确不做的缓存/索引/重构>
+
+Validation:
+- before/after: <同一场景对比>
+- tests/build: <实际运行项>
+- regression checks: <选择、Inspector、滚动位置、错误处理等>
+
+Rollback:
+- <如果收益不足或出现回归，如何回退>
+```
 
 ## 验证命令
 
@@ -232,9 +307,10 @@ xcodebuild test -project Momento.xcodeproj -scheme Momento -destination platform
 
 ## 成功标准
 
-- 10k asset 下瀑布流连续滚动没有明显卡顿，主线程长阻塞显著减少。
-- 窗口 resize 和左右侧栏展开收起期间没有可感知冻结。
-- 搜索和筛选输入不再因为重复全量排序产生明显延迟。
-- 批量导入期间 UI progress 平稳更新，导入不会让主窗口交互明显变慢。
-- 大库打开路径有清楚的 loading/阶段化体验，不再长时间白屏或无响应。
-- 每个性能优化都有测量数据支撑，并能被最小验证命令覆盖基础正确性。
+- 10k asset 下瀑布流连续滚动没有明显卡顿，且 trace 中没有 Momento 代码反复造成 >50ms 主线程阻塞。
+- 窗口 resize 和左右侧栏展开收起期间没有可感知冻结，并且不会重复触发全量 filter/sort。
+- 搜索和筛选输入不再因为重复全量排序产生明显延迟；如果需要 debounce，必须保证最终结果准确且取消逻辑清晰。
+- 批量导入期间 UI progress 平稳更新，导入不会让主窗口交互明显变慢，错误、取消和最终完成状态不能被节流吞掉。
+- 大库打开路径有清楚的 loading/阶段化体验，不再长时间白屏或无响应，也不隐藏 Core Data 或文件访问失败。
+- 每个性能优化都有 before/after 测量数据支撑，并能被最小验证命令覆盖基础正确性。
+- 新增缓存或索引必须通过 invalidation / consistency 检查；没有数据证明收益时不得合入。
