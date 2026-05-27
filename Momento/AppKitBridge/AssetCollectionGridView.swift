@@ -1336,6 +1336,9 @@ private actor AssetPreviewDecodeLimiter {
 }
 
 nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
+    typealias ThumbnailDecoder = @Sendable (AssetItem) -> NSImage?
+    typealias FallbackImageProvider = @Sendable (AssetItem) -> NSImage
+
     static let shared = AssetPreviewImageProvider()
 
     private static let previewDecodeMaxPixelSize = 512
@@ -1343,6 +1346,8 @@ nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
     private static let maxConcurrentPrefetchPreviewDecodes = 1
 
     private let cache = NSCache<NSString, NSImage>()
+    private let thumbnailDecoder: ThumbnailDecoder
+    private let fallbackImageProvider: FallbackImageProvider
     private let taskLock = NSLock()
     private let decodeLimiter = AssetPreviewDecodeLimiter(
         visibleLimit: AssetPreviewImageProvider.maxConcurrentVisiblePreviewDecodes,
@@ -1351,7 +1356,12 @@ nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
     private var prefetchDecodeTasks: [String: Task<Void, Never>] = [:]
     private var prefetchingIdentities: Set<String> = []
 
-    private init() {
+    init(
+        thumbnailDecoder: @escaping ThumbnailDecoder = AssetPreviewImageProvider.decodedThumbnailImage(for:),
+        fallbackImageProvider: @escaping FallbackImageProvider = AssetPreviewImageProvider.defaultFallbackIcon(for:)
+    ) {
+        self.thumbnailDecoder = thumbnailDecoder
+        self.fallbackImageProvider = fallbackImageProvider
         cache.countLimit = 512
         cache.totalCostLimit = 96 * 1024 * 1024
     }
@@ -1451,7 +1461,7 @@ nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
             }
 
             let image = autoreleasepool {
-                Self.decodedThumbnailImage(for: asset)
+                thumbnailDecoder(asset)
             }
             await decodeLimiter.releasePrefetch()
             completePrefetch(identity: identity)
@@ -1476,7 +1486,7 @@ nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
 
     private func loadImage(for asset: AssetItem) -> NSImage {
         if asset.kind == .image || asset.kind == .gif {
-            if let image = Self.decodedThumbnailImage(for: asset) {
+            if let image = thumbnailDecoder(asset) {
                 return image
             }
         }
@@ -1485,6 +1495,10 @@ nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
     }
 
     private func fallbackIcon(for asset: AssetItem) -> NSImage {
+        fallbackImageProvider(asset)
+    }
+
+    private static func defaultFallbackIcon(for asset: AssetItem) -> NSImage {
         if FileManager.default.fileExists(atPath: asset.storageURL.path) {
             return NSWorkspace.shared.icon(forFile: asset.storageURL.path)
         }
@@ -1534,6 +1548,7 @@ nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
         priority: TaskPriority
     ) -> Task<NSImage?, Never> {
         let decodeLimiter = decodeLimiter
+        let thumbnailDecoder = thumbnailDecoder
         return Task.detached(priority: priority) {
             let acquiredSlot = await decodeLimiter.acquireVisible()
             guard acquiredSlot else {
@@ -1546,7 +1561,7 @@ nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
             }
 
             let image = autoreleasepool {
-                Self.decodedThumbnailImage(for: asset)
+                thumbnailDecoder(asset)
             }
             await decodeLimiter.releaseVisible()
             return Task.isCancelled ? nil : image

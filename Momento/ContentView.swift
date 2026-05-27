@@ -1204,22 +1204,40 @@ struct ContentView: View {
             return .empty
         }
 
-        let allLibraryAssets = store.assets.filter { $0.libraryID == currentLibrary.id }
-        let libraryAssets = allLibraryAssets.filter { !$0.isTrashed }
+        var libraryAssetCount = 0
+        var favoriteCount = 0
+        var uncategorizedCount = 0
+        var untaggedCount = 0
+        var trashCount = 0
         var folderCounts: [AssetFolder.ID: Int] = [:]
 
-        for asset in libraryAssets {
+        for asset in store.assets where asset.libraryID == currentLibrary.id {
+            guard !asset.isTrashed else {
+                trashCount += 1
+                continue
+            }
+
+            libraryAssetCount += 1
+            if asset.isFavorite {
+                favoriteCount += 1
+            }
+            if asset.folderIDs.isEmpty {
+                uncategorizedCount += 1
+            }
+            if asset.tags.isEmpty {
+                untaggedCount += 1
+            }
             for folderID in asset.folderIDs {
                 folderCounts[folderID, default: 0] += 1
             }
         }
 
         return MomentoSidebarAssetCounts(
-            all: libraryAssets.count,
-            favorites: libraryAssets.filter(\.isFavorite).count,
-            uncategorized: libraryAssets.filter(\.folderIDs.isEmpty).count,
-            untagged: libraryAssets.filter(\.tags.isEmpty).count,
-            trash: allLibraryAssets.filter(\.isTrashed).count,
+            all: libraryAssetCount,
+            favorites: favoriteCount,
+            uncategorized: uncategorizedCount,
+            untagged: untaggedCount,
+            trash: trashCount,
             folders: folderCounts
         )
     }

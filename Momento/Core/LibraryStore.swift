@@ -324,9 +324,10 @@ final class LibraryStore {
             return
         }
 
-        let visibleAssetIDs = Set(visibleAssets.map(\.id))
+        let visibleAssetsSnapshot = visibleAssets
+        let visibleAssetIDs = Set(visibleAssetsSnapshot.map(\.id))
         selectedAssetIDs = ids.intersection(visibleAssetIDs)
-        selectedAssetID = primarySelectedAssetID(from: selectedAssetIDs)
+        selectedAssetID = primarySelectedAssetID(from: selectedAssetIDs, visibleAssets: visibleAssetsSnapshot)
     }
 
     func setViewMode(_ mode: AssetViewMode) {
@@ -1083,7 +1084,8 @@ final class LibraryStore {
     }
 
     private func pruneSelectedAssetsIfNeeded() {
-        let visibleIDs = Set(visibleAssets.map(\.id))
+        let visibleAssetsSnapshot = visibleAssets
+        let visibleIDs = Set(visibleAssetsSnapshot.map(\.id))
         selectedAssetIDs.formIntersection(visibleIDs)
 
         if selectedAssetIDs.isEmpty {
@@ -1095,10 +1097,13 @@ final class LibraryStore {
             return
         }
 
-        selectedAssetID = primarySelectedAssetID(from: selectedAssetIDs)
+        selectedAssetID = primarySelectedAssetID(from: selectedAssetIDs, visibleAssets: visibleAssetsSnapshot)
     }
 
-    private func primarySelectedAssetID(from ids: Set<AssetItem.ID>) -> AssetItem.ID? {
+    private func primarySelectedAssetID(
+        from ids: Set<AssetItem.ID>,
+        visibleAssets: [AssetItem]
+    ) -> AssetItem.ID? {
         if let selectedAssetID, ids.contains(selectedAssetID) {
             return selectedAssetID
         }
