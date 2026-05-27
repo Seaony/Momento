@@ -19,7 +19,7 @@ nonisolated struct CloudAccountStateService {
     }
 
     init(
-        container: CKContainer = .default(),
+        container: CKContainer,
         currentUbiquityIdentityTokenData: @escaping @Sendable () -> Data? = Self.currentUbiquityIdentityTokenData
     ) {
         self.init(
@@ -105,29 +105,12 @@ nonisolated struct CloudAccountStateService {
     }
 
     private static func accountStatus(for container: CKContainer) async throws -> CKAccountStatus {
-        try await withCheckedThrowingContinuation { continuation in
-            container.accountStatus { status, error in
-                if let error {
-                    continuation.resume(throwing: error)
-                } else {
-                    continuation.resume(returning: status)
-                }
-            }
-        }
+        try await container.accountStatus()
     }
 
     private static func userRecordName(for container: CKContainer) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
-            container.fetchUserRecordID { recordID, error in
-                if let error {
-                    continuation.resume(throwing: error)
-                } else if let recordName = recordID?.recordName {
-                    continuation.resume(returning: recordName)
-                } else {
-                    continuation.resume(throwing: CloudAccountStateServiceError.missingUserRecordID)
-                }
-            }
-        }
+        let recordID = try await container.userRecordID()
+        return recordID.recordName
     }
 
     private static func archivedUbiquityIdentityTokenData(
@@ -163,16 +146,5 @@ nonisolated struct CloudAccountChangeObservation {
 
     func invalidate() {
         tokens.forEach(notificationCenter.removeObserver)
-    }
-}
-
-private enum CloudAccountStateServiceError: LocalizedError {
-    case missingUserRecordID
-
-    var errorDescription: String? {
-        switch self {
-        case .missingUserRecordID:
-            "CloudKit did not return a current user record ID."
-        }
     }
 }

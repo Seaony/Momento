@@ -97,6 +97,14 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(contentSource.contains("showImportError(LibraryStoreError.cloudLibraryUnavailable)"))
     }
 
+    func testCloudAccountServiceRequiresExplicitContainerUntilPhaseZeroIsComplete() throws {
+        let serviceSource = try String(contentsOf: cloudAccountStateServiceURL(), encoding: .utf8)
+
+        XCTAssertTrue(serviceSource.contains("init(\n        container: CKContainer,"))
+        XCTAssertFalse(serviceSource.contains("container: CKContainer = .default()"))
+        XCTAssertFalse(serviceSource.contains("CKContainer.default()"))
+    }
+
     func testCustomDialogsDoNotHideToolbarChrome() throws {
         let source = try String(contentsOf: contentViewURL(), encoding: .utf8)
 
@@ -327,6 +335,10 @@ final class ArchitectureGuardTests: XCTestCase {
 
     private func createLibraryDialogURL() -> URL {
         repositoryRoot().appendingPathComponent("Momento/Features/Library/MomentoCreateLibraryDialog.swift")
+    }
+
+    private func cloudAccountStateServiceURL() -> URL {
+        repositoryRoot().appendingPathComponent("Momento/Services/CloudAccountStateService.swift")
     }
 
     private func settingsURL() -> URL {
