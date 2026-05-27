@@ -280,6 +280,7 @@ Key constraints from the sources:
 - Create: `Momento/Cloud/CloudCacheCoreDataStack.swift`
 - Create: `Momento/Cloud/MomentoCloudModel.xcdatamodeld`
 - Test: `MomentoTests/CloudLibraryCachePathTests.swift`
+- Test: `MomentoTests/CloudCacheCoreDataStackTests.swift`
 
 - [x] Step 1: Write cache path tests.
 
@@ -304,13 +305,14 @@ Key constraints from the sources:
   └── thumbnails/<sha256>.png
   ```
 
-- [ ] Step 3: Create cloud Core Data model.
+- [x] Step 3: Create cloud Core Data model.
 
   Entities:
 
   - `CachedCloudLibrary`
   - `CachedCloudAsset`
   - `CachedCloudAssetBlob`
+  - `CachedCloudAssetColor`
   - `CachedCloudFolder`
   - `CachedCloudTag`
   - `CachedCloudFolderMembership`
@@ -324,18 +326,20 @@ Key constraints from the sources:
   - `dirtyFields`
   - `lastError`
   - `deletedAt`
+  - `recordName`
+  - `zoneName`
 
-- [ ] Step 4: Add cloud cache stack.
+- [x] Step 4: Add cloud cache stack.
 
   It must open `cache.sqlite` under the cloud cache root and must not reuse `MomentoCoreDataStack`.
 
-- [ ] Step 5: Run tests and local lifecycle regression tests.
+- [x] Step 5: Run tests and local lifecycle regression tests.
 
   ```bash
-  xcodebuild test -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' -only-testing:MomentoTests/CloudLibraryCachePathTests -only-testing:MomentoTests/ImportServiceSmokeTests -derivedDataPath /tmp/MomentoDerivedData-cloud-cache
+  xcodebuild test -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' -only-testing:MomentoTests/CloudCacheCoreDataStackTests -only-testing:MomentoTests/CloudLibraryCachePathTests -only-testing:MomentoTests/LibraryPackagePersistenceTests -derivedDataPath /tmp/MomentoDerivedData-cloud-cache
   ```
 
-- [ ] Step 6: Commit.
+- [x] Step 6: Commit.
 
   ```bash
   git add Momento/Cloud MomentoTests

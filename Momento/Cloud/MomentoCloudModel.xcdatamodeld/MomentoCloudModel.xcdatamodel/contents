@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="26500" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
+    <entity name="CachedCloudLibrary" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="ckRecordChangeTag" optional="YES" attributeType="String"/>
+        <attribute name="ckSystemFieldsBlob" optional="YES" attributeType="Binary"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="deletedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="dirtyFields" optional="YES" attributeType="String"/>
+        <attribute name="displayName" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="String"/>
+        <attribute name="isDirty" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="lastError" optional="YES" attributeType="String"/>
+        <attribute name="libraryZoneName" optional="YES" attributeType="String"/>
+        <attribute name="recordName" optional="NO" attributeType="String"/>
+        <attribute name="schemaVersion" optional="YES" attributeType="Integer 64" defaultValueString="1" usesScalarValueType="YES"/>
+        <attribute name="updatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="zoneName" optional="NO" attributeType="String"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="zoneName"/>
+                <constraint value="recordName"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+    <entity name="CachedCloudAsset" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="byteSize" optional="YES" attributeType="Integer 64" usesScalarValueType="YES"/>
+        <attribute name="ckRecordChangeTag" optional="YES" attributeType="String"/>
+        <attribute name="ckSystemFieldsBlob" optional="YES" attributeType="Binary"/>
+        <attribute name="colorProfileName" optional="YES" attributeType="String"/>
+        <attribute name="contentHash" optional="YES" attributeType="String"/>
+        <attribute name="deletedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="dirtyFields" optional="YES" attributeType="String"/>
+        <attribute name="displayName" optional="YES" attributeType="String"/>
+        <attribute name="fileExtension" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="String"/>
+        <attribute name="importedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="isDirty" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="isFavorite" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="isTrashed" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="kindRaw" optional="YES" attributeType="String"/>
+        <attribute name="lastError" optional="YES" attributeType="String"/>
+        <attribute name="libraryID" optional="YES" attributeType="String"/>
+        <attribute name="note" optional="YES" attributeType="String"/>
+        <attribute name="orientation" optional="YES" attributeType="Integer 64" usesScalarValueType="YES"/>
+        <attribute name="originalFileName" optional="YES" attributeType="String"/>
+        <attribute name="pixelHeight" optional="YES" attributeType="Integer 64" usesScalarValueType="YES"/>
+        <attribute name="pixelWidth" optional="YES" attributeType="Integer 64" usesScalarValueType="YES"/>
+        <attribute name="recordName" optional="NO" attributeType="String"/>
+        <attribute name="sourcePageURL" optional="YES" attributeType="String"/>
+        <attribute name="trashedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="updatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="utiIdentifier" optional="YES" attributeType="String"/>
+        <attribute name="zoneName" optional="NO" attributeType="String"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="zoneName"/>
+                <constraint value="recordName"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+    <entity name="CachedCloudAssetBlob" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="byteSize" optional="YES" attributeType="Integer 64" usesScalarValueType="YES"/>
+        <attribute name="ckRecordChangeTag" optional="YES" attributeType="String"/>
+        <attribute name="ckSystemFieldsBlob" optional="YES" attributeType="Binary"/>
+        <attribute name="contentHash" optional="YES" attributeType="String"/>
+        <attribute name="deletedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="dirtyFields" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="String"/>
+        <attribute name="isDirty" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="lastError" optional="YES" attributeType="String"/>
+        <attribute name="libraryID" optional="YES" attributeType="String"/>
+        <attribute name="originalRelativePath" optional="YES" attributeType="String"/>
+        <attribute name="recordName" optional="NO" attributeType="String"/>
+        <attribute name="uploadedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="zoneName" optional="NO" attributeType="String"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="zoneName"/>
+                <constraint value="recordName"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+    <entity name="CachedCloudAssetColor" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="assetID" optional="YES" attributeType="String"/>
+        <attribute name="ckRecordChangeTag" optional="YES" attributeType="String"/>
+        <attribute name="ckSystemFieldsBlob" optional="YES" attributeType="Binary"/>
+        <attribute name="coverage" optional="YES" attributeType="Double" usesScalarValueType="YES"/>
+        <attribute name="deletedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="dirtyFields" optional="YES" attributeType="String"/>
+        <attribute name="hex" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="String"/>
+        <attribute name="isDirty" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="lastError" optional="YES" attributeType="String"/>
+        <attribute name="libraryID" optional="YES" attributeType="String"/>
+        <attribute name="recordName" optional="NO" attributeType="String"/>
+        <attribute name="sortIndex" optional="YES" attributeType="Integer 64" usesScalarValueType="YES"/>
+        <attribute name="zoneName" optional="NO" attributeType="String"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="zoneName"/>
+                <constraint value="recordName"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+    <entity name="CachedCloudFolder" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="ckRecordChangeTag" optional="YES" attributeType="String"/>
+        <attribute name="ckSystemFieldsBlob" optional="YES" attributeType="Binary"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="deletedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="dirtyFields" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="String"/>
+        <attribute name="isDirty" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="lastError" optional="YES" attributeType="String"/>
+        <attribute name="libraryID" optional="YES" attributeType="String"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="parentID" optional="YES" attributeType="String"/>
+        <attribute name="recordName" optional="NO" attributeType="String"/>
+        <attribute name="sortIndex" optional="YES" attributeType="Integer 64" usesScalarValueType="YES"/>
+        <attribute name="updatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="zoneName" optional="NO" attributeType="String"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="zoneName"/>
+                <constraint value="recordName"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+    <entity name="CachedCloudTag" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="ckRecordChangeTag" optional="YES" attributeType="String"/>
+        <attribute name="ckSystemFieldsBlob" optional="YES" attributeType="Binary"/>
+        <attribute name="colorHex" optional="YES" attributeType="String"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="deletedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="dirtyFields" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="String"/>
+        <attribute name="isDirty" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="lastError" optional="YES" attributeType="String"/>
+        <attribute name="libraryID" optional="YES" attributeType="String"/>
+        <attribute name="name" optional="YES" attributeType="String"/>
+        <attribute name="normalizedName" optional="YES" attributeType="String"/>
+        <attribute name="recordName" optional="NO" attributeType="String"/>
+        <attribute name="updatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="zoneName" optional="NO" attributeType="String"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="zoneName"/>
+                <constraint value="recordName"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+    <entity name="CachedCloudFolderMembership" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="assetID" optional="YES" attributeType="String"/>
+        <attribute name="ckRecordChangeTag" optional="YES" attributeType="String"/>
+        <attribute name="ckSystemFieldsBlob" optional="YES" attributeType="Binary"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="deletedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="dirtyFields" optional="YES" attributeType="String"/>
+        <attribute name="folderID" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="String"/>
+        <attribute name="isDirty" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="lastError" optional="YES" attributeType="String"/>
+        <attribute name="libraryID" optional="YES" attributeType="String"/>
+        <attribute name="recordName" optional="NO" attributeType="String"/>
+        <attribute name="zoneName" optional="NO" attributeType="String"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="zoneName"/>
+                <constraint value="recordName"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+    <entity name="CachedCloudTagMembership" representedClassName="NSManagedObject" syncable="YES">
+        <attribute name="assetID" optional="YES" attributeType="String"/>
+        <attribute name="ckRecordChangeTag" optional="YES" attributeType="String"/>
+        <attribute name="ckSystemFieldsBlob" optional="YES" attributeType="Binary"/>
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="deletedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="dirtyFields" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="String"/>
+        <attribute name="isDirty" optional="NO" attributeType="Boolean" defaultValueString="NO" usesScalarValueType="YES"/>
+        <attribute name="lastError" optional="YES" attributeType="String"/>
+        <attribute name="libraryID" optional="YES" attributeType="String"/>
+        <attribute name="recordName" optional="NO" attributeType="String"/>
+        <attribute name="tagID" optional="YES" attributeType="String"/>
+        <attribute name="zoneName" optional="NO" attributeType="String"/>
+        <uniquenessConstraints>
+            <uniquenessConstraint>
+                <constraint value="zoneName"/>
+                <constraint value="recordName"/>
+            </uniquenessConstraint>
+        </uniquenessConstraints>
+    </entity>
+    <elements>
+        <element name="CachedCloudLibrary" positionX="-63" positionY="-18" width="128" height="254"/>
+        <element name="CachedCloudAsset" positionX="108" positionY="-18" width="128" height="509"/>
+        <element name="CachedCloudAssetBlob" positionX="279" positionY="-18" width="128" height="269"/>
+        <element name="CachedCloudAssetColor" positionX="450" positionY="-18" width="128" height="269"/>
+        <element name="CachedCloudFolder" positionX="621" positionY="-18" width="128" height="284"/>
+        <element name="CachedCloudTag" positionX="792" positionY="-18" width="128" height="284"/>
+        <element name="CachedCloudFolderMembership" positionX="963" positionY="-18" width="128" height="239"/>
+        <element name="CachedCloudTagMembership" positionX="1134" positionY="-18" width="128" height="239"/>
+    </elements>
+</model>
