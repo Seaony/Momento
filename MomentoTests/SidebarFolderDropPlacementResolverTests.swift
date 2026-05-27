@@ -34,4 +34,88 @@ final class SidebarFolderDropPlacementResolverTests: XCTestCase {
             .into
         )
     }
+
+    func testSameParentDragFromLowerSiblingDefaultsToBeforeTarget() {
+        let folders = [
+            folder(id: "alpha", sortIndex: 0),
+            folder(id: "beta", sortIndex: 1)
+        ]
+
+        XCTAssertEqual(
+            MomentoSidebarFolderDropPlacementResolver.effectivePlacement(
+                rawPlacement: .into,
+                draggedID: "beta",
+                targetFolder: folders[0],
+                folders: folders,
+                forcedIntoFolderID: nil
+            ),
+            .before
+        )
+    }
+
+    func testSameParentDragFromLowerSiblingKeepsBeforeTargetWhenRawPlacementIsAfter() {
+        let folders = [
+            folder(id: "alpha", sortIndex: 0),
+            folder(id: "beta", sortIndex: 1)
+        ]
+
+        XCTAssertEqual(
+            MomentoSidebarFolderDropPlacementResolver.effectivePlacement(
+                rawPlacement: .after,
+                draggedID: "beta",
+                targetFolder: folders[0],
+                folders: folders,
+                forcedIntoFolderID: nil
+            ),
+            .before
+        )
+    }
+
+    func testSameParentDragFromUpperSiblingDefaultsToAfterTarget() {
+        let folders = [
+            folder(id: "alpha", sortIndex: 0),
+            folder(id: "beta", sortIndex: 1)
+        ]
+
+        XCTAssertEqual(
+            MomentoSidebarFolderDropPlacementResolver.effectivePlacement(
+                rawPlacement: .into,
+                draggedID: "alpha",
+                targetFolder: folders[1],
+                folders: folders,
+                forcedIntoFolderID: nil
+            ),
+            .after
+        )
+    }
+
+    func testForcedIntoPlacementOverridesSiblingSortPlacement() {
+        let folders = [
+            folder(id: "alpha", sortIndex: 0),
+            folder(id: "beta", sortIndex: 1)
+        ]
+
+        XCTAssertEqual(
+            MomentoSidebarFolderDropPlacementResolver.effectivePlacement(
+                rawPlacement: .into,
+                draggedID: "beta",
+                targetFolder: folders[0],
+                folders: folders,
+                forcedIntoFolderID: "alpha"
+            ),
+            .into
+        )
+    }
+
+    private func folder(id: AssetFolder.ID, parentID: AssetFolder.ID? = nil, sortIndex: Int) -> AssetFolder {
+        AssetFolder(
+            id: id,
+            libraryID: "library",
+            name: id.capitalized,
+            parentID: parentID,
+            sortIndex: sortIndex,
+            createdAt: Date(timeIntervalSince1970: TimeInterval(sortIndex)),
+            updatedAt: Date(timeIntervalSince1970: TimeInterval(sortIndex))
+        )
+    }
 }
