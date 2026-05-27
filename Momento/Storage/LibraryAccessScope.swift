@@ -6,12 +6,24 @@ enum LibraryStorageMode: String, Codable, Sendable {
     case cloud
 }
 
+enum RecentLibraryStoreError: LocalizedError {
+    case invalidCloudLibraryDescriptor
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidCloudLibraryDescriptor:
+            "Cloud library descriptors require a cloud library ID and iCloud account ID."
+        }
+    }
+}
+
 struct RecentLibraryReference: Identifiable, Hashable, Codable, Sendable {
     var id: String
     var name: String
     var storageMode: LibraryStorageMode
     var localPackageBookmarkData: Data?
     var cloudLibraryID: String?
+    var cloudAccountID: String?
     var lastOpenedAt: Date?
     var lastKnownSyncState: String?
 
@@ -25,6 +37,7 @@ struct RecentLibraryReference: Identifiable, Hashable, Codable, Sendable {
             localPackageBookmarkData?.isEmpty == false
         case .cloud:
             cloudLibraryID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+                && cloudAccountID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
         }
     }
 
@@ -35,6 +48,7 @@ struct RecentLibraryReference: Identifiable, Hashable, Codable, Sendable {
             storageMode: .local,
             localPackageBookmarkData: bookmarkData,
             cloudLibraryID: nil,
+            cloudAccountID: nil,
             lastOpenedAt: nil,
             lastKnownSyncState: nil
         )
@@ -46,6 +60,7 @@ struct RecentLibraryReference: Identifiable, Hashable, Codable, Sendable {
         storageMode: LibraryStorageMode,
         localPackageBookmarkData: Data?,
         cloudLibraryID: String?,
+        cloudAccountID: String? = nil,
         lastOpenedAt: Date?,
         lastKnownSyncState: String?
     ) {
@@ -54,6 +69,7 @@ struct RecentLibraryReference: Identifiable, Hashable, Codable, Sendable {
         self.storageMode = storageMode
         self.localPackageBookmarkData = localPackageBookmarkData
         self.cloudLibraryID = cloudLibraryID
+        self.cloudAccountID = cloudAccountID
         self.lastOpenedAt = lastOpenedAt
         self.lastKnownSyncState = lastKnownSyncState
     }
@@ -64,6 +80,7 @@ struct RecentLibraryReference: Identifiable, Hashable, Codable, Sendable {
         case storageMode
         case localPackageBookmarkData
         case cloudLibraryID
+        case cloudAccountID
         case lastOpenedAt
         case lastKnownSyncState
         case bookmarkData
@@ -77,6 +94,7 @@ struct RecentLibraryReference: Identifiable, Hashable, Codable, Sendable {
         localPackageBookmarkData = try container.decodeIfPresent(Data.self, forKey: .localPackageBookmarkData)
             ?? container.decodeIfPresent(Data.self, forKey: .bookmarkData)
         cloudLibraryID = try container.decodeIfPresent(String.self, forKey: .cloudLibraryID)
+        cloudAccountID = try container.decodeIfPresent(String.self, forKey: .cloudAccountID)
         lastOpenedAt = try container.decodeIfPresent(Date.self, forKey: .lastOpenedAt)
         lastKnownSyncState = try container.decodeIfPresent(String.self, forKey: .lastKnownSyncState)
     }
@@ -88,6 +106,7 @@ struct RecentLibraryReference: Identifiable, Hashable, Codable, Sendable {
         try container.encode(storageMode, forKey: .storageMode)
         try container.encodeIfPresent(localPackageBookmarkData, forKey: .localPackageBookmarkData)
         try container.encodeIfPresent(cloudLibraryID, forKey: .cloudLibraryID)
+        try container.encodeIfPresent(cloudAccountID, forKey: .cloudAccountID)
         try container.encodeIfPresent(lastOpenedAt, forKey: .lastOpenedAt)
         try container.encodeIfPresent(lastKnownSyncState, forKey: .lastKnownSyncState)
         if storageMode == .local {
@@ -163,17 +182,25 @@ struct RecentLibraryStore {
         id: String,
         name: String,
         cloudLibraryID: String,
+        accountState: CloudAccountState,
         lastKnownSyncState: String? = nil
     ) throws {
+        guard case .available(let accountIdentity) = accountState else {
+            throw RecentLibraryStoreError.invalidCloudLibraryDescriptor
+        }
         let reference = RecentLibraryReference(
             id: id,
             name: name,
             storageMode: .cloud,
             localPackageBookmarkData: nil,
             cloudLibraryID: cloudLibraryID,
+            cloudAccountID: accountIdentity.cloudAccountID,
             lastOpenedAt: nil,
             lastKnownSyncState: lastKnownSyncState
         )
+        guard reference.isValidStorageDescriptor else {
+            throw RecentLibraryStoreError.invalidCloudLibraryDescriptor
+        }
         var references = load().filter { $0.id != id }
         references.insert(reference, at: 0)
         try saveReferences(Array(references.prefix(10)))

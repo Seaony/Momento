@@ -1245,7 +1245,10 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         XCTAssertEqual(reference.bookmarkData, bookmarkData)
         XCTAssertNil(reference.cloudLibraryID)
         let resolved = try recentStore.resolve(reference)
-        XCTAssertEqual(resolved.url.path, environment.packageURL.path)
+        XCTAssertEqual(
+            resolved.url.resolvingSymlinksInPath().path,
+            environment.packageURL.resolvingSymlinksInPath().path
+        )
     }
 
     @MainActor
@@ -1257,7 +1260,8 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         try recentStore.saveCloudPlaceholder(
             id: "cloud-library",
             name: "Cloud Library",
-            cloudLibraryID: "cloud-library"
+            cloudLibraryID: "cloud-library",
+            accountState: testCloudAccountState()
         )
 
         let store = LibraryStore(
@@ -1279,7 +1283,8 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         try recentStore.saveCloudPlaceholder(
             id: "cloud-library",
             name: "Cloud Library",
-            cloudLibraryID: "cloud-library"
+            cloudLibraryID: "cloud-library",
+            accountState: testCloudAccountState()
         )
         let store = LibraryStore(
             defaultViewMode: .grid,
@@ -1327,7 +1332,8 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         try recentStore.saveCloudPlaceholder(
             id: "cloud-library",
             name: "Cloud Library",
-            cloudLibraryID: "cloud-library"
+            cloudLibraryID: "cloud-library",
+            accountState: testCloudAccountState()
         )
 
         XCTAssertEqual(recentStore.load().map(\.storageMode), [.cloud, .local])
@@ -1357,6 +1363,17 @@ final class LibraryPackagePersistenceTests: XCTestCase {
             storageMode: .cloud,
             localPackageBookmarkData: nil,
             cloudLibraryID: " ",
+            cloudAccountID: " ",
+            lastOpenedAt: nil,
+            lastKnownSyncState: nil
+        )
+        let invalidCloudMissingAccount = RecentLibraryReference(
+            id: "invalid-cloud-missing-account",
+            name: "Invalid Cloud Missing Account",
+            storageMode: .cloud,
+            localPackageBookmarkData: nil,
+            cloudLibraryID: "cloud-library",
+            cloudAccountID: nil,
             lastOpenedAt: nil,
             lastKnownSyncState: nil
         )
@@ -1366,16 +1383,58 @@ final class LibraryPackagePersistenceTests: XCTestCase {
             storageMode: .cloud,
             localPackageBookmarkData: nil,
             cloudLibraryID: "valid-cloud",
+            cloudAccountID: testCloudAccountIdentity().cloudAccountID,
             lastOpenedAt: nil,
             lastKnownSyncState: nil
         )
-        let data = try JSONEncoder.momento.encode([invalidLocal, invalidCloud, validCloud])
+        let data = try JSONEncoder.momento.encode([
+            invalidLocal,
+            invalidCloud,
+            invalidCloudMissingAccount,
+            validCloud
+        ])
         environment.defaults.set(data, forKey: "recentLibraries")
 
         let recentStore = RecentLibraryStore(defaults: environment.defaults)
 
         XCTAssertEqual(recentStore.load().map(\.id), ["valid-cloud"])
         XCTAssertEqual(recentStore.load(includeLocalLibraries: false).map(\.id), ["valid-cloud"])
+    }
+
+    @MainActor
+    func testSavingCloudPlaceholderRequiresValidatedAccountIdentity() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let recentStore = RecentLibraryStore(defaults: environment.defaults)
+
+        XCTAssertThrowsError(
+            try recentStore.saveCloudPlaceholder(
+                id: "cloud-library",
+                name: "Cloud Library",
+                cloudLibraryID: "cloud-library",
+                accountState: .unavailable(.noAccount)
+            )
+        ) { error in
+            guard let registryError = error as? RecentLibraryStoreError,
+                  case .invalidCloudLibraryDescriptor = registryError else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+        XCTAssertThrowsError(
+            try recentStore.saveCloudPlaceholder(
+                id: "cloud-library-blank-account",
+                name: "Cloud Library",
+                cloudLibraryID: "cloud-library",
+                accountState: .available(CloudAccountIdentity(cloudAccountID: " "))
+            )
+        ) { error in
+            guard let registryError = error as? RecentLibraryStoreError,
+                  case .invalidCloudLibraryDescriptor = registryError else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+        XCTAssertTrue(recentStore.load().isEmpty)
     }
 
     @MainActor
@@ -1695,7 +1754,8 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         try recentStore.saveCloudPlaceholder(
             id: "cloud-library",
             name: "Cloud",
-            cloudLibraryID: "cloud-library"
+            cloudLibraryID: "cloud-library",
+            accountState: testCloudAccountState()
         )
         try recentStore.save(beta)
 
@@ -1717,6 +1777,14 @@ final class LibraryPackagePersistenceTests: XCTestCase {
                 return $0.sortIndex < $1.sortIndex
             }
             .map(\.name)
+    }
+
+    private func testCloudAccountIdentity(_ id: String = "test-cloud-account") -> CloudAccountIdentity {
+        CloudAccountIdentity(cloudAccountID: id)
+    }
+
+    private func testCloudAccountState(_ id: String = "test-cloud-account") -> CloudAccountState {
+        .available(testCloudAccountIdentity(id))
     }
 
     private func toolbarFilterAsset(
