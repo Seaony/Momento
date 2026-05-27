@@ -999,7 +999,7 @@ struct ContentView: View {
                 mode: .edit,
                 isPresented: editingLibraryDialogIsPresented,
                 initialName: editingLibrary.name,
-                onSubmit: { name in
+                onSubmit: { name, _ in
                     renameLibrary(editingLibrary.id, to: name)
                 }
             )
@@ -1912,7 +1912,12 @@ struct ContentView: View {
         }
     }
 
-    private func chooseLibraryDestination(named libraryName: String) {
+    private func chooseLibraryDestination(named libraryName: String, storageMode: LibraryStorageMode) {
+        guard storageMode == .local else {
+            showImportError(LibraryStoreError.cloudLibraryUnavailable)
+            return
+        }
+
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true

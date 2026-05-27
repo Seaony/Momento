@@ -2281,6 +2281,23 @@
         }
       }
     },
+    "iCloud" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud"
+          }
+        }
+      }
+    },
     "Importing Assets" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2944,6 +2961,23 @@
         }
       }
     },
+    "Not Available" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not Available"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂不可用"
+          }
+        }
+      }
+    },
     "No library selected" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -3110,6 +3144,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "只能从 Chrome 导入 HTTP 或 HTTPS 图片 URL。"
+          }
+        }
+      }
+    },
+    "On This Mac" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On This Mac"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此 Mac 上"
           }
         }
       }

@@ -19,6 +19,15 @@ struct RecentLibraryReference: Identifiable, Hashable, Codable, Sendable {
         localPackageBookmarkData
     }
 
+    var isValidStorageDescriptor: Bool {
+        switch storageMode {
+        case .local:
+            localPackageBookmarkData?.isEmpty == false
+        case .cloud:
+            cloudLibraryID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+        }
+    }
+
     init(id: String, name: String, bookmarkData: Data) {
         self.init(
             id: id,
@@ -119,10 +128,11 @@ struct RecentLibraryStore {
               let references = try? JSONDecoder.momento.decode([RecentLibraryReference].self, from: data) else {
             return []
         }
+        let validReferences = references.filter(\.isValidStorageDescriptor)
         guard !includeLocalLibraries else {
-            return references
+            return validReferences
         }
-        return references.filter { $0.storageMode != .local }
+        return validReferences.filter { $0.storageMode != .local }
     }
 
     func save(_ library: AssetLibrary) throws {
@@ -193,7 +203,8 @@ struct RecentLibraryStore {
     func move(id: RecentLibraryReference.ID, relativeTo targetID: RecentLibraryReference.ID, insertAfterTarget: Bool) throws {
         var references = load()
         guard let sourceIndex = references.firstIndex(where: { $0.id == id }),
-              references.contains(where: { $0.id == targetID }),
+              let targetIndexBeforeMove = references.firstIndex(where: { $0.id == targetID }),
+              references[sourceIndex].storageMode == references[targetIndexBeforeMove].storageMode,
               id != targetID else {
             return
         }

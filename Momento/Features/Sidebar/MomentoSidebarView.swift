@@ -1399,7 +1399,7 @@ private struct MomentoLibrarySwitcherMenu: View {
             menuPanel
 
             if let activeLibrary = activeMoreLibrary,
-               let activeIndex = visibleLibraries.firstIndex(where: { $0.id == activeLibrary.id }) {
+               let activeIndex = visibleLocalLibraries.firstIndex(where: { $0.id == activeLibrary.id }) {
                 libraryMoreMenu(activeLibrary)
                     .offset(libraryMoreMenuOffset(for: activeIndex))
                     .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .topLeading)))
@@ -1420,9 +1420,21 @@ private struct MomentoLibrarySwitcherMenu: View {
     private var menuPanel: some View {
         VStack(alignment: .leading, spacing: 5) {
             if !visibleLibraries.isEmpty {
-                VStack(spacing: 2) {
-                    ForEach(visibleLibraries) { library in
-                        libraryRow(library)
+                VStack(alignment: .leading, spacing: 4) {
+                    if !visibleLocalLibraries.isEmpty {
+                        librarySection(
+                            title: localization.string("On This Mac"),
+                            libraries: visibleLocalLibraries,
+                            showsHeader: !visibleCloudLibraries.isEmpty
+                        )
+                    }
+
+                    if !visibleCloudLibraries.isEmpty {
+                        librarySection(
+                            title: localization.string("iCloud"),
+                            libraries: visibleCloudLibraries,
+                            showsHeader: true
+                        )
                     }
                 }
 
@@ -1482,16 +1494,45 @@ private struct MomentoLibrarySwitcherMenu: View {
         displayedLibraries.isEmpty ? recentLibraries : displayedLibraries
     }
 
+    private var visibleLocalLibraries: [RecentLibraryReference] {
+        visibleLibraries.filter { $0.storageMode == .local }
+    }
+
+    private var visibleCloudLibraries: [RecentLibraryReference] {
+        visibleLibraries.filter { $0.storageMode == .cloud }
+    }
+
     private var activeMoreLibrary: RecentLibraryReference? {
         guard let activeMoreLibraryID else {
             return nil
         }
 
-        return visibleLibraries.first { $0.id == activeMoreLibraryID }
+        return visibleLocalLibraries.first { $0.id == activeMoreLibraryID }
     }
 
     private func syncDisplayedLibraries() {
         displayedLibraries = recentLibraries
+    }
+
+    private func librarySection(
+        title: String,
+        libraries: [RecentLibraryReference],
+        showsHeader: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if showsHeader {
+                Text(title)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(MomentoTheme.secondaryText)
+                    .lineLimit(1)
+                    .padding(.horizontal, 10)
+                    .frame(height: 16, alignment: .bottomLeading)
+            }
+
+            ForEach(libraries) { library in
+                libraryRow(library)
+            }
+        }
     }
 
     private func libraryRow(_ library: RecentLibraryReference) -> some View {
@@ -1507,11 +1548,14 @@ private struct MomentoLibrarySwitcherMenu: View {
                 onSwitchLibrary(library.id)
             } label: {
                 HStack(spacing: 8) {
-                    Image(systemName: "archivebox.fill")
+                    Image(systemName: library.storageMode == .cloud ? "icloud.fill" : "archivebox.fill")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(width: 26, height: 26)
-                        .background(.blue.gradient, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .background(
+                            libraryIconTint(for: library).gradient,
+                            in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        )
 
                     VStack(alignment: .leading, spacing: 1) {
                         Text(library.name)
@@ -1539,21 +1583,26 @@ private struct MomentoLibrarySwitcherMenu: View {
             .buttonStyle(.plain)
             .pointerStyle(.link)
 
-            Button {
-                withAnimation(.smooth(duration: 0.14)) {
-                    hoveredMoreActionID = nil
-                    activeMoreLibraryID = activeMoreLibraryID == library.id ? nil : library.id
+            if library.storageMode == .local {
+                Button {
+                    withAnimation(.smooth(duration: 0.14)) {
+                        hoveredMoreActionID = nil
+                        activeMoreLibraryID = activeMoreLibraryID == library.id ? nil : library.id
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(isSelected || isHovered ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
+                        .frame(width: 24, height: 24)
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(isSelected || isHovered ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
+                .buttonStyle(.plain)
+                .pointerStyle(.link)
+                .help(localization.string("More Actions"))
+            } else {
+                Spacer()
                     .frame(width: 24, height: 24)
-                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            .buttonStyle(.plain)
-            .pointerStyle(.link)
-            .help(localization.string("More Actions"))
         }
         .padding(.horizontal, 7)
         .frame(height: 42)
@@ -1585,11 +1634,14 @@ private struct MomentoLibrarySwitcherMenu: View {
         HStack(spacing: 8) {
             libraryDragHandle(isActive: true)
 
-            Image(systemName: "archivebox.fill")
+            Image(systemName: library.storageMode == .cloud ? "icloud.fill" : "archivebox.fill")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 26, height: 26)
-                .background(.blue.gradient, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .background(
+                    libraryIconTint(for: library).gradient,
+                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+                )
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(library.name)
@@ -1631,7 +1683,11 @@ private struct MomentoLibrarySwitcherMenu: View {
     }
 
     private func libraryMoreMenuOffset(for index: Int) -> CGSize {
-        CGSize(width: MomentoTheme.librarySwitcherWidth - 11, height: 15 + CGFloat(index) * 44)
+        let localHeaderHeight: CGFloat = visibleCloudLibraries.isEmpty ? 0 : 20
+        return CGSize(
+            width: MomentoTheme.librarySwitcherWidth - 11,
+            height: 15 + localHeaderHeight + CGFloat(index) * 44
+        )
     }
 
     private func libraryMoreMenu(_ library: RecentLibraryReference) -> some View {
@@ -1811,11 +1867,19 @@ private struct MomentoLibrarySwitcherMenu: View {
     }
 
     private func libraryPath(for library: RecentLibraryReference) -> String {
+        guard library.storageMode == .local else {
+            return localization.string("iCloud")
+        }
+
         guard let resolved = try? RecentLibraryStore().resolve(library) else {
             return ""
         }
 
         return resolved.url.deletingLastPathComponent().path
+    }
+
+    private func libraryIconTint(for library: RecentLibraryReference) -> Color {
+        library.storageMode == .cloud ? .cyan : .blue
     }
 }
 
@@ -1843,7 +1907,8 @@ private struct LibraryReorderDropDelegate: DropDelegate {
         guard let draggedID = draggingLibraryID,
               draggedID != targetLibrary.id,
               let sourceIndex = displayedLibraries.firstIndex(where: { $0.id == draggedID }),
-              let targetIndex = displayedLibraries.firstIndex(where: { $0.id == targetLibrary.id }) else {
+              let targetIndex = displayedLibraries.firstIndex(where: { $0.id == targetLibrary.id }),
+              displayedLibraries[sourceIndex].storageMode == targetLibrary.storageMode else {
             return
         }
 

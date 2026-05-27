@@ -74,6 +74,29 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("try storage.deleteLibraryPackage(at: resolvedURL)"))
     }
 
+    func testLibrarySwitcherSeparatesLocalAndCloudLibraries() throws {
+        let source = try String(contentsOf: sidebarURL(), encoding: .utf8)
+
+        XCTAssertTrue(source.contains("private var visibleLocalLibraries: [RecentLibraryReference]"))
+        XCTAssertTrue(source.contains("private var visibleCloudLibraries: [RecentLibraryReference]"))
+        XCTAssertTrue(source.contains("localization.string(\"On This Mac\")"))
+        XCTAssertTrue(source.contains("localization.string(\"iCloud\")"))
+        XCTAssertTrue(source.contains("if library.storageMode == .local {"))
+        XCTAssertTrue(source.contains("displayedLibraries[sourceIndex].storageMode == targetLibrary.storageMode"))
+    }
+
+    func testCreateLibraryDialogKeepsCloudModeDisabledUntilSyncExists() throws {
+        let dialogSource = try String(contentsOf: createLibraryDialogURL(), encoding: .utf8)
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+
+        XCTAssertTrue(dialogSource.contains("@State private var selectedStorageMode: LibraryStorageMode = .local"))
+        XCTAssertTrue(dialogSource.contains("private var storageModePicker: some View"))
+        XCTAssertTrue(dialogSource.contains("mode: .cloud"))
+        XCTAssertTrue(dialogSource.contains("isDisabled: true"))
+        XCTAssertTrue(contentSource.contains("guard storageMode == .local else"))
+        XCTAssertTrue(contentSource.contains("showImportError(LibraryStoreError.cloudLibraryUnavailable)"))
+    }
+
     func testCustomDialogsDoNotHideToolbarChrome() throws {
         let source = try String(contentsOf: contentViewURL(), encoding: .utf8)
 
@@ -300,6 +323,10 @@ final class ArchitectureGuardTests: XCTestCase {
 
     private func inspectorURL() -> URL {
         repositoryRoot().appendingPathComponent("Momento/Features/Inspector/MomentoInspectorView.swift")
+    }
+
+    private func createLibraryDialogURL() -> URL {
+        repositoryRoot().appendingPathComponent("Momento/Features/Library/MomentoCreateLibraryDialog.swift")
     }
 
     private func settingsURL() -> URL {

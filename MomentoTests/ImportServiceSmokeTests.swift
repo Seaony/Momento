@@ -1338,6 +1338,47 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testRecentLibraryStoreSkipsDescriptorsMissingModeSpecificIdentity() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let invalidLocal = RecentLibraryReference(
+            id: "invalid-local",
+            name: "Invalid Local",
+            storageMode: .local,
+            localPackageBookmarkData: nil,
+            cloudLibraryID: nil,
+            lastOpenedAt: nil,
+            lastKnownSyncState: nil
+        )
+        let invalidCloud = RecentLibraryReference(
+            id: "invalid-cloud",
+            name: "Invalid Cloud",
+            storageMode: .cloud,
+            localPackageBookmarkData: nil,
+            cloudLibraryID: " ",
+            lastOpenedAt: nil,
+            lastKnownSyncState: nil
+        )
+        let validCloud = RecentLibraryReference(
+            id: "valid-cloud",
+            name: "Valid Cloud",
+            storageMode: .cloud,
+            localPackageBookmarkData: nil,
+            cloudLibraryID: "valid-cloud",
+            lastOpenedAt: nil,
+            lastKnownSyncState: nil
+        )
+        let data = try JSONEncoder.momento.encode([invalidLocal, invalidCloud, validCloud])
+        environment.defaults.set(data, forKey: "recentLibraries")
+
+        let recentStore = RecentLibraryStore(defaults: environment.defaults)
+
+        XCTAssertEqual(recentStore.load().map(\.id), ["valid-cloud"])
+        XCTAssertEqual(recentStore.load(includeLocalLibraries: false).map(\.id), ["valid-cloud"])
+    }
+
+    @MainActor
     func testValidatingMissingCurrentLibraryClosesLibraryAndReportsError() throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }
@@ -1633,6 +1674,37 @@ final class LibraryPackagePersistenceTests: XCTestCase {
             loadRecentLibrary: false
         )
         XCTAssertEqual(relaunched.recentLibraries.map(\.name), ["Beta", "Alpha", "Gamma"])
+    }
+
+    @MainActor
+    func testMovingRecentLibraryDoesNotCrossStorageModes() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let storage = LibraryStorage()
+        let recentStore = RecentLibraryStore(defaults: environment.defaults)
+        let alpha = try storage.createLibraryPackage(
+            at: environment.rootURL.appendingPathComponent("Alpha.momento", isDirectory: true),
+            name: "Alpha"
+        )
+        let beta = try storage.createLibraryPackage(
+            at: environment.rootURL.appendingPathComponent("Beta.momento", isDirectory: true),
+            name: "Beta"
+        )
+        try recentStore.save(alpha)
+        try recentStore.saveCloudPlaceholder(
+            id: "cloud-library",
+            name: "Cloud",
+            cloudLibraryID: "cloud-library"
+        )
+        try recentStore.save(beta)
+
+        let initialOrder = recentStore.load().map(\.id)
+
+        try recentStore.move(id: beta.id, relativeTo: "cloud-library", insertAfterTarget: true)
+        try recentStore.move(id: "cloud-library", relativeTo: alpha.id, insertAfterTarget: false)
+
+        XCTAssertEqual(recentStore.load().map(\.id), initialOrder)
     }
 
     private func folderNames(in folders: [AssetFolder], parentID: AssetFolder.ID?) -> [String] {
