@@ -263,7 +263,7 @@ Key constraints from the sources:
   xcodebuild test -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' -only-testing:MomentoTests/CloudRecordIDBuilderTests -derivedDataPath /tmp/MomentoDerivedData-cloud-records
   ```
 
-- [ ] Step 6: Commit.
+- [x] Step 6: Commit.
 
   ```bash
   git add Momento/Cloud MomentoTests docs/cloudkit-schema-checklist.md
@@ -281,7 +281,7 @@ Key constraints from the sources:
 - Create: `Momento/Cloud/MomentoCloudModel.xcdatamodeld`
 - Test: `MomentoTests/CloudLibraryCachePathTests.swift`
 
-- [ ] Step 1: Write cache path tests.
+- [x] Step 1: Write cache path tests.
 
   Cover:
 
@@ -293,7 +293,7 @@ Key constraints from the sources:
   - Synced downloaded originals are excluded from backup.
   - Upload-pending originals are not excluded from backup.
 
-- [ ] Step 2: Create cache path helper.
+- [x] Step 2: Create cache path helper.
 
   Layout:
 
