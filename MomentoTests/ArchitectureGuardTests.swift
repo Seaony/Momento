@@ -228,17 +228,18 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(contentSource.contains("deleteSelectedAssetsPermanently(request.assets)"))
     }
 
-    func testInternalAssetDragUTTypeIsDeclaredInInfoPlist() throws {
+    func testInternalDragUTTypesAreDeclaredInInfoPlist() throws {
         let data = try Data(contentsOf: infoPlistURL())
         let plist = try XCTUnwrap(PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any])
         let exportedTypes = try XCTUnwrap(plist["UTExportedTypeDeclarations"] as? [[String: Any]])
-        let matchingType: [String: Any]? = exportedTypes.first { type in
-            type["UTTypeIdentifier"] as? String == "com.seaony.momento.asset-ids"
-        }
-        let assetIDsType = try XCTUnwrap(matchingType)
 
+        let assetIDsType = try exportedType("com.seaony.momento.asset-ids", in: exportedTypes)
         XCTAssertEqual(assetIDsType["UTTypeDescription"] as? String, "Momento Asset Drag Payload")
         XCTAssertEqual(assetIDsType["UTTypeConformsTo"] as? [String], ["public.json"])
+
+        let folderIDType = try exportedType("com.seaony.momento.folder-id", in: exportedTypes)
+        XCTAssertEqual(folderIDType["UTTypeDescription"] as? String, "Momento Folder Drag Payload")
+        XCTAssertEqual(folderIDType["UTTypeConformsTo"] as? [String], ["public.json"])
     }
 
     func testSidebarAcceptsInternalAssetDropsForOrganization() throws {
@@ -257,6 +258,12 @@ final class ArchitectureGuardTests: XCTestCase {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+    }
+
+    private func exportedType(_ identifier: String, in exportedTypes: [[String: Any]]) throws -> [String: Any] {
+        try XCTUnwrap(exportedTypes.first { type in
+            type["UTTypeIdentifier"] as? String == identifier
+        })
     }
 
     private func appURL() -> URL {

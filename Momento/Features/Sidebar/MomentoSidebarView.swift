@@ -31,6 +31,7 @@ private enum MomentoSidebarMenuMetrics {
     static let folderRowHeight: CGFloat = 30
     static let folderDropEdgeZoneHeight: CGFloat = 8
     static let folderDropIndicatorHeight: CGFloat = 2
+    static let folderRootDropTargetHeight: CGFloat = 18
     static let libraryMoreMenuWidth: CGFloat = 176
 }
 
@@ -67,6 +68,7 @@ struct MomentoSidebarView: View {
     @State private var hoveredFolderID: AssetFolder.ID?
     @State private var targetedAssetDropID: String?
     @State private var targetedFolderDrop: MomentoSidebarFolderDropTarget?
+    @State private var isRootFolderDropTargeted = false
     @State private var draggingFolderID: AssetFolder.ID?
     @State private var pendingFolderExpansionID: AssetFolder.ID?
     @State private var isFolderSectionHovered = false
@@ -400,6 +402,8 @@ struct MomentoSidebarView: View {
                         ForEach(visibleFolderRows) { row in
                             folderRow(row)
                         }
+
+                        folderRootDropTarget
                     }
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
@@ -540,10 +544,29 @@ struct MomentoSidebarView: View {
             targetedFolderDrop: $targetedFolderDrop,
             onScheduleExpansion: scheduleFolderExpansionAfterDropHover,
             onClearExpansion: clearPendingFolderExpansion,
+            onExpandFolder: expandFolderAfterDrop,
             onMoveFolder: onMoveFolder
         ))
         .help(folder.name)
         .accessibilityLabel(folder.name)
+    }
+
+    private var folderRootDropTarget: some View {
+        Color.clear
+            .frame(height: MomentoSidebarMenuMetrics.folderRootDropTargetHeight)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+            .overlay(alignment: .top) {
+                folderDropIndicator(depth: 0, isVisible: isRootFolderDropTargeted)
+            }
+            .onDrop(of: [FolderDragPasteboardWriter.folderIDUTType], delegate: MomentoSidebarRootFolderDropDelegate(
+                currentLibraryID: currentLibraryID,
+                folders: folders,
+                draggingFolderID: $draggingFolderID,
+                isTargeted: $isRootFolderDropTargeted,
+                onClearExpansion: clearPendingFolderExpansion,
+                onMoveFolder: onMoveFolder
+            ))
     }
 
     @ViewBuilder
@@ -601,6 +624,13 @@ struct MomentoSidebarView: View {
         }
 
         pendingFolderExpansionID = nil
+    }
+
+    private func expandFolderAfterDrop(_ folderID: AssetFolder.ID) {
+        clearPendingFolderExpansion(folderID)
+        withAnimation(.smooth(duration: 0.16)) {
+            _ = expandedFolderIDs.insert(folderID)
+        }
     }
 
     @ViewBuilder
@@ -943,10 +973,11 @@ private struct MomentoSidebarFolderRow: Identifiable {
     var id: AssetFolder.ID { folder.id }
 }
 
-private enum MomentoSidebarFolderDropPlacement: Equatable {
+nonisolated enum MomentoSidebarFolderDropPlacement: Equatable {
     case before
     case into
     case after
+    case rootEnd
 }
 
 private struct MomentoSidebarFolderDropTarget: Equatable {
@@ -954,10 +985,86 @@ private struct MomentoSidebarFolderDropTarget: Equatable {
     var placement: MomentoSidebarFolderDropPlacement
 }
 
-private struct MomentoSidebarFolderMoveCommand {
+nonisolated struct MomentoSidebarFolderMoveCommand {
     var parentID: AssetFolder.ID?
     var targetID: AssetFolder.ID?
     var insertAfterTarget: Bool
+}
+
+nonisolated enum MomentoSidebarFolderDropResolver {
+    static func moveCommand(
+        draggedID: AssetFolder.ID,
+        targetFolder: AssetFolder?,
+        folders: [AssetFolder],
+        placement: MomentoSidebarFolderDropPlacement
+    ) -> MomentoSidebarFolderMoveCommand? {
+        guard folders.contains(where: { $0.id == draggedID }) else {
+            return nil
+        }
+
+        if placement == .rootEnd {
+            return MomentoSidebarFolderMoveCommand(
+                parentID: nil,
+                targetID: nil,
+                insertAfterTarget: false
+            )
+        }
+
+        guard let targetFolder,
+              draggedID != targetFolder.id else {
+            return nil
+        }
+
+        let descendantIDs = descendantFolderIDs(startingAt: draggedID, folders: folders)
+        guard !descendantIDs.contains(targetFolder.id) else {
+            return nil
+        }
+
+        switch placement {
+        case .before:
+            return MomentoSidebarFolderMoveCommand(
+                parentID: targetFolder.parentID,
+                targetID: targetFolder.id,
+                insertAfterTarget: false
+            )
+        case .after:
+            return MomentoSidebarFolderMoveCommand(
+                parentID: targetFolder.parentID,
+                targetID: targetFolder.id,
+                insertAfterTarget: true
+            )
+        case .into:
+            return MomentoSidebarFolderMoveCommand(
+                parentID: targetFolder.id,
+                targetID: nil,
+                insertAfterTarget: false
+            )
+        case .rootEnd:
+            return nil
+        }
+    }
+
+    private static func descendantFolderIDs(
+        startingAt folderID: AssetFolder.ID,
+        folders: [AssetFolder]
+    ) -> Set<AssetFolder.ID> {
+        let childrenByParentID = Dictionary(grouping: folders.compactMap { folder -> (AssetFolder.ID, AssetFolder.ID)? in
+            guard let parentID = folder.parentID else {
+                return nil
+            }
+            return (parentID, folder.id)
+        }, by: \.0).mapValues { pairs in pairs.map(\.1) }
+
+        var result: Set<AssetFolder.ID> = []
+        var pending = [folderID]
+        while let next = pending.popLast() {
+            guard result.insert(next).inserted else {
+                continue
+            }
+            pending.append(contentsOf: childrenByParentID[next, default: []])
+        }
+        return result
+    }
 }
 
 private struct MomentoSidebarFolderDropDelegate: DropDelegate {
@@ -968,6 +1075,7 @@ private struct MomentoSidebarFolderDropDelegate: DropDelegate {
     @Binding var targetedFolderDrop: MomentoSidebarFolderDropTarget?
     var onScheduleExpansion: (AssetFolder.ID) -> Void
     var onClearExpansion: (AssetFolder.ID?) -> Void
+    var onExpandFolder: (AssetFolder.ID) -> Void
     var onMoveFolder: (AssetFolder.ID, AssetFolder.ID?, AssetFolder.ID?, Bool) -> Void
 
     func validateDrop(info: DropInfo) -> Bool {
@@ -1016,6 +1124,9 @@ private struct MomentoSidebarFolderDropDelegate: DropDelegate {
                     return
                 }
 
+                if placement == .into {
+                    onExpandFolder(row.folder.id)
+                }
                 onMoveFolder(payload.folderID, command.parentID, command.targetID, command.insertAfterTarget)
             }
         }
@@ -1073,54 +1184,109 @@ private struct MomentoSidebarFolderDropDelegate: DropDelegate {
         for draggedID: AssetFolder.ID,
         placement: MomentoSidebarFolderDropPlacement
     ) -> MomentoSidebarFolderMoveCommand? {
-        guard draggedID != row.folder.id else {
+        MomentoSidebarFolderDropResolver.moveCommand(
+            draggedID: draggedID,
+            targetFolder: row.folder,
+            folders: folders,
+            placement: placement
+        )
+    }
+}
+
+private struct MomentoSidebarRootFolderDropDelegate: DropDelegate {
+    var currentLibraryID: AssetLibrary.ID?
+    var folders: [AssetFolder]
+    @Binding var draggingFolderID: AssetFolder.ID?
+    @Binding var isTargeted: Bool
+    var onClearExpansion: (AssetFolder.ID?) -> Void
+    var onMoveFolder: (AssetFolder.ID, AssetFolder.ID?, AssetFolder.ID?, Bool) -> Void
+
+    func validateDrop(info: DropInfo) -> Bool {
+        currentLibraryID != nil &&
+            info.hasItemsConforming(to: [FolderDragPasteboardWriter.folderIDUTType])
+    }
+
+    func dropEntered(info: DropInfo) {
+        _ = updateTarget(info: info)
+    }
+
+    func dropExited(info: DropInfo) {
+        clearTargetIfNeeded()
+        onClearExpansion(nil)
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        guard updateTarget(info: info) else {
             return nil
         }
 
-        let descendantIDs = descendantFolderIDs(startingAt: draggedID)
-        guard !descendantIDs.contains(row.folder.id) else {
-            return nil
+        return DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        clearTargetIfNeeded()
+        onClearExpansion(nil)
+
+        guard validateDrop(info: info),
+              let expectedLibraryID = currentLibraryID,
+              let provider = info.itemProviders(for: [FolderDragPasteboardWriter.folderIDUTType]).first else {
+            draggingFolderID = nil
+            return false
         }
 
-        switch placement {
-        case .before:
-            return MomentoSidebarFolderMoveCommand(
-                parentID: row.folder.parentID,
-                targetID: row.folder.id,
-                insertAfterTarget: false
-            )
-        case .after:
-            return MomentoSidebarFolderMoveCommand(
-                parentID: row.folder.parentID,
-                targetID: row.folder.id,
-                insertAfterTarget: true
-            )
-        case .into:
-            return MomentoSidebarFolderMoveCommand(
-                parentID: row.folder.id,
-                targetID: nil,
-                insertAfterTarget: false
-            )
+        provider.loadDataRepresentation(forTypeIdentifier: FolderDragPasteboardWriter.folderIDTypeIdentifier) { data, _ in
+            guard let data,
+                  let payload = try? JSONDecoder.momento.decode(FolderDragPasteboardPayload.self, from: data),
+                  payload.libraryID == expectedLibraryID else {
+                return
+            }
+
+            Task { @MainActor in
+                guard let command = moveCommand(for: payload.folderID) else {
+                    return
+                }
+
+                onMoveFolder(payload.folderID, command.parentID, command.targetID, command.insertAfterTarget)
+            }
+        }
+
+        draggingFolderID = nil
+        return true
+    }
+
+    private func updateTarget(info: DropInfo) -> Bool {
+        guard validateDrop(info: info),
+              let draggingFolderID,
+              moveCommand(for: draggingFolderID) != nil else {
+            clearTargetIfNeeded()
+            onClearExpansion(nil)
+            return false
+        }
+
+        onClearExpansion(nil)
+        withAnimation(.smooth(duration: 0.12)) {
+            isTargeted = true
+        }
+        return true
+    }
+
+    private func clearTargetIfNeeded() {
+        guard isTargeted else {
+            return
+        }
+
+        withAnimation(.smooth(duration: 0.12)) {
+            isTargeted = false
         }
     }
 
-    private func descendantFolderIDs(startingAt folderID: AssetFolder.ID) -> Set<AssetFolder.ID> {
-        let childrenByParentID = Dictionary(grouping: folders.compactMap { folder -> (AssetFolder.ID, AssetFolder.ID)? in
-            guard let parentID = folder.parentID else {
-                return nil
-            }
-            return (parentID, folder.id)
-        }, by: \.0).mapValues { pairs in pairs.map(\.1) }
-
-        var result: Set<AssetFolder.ID> = []
-        var pending = [folderID]
-        while let next = pending.popLast() {
-            guard result.insert(next).inserted else {
-                continue
-            }
-            pending.append(contentsOf: childrenByParentID[next, default: []])
-        }
-        return result
+    private func moveCommand(for draggedID: AssetFolder.ID) -> MomentoSidebarFolderMoveCommand? {
+        MomentoSidebarFolderDropResolver.moveCommand(
+            draggedID: draggedID,
+            targetFolder: nil,
+            folders: folders,
+            placement: .rootEnd
+        )
     }
 }
 

@@ -75,6 +75,16 @@
 		<dict>
 			<key>UTTypeConformsTo</key>
 			<array>
+				<string>public.json</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Momento Folder Drag Payload</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.seaony.momento.folder-id</string>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
 				<string>com.apple.package</string>
 			</array>
 			<key>UTTypeDescription</key>
