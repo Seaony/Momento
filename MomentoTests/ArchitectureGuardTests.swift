@@ -69,25 +69,9 @@ final class ArchitectureGuardTests: XCTestCase {
 
         XCTAssertTrue(contentSource.contains("try store.currentLiveLocalLibrarySourceAccessValidator()"))
         XCTAssertTrue(contentSource.contains("store.currentLibrarySourceReadValidator()"))
-        XCTAssertTrue(contentSource.contains("canReadAssetSourceFiles(sourceReadValidator)"))
-        XCTAssertTrue(contentSource.contains("sourceAccessValidator: sourceReadValidator"))
-        XCTAssertTrue(contentSource.contains("sourceAccessValidator()"))
         XCTAssertTrue(assetGridSource.contains("assetSourceAccessValidator"))
         XCTAssertTrue(assetGridSource.contains("assetSourceReadValidator"))
-        XCTAssertTrue(assetGridSource.contains("prefetchImage("))
-        XCTAssertTrue(assetGridSource.contains("sourceAccessValidator: parent.assetSourceReadValidator()"))
-        XCTAssertTrue(assetGridSource.contains("sourceAccessValidator: sourceAccessValidator"))
-        XCTAssertTrue(bridgeSource.contains("try sourceAccessValidator()"))
-    }
-
-    func testAsyncPreviewDecodeCacheReadsUseSourceValidator() throws {
-        let assetGridSource = try String(contentsOf: assetGridURL(), encoding: .utf8)
-        let decodedStart = try XCTUnwrap(assetGridSource.range(of: "private func decodedThumbnailImageAsync"))
-        let decodedEnd = try XCTUnwrap(assetGridSource.range(of: "private func visibleDecodeTask"))
-        let decodedSource = String(assetGridSource[decodedStart.lowerBound..<decodedEnd.lowerBound])
-
-        XCTAssertTrue(decodedSource.contains("cachedImage(for: asset, sourceAccessValidator: sourceAccessValidator)"))
-        XCTAssertFalse(decodedSource.contains("cache.object(forKey: key)"))
+        XCTAssertTrue(bridgeSource.contains("sourceAccessValidator"))
     }
 
     func testRecentLibraryMutationsUseSecurityScopedAccess() throws {

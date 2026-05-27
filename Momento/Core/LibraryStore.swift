@@ -215,10 +215,20 @@ final class LibraryStore {
 
     func exportCurrentLibrary(to destinationURL: URL) throws {
         let currentLibrary = try requireCurrentLiveLocalLibrary()
+        let sourceAccessValidator = try currentLiveLocalLibrarySourceAccessValidator()
 
         let destinationAccessScope = LibraryAccessScope(url: destinationURL)
-        try withExtendedLifetime(destinationAccessScope) {
-            _ = try storage.exportLibraryPackage(currentLibrary, to: destinationURL)
+        do {
+            try withExtendedLifetime(destinationAccessScope) {
+                _ = try storage.exportLibraryPackage(
+                    currentLibrary,
+                    to: destinationURL,
+                    sourceAccessValidator: sourceAccessValidator
+                )
+            }
+        } catch LibraryStorageError.ubiquitousLibraryPackageUnsupported {
+            closeCurrentLibraryForUbiquitousPackage()
+            throw LibraryStorageError.ubiquitousLibraryPackageUnsupported
         }
     }
 
@@ -928,18 +938,26 @@ final class LibraryStore {
         }
 
         let importingLibraryID = currentLibrary.id
+        let libraryAccessValidator = try currentLiveLocalLibrarySourceAccessValidator()
         let importAccessScope = LibraryAccessScope(url: storage.rootURL(for: currentLibrary))
         defer {
             _ = importAccessScope
         }
 
-        let imported = try await importService.importBatch(
-            from: urls,
-            into: currentLibrary,
-            excludingContentHashes: metadataStore.existingContentHashes(),
-            sourcePageURL: sourcePageURL,
-            progressHandler: progressHandler
-        )
+        let imported: AssetImportBatch
+        do {
+            imported = try await importService.importBatch(
+                from: urls,
+                into: currentLibrary,
+                excludingContentHashes: metadataStore.existingContentHashes(),
+                sourcePageURL: sourcePageURL,
+                progressHandler: progressHandler,
+                libraryAccessValidator: libraryAccessValidator
+            )
+        } catch LibraryStorageError.ubiquitousLibraryPackageUnsupported {
+            closeCurrentLibraryForUbiquitousPackage()
+            throw LibraryStorageError.ubiquitousLibraryPackageUnsupported
+        }
         guard try requireCurrentLiveLocalLibrary().id == importingLibraryID else {
             return
         }
@@ -1030,13 +1048,17 @@ final class LibraryStore {
         do {
             try storage.validateLiveLocalLibraryLocation(at: storage.rootURL(for: currentLibrary))
         } catch LibraryStorageError.ubiquitousLibraryPackageUnsupported {
-            closeCurrentLibrary()
-            recentLibraries = recentStore.load()
-            libraryErrorMessage = LibraryStorageError.ubiquitousLibraryPackageUnsupported.errorDescription
+            closeCurrentLibraryForUbiquitousPackage()
             throw LibraryStorageError.ubiquitousLibraryPackageUnsupported
         }
 
         return currentLibrary
+    }
+
+    private func closeCurrentLibraryForUbiquitousPackage() {
+        closeCurrentLibrary()
+        recentLibraries = recentStore.load()
+        libraryErrorMessage = LibraryStorageError.ubiquitousLibraryPackageUnsupported.errorDescription
     }
 
     private var currentLibraryAssets: [AssetItem] {

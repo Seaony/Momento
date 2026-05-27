@@ -86,15 +86,23 @@ nonisolated struct AssetExportService: Sendable {
     func export(
         _ asset: AssetItem,
         configuration: AssetExportConfiguration,
-        to destinationURL: URL
+        to destinationURL: URL,
+        sourceAccessValidator: (@Sendable () throws -> Void)? = nil
     ) throws -> URL {
-        try export(asset, configuration: configuration, to: destinationURL, replacingExistingFile: true)
+        try export(
+            asset,
+            configuration: configuration,
+            to: destinationURL,
+            replacingExistingFile: true,
+            sourceAccessValidator: sourceAccessValidator
+        )
     }
 
     func export(
         _ assets: [AssetItem],
         configuration: AssetExportConfiguration,
-        toDirectory directoryURL: URL
+        toDirectory directoryURL: URL,
+        sourceAccessValidator: (@Sendable () throws -> Void)? = nil
     ) throws -> [URL] {
         guard !assets.isEmpty else {
             throw AssetExportError.emptySelection
@@ -110,7 +118,8 @@ nonisolated struct AssetExportService: Sendable {
                 asset,
                 configuration: configuration,
                 to: availableDestinationURL(for: requestedDestination),
-                replacingExistingFile: false
+                replacingExistingFile: false,
+                sourceAccessValidator: sourceAccessValidator
             )
         }
     }
@@ -132,7 +141,8 @@ nonisolated struct AssetExportService: Sendable {
         _ asset: AssetItem,
         configuration: AssetExportConfiguration,
         to destinationURL: URL,
-        replacingExistingFile: Bool
+        replacingExistingFile: Bool,
+        sourceAccessValidator: (@Sendable () throws -> Void)?
     ) throws -> URL {
         let temporaryURL = destinationURL
             .deletingLastPathComponent()
@@ -145,8 +155,10 @@ nonisolated struct AssetExportService: Sendable {
             )
             switch configuration.format {
             case .original:
+                try sourceAccessValidator?()
                 try FileManager.default.copyItem(at: asset.storageURL, to: temporaryURL)
             case .jpeg, .png:
+                try sourceAccessValidator?()
                 try writeConvertedImage(asset, configuration: configuration, to: temporaryURL)
             }
 

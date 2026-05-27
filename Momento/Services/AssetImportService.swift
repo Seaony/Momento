@@ -64,14 +64,16 @@ struct AssetImportService: Sendable {
         into library: AssetLibrary,
         excludingContentHashes existingContentHashes: Set<String>,
         sourcePageURL: URL? = nil,
-        progressHandler: AssetImportProgressHandler? = nil
+        progressHandler: AssetImportProgressHandler? = nil,
+        libraryAccessValidator: (@Sendable () throws -> Void)? = nil
     ) async throws -> [AssetItem] {
         try await importBatch(
             from: urls,
             into: library,
             excludingContentHashes: existingContentHashes,
             sourcePageURL: sourcePageURL,
-            progressHandler: progressHandler
+            progressHandler: progressHandler,
+            libraryAccessValidator: libraryAccessValidator
         ).newAssets
     }
 
@@ -80,7 +82,8 @@ struct AssetImportService: Sendable {
         into library: AssetLibrary,
         excludingContentHashes existingContentHashes: Set<String>,
         sourcePageURL: URL? = nil,
-        progressHandler: AssetImportProgressHandler? = nil
+        progressHandler: AssetImportProgressHandler? = nil,
+        libraryAccessValidator: (@Sendable () throws -> Void)? = nil
     ) async throws -> AssetImportBatch {
         // 用户从 Finder 选择的文件/文件夹可能来自 sandbox 外部。访问权限必须覆盖
         // 后面的 detached import task，所以 scope 在 await 之前创建，并在整个导入
@@ -93,6 +96,7 @@ struct AssetImportService: Sendable {
         return try await Task.detached(priority: .userInitiated) {
             var progressReporter = AssetImportProgressReporter(handler: progressHandler)
             await progressReporter.report(.preparing(), force: true)
+            try libraryAccessValidator?()
             try storage.prepareLibraryDirectories(for: library)
 
             let candidates = try collectImportCandidates(from: urls)
@@ -170,20 +174,25 @@ struct AssetImportService: Sendable {
                     in: library
                 )
 
+                try libraryAccessValidator?()
                 if !FileManager.default.fileExists(atPath: destination.path) {
+                    try libraryAccessValidator?()
                     try FileManager.default.createDirectory(
                         at: destination.deletingLastPathComponent(),
                         withIntermediateDirectories: true
                     )
+                    try libraryAccessValidator?()
                     try FileManager.default.copyItem(at: fileURL, to: destination)
                 }
 
+                try libraryAccessValidator?()
                 let thumbnailURL = try? thumbnailService.generateThumbnail(
                     for: destination,
                     contentHash: hash,
                     in: library
                 )
                 let paletteSourceURL = thumbnailURL ?? destination
+                try libraryAccessValidator?()
                 let paletteColors = colorAnalysisService.paletteColors(
                     for: paletteSourceURL,
                     libraryID: library.id,

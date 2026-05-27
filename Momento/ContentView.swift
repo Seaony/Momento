@@ -1905,12 +1905,18 @@ struct ContentView: View {
                     try sourceAccessValidator()
                     let exportService = AssetExportService()
                     if assets.count == 1, let asset = assets.first {
-                        return try [exportService.export(asset, configuration: configuration, to: destinationURL)]
+                        return try [exportService.export(
+                            asset,
+                            configuration: configuration,
+                            to: destinationURL,
+                            sourceAccessValidator: sourceAccessValidator
+                        )]
                     }
                     return try exportService.export(
                         assets,
                         configuration: configuration,
-                        toDirectory: destinationURL
+                        toDirectory: destinationURL,
+                        sourceAccessValidator: sourceAccessValidator
                     )
                 }.value
 

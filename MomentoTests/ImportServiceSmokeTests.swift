@@ -403,6 +403,46 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testExportingLibraryPackageRevalidatesSourceBeforeCopyingPackage() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let storage = LibraryStorage(applicationSupportRoot: environment.rootURL)
+        let sourceStore = LibraryStore(
+            defaultViewMode: .grid,
+            storage: storage,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try sourceStore.createLibrary(at: environment.packageURL)
+        let sourceLibrary = try XCTUnwrap(sourceStore.currentLibrary)
+        let source = try environment.writeOnePixelPNG(named: "portable.png")
+        try await sourceStore.importItems(from: [source])
+
+        let markerURL = environment.rootURL.appendingPathComponent("source-validated")
+        let exportURL = environment.rootURL.appendingPathComponent("BlockedExport.momento", isDirectory: true)
+
+        XCTAssertThrowsError(
+            try storage.exportLibraryPackage(
+                sourceLibrary,
+                to: exportURL,
+                sourceAccessValidator: {
+                    if FileManager.default.fileExists(atPath: markerURL.path) {
+                        throw LibraryStorageError.ubiquitousLibraryPackageUnsupported
+                    }
+                    try Data("validated".utf8).write(to: markerURL)
+                }
+            )
+        ) { error in
+            guard case LibraryStorageError.ubiquitousLibraryPackageUnsupported = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: exportURL.path))
+    }
+
+    @MainActor
     func testImportPersistsAndDeduplicatesAssets() async throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }
@@ -1778,6 +1818,47 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         XCTAssertTrue(store.assets.isEmpty)
         let metadataStore = try LibraryMetadataStore(library: library, storage: LibraryStorage())
         XCTAssertTrue(try metadataStore.loadAssets().isEmpty)
+    }
+
+    @MainActor
+    func testImportingItemsRejectsLibraryThatBecomesUbiquitousBeforeCopyingFiles() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let blockedMarkerURL = environment.rootURL.appendingPathComponent("blocked-current-library")
+        let blockedPath = environment.packageURL.standardizedFileURL.path
+        let storage = LibraryStorage(isUbiquitousItem: { url in
+            FileManager.default.fileExists(atPath: blockedMarkerURL.path)
+                && url.standardizedFileURL.path == blockedPath
+        })
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            storage: storage,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+        let source = try environment.writeOnePixelPNG(named: "blocked-mid-import.png")
+
+        do {
+            try await store.importItems(
+                from: [source],
+                progressHandler: { progress in
+                    if progress.phase == .importing && progress.processedFileCount == 0 {
+                        try? Data("blocked".utf8).write(to: blockedMarkerURL)
+                    }
+                }
+            )
+            XCTFail("Import should reject a library that becomes iCloud-backed before copying files.")
+        } catch LibraryStorageError.ubiquitousLibraryPackageUnsupported {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        XCTAssertNil(store.currentLibrary)
+        XCTAssertTrue(store.assets.isEmpty)
+        XCTAssertTrue(try environment.storedAssetFiles().isEmpty)
     }
 
     @MainActor

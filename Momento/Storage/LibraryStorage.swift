@@ -145,8 +145,13 @@ nonisolated struct LibraryStorage: Sendable {
         return library
     }
 
-    nonisolated func exportLibraryPackage(_ library: AssetLibrary, to destinationURL: URL) throws -> URL {
+    nonisolated func exportLibraryPackage(
+        _ library: AssetLibrary,
+        to destinationURL: URL,
+        sourceAccessValidator: (@Sendable () throws -> Void)? = nil
+    ) throws -> URL {
         let sourceURL = rootURL(for: library)
+        try sourceAccessValidator?()
         _ = try validateLibraryPackage(at: sourceURL)
 
         let normalizedDestinationURL = normalizedPackageURL(destinationURL)
@@ -158,6 +163,7 @@ nonisolated struct LibraryStorage: Sendable {
             at: normalizedDestinationURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
+        try sourceAccessValidator?()
         try FileManager.default.copyItem(at: sourceURL, to: normalizedDestinationURL)
         _ = try validateLibraryPackage(at: normalizedDestinationURL)
         return normalizedDestinationURL
