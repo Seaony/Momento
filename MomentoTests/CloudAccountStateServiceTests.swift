@@ -74,6 +74,30 @@ final class CloudAccountStateServiceTests: XCTestCase {
         XCTAssertFalse(state.canCreateCloudLibraryPlaceholder)
     }
 
+    func testTemporarilyUnavailableAccountDoesNotFetchUserRecordID() async {
+        let service = CloudAccountStateService(
+            fetchAccountStatus: { .temporarilyUnavailable },
+            fetchUserRecordName: { throw TestCloudAccountError() }
+        )
+
+        let state = await service.currentState()
+
+        XCTAssertEqual(state, .unavailable(.temporarilyUnavailable))
+        XCTAssertFalse(state.canCreateCloudLibraryPlaceholder)
+    }
+
+    func testCouldNotDetermineAccountDoesNotFetchUserRecordID() async {
+        let service = CloudAccountStateService(
+            fetchAccountStatus: { .couldNotDetermine },
+            fetchUserRecordName: { throw TestCloudAccountError() }
+        )
+
+        let state = await service.currentState()
+
+        XCTAssertEqual(state, .unavailable(.couldNotDetermine))
+        XCTAssertFalse(state.canCreateCloudLibraryPlaceholder)
+    }
+
     func testRestrictedAccountMapsToRestrictedState() async {
         let service = CloudAccountStateService(
             fetchAccountStatus: { .restricted },
