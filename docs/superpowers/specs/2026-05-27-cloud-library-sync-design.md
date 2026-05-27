@@ -74,12 +74,17 @@ The design below is based on Apple documentation checked during this review:
   - Source: [CKSyncEngine](https://developer.apple.com/documentation/cloudkit/cksyncengine-5sie5)
   - Source: [CKSyncEngine.Configuration.database](https://developer.apple.com/documentation/cloudkit/cksyncengineconfiguration/database)
   - Source: [CKSyncEngine.Configuration.stateSerialization](https://developer.apple.com/documentation/cloudkit/cksyncengine-5sie5/configuration/stateserialization)
+  - Source: [CKSyncEngineDelegate.nextRecordZoneChangeBatch](https://developer.apple.com/documentation/cloudkit/cksyncenginedelegate-1q7g8/nextrecordzonechangebatch%28_%3Asyncengine%3A%29)
+  - Source: [CKSyncEngine.State.pendingRecordZoneChanges](https://developer.apple.com/documentation/cloudkit/cksyncenginestate/pendingrecordzonechanges)
   - Source: [Apple CKSyncEngine sample](https://github.com/apple/sample-cloudkit-sync-engine)
 - Core Data with CloudKit only works if the model is compatible with CloudKit limitations. Apple documents that unique constraints are unsupported, relationships must be optional, and production CloudKit schemas need careful forward-compatibility planning.
   - Source: [Mirroring a Core Data store with CloudKit](https://developer.apple.com/documentation/CoreData/mirroring-a-core-data-store-with-cloudkit)
   - Source: [Creating a Core Data Model for CloudKit](https://developer.apple.com/documentation/CoreData/creating-a-core-data-model-for-cloudkit)
 - iCloud Documents can sync document packages, but multi-device document writes require file coordinators/file presenters and conflict handling. Package syncing is a document workflow, not a good fit for a live multi-device SQLite package with caches.
   - Source: [iCloud File Management](https://developer.apple.com/library/archive/documentation/FileManagement/Conceptual/FileSystemProgrammingGuide/iCloud/iCloud.html)
+- iOS local cache files have backup and file-protection consequences. Re-downloadable support files should be excluded from backup, and files needed by background sync must use a protection class that remains accessible after first unlock.
+  - Source: [NSURLIsExcludedFromBackupKey](https://developer.apple.com/documentation/foundation/urlresourcekey/isexcludedfrombackupkey)
+  - Source: [FileProtectionType.completeUntilFirstUserAuthentication](https://developer.apple.com/documentation/foundation/fileprotectiontype/completeuntilfirstuserauthentication)
 
 ## Alternatives Reviewed
 
@@ -216,7 +221,7 @@ Cloud libraries still need a local store:
 ```text
 Application Support/Momento/CloudLibraries/<libraryID>/
 ├── cache.sqlite
-├── assets/<hashPrefix>/<sha256>.<ext>       # downloaded originals only
+├── assets/<hashPrefix>/<sha256>.<ext>       # downloaded or upload-pending originals
 └── thumbnails/<sha256>.png                  # downloaded/generated cache
 ```
 
@@ -236,6 +241,37 @@ Rules:
 - Cached originals can be evicted later, but metadata and thumbnails needed for browsing should remain.
 - Each cached record stores the latest known CloudKit record change tag needed for conflict detection.
 - Do not introduce a separate general-purpose operation log in the first version. Start with per-record dirty/error state plus persisted CKSyncEngine state. Add a semantic operation table only if a real recovery case cannot be represented by dirty records and tombstones.
+
+### Cloud Cache Write Boundary
+
+Cloud mode introduces background CloudKit callbacks, local UI commands, file copies, hashing, and thumbnail generation. These must not write the same Core Data rows or asset files from unrelated execution contexts.
+
+Use one explicit cloud-cache write boundary, for example a `CloudLibraryRepository` actor or an equivalent serial executor. The name is not important; the ownership is.
+
+Responsibilities:
+
+- Own the cloud-cache Core Data context, cloud-cache file moves/copies, availability updates, dirty/error state, and CKRecord system-field persistence.
+- Accept UI write commands from the `@MainActor` `LibraryStore`, apply them to the local cloud cache, then enqueue `CKSyncEngine` pending changes.
+- Accept CKSyncEngine delegate events, materialize outgoing records from local state, and apply remote changes into the local cache.
+- Publish value snapshots or an async change stream back to `LibraryStore`; do not mutate SwiftUI-observed UI state directly from CloudKit callbacks.
+- Serialize file and database state transitions. For example, a CKAsset download must copy the staged file, verify hash, update `originalAvailability`, and persist record system fields through one write boundary.
+- Keep long hashing, thumbnail generation, and file IO off the main actor. Only publish small value snapshots to UI.
+
+This boundary is required before Phase 2 metadata sync. Without it, a remote record change, local edit, and asset download can race and leave `isDirty`, availability, and filesystem contents inconsistent.
+
+### iOS Cache Durability, Backup, and File Protection
+
+The cloud cache is not a disposable `Caches` directory. Metadata, pending writes, and upload-pending originals must survive app relaunch and low-storage cleanup.
+
+Storage rules:
+
+- Store `cache.sqlite`, CKSyncEngine state, dirty metadata, and upload-pending originals under Application Support, not `Library/Caches`.
+- Do not mark upload-pending originals as excluded from backup until CloudKit confirms the upload. Before that confirmation, the local file may be the only durable copy of the user's import.
+- After a blob is confirmed uploaded and can be re-downloaded from CloudKit, mark downloaded/synced originals and thumbnails with `NSURLIsExcludedFromBackupKey = true`. Set this attribute after every copy/write because common file operations can reset it.
+- Thumbnails are always reconstructable and should be excluded from backup. They can still live in Application Support if the product wants stable offline browsing; exclusion from backup is separate from purgeability.
+- Do not evict a local original while its `CloudAssetBlob` is dirty, uploadPending, uploadFailed, or referenced by a user-triggered export/drag/download operation.
+- On iOS, use a file protection policy that allows background sync after first device unlock, such as `.completeUntilFirstUserAuthentication`, for the cloud cache database, sync-engine state, and sync-managed asset files. Do not use `.complete` for files that CKSyncEngine may need while the device is locked unless the product explicitly accepts locked-device sync blocking.
+- After device restore from backup, revalidate account binding before opening the restored cloud cache as writable. If the CloudKit account does not match, use the account-mismatch flow.
 
 ### Local Cache Schema
 
@@ -282,8 +318,8 @@ CachedCloudFolder / CachedCloudTag
 
 CachedCloudFolderMembership / CachedCloudTagMembership
 - mirror the cloud schema fields exactly
-- plus: ckRecordChangeTag?, ckSystemFieldsBlob?, isDirty, lastError?
-- no dirtyFields column: memberships are insert-or-tombstone, no scalar merge
+- plus: ckRecordChangeTag?, ckSystemFieldsBlob?, isDirty, pendingIntent: present | tombstoned, lastError?
+- no dirtyFields column: membership conflict handling uses the intended membership state (`deletedAt == nil` or non-nil), not scalar field merging
 ```
 
 Rules:
@@ -291,6 +327,7 @@ Rules:
 - `ckSystemFieldsBlob` stores `CKRecord.encodeSystemFields(with:)` output so records can be reconstructed with server metadata, including record ID and change tag, after app relaunch.
 - `ckRecordChangeTag` is persisted for diagnostics and local conflict reasoning; the encoded system fields remain the authoritative source when reconstructing a `CKRecord`.
 - `isDirty` plus structured dirty field tracking are read by both the UI (to show pending state) and the sync code (to know what to merge on conflict). The storage format can be a normalized table, bitset, or encoded field list; do not lock this to comma-joined strings until implementation.
+- Membership rows use `pendingIntent` instead of `dirtyFields` because their only user-visible states are "present" and "tombstoned". They still require change-tag conflict handling when the same membership is concurrently added and removed on different devices.
 - `originalAvailability` / `thumbnailAvailability` are persisted (not derived) so UI does not need to re-stat the filesystem on every list refresh.
 - Deletions are tombstones (`deletedAt`), not row removals; GC is co-scheduled with the corresponding cloud record GC after the grace period.
 
@@ -579,7 +616,7 @@ Rules:
 - Use CloudKit record metadata / change tags to detect server conflicts.
 - Do not use device-local `updatedAt` as the authority for conflict detection. It is useful for UI and local ordering, but device clocks can skew.
 - For v1 scalar conflicts, use server-versioned last-writer-wins: save with the latest known record change tag, handle `serverRecordChanged`, merge the intended scalar changes into the server record, and retry. The winning version is the last write CloudKit accepts, not the largest client timestamp.
-- Keep membership changes as independent records so adding a tag on one device does not overwrite another tag added elsewhere.
+- Keep membership changes as independent records so adding a tag on one device does not overwrite a different tag added elsewhere. The same membership's add/remove race still needs change-tag conflict handling; see "Membership Add/Delete Semantics".
 
 ### Folder Operations
 
@@ -614,7 +651,7 @@ The first version should use simple, explicit conflict rules:
 | Asset original file | Immutable by `contentHash`; no merge needed |
 | Duplicate import | Deterministic asset/blob record IDs collapse duplicates |
 | Display name / note / favorite | Server-versioned last writer wins through CloudKit record change tags |
-| Tags/folder membership | Independent membership tombstone records |
+| Tags/folder membership | Independent membership records; different membership IDs commute, same membership add/remove resolves through change tags |
 | Folder rename/move | Server-versioned last writer wins |
 | Trash vs restore | Server-versioned last writer wins while `deletedAt` is nil |
 | Permanent delete | `deletedAt` wins over restore |
@@ -622,6 +659,26 @@ The first version should use simple, explicit conflict rules:
 | Account signed out/switched | Disable cloud writes; protect cached data by account identity |
 
 More advanced CRDT-style merging is not justified for the first implementation. It would be over-designed for this product stage and would complicate debugging. The design instead chooses smaller records and clear tombstones.
+
+### Membership Add/Delete Semantics
+
+Folder and tag membership records reduce conflict scope, but they do not make every conflict disappear.
+
+Rules:
+
+- The deterministic membership record ID represents exactly one relationship: `assetID + folderID` or `assetID + tagID` within a library zone.
+- Adding membership writes the record with `deletedAt = nil` and `pendingIntent = present`.
+- Removing membership writes the same record with `deletedAt = now` and `pendingIntent = tombstoned`.
+- A user-visible remove is a tombstone save, not an immediate CloudKit hard delete. Hard deletion is GC only after the grace period.
+- Concurrent changes to different membership record IDs commute naturally because they are separate records.
+- Concurrent add/remove of the same membership record ID does **not** commute. Resolve it with the same CloudKit change-tag flow as scalar records: merge the local intended state into the current server record and retry. The last accepted CloudKit save wins for that exact membership.
+- Parent deletion wins over membership presence. If the asset, folder, or tag is tombstoned or missing, incoming membership-present records are kept tombstoned locally or ignored; they must not resurrect the parent.
+
+Required tests:
+
+- Device A adds asset X to folder F while Device B removes X from F; the final membership state matches the last accepted CloudKit save and both caches converge.
+- Device A adds X to folder F while Device B adds X to folder G; both memberships survive.
+- Device A deletes folder F while Device B adds X to F offline; folder deletion wins and the membership does not resurrect F.
 
 ### Server-Versioned Merge Algorithm
 
@@ -631,31 +688,81 @@ Server-versioned last-writer-wins is implemented through CloudKit record change 
 saveDirtyRecord(localRecord):
   add CKSyncEngine.PendingRecordZoneChange.saveRecord(recordID)
 
+saveHardDeletedRecord(recordID):
+  # GC path only; normal user deletes are tombstone saves.
+  add CKSyncEngine.PendingRecordZoneChange.deleteRecord(recordID)
+
+nextRecordZoneChangeBatch(context, syncEngine):
+  pending = syncEngine.state.pendingRecordZoneChanges filtered to context.options.scope
+  if pending is empty:
+    return nil
+  return CKSyncEngine.RecordZoneChangeBatch(pendingChanges: pending) { recordID in
+    return recordProvider(recordID)
+  }
+
 recordProvider(recordID):
-  ckRecord = reconstruct from localRecord.ckSystemFieldsBlob
-  apply only localRecord.dirtyFields to ckRecord
+  localRecord = load local dirty record for recordID
+  if missing:
+    remove stale pending change from CKSyncEngine state
+    return nil
+  ckRecord = reconstruct from localRecord.ckSystemFieldsBlob,
+             or create a new CKRecord with deterministic recordID if no system fields exist
+  if localRecord is membership:
+    apply pendingIntent by setting deletedAt nil/non-nil
+  else:
+    apply only localRecord.dirtyFields to ckRecord
   return ckRecord
 
 on sentRecordZoneChanges.savedRecords(savedRecord):
   persist savedRecord.encodeSystemFields(...)
   clear local isDirty / dirtyFields / lastError
+  clear membership pendingIntent when relevant
+
+on sentRecordZoneChanges.deletedRecordIDs(recordID):
+  clear local system fields for recordID
+  mark GC delete complete
 
 on sentRecordZoneChanges.failedRecordSaves(error: serverRecordChanged):
   serverRecord = error.serverRecord
   merged = serverRecord.copy()
-  apply only localRecord.dirtyFields to merged
+  if localRecord is membership:
+    apply pendingIntent by setting deletedAt nil/non-nil
+  else:
+    apply only localRecord.dirtyFields to merged
   persist merged system fields locally
   keep localRecord.isDirty = true
-  keep pending save so CKSyncEngine can retry
+  add/keep pending save so CKSyncEngine sends the merged record
+
+on sentRecordZoneChanges.failedRecordSaves(error: zoneNotFound):
+  add CKSyncEngine.PendingDatabaseChange.saveZone(recordID.zoneID)
+  clear stale local ckSystemFieldsBlob for that record
+  keep localRecord.isDirty = true
+  add pending save after zone recreation
+
+on sentRecordZoneChanges.failedRecordSaves(error: unknownItem):
+  if local intent is present or tombstoned:
+    clear stale local ckSystemFieldsBlob
+    keep localRecord.isDirty = true
+    add pending save to recreate the tombstone/present record
+  else if local intent is hard-delete GC:
+    treat delete as complete and clear local sync state
 
 on retryable error (network, throttle, zoneBusy):
   keep localRecord.isDirty = true
-  keep pending save; CKSyncEngine will retry according to system conditions
+  do not duplicate pending changes; CKSyncEngine keeps retryable pending changes according to system conditions
+
+on limitExceeded:
+  keep affected records dirty
+  reduce future batch size for the affected zone/type and retry; do not mark records synced
 
 on non-retryable error (quotaExceeded, badContainer, permissionFailure):
   keep localRecord.isDirty = true
   localRecord.lastError = error
   surface in UI
+
+on account/notAuthenticated error:
+  block cloud writes until CKContainer.accountStatus and cloudAccountID are revalidated
+  keep local dirty state visible
 ```
 
 Required invariants:
@@ -664,7 +771,8 @@ Required invariants:
 - **Manual save policy, if used, is `.ifServerRecordUnchanged`.** `.changedKeys` does not compare record change tags, and `.allKeys` overwrites unchanged fields.
 - **Field-level dirty tracking is required.** A record cannot just save "everything I have" because that clobbers server fields the client never observed. Each `CachedCloud*` entity stores dirty field state and clears it on success.
 - **Unknown fields on the server record pass through unchanged** because the merge only writes locally-dirty fields and leaves the rest as the server returned them.
-- **Membership records skip this algorithm.** `CloudFolderMembership` / `CloudTagMembership` are insert-with-tombstone, so concurrent inserts/deletes commute naturally — no field merging needed.
+- **Membership records skip scalar dirty-field merging, not conflict detection.** `CloudFolderMembership` / `CloudTagMembership` merge by applying the local membership intent to the current server record, then retrying with CloudKit change tags.
+- **The next batch must respect CKSyncEngine's requested scope.** Returning pending changes outside `context.options.scope` can produce invalid-argument failures.
 
 ## iCloud Account and Offline Behavior
 
@@ -740,7 +848,29 @@ Why:
 
 Export remains the inverse: cloud library can be exported to a local `.momento` package after all required originals are downloaded. Export is Mac-only in v1, matching local library access scope.
 
+## Implementation Entry Points
+
+The implementation should start from the existing local-library seams and avoid broad rewrites.
+
+Current files to protect:
+
+- `Momento/Storage/LibraryStorage.swift`: remains the local `.momento` package owner. Do not make it a CloudKit transport.
+- `Momento/Storage/LibraryMetadataStore.swift`: remains the local-package Core Data store. Do not retrofit CloudKit sync columns into this model.
+- `Momento/Storage/LibraryAccessScope.swift`: currently stores recent local libraries as security-scoped bookmarks. Evolve this into a storage-mode-aware descriptor without breaking existing bookmark decoding.
+- `Momento/Core/LibraryStore.swift`: remains the `@MainActor` UI state aggregator. Add storage-mode routing here, but keep cloud cache writes inside the cloud-cache write boundary described above.
+- `Momento/Core/AssetModels.swift`: `AssetItem.storageURL` is currently non-optional. Cloud mode must not fake a local original URL for remote-only assets; introduce a cloud-aware availability/resolution path before exposing cloud assets through UI workflows that preview, export, or drag originals.
+- `Momento/Services/AssetImportService.swift`, `AssetThumbnailService.swift`, and `AssetExportService.swift`: reuse hashing, thumbnail, and export behavior where possible, but route cloud imports/exports through the cloud eligibility and resolver rules.
+
+Preferred shape:
+
+- Add small storage-mode types and adapters first.
+- Add a dedicated cloud cache stack/repository for cloud libraries.
+- Keep local package APIs stable unless a call site genuinely needs storage-mode dispatch.
+- Do not introduce a large generic persistence abstraction before both local and cloud paths have real shared behavior.
+
 ## Implementation Phasing
+
+Each phase has an exit gate. Do not start the next phase until the gate is met, because later phases depend on storage identity, account identity, and sync-state correctness.
 
 ### Phase 0: Technical Spikes and Release Gates
 
@@ -767,35 +897,81 @@ Phase 0 spikes:
 - Define first-release cloud limits for file type, file size, cloud-library count, per-library asset count, and total cloud bytes. Start the spike with conservative seed values such as 5k assets per library, 100 MB per file, and 20 cloud libraries per account, but do not ship these limits without measurement.
 - Define CloudKit schema/index checklist before production promotion.
 
+Exit gate:
+
+- A written Phase 0 result exists with the chosen iOS deployment target, final container identifier, CKSyncEngine availability result, entitlement/provisioning status, account-switch findings, CKAsset size findings, and proposed v1 limits.
+- A real-device smoke test proves a record can save on one platform and fetch on the other through the selected container.
+- If CKSyncEngine is not available for the selected iOS target, stop this plan and write the manual-sync design before implementation.
+
 ### Phase 1: Storage Mode Foundation
 
-- Add storage-mode concept to library descriptors.
-- Keep existing local package behavior unchanged.
-- Add cloud library registry/listing with empty cloud libraries.
-- Add iCloud capability checks and account-state UI.
+Outputs:
+
+- Storage-mode-aware `LibraryDescriptor` / recent-library registry with backward-compatible migration from existing `RecentLibraryReference`.
+- Local libraries still create, open, rename, reveal, reorder, delete, import, and export as `.momento` packages.
+- Cloud library descriptors can be represented locally as empty placeholders after iCloud account availability is known; real CloudKit discovery waits for Phase 2.
+- Library picker/sidebar separates "On This Mac" and "iCloud" without exposing local-only libraries on iOS.
+- Account-state service exposes at least: available, unavailable, restricted/error, switched/mismatch.
+
+Exit gate:
+
+- Existing local-library lifecycle tests still pass.
+- New tests cover migration of existing local recent libraries, local-only invisibility on iOS registry code paths, and storage-mode selection at create time.
+- No CloudKit metadata or blob sync is implemented in this phase beyond account/status checks.
 
 ### Phase 2: Cloud Metadata Sync
 
-- Add CloudKit schema, catalog zone, and per-library zone creation.
-- Add local cloud cache and account-level sync-engine state persistence.
-- Sync libraries, folders, tags, and asset metadata without original download beyond thumbnails.
-- Add deterministic record IDs and tombstones.
-- Persist CloudKit record change tags in the local cloud cache and use them for conflict detection.
-- Add CloudKit schema/index checklist and a development-to-production promotion gate.
+Outputs:
+
+- CloudKit record schema constants and deterministic record-name builders with ASCII/length tests.
+- Catalog zone and per-library zone creation through one account/private-database CKSyncEngine.
+- Dedicated cloud-cache Core Data model/stack and cloud-cache write boundary.
+- Cloud library create, discover, open, rename, and tombstone delete.
+- Metadata sync for folders, tags, memberships, trash state, favorite, note, display name, and asset metadata without original download.
+- Server-versioned conflict handling for scalar fields and same-membership add/remove.
+- Development schema/index checklist for every query used by discovery and sync.
+
+Exit gate:
+
+- Protocol-backed fake CloudKit/CKSyncEngine tests simulate two devices with separate local caches.
+- Tests cover deterministic record IDs, zone lifecycle, metadata dirty retry, serverRecordChanged merge, zoneNotFound recovery, unknownItem handling, and same-membership add/remove convergence.
+- Manual real-device test proves cloud library creation/rename and metadata edit sync between Mac and iOS.
+- Local `.momento` lifecycle tests still pass.
 
 ### Phase 3: Blob Upload/Download
 
-- Add import into cloud libraries.
-- Upload original `CKAsset` and thumbnail.
-- Add on-demand original download.
-- Add blob repair and upload failure states.
-- Run large-file spike before enabling broad file support.
+Outputs:
+
+- Cloud import eligibility checks for file type, byte size, and local readability before normal cloud asset creation.
+- Import copies originals into the cloud cache, computes SHA-256, creates thumbnails, and marks `CloudAsset`/`CloudAssetBlob` dirty in one local transaction.
+- CKAsset upload uses canonical cloud-cache file URLs that remain readable until send completion.
+- CKAsset download copies staged files into the cloud cache during the record-change callback, verifies SHA-256, and only then marks originals local.
+- iOS cache files apply the backup-exclusion and file-protection policy from this document.
+- Preview/export/drag uses the cloud-aware original resolver and surfaces download failure.
+- Upload/download failure states are visible and durable.
+
+Exit gate:
+
+- Tests cover import eligibility rejection, uploadFailed state, download hash mismatch, staged-file copy, backup-exclusion marking, file-protection assignment on iOS paths, and no eviction of upload-pending originals.
+- Manual real-device test covers Mac import visible on iOS, iOS import visible on Mac, on-demand original download, offline import then upload, and quota/upload failure handling if a safe test path is available.
+- Large-file spike result is written before enabling file types/sizes beyond the measured v1 limits.
 
 ### Phase 4: Full Read-Write Cross-Device Behavior
 
-- Implement Mac/iOS write commands for rename, note, favorite, tags, folders, trash, restore, and permanent delete.
-- Add conflict handling and visible sync status.
-- Add multi-device integration tests with separate local caches.
+Outputs:
+
+- Shared Mac/iOS command layer for rename, note, favorite, tags, folders, trash, restore, permanent delete, and cloud-library delete.
+- Visible per-library and per-record sync status in the UI.
+- Copy local library to iCloud is resumable and cancellable before it is enabled for non-trivial libraries.
+- Export cloud library to local `.momento` package downloads required originals first and remains Mac-only in v1.
+- Multi-device integration suite runs against fake/protocol CloudKit with separate caches.
+
+Exit gate:
+
+- Multi-device tests cover concurrent rename, concurrent folder move, same-membership add/remove, different-membership add/add, offline edits, account sign-out, account switch, quota/upload failure, permanent delete vs restore, and blob GC grace period.
+- Manual matrix passes on two real devices with the same Apple ID.
+- Schema/index checklist is complete and production promotion is explicitly approved before release builds point at production CloudKit schema.
+- Build/typecheck passes for macOS and iOS targets.
 
 ## Validation Plan
 
@@ -807,9 +983,13 @@ Minimum validation for the design implementation later:
 - Unit tests for zone naming and library-zone lifecycle.
 - Unit tests for tombstone rules: delete vs restore, folder delete vs membership arrival, blob GC grace period.
 - Unit tests for dirty-state retry and partial failure handling.
+- Unit tests for CKSyncEngine batch scope filtering, `serverRecordChanged`, `zoneNotFound`, `unknownItem`, and `limitExceeded` handling.
+- Unit tests for same-membership add/remove conflict convergence.
+- Unit tests for iOS cache backup-exclusion, file-protection policy, and upload-pending original durability.
+- Unit tests or actor-isolation tests for the cloud-cache write boundary so UI writes and sync callbacks cannot mutate the same cache directly.
 - Unit tests for record-name generation: ASCII-only, deterministic, under 255 characters.
 - Integration tests using CloudKit test environment or protocol-backed fake CloudKit service.
-- Manual tests on two devices with the same Apple ID: Mac import, iOS import, concurrent rename, concurrent folder move, offline edits, account sign-out, quota/upload failure.
+- Manual tests on two devices with the same Apple ID: Mac import, iOS import, concurrent rename, concurrent folder move, same-membership add/remove, offline edits, account sign-out, account switch, quota/upload failure.
 - `git diff --check`, targeted tests, and build/typecheck for each implementation phase.
 
 ## Deep Review Findings and Fixes
@@ -1022,6 +1202,67 @@ Fix in design:
 
 - Measure multi-library zone behavior in Phase 0, not just one large library.
 - Define a first-release cloud-library count limit if measurement shows operational overhead.
+
+### Finding 19: Same-membership add/remove is not naturally commutative
+
+Counter case:
+
+- Mac adds asset X to folder F while iOS removes asset X from folder F offline. Both actions target the same deterministic membership record, so treating membership records as "insert-or-tombstone, no conflict" can leave clients disagreeing about whether the relationship exists.
+
+Fix in design:
+
+- Add `pendingIntent` for membership rows.
+- Resolve same-membership add/remove through CloudKit change tags by applying the local intended `deletedAt` state to the current server record and retrying.
+- Add convergence tests for same-membership add/remove and different-membership add/add.
+
+### Finding 20: CKSyncEngine failure handling needs executable branches
+
+Counter case:
+
+- The app tries to save a record in a missing zone or with stale system fields. If the plan only says "keep pending and retry", CKSyncEngine may keep failing because the app never recreates the zone, clears stale system fields, or re-adds the repaired pending save.
+
+Fix in design:
+
+- Add explicit branches for `serverRecordChanged`, `zoneNotFound`, `unknownItem`, retryable errors, `limitExceeded`, account/notAuthenticated, and non-retryable blocking errors.
+- Require `nextRecordZoneChangeBatch` to filter pending changes to CKSyncEngine's requested scope.
+- Add tests for each branch before relying on real CloudKit behavior.
+
+### Finding 21: iOS cache durability is separate from sync cache design
+
+Counter case:
+
+- iOS imports an image, stores it in a cache-like directory, marks it excluded from backup, then upload fails or the app is restored before upload succeeds. The imported original can be lost even though the UI showed it locally.
+
+Fix in design:
+
+- Keep dirty metadata, sync-engine state, and upload-pending originals in Application Support.
+- Do not exclude upload-pending originals from backup until upload success.
+- Exclude re-downloadable synced blobs and thumbnails from backup after every write/copy.
+- Specify a file-protection policy compatible with background sync after first unlock.
+
+### Finding 22: CloudKit callbacks need a single write owner
+
+Counter case:
+
+- A user edits metadata while a remote change callback and CKAsset download are also updating the same rows. If UI, sync delegate, and file IO mutate the cache independently, `isDirty`, system fields, and availability can diverge.
+
+Fix in design:
+
+- Add a required cloud-cache write boundary.
+- Keep `LibraryStore` as the `@MainActor` presentation layer.
+- Route UI commands and CKSyncEngine delegate events through the same serialized cloud-cache writer.
+
+### Finding 23: Phase bullets were not enough for execution
+
+Counter case:
+
+- An implementer starts Phase 2 before Phase 0 proves CKSyncEngine availability or before Phase 1 protects local-library registry migration. The design remains correct in theory but creates rework and untestable partial states.
+
+Fix in design:
+
+- Add implementation entry points tied to current Momento files.
+- Add per-phase outputs and exit gates.
+- Add validation coverage for the newly identified conflict, CKSyncEngine, cache durability, and concurrency risks.
 
 ## Final Recommendation
 
