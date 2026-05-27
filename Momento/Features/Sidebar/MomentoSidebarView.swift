@@ -980,6 +980,25 @@ nonisolated enum MomentoSidebarFolderDropPlacement: Equatable {
     case rootEnd
 }
 
+nonisolated enum MomentoSidebarFolderDropPlacementResolver {
+    static func placement(
+        localY: CGFloat,
+        rowHeight: CGFloat,
+        edgeZoneHeight: CGFloat
+    ) -> MomentoSidebarFolderDropPlacement {
+        let clampedY = min(max(localY, 0), rowHeight)
+        if rowHeight - clampedY <= edgeZoneHeight {
+            return .before
+        }
+
+        if clampedY <= edgeZoneHeight {
+            return .after
+        }
+
+        return .into
+    }
+}
+
 private struct MomentoSidebarFolderDropTarget: Equatable {
     var folderID: AssetFolder.ID
     var placement: MomentoSidebarFolderDropPlacement
@@ -1169,15 +1188,11 @@ private struct MomentoSidebarFolderDropDelegate: DropDelegate {
     }
 
     private func dropPlacement(info: DropInfo) -> MomentoSidebarFolderDropPlacement {
-        if info.location.y < MomentoSidebarMenuMetrics.folderDropEdgeZoneHeight {
-            return .before
-        }
-
-        if info.location.y > MomentoSidebarMenuMetrics.folderRowHeight - MomentoSidebarMenuMetrics.folderDropEdgeZoneHeight {
-            return .after
-        }
-
-        return .into
+        MomentoSidebarFolderDropPlacementResolver.placement(
+            localY: info.location.y,
+            rowHeight: MomentoSidebarMenuMetrics.folderRowHeight,
+            edgeZoneHeight: MomentoSidebarMenuMetrics.folderDropEdgeZoneHeight
+        )
     }
 
     private func moveCommand(
