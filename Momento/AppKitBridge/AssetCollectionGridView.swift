@@ -85,6 +85,28 @@ private enum AssetCollectionMetrics {
     }
 }
 
+nonisolated enum AssetCollectionSelectionResolver {
+    private static let rangeOrAdditiveModifiers: NSEvent.ModifierFlags = [.command, .shift, .control, .option]
+
+    static func replacementIndexPathForPlainClick(
+        changedIndexPaths: Set<IndexPath>,
+        selectedIndexPaths: Set<IndexPath>,
+        mouseDownIndexPath: IndexPath?,
+        modifierFlags: NSEvent.ModifierFlags
+    ) -> IndexPath? {
+        guard modifierFlags.intersection(rangeOrAdditiveModifiers).isEmpty,
+              changedIndexPaths.count == 1,
+              let changedIndexPath = changedIndexPaths.first,
+              mouseDownIndexPath == changedIndexPath,
+              selectedIndexPaths.count > 1,
+              selectedIndexPaths.contains(changedIndexPath) else {
+            return nil
+        }
+
+        return changedIndexPath
+    }
+}
+
 private struct AssetColumnLayout {
     let columnCount: Int
     let itemWidth: CGFloat
@@ -528,6 +550,7 @@ extension AssetCollectionGridView {
             didSelectItemsAt indexPaths: Set<IndexPath>
         ) {
             collectionView.window?.makeFirstResponder(collectionView)
+            collapseSelectionAfterPlainClickIfNeeded(indexPaths, in: collectionView)
             publishSelection(from: collectionView)
         }
 
@@ -782,6 +805,26 @@ extension AssetCollectionGridView {
             parent.onSelectionChange(selectedIDs)
         }
 
+        private func collapseSelectionAfterPlainClickIfNeeded(
+            _ indexPaths: Set<IndexPath>,
+            in collectionView: NSCollectionView
+        ) {
+            guard !isSyncingSelection,
+                  let collectionView = collectionView as? AssetPreviewCollectionView,
+                  let replacementIndexPath = AssetCollectionSelectionResolver.replacementIndexPathForPlainClick(
+                    changedIndexPaths: indexPaths,
+                    selectedIndexPaths: collectionView.selectionIndexPaths,
+                    mouseDownIndexPath: collectionView.lastMouseDownIndexPath,
+                    modifierFlags: collectionView.lastMouseDownModifierFlags
+                  ) else {
+                return
+            }
+
+            isSyncingSelection = true
+            collectionView.selectionIndexPaths = [replacementIndexPath]
+            isSyncingSelection = false
+        }
+
         private func orderedDragAssetIDs(
             primaryAssetID: AssetItem.ID,
             in collectionView: NSCollectionView
@@ -846,6 +889,8 @@ private final class AssetPreviewCollectionView: NSCollectionView {
     var onSpacePreviewEnd: (() -> Void)?
     var onFavoriteShortcut: (() -> Bool)?
     var onCommandDeleteShortcut: (() -> Bool)?
+    private(set) var lastMouseDownIndexPath: IndexPath?
+    private(set) var lastMouseDownModifierFlags: NSEvent.ModifierFlags = []
 
     override var acceptsFirstResponder: Bool {
         true
@@ -893,6 +938,12 @@ private final class AssetPreviewCollectionView: NSCollectionView {
         }
 
         super.keyUp(with: event)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        lastMouseDownModifierFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        lastMouseDownIndexPath = indexPathForItem(at: convert(event.locationInWindow, from: nil))
+        super.mouseDown(with: event)
     }
 }
 
