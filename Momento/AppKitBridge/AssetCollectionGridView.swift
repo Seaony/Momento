@@ -876,18 +876,30 @@ private final class AssetCollectionScrollView: NSScrollView {
     }
 
     override func reflectScrolledClipView(_ clipView: NSClipView) {
-        hideScrollIndicators()
         super.reflectScrolledClipView(clipView)
         hideScrollIndicators()
     }
 
     private func hideScrollIndicators() {
+        guard needsHiddenScrollIndicatorReset else {
+            return
+        }
+
         hasVerticalScroller = false
         hasHorizontalScroller = false
         verticalScroller = nil
         horizontalScroller = nil
         contentInsets = AssetCollectionMetrics.zeroEdgeInsets
         scrollerInsets = AssetCollectionMetrics.zeroEdgeInsets
+    }
+
+    private var needsHiddenScrollIndicatorReset: Bool {
+        hasVerticalScroller
+            || hasHorizontalScroller
+            || verticalScroller != nil
+            || horizontalScroller != nil
+            || !contentInsets.areZero
+            || !scrollerInsets.areZero
     }
 }
 
@@ -1218,14 +1230,45 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
     }
 }
 
+private actor AssetPreviewDecodeLimiter {
+    private let limit: Int
+    private var activeCount = 0
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    init(limit: Int) {
+        self.limit = limit
+    }
+
+    func acquire() async {
+        if activeCount < limit {
+            activeCount += 1
+            return
+        }
+
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func release() {
+        if waiters.isEmpty {
+            activeCount = max(activeCount - 1, 0)
+        } else {
+            waiters.removeFirst().resume()
+        }
+    }
+}
+
 nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
     static let shared = AssetPreviewImageProvider()
 
     private static let previewDecodeMaxPixelSize = 512
+    private static let maxConcurrentPreviewDecodes = 2
 
     private let cache = NSCache<NSString, NSImage>()
-    private let prefetchLock = NSLock()
-    private var prefetchingIdentities: Set<String> = []
+    private let loadLock = NSLock()
+    private let decodeLimiter = AssetPreviewDecodeLimiter(limit: AssetPreviewImageProvider.maxConcurrentPreviewDecodes)
+    private var loadingTasks: [String: Task<NSImage?, Never>] = [:]
 
     private init() {
         cache.countLimit = 512
@@ -1265,14 +1308,8 @@ nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
         }
 
         if shouldDecodeThumbnail(for: asset) {
-            let image = await Task.detached(priority: .userInitiated) {
-                autoreleasepool {
-                    Self.decodedThumbnailImage(for: asset)
-                }
-            }.value
-
+            let image = await decodedThumbnailImageAsync(for: asset, priority: .userInitiated)
             if let image {
-                cache.setObject(image, forKey: key, cost: cacheCost(for: image))
                 return image
             }
         }
@@ -1299,24 +1336,25 @@ nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
         let identity = identity(for: asset)
         let key = identity as NSString
         guard cache.object(forKey: key) == nil,
-              shouldDecodeThumbnail(for: asset),
-              beginPrefetching(identity) else {
+              shouldDecodeThumbnail(for: asset) else {
+            return
+        }
+
+        let (task, didCreateTask) = thumbnailDecodeTask(for: asset, identity: identity, priority: .utility)
+        guard didCreateTask else {
             return
         }
 
         Task.detached(priority: .utility) { [self] in
             defer {
-                endPrefetching(identity)
+                completeThumbnailDecode(identity: identity)
             }
 
             guard cache.object(forKey: key) == nil else {
                 return
             }
 
-            let image = autoreleasepool {
-                Self.decodedThumbnailImage(for: asset)
-            }
-
+            let image = await task.value
             if let image {
                 cache.setObject(image, forKey: key, cost: cacheCost(for: image))
             }
@@ -1357,22 +1395,51 @@ nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
         (asset.kind == .image || asset.kind == .gif) && asset.thumbnailURL != nil
     }
 
-    private func beginPrefetching(_ identity: String) -> Bool {
-        prefetchLock.lock()
-        defer { prefetchLock.unlock() }
-
-        guard !prefetchingIdentities.contains(identity) else {
-            return false
+    private func decodedThumbnailImageAsync(for asset: AssetItem, priority: TaskPriority) async -> NSImage? {
+        let identity = identity(for: asset)
+        let key = identity as NSString
+        if let cachedImage = cache.object(forKey: key) {
+            return cachedImage
         }
 
-        prefetchingIdentities.insert(identity)
-        return true
+        let (task, _) = thumbnailDecodeTask(for: asset, identity: identity, priority: priority)
+        let image = await task.value
+        if let image {
+            cache.setObject(image, forKey: key, cost: cacheCost(for: image))
+        }
+        completeThumbnailDecode(identity: identity)
+        return image
     }
 
-    private func endPrefetching(_ identity: String) {
-        prefetchLock.lock()
-        prefetchingIdentities.remove(identity)
-        prefetchLock.unlock()
+    private func thumbnailDecodeTask(
+        for asset: AssetItem,
+        identity: String,
+        priority: TaskPriority
+    ) -> (task: Task<NSImage?, Never>, didCreateTask: Bool) {
+        loadLock.lock()
+        defer { loadLock.unlock() }
+
+        if let loadingTask = loadingTasks[identity] {
+            return (loadingTask, false)
+        }
+
+        let decodeLimiter = decodeLimiter
+        let task = Task.detached(priority: priority) {
+            await decodeLimiter.acquire()
+            let image = autoreleasepool {
+                Self.decodedThumbnailImage(for: asset)
+            }
+            await decodeLimiter.release()
+            return image
+        }
+        loadingTasks[identity] = task
+        return (task, true)
+    }
+
+    private func completeThumbnailDecode(identity: String) {
+        loadLock.lock()
+        loadingTasks[identity] = nil
+        loadLock.unlock()
     }
 
     private static func decodedThumbnailImage(for asset: AssetItem) -> NSImage? {
@@ -2741,5 +2808,11 @@ private final class HoverSelectionView: NSView {
 private extension CGFloat {
     func clamped(to range: ClosedRange<CGFloat>) -> CGFloat {
         Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
+    }
+}
+
+private extension NSEdgeInsets {
+    var areZero: Bool {
+        top == 0 && left == 0 && bottom == 0 && right == 0
     }
 }
