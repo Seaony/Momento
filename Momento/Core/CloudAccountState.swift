@@ -29,9 +29,7 @@ nonisolated enum CloudAccountState: Equatable, Sendable {
         switch self {
         case .available(let identity):
             identity.cloudAccountID
-        case .mismatch(_, let actualCloudAccountID):
-            actualCloudAccountID
-        case .unavailable, .restricted, .error:
+        case .unavailable, .restricted, .error, .mismatch:
             nil
         }
     }

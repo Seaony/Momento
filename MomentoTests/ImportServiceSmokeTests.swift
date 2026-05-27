@@ -1252,6 +1252,45 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testRecentLibraryStoreKeepsValidLocalLibrariesWhenOneDescriptorHasUnknownMode() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let library = try LibraryStorage().createLibraryPackage(at: environment.packageURL, name: "Legacy")
+        let bookmarkData = try environment.packageURL.bookmarkData(
+            options: [.withSecurityScope],
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+        let encodedReferences = try JSONSerialization.data(withJSONObject: [
+            [
+                "id": library.id,
+                "name": library.name,
+                "bookmarkData": bookmarkData.base64EncodedString()
+            ],
+            [
+                "id": "future-cloud",
+                "name": "Future Cloud",
+                "storageMode": "future-cloud-mode",
+                "cloudLibraryID": "future-cloud",
+                "cloudAccountID": "future-account"
+            ]
+        ])
+        environment.defaults.set(encodedReferences, forKey: "recentLibraries")
+
+        let recentStore = RecentLibraryStore(defaults: environment.defaults)
+        let references = recentStore.load()
+
+        XCTAssertEqual(references.map(\.id), [library.id])
+        XCTAssertEqual(references.first?.storageMode, .local)
+        XCTAssertEqual(references.first?.bookmarkData, bookmarkData)
+
+        let cleanedData = try XCTUnwrap(environment.defaults.data(forKey: "recentLibraries"))
+        let persistedReferences = try JSONDecoder.momento.decode([RecentLibraryReference].self, from: cleanedData)
+        XCTAssertEqual(persistedReferences.map(\.id), [library.id])
+    }
+
+    @MainActor
     func testCloudRecentLibraryIsNotOpenedAsLocalPackageOnLaunch() throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }
@@ -1399,6 +1438,10 @@ final class LibraryPackagePersistenceTests: XCTestCase {
 
         XCTAssertEqual(recentStore.load().map(\.id), ["valid-cloud"])
         XCTAssertEqual(recentStore.load(includeLocalLibraries: false).map(\.id), ["valid-cloud"])
+
+        let cleanedData = try XCTUnwrap(environment.defaults.data(forKey: "recentLibraries"))
+        let persistedReferences = try JSONDecoder.momento.decode([RecentLibraryReference].self, from: cleanedData)
+        XCTAssertEqual(persistedReferences.map(\.id), ["valid-cloud"])
     }
 
     @MainActor
@@ -1435,6 +1478,81 @@ final class LibraryPackagePersistenceTests: XCTestCase {
             }
         }
         XCTAssertTrue(recentStore.load().isEmpty)
+    }
+
+    @MainActor
+    func testSavingCloudPlaceholderRequiresStableDescriptorIdentity() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let recentStore = RecentLibraryStore(defaults: environment.defaults)
+
+        XCTAssertThrowsError(
+            try recentStore.saveCloudPlaceholder(
+                id: " ",
+                name: "Cloud Library",
+                cloudLibraryID: "cloud-library",
+                accountState: testCloudAccountState()
+            )
+        ) { error in
+            guard let registryError = error as? RecentLibraryStoreError,
+                  case .invalidCloudLibraryDescriptor = registryError else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+        XCTAssertThrowsError(
+            try recentStore.saveCloudPlaceholder(
+                id: "cloud-library",
+                name: " ",
+                cloudLibraryID: "cloud-library",
+                accountState: testCloudAccountState()
+            )
+        ) { error in
+            guard let registryError = error as? RecentLibraryStoreError,
+                  case .invalidCloudLibraryDescriptor = registryError else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+        XCTAssertThrowsError(
+            try recentStore.saveCloudPlaceholder(
+                id: "cloud-library",
+                name: "Cloud Library",
+                cloudLibraryID: " ",
+                accountState: testCloudAccountState()
+            )
+        ) { error in
+            guard let registryError = error as? RecentLibraryStoreError,
+                  case .invalidCloudLibraryDescriptor = registryError else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+        XCTAssertTrue(recentStore.load().isEmpty)
+    }
+
+    @MainActor
+    func testSavingCloudPlaceholderReplacesSameCloudLibraryID() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let recentStore = RecentLibraryStore(defaults: environment.defaults)
+        try recentStore.saveCloudPlaceholder(
+            id: "first-descriptor",
+            name: "Original Name",
+            cloudLibraryID: "cloud-library",
+            accountState: testCloudAccountState()
+        )
+        try recentStore.saveCloudPlaceholder(
+            id: "second-descriptor",
+            name: "Renamed",
+            cloudLibraryID: " cloud-library ",
+            accountState: testCloudAccountState()
+        )
+
+        let references = recentStore.load()
+        XCTAssertEqual(references.count, 1)
+        XCTAssertEqual(references.first?.id, "second-descriptor")
+        XCTAssertEqual(references.first?.name, "Renamed")
+        XCTAssertEqual(references.first?.cloudLibraryID, "cloud-library")
     }
 
     @MainActor

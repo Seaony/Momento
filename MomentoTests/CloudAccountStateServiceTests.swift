@@ -127,7 +127,7 @@ final class CloudAccountStateServiceTests: XCTestCase {
             )
         )
         XCTAssertFalse(state.canCreateCloudLibraryPlaceholder)
-        XCTAssertEqual(state.cloudAccountID, actualCloudAccountID)
+        XCTAssertNil(state.cloudAccountID)
     }
 
     func testAccountChangeObservationHandlesCloudKitAndUbiquityChanges() {
