@@ -54,6 +54,49 @@ final class AssetPreviewImageProviderTests: XCTestCase {
         XCTAssertNil(provider.cachedImage(for: asset))
     }
 
+    func testSourceValidatorFailureDoesNotDecodeOrFallbackToStoredFile() {
+        let readProbe = PreviewReadProbe()
+        let provider = AssetPreviewImageProvider(
+            thumbnailDecoder: { _ in
+                readProbe.recordThumbnailDecode()
+                return Self.makeImage()
+            },
+            fallbackImageProvider: { _ in
+                readProbe.recordFallbackRead()
+                return Self.makeImage()
+            }
+        )
+        let asset = Self.makeAsset()
+
+        _ = provider.image(for: asset, sourceAccessValidator: {
+            throw LibraryStorageError.ubiquitousLibraryPackageUnsupported
+        })
+
+        XCTAssertFalse(readProbe.didDecodeThumbnail)
+        XCTAssertFalse(readProbe.didReadFallbackFile)
+        XCTAssertNil(provider.cachedImage(for: asset))
+    }
+
+    func testSourceValidatorFailureDoesNotReturnCachedStoredPreview() {
+        let provider = AssetPreviewImageProvider(
+            thumbnailDecoder: { _ in
+                Self.makeImage()
+            },
+            fallbackImageProvider: { _ in
+                Self.makeImage()
+            }
+        )
+        let asset = Self.makeAsset()
+
+        _ = provider.image(for: asset)
+
+        let guardedImage = provider.image(for: asset, sourceAccessValidator: {
+            throw LibraryStorageError.ubiquitousLibraryPackageUnsupported
+        })
+
+        XCTAssertNotIdentical(guardedImage, provider.cachedImage(for: asset))
+    }
+
     private static func makeAsset() -> AssetItem {
         let url = URL(fileURLWithPath: "/tmp/momento-preview-test.png")
         return AssetItem(
@@ -76,5 +119,35 @@ final class AssetPreviewImageProviderTests: XCTestCase {
 
     private static func makeImage() -> NSImage {
         NSImage(size: NSSize(width: 16, height: 16))
+    }
+
+    private final class PreviewReadProbe: @unchecked Sendable {
+        private let lock = NSLock()
+        private var thumbnailDecodeCount = 0
+        private var fallbackReadCount = 0
+
+        var didDecodeThumbnail: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return thumbnailDecodeCount > 0
+        }
+
+        var didReadFallbackFile: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return fallbackReadCount > 0
+        }
+
+        func recordThumbnailDecode() {
+            lock.lock()
+            thumbnailDecodeCount += 1
+            lock.unlock()
+        }
+
+        func recordFallbackRead() {
+            lock.lock()
+            fallbackReadCount += 1
+            lock.unlock()
+        }
     }
 }

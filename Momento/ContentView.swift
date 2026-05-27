@@ -93,8 +93,17 @@ struct ContentView: View {
         selectedInspectorAssets(from: store.visibleAssets)
     }
 
-    private func inspectorAssets(from selectedAssets: [AssetItem]) -> [MomentoInspectorAsset] {
-        selectedAssets.map { MomentoInspectorAsset(asset: $0, localization: localization) }
+    private func inspectorAssets(
+        from selectedAssets: [AssetItem],
+        sourceAccessValidator: (@Sendable () throws -> Void)?
+    ) -> [MomentoInspectorAsset] {
+        selectedAssets.map {
+            MomentoInspectorAsset(
+                asset: $0,
+                localization: localization,
+                sourceAccessValidator: sourceAccessValidator
+            )
+        }
     }
 
     private func selectedTags(for renderedSelectedAssets: [AssetItem]) -> Binding<[String]> {
@@ -193,6 +202,7 @@ struct ContentView: View {
     private var libraryBody: some View {
         let visibleAssets = store.visibleAssets
         let selectedInspectorAssets = selectedInspectorAssets(from: visibleAssets)
+        let sourceReadValidator = store.currentLibrarySourceReadValidator()
 
         return MomentoShellView(
             sidebarSelection: sidebarSelection,
@@ -222,8 +232,14 @@ struct ContentView: View {
             onAssignDroppedAssetsToFolder: assignDroppedAssetsToFolder,
             title: title,
             subtitle: localization.itemCount(visibleAssets.count),
-            inspectorAsset: store.selectedAsset.map { MomentoInspectorAsset(asset: $0, localization: localization) },
-            inspectorAssets: inspectorAssets(from: selectedInspectorAssets),
+            inspectorAsset: store.selectedAsset.map {
+                MomentoInspectorAsset(
+                    asset: $0,
+                    localization: localization,
+                    sourceAccessValidator: sourceReadValidator
+                )
+            },
+            inspectorAssets: inspectorAssets(from: selectedInspectorAssets, sourceAccessValidator: sourceReadValidator),
             inspectorTags: selectedTags(for: selectedInspectorAssets),
             inspectorAvailableTags: availableTagNames,
             inspectorFolderIDs: selectedFolderIDs(for: selectedInspectorAssets),
@@ -234,7 +250,7 @@ struct ContentView: View {
             if isTagManagementSelected {
                 tagManagementContent
             } else {
-                assetGridContent(visibleAssets)
+                assetGridContent(visibleAssets, sourceReadValidator: sourceReadValidator)
             }
         }
         .toolbar {
@@ -309,7 +325,10 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private func assetGridContent(_ visibleAssets: [AssetItem]) -> some View {
+    private func assetGridContent(
+        _ visibleAssets: [AssetItem],
+        sourceReadValidator: (@Sendable () throws -> Void)?
+    ) -> some View {
         ZStack {
             AssetCollectionGridView(
                 assets: visibleAssets,
@@ -324,7 +343,14 @@ struct ContentView: View {
                 onSpacePreviewEnd: endSpacePreview,
                 onFavoriteToggle: toggleFavorite,
                 onCommandDelete: commandDeleteSelectedAssets,
-                onContextMenuAction: handleAssetContextMenuAction
+                onContextMenuAction: handleAssetContextMenuAction,
+                assetSourceAccessValidator: {
+                    try store.currentLiveLocalLibrarySourceAccessValidator()
+                },
+                assetSourceReadValidator: {
+                    sourceReadValidator
+                },
+                onAssetSourceAccessError: handleAssetSourceAccessError
             )
 
             if visibleAssets.isEmpty {
@@ -1440,6 +1466,15 @@ struct ContentView: View {
     }
 
     private func previewURL(for asset: AssetItem) -> URL? {
+        let sourceAccessValidator: @Sendable () throws -> Void
+        do {
+            sourceAccessValidator = try store.currentLiveLocalLibrarySourceAccessValidator()
+            try sourceAccessValidator()
+        } catch {
+            handleAssetSourceAccessError(error)
+            return nil
+        }
+
         if FileManager.default.fileExists(atPath: asset.storageURL.path) {
             return asset.storageURL
         }
@@ -1828,7 +1863,13 @@ struct ContentView: View {
     }
 
     private func presentAssetExportDialog(for assets: [AssetItem]) {
-        let exportableAssets = assets.filter { !$0.isTrashed || FileManager.default.fileExists(atPath: $0.storageURL.path) }
+        let sourceReadValidator = store.currentLibrarySourceReadValidator()
+        let canReadStoredSource = canReadAssetSourceFiles(sourceReadValidator)
+        let exportableAssets = assets.filter {
+            !$0.isTrashed || (
+                canReadStoredSource && FileManager.default.fileExists(atPath: $0.storageURL.path)
+            )
+        }
         guard !exportableAssets.isEmpty else {
             return
         }
@@ -1839,6 +1880,14 @@ struct ContentView: View {
     }
 
     private func exportAssets(_ assets: [AssetItem], configuration: AssetExportConfiguration) {
+        let sourceAccessValidator: @Sendable () throws -> Void
+        do {
+            sourceAccessValidator = try store.currentLiveLocalLibrarySourceAccessValidator()
+        } catch {
+            handleAssetSourceAccessError(error)
+            return
+        }
+
         guard let destinationURL = chooseAssetExportDestination(for: assets, configuration: configuration) else {
             return
         }
@@ -1853,6 +1902,7 @@ struct ContentView: View {
 
             do {
                 let exportedURLs = try await Task.detached(priority: .userInitiated) {
+                    try sourceAccessValidator()
                     let exportService = AssetExportService()
                     if assets.count == 1, let asset = assets.first {
                         return try [exportService.export(asset, configuration: configuration, to: destinationURL)]
@@ -1871,10 +1921,30 @@ struct ContentView: View {
                 }
             } catch {
                 await MainActor.run {
-                    showImportError(error)
+                    handleAssetSourceAccessError(error)
                 }
             }
         }
+    }
+
+    private func canReadAssetSourceFiles(_ sourceAccessValidator: (@Sendable () throws -> Void)?) -> Bool {
+        guard let sourceAccessValidator else {
+            return true
+        }
+
+        do {
+            try sourceAccessValidator()
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func handleAssetSourceAccessError(_ error: Error) {
+        if case LibraryStorageError.ubiquitousLibraryPackageUnsupported = error {
+            try? store.validateCurrentLibraryAvailability()
+        }
+        showImportError(error)
     }
 
     private func chooseAssetExportDestination(
@@ -2251,16 +2321,23 @@ struct ContentView: View {
 }
 
 private extension MomentoInspectorAsset {
-    init(asset: AssetItem, localization: AppLocalization) {
+    init(
+        asset: AssetItem,
+        localization: AppLocalization,
+        sourceAccessValidator: (@Sendable () throws -> Void)? = nil
+    ) {
+        let canReadStoredSource = Self.canReadStoredSource(sourceAccessValidator)
         let fileURL: URL?
-        if FileManager.default.fileExists(atPath: asset.storageURL.path) {
+        if canReadStoredSource, FileManager.default.fileExists(atPath: asset.storageURL.path) {
             fileURL = asset.storageURL
         } else {
             fileURL = asset.originalURL
         }
 
         let previewURL: URL?
-        if let thumbnailURL = asset.thumbnailURL, FileManager.default.fileExists(atPath: thumbnailURL.path) {
+        if canReadStoredSource,
+           let thumbnailURL = asset.thumbnailURL,
+           FileManager.default.fileExists(atPath: thumbnailURL.path) {
             previewURL = thumbnailURL
         } else {
             previewURL = fileURL
@@ -2270,7 +2347,13 @@ private extension MomentoInspectorAsset {
             id: asset.id,
             title: asset.displayName,
             fileName: fileURL?.lastPathComponent ?? asset.displayName,
-            previewImage: Self.cachedPreviewImage(for: asset, previewURL: previewURL),
+            previewImage: canReadStoredSource
+                ? Self.cachedPreviewImage(
+                    for: asset,
+                    previewURL: previewURL,
+                    sourceAccessValidator: sourceAccessValidator
+                )
+                : nil,
             dimensions: asset.dimensions.map { "\($0.width) × \($0.height)" },
             colors: asset.paletteColors.map { color in
                 MomentoInspectorColor(hex: color.hex, coverage: color.coverage)
@@ -2284,13 +2367,30 @@ private extension MomentoInspectorAsset {
         )
     }
 
-    private static func cachedPreviewImage(for asset: AssetItem, previewURL: URL?) -> NSImage? {
+    private static func canReadStoredSource(_ sourceAccessValidator: (@Sendable () throws -> Void)?) -> Bool {
+        guard let sourceAccessValidator else {
+            return true
+        }
+
+        do {
+            try sourceAccessValidator()
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private static func cachedPreviewImage(
+        for asset: AssetItem,
+        previewURL: URL?,
+        sourceAccessValidator: (@Sendable () throws -> Void)?
+    ) -> NSImage? {
         guard previewURL != nil,
               asset.kind == .image || asset.kind == .gif else {
             return nil
         }
 
-        return AssetPreviewImageProvider.shared.image(for: asset)
+        return AssetPreviewImageProvider.shared.image(for: asset, sourceAccessValidator: sourceAccessValidator)
     }
 
     private static func exifItems(

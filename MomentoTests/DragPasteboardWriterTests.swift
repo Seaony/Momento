@@ -39,6 +39,84 @@ final class DragPasteboardWriterTests: XCTestCase {
         XCTAssertEqual(payload.primaryAssetID, "asset-a")
     }
 
+    func testAssetFilePromiseProviderRejectsCopyWhenSourceValidatorFails() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "momento-drag-promise-tests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let sourceURL = directory.appendingPathComponent("source.png")
+        try Data("asset".utf8).write(to: sourceURL)
+        let destinationURL = directory.appendingPathComponent("destination.png")
+        let asset = makeAsset(storageURL: sourceURL)
+        let provider = try XCTUnwrap(AssetFilePromiseProvider(
+            asset: asset,
+            libraryID: "library",
+            assetIDs: ["asset-a"],
+            primaryAssetID: "asset-a",
+            exportBatch: AssetDragExportBatch(expectedFileCount: 1),
+            sourceAccessValidator: {
+                throw LibraryStorageError.ubiquitousLibraryPackageUnsupported
+            }
+        ))
+
+        let promiseWritten = expectation(description: "Promise write completes")
+        var capturedError: Error?
+        provider.filePromiseProvider(provider, writePromiseTo: destinationURL) { error in
+            capturedError = error
+            promiseWritten.fulfill()
+        }
+        wait(for: [promiseWritten], timeout: 1)
+
+        guard let storageError = capturedError as? LibraryStorageError,
+              case .ubiquitousLibraryPackageUnsupported = storageError else {
+            return XCTFail("Unexpected error: \(String(describing: capturedError))")
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destinationURL.path))
+    }
+
+    func testAssetFilePromiseProviderReportsSourceValidatorFailureToApp() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "momento-drag-promise-report-tests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let sourceURL = directory.appendingPathComponent("source.png")
+        try Data("asset".utf8).write(to: sourceURL)
+        let destinationURL = directory.appendingPathComponent("destination.png")
+        let sourceAccessRejected = expectation(description: "Source access error is reported")
+        var reportedError: Error?
+        let provider = try XCTUnwrap(AssetFilePromiseProvider(
+            asset: makeAsset(storageURL: sourceURL),
+            libraryID: "library",
+            assetIDs: ["asset-a"],
+            primaryAssetID: "asset-a",
+            exportBatch: AssetDragExportBatch(expectedFileCount: 1),
+            sourceAccessValidator: {
+                throw LibraryStorageError.ubiquitousLibraryPackageUnsupported
+            },
+            onSourceAccessError: { error in
+                reportedError = error
+                sourceAccessRejected.fulfill()
+            }
+        ))
+
+        let promiseWritten = expectation(description: "Promise write completes")
+        provider.filePromiseProvider(provider, writePromiseTo: destinationURL) { _ in
+            promiseWritten.fulfill()
+        }
+        wait(for: [sourceAccessRejected, promiseWritten], timeout: 1)
+
+        guard let storageError = reportedError as? LibraryStorageError,
+              case .ubiquitousLibraryPackageUnsupported = storageError else {
+            return XCTFail("Unexpected error: \(String(describing: reportedError))")
+        }
+    }
+
     private func loadDataRepresentation(
         from provider: NSItemProvider,
         typeIdentifier: String
@@ -60,13 +138,13 @@ final class DragPasteboardWriterTests: XCTestCase {
         }
     }
 
-    private func makeAsset() -> AssetItem {
+    private func makeAsset(storageURL: URL = URL(fileURLWithPath: "/tmp/momento-drag-pasteboard-writer-test.png")) -> AssetItem {
         AssetItem(
             id: "asset-a",
             libraryID: "library",
             displayName: "Asset A",
             originalURL: nil,
-            storageURL: URL(fileURLWithPath: "/tmp/momento-drag-pasteboard-writer-test.png"),
+            storageURL: storageURL,
             kind: .image,
             fileExtension: "png",
             byteSize: 1,

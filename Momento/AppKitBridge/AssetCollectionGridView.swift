@@ -193,6 +193,9 @@ struct AssetCollectionGridView: NSViewRepresentable {
     var onFavoriteToggle: (AssetItem) -> Void
     var onCommandDelete: (Set<AssetItem.ID>) -> Bool
     var onContextMenuAction: (AssetItem, [AssetItem], AssetContextMenuAction) -> Void
+    var assetSourceAccessValidator: () throws -> @Sendable () throws -> Void
+    var assetSourceReadValidator: () -> (@Sendable () throws -> Void)?
+    var onAssetSourceAccessError: (Error) -> Void
 
     static func invalidatePreviewCache(for asset: AssetItem) {
         AssetPreviewImageProvider.shared.invalidateImage(for: asset)
@@ -209,7 +212,10 @@ struct AssetCollectionGridView: NSViewRepresentable {
         onSpacePreviewEnd: @escaping () -> Void = {},
         onFavoriteToggle: @escaping (AssetItem) -> Void = { _ in },
         onCommandDelete: @escaping (Set<AssetItem.ID>) -> Bool = { _ in false },
-        onContextMenuAction: @escaping (AssetItem, [AssetItem], AssetContextMenuAction) -> Void = { _, _, _ in }
+        onContextMenuAction: @escaping (AssetItem, [AssetItem], AssetContextMenuAction) -> Void = { _, _, _ in },
+        assetSourceAccessValidator: @escaping () throws -> @Sendable () throws -> Void = { {} },
+        assetSourceReadValidator: @escaping () -> (@Sendable () throws -> Void)? = { nil },
+        onAssetSourceAccessError: @escaping (Error) -> Void = { _ in }
     ) {
         self.assets = assets
         self.selectedAssetIDs = selectedAssetIDs
@@ -222,6 +228,9 @@ struct AssetCollectionGridView: NSViewRepresentable {
         self.onFavoriteToggle = onFavoriteToggle
         self.onCommandDelete = onCommandDelete
         self.onContextMenuAction = onContextMenuAction
+        self.assetSourceAccessValidator = assetSourceAccessValidator
+        self.assetSourceReadValidator = assetSourceReadValidator
+        self.onAssetSourceAccessError = onAssetSourceAccessError
     }
 
     func makeCoordinator() -> Coordinator {
@@ -510,13 +519,21 @@ extension AssetCollectionGridView {
             assetItem.onFavoriteToggle = { [weak self, assetID = asset.id] in
                 self?.toggleFavorite(assetID: assetID)
             }
-            assetItem.configure(with: asset, viewMode: parent.viewMode, localization: parent.localization)
+            assetItem.configure(
+                with: asset,
+                viewMode: parent.viewMode,
+                localization: parent.localization,
+                sourceAccessValidator: parent.assetSourceReadValidator()
+            )
             return assetItem
         }
 
         func collectionView(_ collectionView: NSCollectionView, prefetchItemsAt indexPaths: [IndexPath]) {
             for indexPath in indexPaths where parent.assets.indices.contains(indexPath.item) {
-                AssetPreviewImageProvider.shared.prefetchImage(for: parent.assets[indexPath.item])
+                AssetPreviewImageProvider.shared.prefetchImage(
+                    for: parent.assets[indexPath.item],
+                    sourceAccessValidator: parent.assetSourceReadValidator()
+                )
             }
         }
 
@@ -594,6 +611,15 @@ extension AssetCollectionGridView {
 
             let primaryAssetID = activeDragPrimaryAssetID ?? asset.id
             let selectedAssetIDs = orderedDragAssetIDs(primaryAssetID: primaryAssetID, in: collectionView)
+            let sourceAccessValidator: @Sendable () throws -> Void
+            do {
+                sourceAccessValidator = try parent.assetSourceAccessValidator()
+            } catch {
+                parent.onAssetSourceAccessError(error)
+                return nil
+            }
+            let onSourceAccessError = parent.onAssetSourceAccessError
+
             let exportBatch: AssetDragExportBatch
             if let activeDragExportBatch {
                 exportBatch = activeDragExportBatch
@@ -608,7 +634,13 @@ extension AssetCollectionGridView {
                 libraryID: asset.libraryID,
                 assetIDs: selectedAssetIDs,
                 primaryAssetID: primaryAssetID,
-                exportBatch: exportBatch
+                exportBatch: exportBatch,
+                sourceAccessValidator: sourceAccessValidator,
+                onSourceAccessError: { error in
+                    DispatchQueue.main.async {
+                        onSourceAccessError(error)
+                    }
+                }
             )
         }
 
@@ -1389,6 +1421,7 @@ private actor AssetPreviewDecodeLimiter {
 nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
     typealias ThumbnailDecoder = @Sendable (AssetItem) -> NSImage?
     typealias FallbackImageProvider = @Sendable (AssetItem) -> NSImage
+    typealias SourceAccessValidator = @Sendable () throws -> Void
 
     static let shared = AssetPreviewImageProvider()
 
@@ -1431,36 +1464,56 @@ nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
         cache.object(forKey: identity(for: asset) as NSString)
     }
 
-    func image(for asset: AssetItem) -> NSImage {
+    func cachedImage(for asset: AssetItem, sourceAccessValidator: SourceAccessValidator?) -> NSImage? {
+        guard canReadStoredSource(sourceAccessValidator) else {
+            return nil
+        }
+
+        return cachedImage(for: asset)
+    }
+
+    func image(for asset: AssetItem, sourceAccessValidator: SourceAccessValidator? = nil) -> NSImage {
         let key = identity(for: asset) as NSString
+        guard canReadStoredSource(sourceAccessValidator) else {
+            return typeIcon(for: asset)
+        }
+
         if let cachedImage = cache.object(forKey: key) {
             return cachedImage
         }
 
-        let image = loadImage(for: asset)
+        let image = loadImage(for: asset, sourceAccessValidator: sourceAccessValidator)
         cache.setObject(image, forKey: key, cost: cacheCost(for: image))
         return image
     }
 
-    func imageAsync(for asset: AssetItem) async -> NSImage {
+    func imageAsync(for asset: AssetItem, sourceAccessValidator: SourceAccessValidator? = nil) async -> NSImage {
         let identity = identity(for: asset)
         let key = identity as NSString
+        guard canReadStoredSource(sourceAccessValidator) else {
+            return typeIcon(for: asset)
+        }
+
         if let cachedImage = cache.object(forKey: key) {
             return cachedImage
         }
 
         if shouldDecodeThumbnail(for: asset) {
-            let image = await decodedThumbnailImageAsync(for: asset, priority: .userInitiated)
+            let image = await decodedThumbnailImageAsync(
+                for: asset,
+                priority: .userInitiated,
+                sourceAccessValidator: sourceAccessValidator
+            )
             if let image {
                 return image
             }
         }
 
         if Task.isCancelled {
-            return placeholderImage(for: asset)
+            return placeholderImage(for: asset, sourceAccessValidator: sourceAccessValidator)
         }
 
-        let image = fallbackIcon(for: asset)
+        let image = fallbackIcon(for: asset, sourceAccessValidator: sourceAccessValidator)
         cache.setObject(image, forKey: key, cost: cacheCost(for: image))
         return image
     }
@@ -1469,20 +1522,21 @@ nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
         shouldDecodeThumbnail(for: asset)
     }
 
-    func placeholderImage(for asset: AssetItem) -> NSImage {
+    func placeholderImage(for asset: AssetItem, sourceAccessValidator: SourceAccessValidator? = nil) -> NSImage {
         if shouldDecodeThumbnail(for: asset),
            let type = UTType(filenameExtension: asset.fileExtension) {
             return NSWorkspace.shared.icon(for: type)
         }
 
-        return fallbackIcon(for: asset)
+        return fallbackIcon(for: asset, sourceAccessValidator: sourceAccessValidator)
     }
 
-    func prefetchImage(for asset: AssetItem) {
+    func prefetchImage(for asset: AssetItem, sourceAccessValidator: SourceAccessValidator? = nil) {
         let identity = identity(for: asset)
         let key = identity as NSString
         guard cache.object(forKey: key) == nil,
               shouldDecodeThumbnail(for: asset),
+              canReadStoredSource(sourceAccessValidator),
               beginPrefetching(identity) else {
             return
         }
@@ -1511,8 +1565,11 @@ nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
                 return
             }
 
-            let image = autoreleasepool {
-                thumbnailDecoder(asset)
+            let image = autoreleasepool { () -> NSImage? in
+                guard canReadStoredSource(sourceAccessValidator) else {
+                    return nil
+                }
+                return thumbnailDecoder(asset)
             }
             await decodeLimiter.releasePrefetch()
             completePrefetch(identity: identity)
@@ -1535,18 +1592,25 @@ nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
         cache.removeObject(forKey: identity as NSString)
     }
 
-    private func loadImage(for asset: AssetItem) -> NSImage {
+    private func loadImage(for asset: AssetItem, sourceAccessValidator: SourceAccessValidator?) -> NSImage {
         if asset.kind == .image || asset.kind == .gif {
+            guard canReadStoredSource(sourceAccessValidator) else {
+                return typeIcon(for: asset)
+            }
             if let image = thumbnailDecoder(asset) {
                 return image
             }
         }
 
-        return fallbackIcon(for: asset)
+        return fallbackIcon(for: asset, sourceAccessValidator: sourceAccessValidator)
     }
 
-    private func fallbackIcon(for asset: AssetItem) -> NSImage {
-        fallbackImageProvider(asset)
+    private func fallbackIcon(for asset: AssetItem, sourceAccessValidator: SourceAccessValidator?) -> NSImage {
+        guard canReadStoredSource(sourceAccessValidator) else {
+            return typeIcon(for: asset)
+        }
+
+        return fallbackImageProvider(asset)
     }
 
     private static func defaultFallbackIcon(for asset: AssetItem) -> NSImage {
@@ -1565,19 +1629,52 @@ nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
         return NSWorkspace.shared.icon(for: .data)
     }
 
+    private func canReadStoredSource(_ sourceAccessValidator: SourceAccessValidator?) -> Bool {
+        guard let sourceAccessValidator else {
+            return true
+        }
+
+        do {
+            try sourceAccessValidator()
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private static func typeIcon(for asset: AssetItem) -> NSImage {
+        if let type = UTType(filenameExtension: asset.fileExtension) {
+            return NSWorkspace.shared.icon(for: type)
+        }
+
+        return NSWorkspace.shared.icon(for: .data)
+    }
+
+    private func typeIcon(for asset: AssetItem) -> NSImage {
+        Self.typeIcon(for: asset)
+    }
+
     private func shouldDecodeThumbnail(for asset: AssetItem) -> Bool {
         (asset.kind == .image || asset.kind == .gif) && asset.thumbnailURL != nil
     }
 
-    private func decodedThumbnailImageAsync(for asset: AssetItem, priority: TaskPriority) async -> NSImage? {
+    private func decodedThumbnailImageAsync(
+        for asset: AssetItem,
+        priority: TaskPriority,
+        sourceAccessValidator: SourceAccessValidator?
+    ) async -> NSImage? {
         let identity = identity(for: asset)
         let key = identity as NSString
-        if let cachedImage = cache.object(forKey: key) {
+        if let cachedImage = cachedImage(for: asset, sourceAccessValidator: sourceAccessValidator) {
             return cachedImage
         }
 
         cancelPrefetch(identity: identity)
-        let task = visibleDecodeTask(for: asset, priority: priority)
+        let task = visibleDecodeTask(
+            for: asset,
+            priority: priority,
+            sourceAccessValidator: sourceAccessValidator
+        )
         let image = await withTaskCancellationHandler {
             await task.value
         } onCancel: {
@@ -1596,7 +1693,8 @@ nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
 
     private func visibleDecodeTask(
         for asset: AssetItem,
-        priority: TaskPriority
+        priority: TaskPriority,
+        sourceAccessValidator: SourceAccessValidator?
     ) -> Task<NSImage?, Never> {
         let decodeLimiter = decodeLimiter
         let thumbnailDecoder = thumbnailDecoder
@@ -1611,8 +1709,11 @@ nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
                 return nil
             }
 
-            let image = autoreleasepool {
-                thumbnailDecoder(asset)
+            let image = autoreleasepool { () -> NSImage? in
+                guard self.canReadStoredSource(sourceAccessValidator) else {
+                    return nil
+                }
+                return thumbnailDecoder(asset)
             }
             await decodeLimiter.releaseVisible()
             return Task.isCancelled ? nil : image
@@ -1920,7 +2021,12 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         updateTextColors()
     }
 
-    func configure(with asset: AssetItem, viewMode: AssetViewMode, localization: AppLocalization) {
+    func configure(
+        with asset: AssetItem,
+        viewMode: AssetViewMode,
+        localization: AppLocalization,
+        sourceAccessValidator: (@Sendable () throws -> Void)? = nil
+    ) {
         previewImageTask?.cancel()
         previewImageTask = nil
         self.asset = asset
@@ -1934,16 +2040,23 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         let previewProvider = AssetPreviewImageProvider.shared
         let previewIdentity = previewProvider.identity(for: asset)
         let viewImageIdentity = "\(viewMode.rawValue):\(previewIdentity)"
-        let cachedImage = previewProvider.cachedImage(for: asset)
+        let cachedImage = previewProvider.cachedImage(for: asset, sourceAccessValidator: sourceAccessValidator)
         let canLoadImageAsync = previewProvider.shouldLoadImageAsync(for: asset)
         previewImageView.setImage(
-            cachedImage ?? (canLoadImageAsync ? previewProvider.placeholderImage(for: asset) : previewProvider.image(for: asset)),
+            cachedImage ?? (
+                canLoadImageAsync
+                    ? previewProvider.placeholderImage(for: asset, sourceAccessValidator: sourceAccessValidator)
+                    : previewProvider.image(for: asset, sourceAccessValidator: sourceAccessValidator)
+            ),
             identity: cachedImage == nil && canLoadImageAsync ? "\(viewImageIdentity):placeholder" : viewImageIdentity,
             animated: false
         )
         if cachedImage == nil && canLoadImageAsync {
-            previewImageTask = Task { @MainActor [weak self, asset, viewMode, viewImageIdentity] in
-                let image = await AssetPreviewImageProvider.shared.imageAsync(for: asset)
+            previewImageTask = Task { @MainActor [weak self, asset, viewMode, viewImageIdentity, sourceAccessValidator] in
+                let image = await AssetPreviewImageProvider.shared.imageAsync(
+                    for: asset,
+                    sourceAccessValidator: sourceAccessValidator
+                )
                 guard !Task.isCancelled,
                       let self,
                       self.asset?.id == asset.id,

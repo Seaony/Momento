@@ -12,13 +12,17 @@ nonisolated final class AssetFilePromiseProvider: NSFilePromiseProvider, NSFileP
     private let sourceURL: URL
     private let fileName: String
     private let exportBatch: AssetDragExportBatch
+    private let sourceAccessValidator: @Sendable () throws -> Void
+    private let onSourceAccessError: (Error) -> Void
 
     init?(
         asset: AssetItem,
         libraryID: AssetLibrary.ID,
         assetIDs: [AssetItem.ID],
         primaryAssetID: AssetItem.ID,
-        exportBatch: AssetDragExportBatch
+        exportBatch: AssetDragExportBatch,
+        sourceAccessValidator: @escaping @Sendable () throws -> Void = {},
+        onSourceAccessError: @escaping (Error) -> Void = { _ in }
     ) {
         guard let payloadData = AssetDragPasteboardWriter.encodedPayload(
             libraryID: libraryID,
@@ -32,6 +36,8 @@ nonisolated final class AssetFilePromiseProvider: NSFilePromiseProvider, NSFileP
         sourceURL = asset.storageURL
         fileName = Self.promisedFileName(for: asset)
         self.exportBatch = exportBatch
+        self.sourceAccessValidator = sourceAccessValidator
+        self.onSourceAccessError = onSourceAccessError
         super.init()
         fileType = asset.utiIdentifier
         delegate = self
@@ -76,6 +82,15 @@ nonisolated final class AssetFilePromiseProvider: NSFilePromiseProvider, NSFileP
         writePromiseTo url: URL,
         completionHandler: @escaping (Error?) -> Void
     ) {
+        do {
+            try sourceAccessValidator()
+        } catch {
+            onSourceAccessError(error)
+            completionHandler(error)
+            notifyExportBatch(success: false)
+            return
+        }
+
         do {
             try FileManager.default.copyItem(at: sourceURL, to: availableDestinationURL(for: url))
             completionHandler(nil)

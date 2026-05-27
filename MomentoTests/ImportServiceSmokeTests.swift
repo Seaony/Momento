@@ -295,6 +295,114 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testStoreImportLibraryAllowsUbiquitousSnapshotSourceWhenDestinationIsLocal() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let storage = LibraryStorage(applicationSupportRoot: environment.rootURL)
+        let sourceStore = LibraryStore(
+            defaultViewMode: .grid,
+            storage: storage,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try sourceStore.createLibrary(at: environment.packageURL)
+        let sourceLibrary = try XCTUnwrap(sourceStore.currentLibrary)
+        let source = try environment.writeOnePixelPNG(named: "portable.png")
+        try await sourceStore.importItems(from: [source])
+
+        let exportedURL = try storage.exportLibraryPackage(
+            sourceLibrary,
+            to: environment.rootURL.appendingPathComponent("Exported.momento", isDirectory: true)
+        )
+        let blockedPath = exportedURL.standardizedFileURL.path
+        let importStorage = LibraryStorage(applicationSupportRoot: environment.rootURL, isUbiquitousItem: { url in
+            url.standardizedFileURL.path == blockedPath
+        })
+        let importedDefaultsSuiteName = "\(environment.defaultsSuiteName).store-imported"
+        let importedDefaults = try XCTUnwrap(UserDefaults(suiteName: importedDefaultsSuiteName))
+        defer {
+            importedDefaults.removePersistentDomain(forName: importedDefaultsSuiteName)
+        }
+        let importStore = LibraryStore(
+            defaultViewMode: .grid,
+            storage: importStorage,
+            recentStore: RecentLibraryStore(defaults: importedDefaults),
+            loadRecentLibrary: false
+        )
+
+        try importStore.importLibrary(
+            from: exportedURL,
+            destinationRootURL: environment.rootURL.appendingPathComponent("StoreImported", isDirectory: true)
+        )
+
+        XCTAssertEqual(importStore.currentLibrary?.id, sourceLibrary.id)
+        XCTAssertEqual(importStore.assets.map(\.displayName), ["portable"])
+    }
+
+    @MainActor
+    func testStoreExportCurrentLibraryAllowsUbiquitousSnapshotDestination() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let exportRoot = environment.rootURL.appendingPathComponent("CloudExports", isDirectory: true)
+        try FileManager.default.createDirectory(at: exportRoot, withIntermediateDirectories: true)
+        let exportURL = exportRoot.appendingPathComponent("Exported.momento", isDirectory: true)
+        let blockedRootPath = exportRoot.standardizedFileURL.path
+        let blockedPackagePath = exportURL.standardizedFileURL.path
+        let storage = LibraryStorage(applicationSupportRoot: environment.rootURL, isUbiquitousItem: { url in
+            let path = url.standardizedFileURL.path
+            return path == blockedRootPath || path == blockedPackagePath
+        })
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            storage: storage,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+        let source = try environment.writeOnePixelPNG(named: "portable.png")
+        try await store.importItems(from: [source])
+
+        try store.exportCurrentLibrary(to: exportURL)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: exportURL.appendingPathComponent("manifest.json").path))
+        XCTAssertEqual(try storage.validateLibraryPackage(at: exportURL).id, store.currentLibrary?.id)
+    }
+
+    @MainActor
+    func testExportCurrentLibraryRejectsUbiquitousCurrentLibraryBeforeReadingSource() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let blockedMarkerURL = environment.rootURL.appendingPathComponent("blocked-current-library")
+        let blockedPath = environment.packageURL.standardizedFileURL.path
+        let storage = LibraryStorage(applicationSupportRoot: environment.rootURL, isUbiquitousItem: { url in
+            FileManager.default.fileExists(atPath: blockedMarkerURL.path)
+                && url.standardizedFileURL.path == blockedPath
+        })
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            storage: storage,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+        let exportURL = environment.rootURL.appendingPathComponent("BlockedExport.momento", isDirectory: true)
+
+        try Data("blocked".utf8).write(to: blockedMarkerURL)
+
+        XCTAssertThrowsError(try store.exportCurrentLibrary(to: exportURL)) { error in
+            guard case LibraryStorageError.ubiquitousLibraryPackageUnsupported = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+
+        XCTAssertNil(store.currentLibrary)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: exportURL.path))
+    }
+
+    @MainActor
     func testImportPersistsAndDeduplicatesAssets() async throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }
@@ -1411,7 +1519,15 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }
 
-        let library = try LibraryStorage().createLibraryPackage(at: environment.packageURL, name: "Test")
+        let recentStore = RecentLibraryStore(defaults: environment.defaults)
+        let safeStore = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: recentStore,
+            loadRecentLibrary: false
+        )
+        try safeStore.createLibrary(at: environment.packageURL)
+        let library = try XCTUnwrap(safeStore.currentLibrary)
+        let recentID = try XCTUnwrap(safeStore.recentLibraries.first?.id)
         let thumbnailURL = environment.packageURL
             .appendingPathComponent("thumbnails", isDirectory: true)
             .appendingPathComponent("cached-thumb.dat")
@@ -1436,6 +1552,12 @@ final class LibraryPackagePersistenceTests: XCTestCase {
             }
         }
 
+        XCTAssertNil(store.currentLibrary)
+        XCTAssertEqual(store.recentLibraries.map(\.id), [recentID])
+        XCTAssertEqual(
+            store.libraryErrorMessage,
+            LibraryStorageError.ubiquitousLibraryPackageUnsupported.errorDescription
+        )
         XCTAssertTrue(FileManager.default.fileExists(atPath: thumbnailURL.path))
     }
 
@@ -1475,6 +1597,187 @@ final class LibraryPackagePersistenceTests: XCTestCase {
             store.libraryErrorMessage,
             LibraryStorageError.ubiquitousLibraryPackageUnsupported.errorDescription
         )
+    }
+
+    @MainActor
+    func testRenamingAssetRejectsUbiquitousCurrentLibraryBeforeWritingMetadata() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let blockedMarkerURL = environment.rootURL.appendingPathComponent("blocked-current-library")
+        let blockedPath = environment.packageURL.standardizedFileURL.path
+        let storage = LibraryStorage(isUbiquitousItem: { url in
+            FileManager.default.fileExists(atPath: blockedMarkerURL.path)
+                && url.standardizedFileURL.path == blockedPath
+        })
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            storage: storage,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+        let source = try environment.writeOnePixelPNG(named: "guarded.png")
+        try await store.importItems(from: [source])
+        let library = try XCTUnwrap(store.currentLibrary)
+        let assetID = try XCTUnwrap(store.assets.first?.id)
+
+        try Data("blocked".utf8).write(to: blockedMarkerURL)
+
+        XCTAssertThrowsError(try store.renameAsset(id: assetID, to: "Renamed")) { error in
+            guard case LibraryStorageError.ubiquitousLibraryPackageUnsupported = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+
+        XCTAssertNil(store.currentLibrary)
+        let metadataStore = try LibraryMetadataStore(library: library, storage: LibraryStorage())
+        XCTAssertEqual(try metadataStore.loadAssets().first?.displayName, "guarded")
+    }
+
+    @MainActor
+    func testCreatingAssetSourceAccessValidatorRejectsUbiquitousCurrentLibrary() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let blockedMarkerURL = environment.rootURL.appendingPathComponent("blocked-current-library")
+        let blockedPath = environment.packageURL.standardizedFileURL.path
+        let storage = LibraryStorage(isUbiquitousItem: { url in
+            FileManager.default.fileExists(atPath: blockedMarkerURL.path)
+                && url.standardizedFileURL.path == blockedPath
+        })
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            storage: storage,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        try Data("blocked".utf8).write(to: blockedMarkerURL)
+
+        XCTAssertThrowsError(try store.currentLiveLocalLibrarySourceAccessValidator()) { error in
+            guard case LibraryStorageError.ubiquitousLibraryPackageUnsupported = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+
+        XCTAssertNil(store.currentLibrary)
+        XCTAssertEqual(
+            store.libraryErrorMessage,
+            LibraryStorageError.ubiquitousLibraryPackageUnsupported.errorDescription
+        )
+    }
+
+    @MainActor
+    func testAssetSourceAccessValidatorRejectsIfCurrentLibraryBecomesUbiquitousBeforeRead() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let blockedMarkerURL = environment.rootURL.appendingPathComponent("blocked-current-library")
+        let blockedPath = environment.packageURL.standardizedFileURL.path
+        let storage = LibraryStorage(isUbiquitousItem: { url in
+            FileManager.default.fileExists(atPath: blockedMarkerURL.path)
+                && url.standardizedFileURL.path == blockedPath
+        })
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            storage: storage,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+        let sourceAccessValidator = try store.currentLiveLocalLibrarySourceAccessValidator()
+
+        try Data("blocked".utf8).write(to: blockedMarkerURL)
+
+        XCTAssertThrowsError(try sourceAccessValidator()) { error in
+            guard case LibraryStorageError.ubiquitousLibraryPackageUnsupported = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+    }
+
+    @MainActor
+    func testImportingItemsRejectsUbiquitousCurrentLibraryBeforeCopyingFiles() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let blockedMarkerURL = environment.rootURL.appendingPathComponent("blocked-current-library")
+        let blockedPath = environment.packageURL.standardizedFileURL.path
+        let storage = LibraryStorage(isUbiquitousItem: { url in
+            FileManager.default.fileExists(atPath: blockedMarkerURL.path)
+                && url.standardizedFileURL.path == blockedPath
+        })
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            storage: storage,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+        let source = try environment.writeOnePixelPNG(named: "blocked-import.png")
+
+        try Data("blocked".utf8).write(to: blockedMarkerURL)
+
+        do {
+            try await store.importItems(from: [source])
+            XCTFail("Import should reject an iCloud-backed current library before copying files.")
+        } catch LibraryStorageError.ubiquitousLibraryPackageUnsupported {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        XCTAssertNil(store.currentLibrary)
+        XCTAssertTrue(store.assets.isEmpty)
+        let storedAssetPaths = try FileManager.default.subpathsOfDirectory(
+            atPath: environment.packageURL.appendingPathComponent("assets", isDirectory: true).path
+        )
+        XCTAssertTrue(storedAssetPaths.isEmpty)
+    }
+
+    @MainActor
+    func testImportingItemsRejectsUbiquitousCurrentLibraryBeforeSavingMetadata() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let blockedMarkerURL = environment.rootURL.appendingPathComponent("blocked-current-library")
+        let blockedPath = environment.packageURL.standardizedFileURL.path
+        let storage = LibraryStorage(isUbiquitousItem: { url in
+            FileManager.default.fileExists(atPath: blockedMarkerURL.path)
+                && url.standardizedFileURL.path == blockedPath
+        })
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            storage: storage,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+        let library = try XCTUnwrap(store.currentLibrary)
+        let source = try environment.writeOnePixelPNG(named: "blocked-before-save.png")
+
+        do {
+            try await store.importItems(
+                from: [source],
+                progressHandler: { progress in
+                    if progress.phase == .finalizing {
+                        try? Data("blocked".utf8).write(to: blockedMarkerURL)
+                    }
+                }
+            )
+            XCTFail("Import should reject an iCloud-backed current library before saving metadata.")
+        } catch LibraryStorageError.ubiquitousLibraryPackageUnsupported {
+            // Expected.
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+
+        XCTAssertNil(store.currentLibrary)
+        XCTAssertTrue(store.assets.isEmpty)
+        let metadataStore = try LibraryMetadataStore(library: library, storage: LibraryStorage())
+        XCTAssertTrue(try metadataStore.loadAssets().isEmpty)
     }
 
     @MainActor

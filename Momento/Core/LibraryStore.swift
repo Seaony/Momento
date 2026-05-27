@@ -214,13 +214,32 @@ final class LibraryStore {
     }
 
     func exportCurrentLibrary(to destinationURL: URL) throws {
-        guard let currentLibrary else {
-            throw LibraryStoreError.noCurrentLibrary
-        }
+        let currentLibrary = try requireCurrentLiveLocalLibrary()
 
         let destinationAccessScope = LibraryAccessScope(url: destinationURL)
         try withExtendedLifetime(destinationAccessScope) {
             _ = try storage.exportLibraryPackage(currentLibrary, to: destinationURL)
+        }
+    }
+
+    func currentLiveLocalLibrarySourceAccessValidator() throws -> @Sendable () throws -> Void {
+        let currentLibrary = try requireCurrentLiveLocalLibrary()
+        let packageURL = storage.rootURL(for: currentLibrary)
+        let storage = storage
+        return {
+            try storage.validateLiveLocalLibraryLocation(at: packageURL)
+        }
+    }
+
+    func currentLibrarySourceReadValidator() -> (@Sendable () throws -> Void)? {
+        guard let currentLibrary else {
+            return nil
+        }
+
+        let packageURL = storage.rootURL(for: currentLibrary)
+        let storage = storage
+        return {
+            try storage.validateLiveLocalLibraryLocation(at: packageURL)
         }
     }
 
@@ -232,12 +251,8 @@ final class LibraryStore {
     }
 
     func clearCachesAndReloadCurrentLibrary() throws {
-        guard let currentLibrary else {
-            throw LibraryStoreError.noCurrentLibrary
-        }
-
+        let currentLibrary = try requireCurrentLiveLocalLibrary()
         let packageURL = storage.rootURL(for: currentLibrary)
-        try storage.validateLiveLocalLibraryLocation(at: packageURL)
         try storage.clearTransientCaches(for: currentLibrary)
         try openLibrary(at: packageURL)
         try rebuildMissingThumbnails()
@@ -472,6 +487,7 @@ final class LibraryStore {
               let index = assets.firstIndex(where: { $0.id == selectedAssetID }) else {
             return
         }
+        let currentLibrary = try requireCurrentLiveLocalLibrary()
 
         if let metadataStore {
             mergeAssets([try metadataStore.setTagNames(names, forAssetID: selectedAssetID)])
@@ -479,9 +495,7 @@ final class LibraryStore {
         } else {
             let updatedTags = normalizedTags(from: names)
             assets[index].tags = updatedTags
-            if let currentLibrary {
-                tags = Self.uniqueTags(from: assets, libraryID: currentLibrary.id)
-            }
+            tags = Self.uniqueTags(from: assets, libraryID: currentLibrary.id)
         }
     }
 
@@ -491,9 +505,7 @@ final class LibraryStore {
             throw LibraryStoreError.invalidTagName
         }
 
-        guard let currentLibrary else {
-            throw LibraryStoreError.noCurrentLibrary
-        }
+        let currentLibrary = try requireCurrentLiveLocalLibrary()
 
         if let metadataStore {
             mergeAssets(try metadataStore.renameTag(id: tagID, to: trimmedName))
@@ -537,9 +549,7 @@ final class LibraryStore {
             throw LibraryStoreError.invalidTagName
         }
 
-        guard currentLibrary != nil else {
-            throw LibraryStoreError.noCurrentLibrary
-        }
+        try requireCurrentLiveLocalLibrary()
 
         if let metadataStore {
             _ = try metadataStore.resolveOrCreateTags(named: [trimmedName])
@@ -559,9 +569,7 @@ final class LibraryStore {
     }
 
     func deleteTag(id tagID: TagItem.ID) throws {
-        guard let currentLibrary else {
-            throw LibraryStoreError.noCurrentLibrary
-        }
+        let currentLibrary = try requireCurrentLiveLocalLibrary()
 
         if let metadataStore {
             mergeAssets(try metadataStore.deleteTag(id: tagID))
@@ -591,8 +599,8 @@ final class LibraryStore {
     }
 
     func addTag(id tagID: TagItem.ID, toAssets assetIDs: Set<AssetItem.ID>) throws {
-        guard let metadataStore,
-              currentLibrary != nil else {
+        try requireCurrentLiveLocalLibrary()
+        guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
 
@@ -609,8 +617,8 @@ final class LibraryStore {
             throw LibraryStoreError.invalidTagName
         }
 
-        guard let metadataStore,
-              currentLibrary != nil else {
+        try requireCurrentLiveLocalLibrary()
+        guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
 
@@ -633,8 +641,8 @@ final class LibraryStore {
             throw LibraryStoreError.invalidTagName
         }
 
-        guard let metadataStore,
-              currentLibrary != nil else {
+        try requireCurrentLiveLocalLibrary()
+        guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
 
@@ -660,6 +668,7 @@ final class LibraryStore {
     }
 
     func createFolder(name: String? = nil, parentID: AssetFolder.ID? = nil) throws {
+        try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
@@ -675,6 +684,7 @@ final class LibraryStore {
     }
 
     func renameFolder(id: AssetFolder.ID, to name: String) throws {
+        try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
@@ -689,6 +699,7 @@ final class LibraryStore {
         relativeTo targetID: AssetFolder.ID?,
         insertAfterTarget: Bool
     ) throws {
+        try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
@@ -703,6 +714,7 @@ final class LibraryStore {
     }
 
     func deleteFolder(id: AssetFolder.ID) throws {
+        try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
@@ -719,6 +731,7 @@ final class LibraryStore {
     }
 
     func assignAssets(ids: Set<AssetItem.ID>, to folderID: AssetFolder.ID) throws {
+        try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
@@ -727,6 +740,7 @@ final class LibraryStore {
     }
 
     func unassignAssets(ids: Set<AssetItem.ID>, from folderID: AssetFolder.ID) throws {
+        try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
@@ -735,8 +749,8 @@ final class LibraryStore {
     }
 
     func toggleFavorite(for assetID: AssetItem.ID) throws {
-        guard let metadataStore,
-              let currentLibrary else {
+        let currentLibrary = try requireCurrentLiveLocalLibrary()
+        guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
 
@@ -754,8 +768,8 @@ final class LibraryStore {
             throw LibraryStoreError.invalidAssetName
         }
 
-        guard let metadataStore,
-              let currentLibrary else {
+        let currentLibrary = try requireCurrentLiveLocalLibrary()
+        guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
 
@@ -776,8 +790,8 @@ final class LibraryStore {
     }
 
     func updateNote(_ note: String, forAssetID assetID: AssetItem.ID) throws {
-        guard let metadataStore,
-              let currentLibrary else {
+        let currentLibrary = try requireCurrentLiveLocalLibrary()
+        guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
 
@@ -790,9 +804,7 @@ final class LibraryStore {
     }
 
     func refreshThumbnail(for assetID: AssetItem.ID) throws -> AssetItem? {
-        guard let currentLibrary else {
-            throw LibraryStoreError.noCurrentLibrary
-        }
+        let currentLibrary = try requireCurrentLiveLocalLibrary()
 
         guard let index = assets.firstIndex(where: { $0.id == assetID && $0.libraryID == currentLibrary.id }) else {
             throw LibraryStoreError.missingAsset
@@ -814,8 +826,8 @@ final class LibraryStore {
     }
 
     func reanalyzeColors(for assetID: AssetItem.ID) throws {
-        guard let metadataStore,
-              let currentLibrary else {
+        let currentLibrary = try requireCurrentLiveLocalLibrary()
+        guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
 
@@ -833,8 +845,8 @@ final class LibraryStore {
     }
 
     func moveAssetToTrash(id assetID: AssetItem.ID) throws {
-        guard let metadataStore,
-              let currentLibrary else {
+        let currentLibrary = try requireCurrentLiveLocalLibrary()
+        guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
 
@@ -847,8 +859,8 @@ final class LibraryStore {
     }
 
     func moveAssetsToTrash(ids assetIDs: Set<AssetItem.ID>) throws {
-        guard let metadataStore,
-              let currentLibrary else {
+        let currentLibrary = try requireCurrentLiveLocalLibrary()
+        guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
 
@@ -864,6 +876,7 @@ final class LibraryStore {
     }
 
     func restoreAssets(ids assetIDs: Set<AssetItem.ID>) throws {
+        try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
@@ -873,8 +886,8 @@ final class LibraryStore {
     }
 
     func deleteAssetPermanently(id assetID: AssetItem.ID) throws {
-        guard let metadataStore,
-              let currentLibrary else {
+        let currentLibrary = try requireCurrentLiveLocalLibrary()
+        guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
 
@@ -889,8 +902,8 @@ final class LibraryStore {
     }
 
     func emptyTrash() throws {
-        guard let metadataStore,
-              let currentLibrary else {
+        let currentLibrary = try requireCurrentLiveLocalLibrary()
+        guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
 
@@ -909,7 +922,8 @@ final class LibraryStore {
         sourcePageURL: URL? = nil,
         progressHandler: AssetImportProgressHandler? = nil
     ) async throws {
-        guard let currentLibrary, let metadataStore else {
+        let currentLibrary = try requireCurrentLiveLocalLibrary()
+        guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
 
@@ -926,6 +940,9 @@ final class LibraryStore {
             sourcePageURL: sourcePageURL,
             progressHandler: progressHandler
         )
+        guard try requireCurrentLiveLocalLibrary().id == importingLibraryID else {
+            return
+        }
         let savedAssets = try metadataStore.saveImportedBatch(imported)
         guard self.currentLibrary?.id == importingLibraryID else {
             return
@@ -941,6 +958,7 @@ final class LibraryStore {
         sourcePageURL: URL? = nil,
         progressHandler: AssetImportProgressHandler? = nil
     ) async throws {
+        try requireCurrentLiveLocalLibrary()
         let downloadedURL = try await RemoteImageImportService().downloadImage(from: url)
         defer {
             try? FileManager.default.removeItem(at: downloadedURL)
@@ -1001,6 +1019,24 @@ final class LibraryStore {
         return try withExtendedLifetime(accessScope) {
             try action(resolved.url)
         }
+    }
+
+    @discardableResult
+    private func requireCurrentLiveLocalLibrary() throws -> AssetLibrary {
+        guard let currentLibrary else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        do {
+            try storage.validateLiveLocalLibraryLocation(at: storage.rootURL(for: currentLibrary))
+        } catch LibraryStorageError.ubiquitousLibraryPackageUnsupported {
+            closeCurrentLibrary()
+            recentLibraries = recentStore.load()
+            libraryErrorMessage = LibraryStorageError.ubiquitousLibraryPackageUnsupported.errorDescription
+            throw LibraryStorageError.ubiquitousLibraryPackageUnsupported
+        }
+
+        return currentLibrary
     }
 
     private var currentLibraryAssets: [AssetItem] {
