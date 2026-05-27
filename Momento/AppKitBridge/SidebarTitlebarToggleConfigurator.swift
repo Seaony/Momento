@@ -242,20 +242,24 @@ private struct SidebarTitlebarToggleAccessoryView: View {
                 isCollapsed.toggle()
             }
         } label: {
-            Image(systemName: "sidebar.left")
-                .font(.system(size: MomentoTheme.toolbarIconSize, weight: .medium))
-                .foregroundStyle(MomentoTheme.primaryText)
-                .frame(width: MomentoTheme.sidebarTitlebarButtonSize, height: MomentoTheme.sidebarTitlebarButtonSize)
-                .background {
-                    MomentoGlassBackground(
-                        glass: .regular.interactive(isToggleHovered),
-                        cornerRadius: 9
-                    )
-                }
+            ZStack {
+                Image(systemName: "sidebar.left")
+                    .font(.system(size: MomentoTheme.toolbarIconSize, weight: .medium))
+                    .foregroundStyle(MomentoTheme.primaryText)
+                    .frame(width: MomentoTheme.sidebarTitlebarButtonSize, height: MomentoTheme.sidebarTitlebarButtonSize)
+                    .background {
+                        MomentoGlassBackground(
+                            glass: .regular.interactive(isToggleHovered),
+                            cornerRadius: 9
+                        )
+                    }
+            }
+            .frame(width: MomentoTheme.titlebarControlHitSize, height: MomentoTheme.titlebarControlHitSize)
+            .contentShape(.interaction, Rectangle())
         }
         .buttonStyle(.plain)
         .frame(width: MomentoTheme.titlebarControlHitSize, height: MomentoTheme.titlebarControlHitSize)
-        .contentShape(RoundedRectangle(cornerRadius: MomentoTheme.titlebarControlHitSize / 2, style: .continuous))
+        .contentShape(.interaction, Rectangle())
         .pointerStyle(.link)
         .onHover { hovering in
             withAnimation(.smooth(duration: 0.14)) {

@@ -170,20 +170,24 @@ private struct InspectorTitlebarControlAccessoryView: View {
                 isInspectorPresented.toggle()
             }
         } label: {
-            Image(systemName: "sidebar.right")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(MomentoTheme.primaryText)
-                .frame(width: MomentoTheme.toolbarIconButtonWidth, height: MomentoTheme.toolbarControlHeight)
-                .background {
-                    MomentoGlassBackground(
-                        glass: .regular.interactive(isHovered),
-                        cornerRadius: MomentoTheme.toolbarControlRadius
-                    )
-                }
+            ZStack {
+                Image(systemName: "sidebar.right")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(MomentoTheme.primaryText)
+                    .frame(width: MomentoTheme.toolbarIconButtonWidth, height: MomentoTheme.toolbarControlHeight)
+                    .background {
+                        MomentoGlassBackground(
+                            glass: .regular.interactive(isHovered),
+                            cornerRadius: MomentoTheme.toolbarControlRadius
+                        )
+                    }
+            }
+            .frame(width: MomentoTheme.titlebarControlHitSize, height: MomentoTheme.titlebarControlHitSize)
+            .contentShape(.interaction, Rectangle())
         }
         .buttonStyle(.plain)
         .frame(width: MomentoTheme.titlebarControlHitSize, height: MomentoTheme.titlebarControlHitSize)
-        .contentShape(RoundedRectangle(cornerRadius: MomentoTheme.toolbarControlRadius, style: .continuous))
+        .contentShape(.interaction, Rectangle())
         .pointerStyle(.link)
         .onHover { hovering in
             withAnimation(.smooth(duration: 0.14)) {
