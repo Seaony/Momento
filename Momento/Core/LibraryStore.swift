@@ -237,6 +237,7 @@ final class LibraryStore {
         }
 
         let packageURL = storage.rootURL(for: currentLibrary)
+        try storage.validateLiveLocalLibraryLocation(at: packageURL)
         try storage.clearTransientCaches(for: currentLibrary)
         try openLibrary(at: packageURL)
         try rebuildMissingThumbnails()
@@ -253,7 +254,8 @@ final class LibraryStore {
         }
 
         let library = try withSecurityScopedRecentLibraryURL(reference) { resolvedURL in
-            try storage.renameLibraryPackage(at: resolvedURL, to: trimmedName)
+            try storage.validateLiveLocalLibraryLocation(at: resolvedURL)
+            return try storage.renameLibraryPackage(at: resolvedURL, to: trimmedName)
         }
         try recentStore.updateName(id: id, name: trimmedName)
         recentLibraries = recentStore.load()
@@ -270,6 +272,7 @@ final class LibraryStore {
         }
 
         try withSecurityScopedRecentLibraryURL(reference) { resolvedURL in
+            try storage.validateLiveLocalLibraryLocation(at: resolvedURL)
             try storage.deleteLibraryPackage(at: resolvedURL)
         }
 
@@ -307,13 +310,19 @@ final class LibraryStore {
         }
 
         do {
-            _ = try storage.openLibraryPackage(at: storage.rootURL(for: currentLibrary))
+            let packageURL = storage.rootURL(for: currentLibrary)
+            try storage.validateLiveLocalLibraryLocation(at: packageURL)
+            _ = try storage.openLibraryPackage(at: packageURL)
         } catch LibraryStorageError.missingLibraryPackage {
             let libraryID = currentLibrary.id
             closeCurrentLibrary()
             try recentStore.remove(id: libraryID)
             recentLibraries = recentStore.load()
             libraryErrorMessage = LibraryStorageError.missingLibraryPackage.errorDescription
+        } catch LibraryStorageError.ubiquitousLibraryPackageUnsupported {
+            closeCurrentLibrary()
+            recentLibraries = recentStore.load()
+            libraryErrorMessage = LibraryStorageError.ubiquitousLibraryPackageUnsupported.errorDescription
         }
     }
 

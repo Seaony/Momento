@@ -182,9 +182,14 @@ nonisolated struct LibraryStorage: Sendable {
 
     nonisolated func validateLiveLocalLibraryLocation(at packageURL: URL) throws {
         let normalizedURL = normalizedPackageURL(packageURL)
-        let locationURL = FileManager.default.fileExists(atPath: normalizedURL.path)
-            ? normalizedURL
-            : normalizedURL.deletingLastPathComponent()
+        var locationURL = normalizedURL
+        while !FileManager.default.fileExists(atPath: locationURL.path) {
+            let parentURL = locationURL.deletingLastPathComponent()
+            if parentURL.path == locationURL.path {
+                break
+            }
+            locationURL = parentURL
+        }
         guard !isUbiquitousItem(locationURL) else {
             throw LibraryStorageError.ubiquitousLibraryPackageUnsupported
         }
