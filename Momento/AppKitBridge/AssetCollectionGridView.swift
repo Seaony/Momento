@@ -498,7 +498,11 @@ extension AssetCollectionGridView {
             }
         }
 
-        func collectionView(_ collectionView: NSCollectionView, cancelPrefetchingForItemsAt indexPaths: [IndexPath]) {}
+        func collectionView(_ collectionView: NSCollectionView, cancelPrefetchingForItemsAt indexPaths: [IndexPath]) {
+            for indexPath in indexPaths where parent.assets.indices.contains(indexPath.item) {
+                AssetPreviewImageProvider.shared.cancelPrefetch(for: parent.assets[indexPath.item])
+            }
+        }
 
         func collectionView(
             _ collectionView: NSCollectionView,
@@ -1260,31 +1264,74 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
 }
 
 private actor AssetPreviewDecodeLimiter {
-    private let limit: Int
-    private var activeCount = 0
-    private var waiters: [CheckedContinuation<Void, Never>] = []
-
-    init(limit: Int) {
-        self.limit = limit
+    private struct VisibleWaiter {
+        let id: UUID
+        let continuation: CheckedContinuation<Bool, Never>
     }
 
-    func acquire() async {
-        if activeCount < limit {
-            activeCount += 1
+    private let visibleLimit: Int
+    private let prefetchLimit: Int
+    private var activeVisibleCount = 0
+    private var activePrefetchCount = 0
+    private var visibleWaiters: [VisibleWaiter] = []
+
+    init(visibleLimit: Int, prefetchLimit: Int) {
+        self.visibleLimit = visibleLimit
+        self.prefetchLimit = prefetchLimit
+    }
+
+    func acquireVisible() async -> Bool {
+        if activeVisibleCount < visibleLimit {
+            activeVisibleCount += 1
+            return true
+        }
+
+        let waiterID = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                if Task.isCancelled {
+                    continuation.resume(returning: false)
+                } else {
+                    visibleWaiters.append(VisibleWaiter(id: waiterID, continuation: continuation))
+                }
+            }
+        } onCancel: {
+            Task {
+                await self.cancelVisibleWaiter(id: waiterID)
+            }
+        }
+    }
+
+    func releaseVisible() {
+        if visibleWaiters.isEmpty {
+            activeVisibleCount = max(activeVisibleCount - 1, 0)
+        } else {
+            visibleWaiters.removeFirst().continuation.resume(returning: true)
+        }
+    }
+
+    func tryAcquirePrefetch() -> Bool {
+        guard visibleWaiters.isEmpty,
+              activeVisibleCount < visibleLimit,
+              activePrefetchCount < prefetchLimit else {
+            return false
+        }
+
+        activePrefetchCount += 1
+        return true
+    }
+
+    func releasePrefetch() {
+        activePrefetchCount = max(activePrefetchCount - 1, 0)
+    }
+
+    private func cancelVisibleWaiter(id: UUID) {
+        guard let waiterIndex = visibleWaiters.firstIndex(where: { $0.id == id }) else {
             return
         }
 
-        await withCheckedContinuation { continuation in
-            waiters.append(continuation)
-        }
-    }
-
-    func release() {
-        if waiters.isEmpty {
-            activeCount = max(activeCount - 1, 0)
-        } else {
-            waiters.removeFirst().resume()
-        }
+        let waiter = visibleWaiters.remove(at: waiterIndex)
+        waiter.continuation.resume(returning: false)
     }
 }
 
@@ -1292,12 +1339,17 @@ nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
     static let shared = AssetPreviewImageProvider()
 
     private static let previewDecodeMaxPixelSize = 512
-    private static let maxConcurrentPreviewDecodes = 2
+    private static let maxConcurrentVisiblePreviewDecodes = 3
+    private static let maxConcurrentPrefetchPreviewDecodes = 1
 
     private let cache = NSCache<NSString, NSImage>()
-    private let loadLock = NSLock()
-    private let decodeLimiter = AssetPreviewDecodeLimiter(limit: AssetPreviewImageProvider.maxConcurrentPreviewDecodes)
-    private var loadingTasks: [String: Task<NSImage?, Never>] = [:]
+    private let taskLock = NSLock()
+    private let decodeLimiter = AssetPreviewDecodeLimiter(
+        visibleLimit: AssetPreviewImageProvider.maxConcurrentVisiblePreviewDecodes,
+        prefetchLimit: AssetPreviewImageProvider.maxConcurrentPrefetchPreviewDecodes
+    )
+    private var prefetchDecodeTasks: [String: Task<Void, Never>] = [:]
+    private var prefetchingIdentities: Set<String> = []
 
     private init() {
         cache.countLimit = 512
@@ -1343,6 +1395,10 @@ nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
             }
         }
 
+        if Task.isCancelled {
+            return placeholderImage(for: asset)
+        }
+
         let image = fallbackIcon(for: asset)
         cache.setObject(image, forKey: key, cost: cacheCost(for: image))
         return image
@@ -1365,33 +1421,57 @@ nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
         let identity = identity(for: asset)
         let key = identity as NSString
         guard cache.object(forKey: key) == nil,
-              shouldDecodeThumbnail(for: asset) else {
+              shouldDecodeThumbnail(for: asset),
+              beginPrefetching(identity) else {
             return
         }
 
-        let (task, didCreateTask) = thumbnailDecodeTask(for: asset, identity: identity, priority: .utility)
-        guard didCreateTask else {
-            return
-        }
-
-        Task.detached(priority: .utility) { [self] in
-            defer {
-                completeThumbnailDecode(identity: identity)
-            }
-
-            guard cache.object(forKey: key) == nil else {
+        let task = Task.detached(priority: .utility) { [self] in
+            guard !Task.isCancelled else {
+                completePrefetch(identity: identity)
                 return
             }
 
-            let image = await task.value
-            if let image {
+            let acquiredSlot = await decodeLimiter.tryAcquirePrefetch()
+            guard acquiredSlot else {
+                completePrefetch(identity: identity)
+                return
+            }
+
+            guard !Task.isCancelled else {
+                await decodeLimiter.releasePrefetch()
+                completePrefetch(identity: identity)
+                return
+            }
+
+            guard cache.object(forKey: key) == nil else {
+                await decodeLimiter.releasePrefetch()
+                completePrefetch(identity: identity)
+                return
+            }
+
+            let image = autoreleasepool {
+                Self.decodedThumbnailImage(for: asset)
+            }
+            await decodeLimiter.releasePrefetch()
+            completePrefetch(identity: identity)
+
+            if !Task.isCancelled, let image {
                 cache.setObject(image, forKey: key, cost: cacheCost(for: image))
             }
         }
+
+        storePrefetchTask(task, identity: identity)
+    }
+
+    func cancelPrefetch(for asset: AssetItem) {
+        cancelPrefetch(identity: identity(for: asset))
     }
 
     func invalidateImage(for asset: AssetItem) {
-        cache.removeObject(forKey: identity(for: asset) as NSString)
+        let identity = identity(for: asset)
+        cancelPrefetch(identity: identity)
+        cache.removeObject(forKey: identity as NSString)
     }
 
     private func loadImage(for asset: AssetItem) -> NSImage {
@@ -1431,44 +1511,84 @@ nonisolated final class AssetPreviewImageProvider: @unchecked Sendable {
             return cachedImage
         }
 
-        let (task, _) = thumbnailDecodeTask(for: asset, identity: identity, priority: priority)
-        let image = await task.value
+        cancelPrefetch(identity: identity)
+        let task = visibleDecodeTask(for: asset, priority: priority)
+        let image = await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+
+        guard !Task.isCancelled else {
+            return nil
+        }
+
         if let image {
             cache.setObject(image, forKey: key, cost: cacheCost(for: image))
         }
-        completeThumbnailDecode(identity: identity)
         return image
     }
 
-    private func thumbnailDecodeTask(
+    private func visibleDecodeTask(
         for asset: AssetItem,
-        identity: String,
         priority: TaskPriority
-    ) -> (task: Task<NSImage?, Never>, didCreateTask: Bool) {
-        loadLock.lock()
-        defer { loadLock.unlock() }
-
-        if let loadingTask = loadingTasks[identity] {
-            return (loadingTask, false)
-        }
-
+    ) -> Task<NSImage?, Never> {
         let decodeLimiter = decodeLimiter
-        let task = Task.detached(priority: priority) {
-            await decodeLimiter.acquire()
+        return Task.detached(priority: priority) {
+            let acquiredSlot = await decodeLimiter.acquireVisible()
+            guard acquiredSlot else {
+                return nil
+            }
+
+            guard !Task.isCancelled else {
+                await decodeLimiter.releaseVisible()
+                return nil
+            }
+
             let image = autoreleasepool {
                 Self.decodedThumbnailImage(for: asset)
             }
-            await decodeLimiter.release()
-            return image
+            await decodeLimiter.releaseVisible()
+            return Task.isCancelled ? nil : image
         }
-        loadingTasks[identity] = task
-        return (task, true)
     }
 
-    private func completeThumbnailDecode(identity: String) {
-        loadLock.lock()
-        loadingTasks[identity] = nil
-        loadLock.unlock()
+    private func beginPrefetching(_ identity: String) -> Bool {
+        taskLock.lock()
+        defer { taskLock.unlock() }
+
+        guard prefetchDecodeTasks[identity] == nil,
+              !prefetchingIdentities.contains(identity) else {
+            return false
+        }
+
+        prefetchingIdentities.insert(identity)
+        return true
+    }
+
+    private func storePrefetchTask(_ task: Task<Void, Never>, identity: String) {
+        taskLock.lock()
+        if prefetchingIdentities.contains(identity), prefetchDecodeTasks[identity] == nil {
+            prefetchDecodeTasks[identity] = task
+        } else {
+            task.cancel()
+        }
+        taskLock.unlock()
+    }
+
+    private func cancelPrefetch(identity: String) {
+        taskLock.lock()
+        let task = prefetchDecodeTasks.removeValue(forKey: identity)
+        prefetchingIdentities.remove(identity)
+        taskLock.unlock()
+        task?.cancel()
+    }
+
+    private func completePrefetch(identity: String) {
+        taskLock.lock()
+        prefetchDecodeTasks[identity] = nil
+        prefetchingIdentities.remove(identity)
+        taskLock.unlock()
     }
 
     private static func decodedThumbnailImage(for asset: AssetItem) -> NSImage? {
