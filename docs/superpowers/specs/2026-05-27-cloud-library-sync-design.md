@@ -903,6 +903,8 @@ Exit gate:
 - A real-device smoke test proves a record can save on one platform and fetch on the other through the selected container.
 - If CKSyncEngine is not available for the selected iOS target, stop this plan and write the manual-sync design before implementation.
 
+Current status is tracked in `2026-05-27-cloud-library-sync-phase0-status.md`.
+
 ### Phase 1: Storage Mode Foundation
 
 Outputs:
