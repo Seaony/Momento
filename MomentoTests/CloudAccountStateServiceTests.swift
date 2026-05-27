@@ -149,6 +149,28 @@ final class CloudAccountStateServiceTests: XCTestCase {
         wait(for: [expectation], timeout: 1)
         observation.invalidate()
     }
+
+    func testAccountChangeObservationStopsObservingWhenReleased() {
+        let notificationCenter = NotificationCenter()
+        let service = CloudAccountStateService(
+            fetchAccountStatus: { .available },
+            fetchUserRecordName: { "cloudkit-user-record" }
+        )
+        let expectation = expectation(description: "No account changes observed after release")
+        expectation.isInverted = true
+
+        var observation: CloudAccountChangeObservation? = service.observeAccountChanges(
+            notificationCenter: notificationCenter
+        ) {
+            expectation.fulfill()
+        }
+        XCTAssertNotNil(observation)
+        observation = nil
+
+        notificationCenter.post(name: .CKAccountChanged, object: nil)
+
+        wait(for: [expectation], timeout: 0.2)
+    }
 }
 
 private final class LockedValue<Value>: @unchecked Sendable {

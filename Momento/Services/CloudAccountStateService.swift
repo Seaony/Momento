@@ -135,16 +135,21 @@ nonisolated struct CloudAccountStateService {
     }
 }
 
-nonisolated struct CloudAccountChangeObservation {
+nonisolated final class CloudAccountChangeObservation {
     private let notificationCenter: NotificationCenter
-    private let tokens: [NSObjectProtocol]
+    private var tokens: [NSObjectProtocol]
 
     init(notificationCenter: NotificationCenter, tokens: [NSObjectProtocol]) {
         self.notificationCenter = notificationCenter
         self.tokens = tokens
     }
 
+    deinit {
+        invalidate()
+    }
+
     func invalidate() {
         tokens.forEach(notificationCenter.removeObserver)
+        tokens.removeAll()
     }
 }
