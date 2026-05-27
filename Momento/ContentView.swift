@@ -42,6 +42,7 @@ private enum ContentToolbarMetrics {
 
 struct ContentView: View {
     @Environment(\.appLocalization) private var localization
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(AppSettingsKeys.defaultViewMode) private var defaultViewModeRawValue = AssetViewMode.masonry.rawValue
     @Bindable var store: LibraryStore
     @ObservedObject var updateService: AppUpdateService
@@ -60,6 +61,7 @@ struct ContentView: View {
     @State private var hoveredFilterFacet: AssetFilterFacet?
     @State private var hoveredFilterOptionID: String?
     @State private var hoveredSortOptionID: String?
+    @State private var isEmptyImportButtonHovered = false
     @State private var selectedFilterFacet: AssetFilterFacet = .colors
     @State private var filterTagSearchQuery = ""
     @State private var isFilterPopoverPresented = false
@@ -1220,11 +1222,7 @@ struct ContentView: View {
     }
 
     private var emptyGridState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "photo.on.rectangle.angled")
-                .font(.system(size: 34, weight: .regular))
-                .foregroundStyle(MomentoTheme.tertiaryText)
-
+        VStack(spacing: 0) {
             Text(localization.string("Drop assets here"))
                 .font(.system(size: 15, weight: .semibold))
 
@@ -1233,6 +1231,7 @@ struct ContentView: View {
                 .foregroundStyle(MomentoTheme.secondaryText)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 360)
+                .padding(.top, 12)
 
             Button {
                 isImporterPresented = true
@@ -1241,11 +1240,17 @@ struct ContentView: View {
             }
             .buttonStyle(.glassProminent)
             .controlSize(.large)
+            .scaleEffect(isEmptyImportButtonHovered && !reduceMotion ? 1.035 : 1)
+            .brightness(isEmptyImportButtonHovered ? 0.08 : 0)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.16), value: isEmptyImportButtonHovered)
+            .pointerStyle(.link)
+            .onHover { isHovered in
+                isEmptyImportButtonHovered = isHovered
+            }
+            .padding(.top, 30)
         }
-        .padding(28)
-        .background {
-            MomentoGlassBackground(cornerRadius: 18)
-        }
+        .padding(.horizontal, 28)
+        .padding(.vertical, 24)
     }
 
     private func importErrorBanner(_ message: String) -> some View {
