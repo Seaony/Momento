@@ -1556,6 +1556,31 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testSavingCloudPlaceholderKeepsSameCloudLibraryIDForDifferentAccounts() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let recentStore = RecentLibraryStore(defaults: environment.defaults)
+        try recentStore.saveCloudPlaceholder(
+            id: "first-account-descriptor",
+            name: "First Account",
+            cloudLibraryID: "cloud-library",
+            accountState: testCloudAccountState("first-account")
+        )
+        try recentStore.saveCloudPlaceholder(
+            id: "second-account-descriptor",
+            name: "Second Account",
+            cloudLibraryID: "cloud-library",
+            accountState: testCloudAccountState("second-account")
+        )
+
+        let references = recentStore.load()
+        XCTAssertEqual(references.map(\.id), ["second-account-descriptor", "first-account-descriptor"])
+        XCTAssertEqual(references.map(\.cloudAccountID), ["second-account", "first-account"])
+        XCTAssertEqual(references.map(\.cloudLibraryID), ["cloud-library", "cloud-library"])
+    }
+
+    @MainActor
     func testValidatingMissingCurrentLibraryClosesLibraryAndReportsError() throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }

@@ -220,7 +220,9 @@ struct RecentLibraryStore {
             guard existingReference.storageMode == .cloud else {
                 return true
             }
-            return existingReference.cloudLibraryID?.trimmingCharacters(in: .whitespacesAndNewlines) != trimmedCloudLibraryID
+            let existingCloudLibraryID = existingReference.cloudLibraryID?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let existingCloudAccountID = existingReference.cloudAccountID?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return existingCloudLibraryID != trimmedCloudLibraryID || existingCloudAccountID != trimmedCloudAccountID
         }
         references.insert(reference, at: 0)
         try saveReferences(Array(references.prefix(10)))
