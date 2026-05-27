@@ -1297,6 +1297,73 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testMovingFoldersPersistsManualOrderAndHierarchy() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        try store.createFolder(name: "Alpha")
+        let alphaID = try XCTUnwrap(store.folders.first { $0.name == "Alpha" }?.id)
+        try store.createFolder(name: "Beta")
+        let betaID = try XCTUnwrap(store.folders.first { $0.name == "Beta" }?.id)
+        try store.createFolder(name: "Gamma")
+        let gammaID = try XCTUnwrap(store.folders.first { $0.name == "Gamma" }?.id)
+
+        try store.moveFolder(id: gammaID, toParentID: nil, relativeTo: alphaID, insertAfterTarget: false)
+        XCTAssertEqual(folderNames(in: store.folders, parentID: nil), ["Gamma", "Alpha", "Beta"])
+
+        try store.moveFolder(id: alphaID, toParentID: betaID, relativeTo: nil, insertAfterTarget: false)
+        XCTAssertEqual(folderNames(in: store.folders, parentID: nil), ["Gamma", "Beta"])
+        XCTAssertEqual(folderNames(in: store.folders, parentID: betaID), ["Alpha"])
+
+        try store.moveFolder(id: alphaID, toParentID: nil, relativeTo: betaID, insertAfterTarget: true)
+        XCTAssertEqual(folderNames(in: store.folders, parentID: nil), ["Gamma", "Beta", "Alpha"])
+        XCTAssertNil(store.folders.first { $0.id == alphaID }?.parentID)
+
+        let reopened = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try reopened.openLibrary(at: environment.packageURL)
+        XCTAssertEqual(folderNames(in: reopened.folders, parentID: nil), ["Gamma", "Beta", "Alpha"])
+    }
+
+    @MainActor
+    func testMovingFolderIntoDescendantIsRejected() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        try store.createFolder(name: "Parent")
+        let parentID = try XCTUnwrap(store.folders.first { $0.name == "Parent" }?.id)
+        try store.createFolder(name: "Child", parentID: parentID)
+        let childID = try XCTUnwrap(store.folders.first { $0.name == "Child" }?.id)
+
+        XCTAssertThrowsError(
+            try store.moveFolder(id: parentID, toParentID: childID, relativeTo: nil, insertAfterTarget: false)
+        ) { error in
+            guard case LibraryMetadataError.invalidFolderMove = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+        XCTAssertEqual(store.folders.first { $0.id == parentID }?.parentID, nil)
+        XCTAssertEqual(store.folders.first { $0.id == childID }?.parentID, parentID)
+    }
+
+    @MainActor
     func testImportingFolderPreservesHierarchyAsVirtualFolders() async throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }
@@ -1425,6 +1492,18 @@ final class LibraryPackagePersistenceTests: XCTestCase {
             loadRecentLibrary: false
         )
         XCTAssertEqual(relaunched.recentLibraries.map(\.name), ["Beta", "Alpha", "Gamma"])
+    }
+
+    private func folderNames(in folders: [AssetFolder], parentID: AssetFolder.ID?) -> [String] {
+        folders
+            .filter { $0.parentID == parentID }
+            .sorted {
+                if $0.sortIndex == $1.sortIndex {
+                    return $0.createdAt < $1.createdAt
+                }
+                return $0.sortIndex < $1.sortIndex
+            }
+            .map(\.name)
     }
 
     private func toolbarFilterAsset(

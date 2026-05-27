@@ -27,3 +27,23 @@ nonisolated enum AssetDragPasteboardWriter {
         return try? JSONEncoder.momento.encode(payload)
     }
 }
+
+nonisolated struct FolderDragPasteboardPayload: Codable, Hashable, Sendable {
+    var libraryID: AssetLibrary.ID
+    var folderID: AssetFolder.ID
+}
+
+nonisolated enum FolderDragPasteboardWriter {
+    static let folderIDTypeIdentifier = "com.seaony.momento.folder-id"
+    static let folderIDUTType = UTType(exportedAs: folderIDTypeIdentifier)
+
+    static func itemProvider(libraryID: AssetLibrary.ID, folderID: AssetFolder.ID) -> NSItemProvider {
+        let provider = NSItemProvider()
+        provider.registerDataRepresentation(forTypeIdentifier: folderIDTypeIdentifier, visibility: .ownProcess) { completion in
+            let payload = FolderDragPasteboardPayload(libraryID: libraryID, folderID: folderID)
+            completion(try? JSONEncoder.momento.encode(payload), nil)
+            return nil
+        }
+        return provider
+    }
+}

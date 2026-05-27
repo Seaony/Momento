@@ -225,6 +225,70 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         }
     }
 
+    func moveFolder(
+        id: AssetFolder.ID,
+        toParentID parentID: AssetFolder.ID?,
+        relativeTo targetID: AssetFolder.ID?,
+        insertAfterTarget: Bool
+    ) throws -> AssetFolder {
+        try context.performAndWait {
+            guard let movingRecord = try folderRecord(id: id) else {
+                throw LibraryMetadataError.missingFolder
+            }
+
+            if parentID == id {
+                throw LibraryMetadataError.invalidFolderMove
+            }
+
+            if let parentID, try folderRecord(id: parentID) == nil {
+                throw LibraryMetadataError.missingFolder
+            }
+
+            let descendantIDs = try descendantFolderIDs(startingAt: id)
+            if let parentID, descendantIDs.contains(parentID) {
+                throw LibraryMetadataError.invalidFolderMove
+            }
+            if let targetID, descendantIDs.contains(targetID) {
+                throw LibraryMetadataError.invalidFolderMove
+            }
+
+            if let targetID {
+                guard let targetRecord = try folderRecord(id: targetID) else {
+                    throw LibraryMetadataError.missingFolder
+                }
+                guard (targetRecord.value(forKey: "parentID") as? String) == parentID else {
+                    throw LibraryMetadataError.invalidFolderMove
+                }
+            }
+
+            let previousParentID = movingRecord.value(forKey: "parentID") as? String
+            let updatedAt = Date()
+
+            if previousParentID != parentID {
+                movingRecord.setValue(parentID, forKey: "parentID")
+                movingRecord.setValue(updatedAt, forKey: "updatedAt")
+                try normalizeFolderSortIndexes(parentID: previousParentID, updatedAt: updatedAt)
+            }
+
+            try normalizeFolderSortIndexes(
+                parentID: parentID,
+                movingRecord: movingRecord,
+                relativeTo: targetID,
+                insertAfterTarget: insertAfterTarget,
+                updatedAt: updatedAt
+            )
+
+            if context.hasChanges {
+                try context.save()
+            }
+
+            guard let folder = folder(from: movingRecord) else {
+                throw LibraryMetadataError.missingFolder
+            }
+            return folder
+        }
+    }
+
     func deleteFolder(id: AssetFolder.ID) throws -> [AssetFolder.ID] {
         try context.performAndWait {
             guard try folderRecord(id: id) != nil else {
@@ -1289,6 +1353,50 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         return maxSortIndex + 1
     }
 
+    private func normalizeFolderSortIndexes(parentID: String?, updatedAt: Date) throws {
+        try updateFolderSortIndexes(try folderRecords(parentID: parentID), updatedAt: updatedAt)
+    }
+
+    private func normalizeFolderSortIndexes(
+        parentID: String?,
+        movingRecord: NSManagedObject,
+        relativeTo targetID: AssetFolder.ID?,
+        insertAfterTarget: Bool,
+        updatedAt: Date
+    ) throws {
+        guard let movingID = movingRecord.value(forKey: "id") as? String else {
+            throw LibraryMetadataError.missingFolder
+        }
+
+        var siblingRecords = try folderRecords(parentID: parentID).filter {
+            ($0.value(forKey: "id") as? String) != movingID
+        }
+
+        let insertionIndex: Int
+        if let targetID {
+            guard let targetIndex = siblingRecords.firstIndex(where: { ($0.value(forKey: "id") as? String) == targetID }) else {
+                throw LibraryMetadataError.missingFolder
+            }
+            insertionIndex = insertAfterTarget ? targetIndex + 1 : targetIndex
+        } else {
+            insertionIndex = siblingRecords.endIndex
+        }
+
+        siblingRecords.insert(movingRecord, at: min(insertionIndex, siblingRecords.endIndex))
+        try updateFolderSortIndexes(siblingRecords, updatedAt: updatedAt)
+    }
+
+    private func updateFolderSortIndexes(_ records: [NSManagedObject], updatedAt: Date) throws {
+        for (index, record) in records.enumerated() {
+            guard intValue(record.value(forKey: "sortIndex")) != index else {
+                continue
+            }
+
+            record.setValue(index, forKey: "sortIndex")
+            record.setValue(updatedAt, forKey: "updatedAt")
+        }
+    }
+
     private func saveFolderAssignments(
         _ assignmentsByContentHash: [String: [[String]]],
         affectedAssetIDs: inout Set<AssetItem.ID>
@@ -1426,6 +1534,25 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
             )
         }
         return try context.fetch(request).first
+    }
+
+    private func folderRecords(parentID: String?) throws -> [NSManagedObject] {
+        let request = NSFetchRequest<NSManagedObject>(entityName: "FolderRecord")
+        if let parentID {
+            request.predicate = NSPredicate(
+                format: "libraryID == %@ AND parentID == %@",
+                library.id,
+                parentID
+            )
+        } else {
+            request.predicate = NSPredicate(format: "libraryID == %@ AND parentID == nil", library.id)
+        }
+        request.sortDescriptors = [
+            NSSortDescriptor(key: "sortIndex", ascending: true),
+            NSSortDescriptor(key: "createdAt", ascending: true),
+            NSSortDescriptor(key: "id", ascending: true)
+        ]
+        return try context.fetch(request)
     }
 
     private func folderRecords(ids: Set<String>) throws -> [NSManagedObject] {
@@ -1595,6 +1722,7 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
 
 enum LibraryMetadataError: LocalizedError {
     case invalidFolderName
+    case invalidFolderMove
     case invalidAssetName
     case invalidTagName
     case duplicateTagName
@@ -1606,6 +1734,8 @@ enum LibraryMetadataError: LocalizedError {
         switch self {
         case .invalidFolderName:
             "Enter a folder name."
+        case .invalidFolderMove:
+            "Move the folder to a different location."
         case .invalidAssetName:
             "Enter an asset title."
         case .invalidTagName:

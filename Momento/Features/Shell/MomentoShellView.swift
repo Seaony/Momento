@@ -38,6 +38,7 @@ struct MomentoShellView<Content: View>: View {
     var onCreateFolder: (AssetFolder.ID?) -> Void
     var onRenameFolder: (AssetFolder.ID) -> Void
     var onDeleteFolder: (AssetFolder.ID) -> Void
+    var onMoveFolder: (AssetFolder.ID, AssetFolder.ID?, AssetFolder.ID?, Bool) -> Void
     var onAssignDroppedAssetsToFolder: (Set<AssetItem.ID>, AssetFolder.ID) -> Void
     var title: String
     var subtitle: String?
@@ -83,6 +84,7 @@ struct MomentoShellView<Content: View>: View {
         onCreateFolder: @escaping (AssetFolder.ID?) -> Void = { _ in },
         onRenameFolder: @escaping (AssetFolder.ID) -> Void = { _ in },
         onDeleteFolder: @escaping (AssetFolder.ID) -> Void = { _ in },
+        onMoveFolder: @escaping (AssetFolder.ID, AssetFolder.ID?, AssetFolder.ID?, Bool) -> Void = { _, _, _, _ in },
         onAssignDroppedAssetsToFolder: @escaping (Set<AssetItem.ID>, AssetFolder.ID) -> Void = { _, _ in },
         title: String = "All Assets",
         subtitle: String? = "0 items",
@@ -120,6 +122,7 @@ struct MomentoShellView<Content: View>: View {
         self.onCreateFolder = onCreateFolder
         self.onRenameFolder = onRenameFolder
         self.onDeleteFolder = onDeleteFolder
+        self.onMoveFolder = onMoveFolder
         self.onAssignDroppedAssetsToFolder = onAssignDroppedAssetsToFolder
         self.title = title
         self.subtitle = subtitle
@@ -219,6 +222,7 @@ struct MomentoShellView<Content: View>: View {
             onCreateFolder: onCreateFolder,
             onRenameFolder: onRenameFolder,
             onDeleteFolder: onDeleteFolder,
+            onMoveFolder: onMoveFolder,
             onAssignDroppedAssetsToFolder: onAssignDroppedAssetsToFolder
         )
         .frame(width: effectiveSidebarWidth)

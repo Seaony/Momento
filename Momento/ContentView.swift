@@ -213,6 +213,7 @@ struct ContentView: View {
             onCreateFolder: presentCreateFolderDialog,
             onRenameFolder: presentRenameFolderDialog,
             onDeleteFolder: presentDeleteFolderDialog,
+            onMoveFolder: moveFolder,
             onAssignDroppedAssetsToFolder: assignDroppedAssetsToFolder,
             title: title,
             subtitle: localization.itemCount(visibleAssets.count),
@@ -2090,6 +2091,24 @@ struct ContentView: View {
     private func deleteFolder(_ id: AssetFolder.ID) {
         do {
             try store.deleteFolder(id: id)
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func moveFolder(
+        _ id: AssetFolder.ID,
+        toParentID parentID: AssetFolder.ID?,
+        relativeTo targetID: AssetFolder.ID?,
+        insertAfterTarget: Bool
+    ) {
+        do {
+            try store.moveFolder(
+                id: id,
+                toParentID: parentID,
+                relativeTo: targetID,
+                insertAfterTarget: insertAfterTarget
+            )
         } catch {
             showImportError(error)
         }

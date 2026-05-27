@@ -665,6 +665,25 @@ final class LibraryStore {
         folders = try metadataStore.loadFolders()
     }
 
+    func moveFolder(
+        id: AssetFolder.ID,
+        toParentID parentID: AssetFolder.ID?,
+        relativeTo targetID: AssetFolder.ID?,
+        insertAfterTarget: Bool
+    ) throws {
+        guard let metadataStore else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+
+        _ = try metadataStore.moveFolder(
+            id: id,
+            toParentID: parentID,
+            relativeTo: targetID,
+            insertAfterTarget: insertAfterTarget
+        )
+        folders = try metadataStore.loadFolders()
+    }
+
     func deleteFolder(id: AssetFolder.ID) throws {
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
