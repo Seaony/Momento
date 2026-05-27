@@ -7,12 +7,29 @@ nonisolated struct AssetLibrary: Identifiable, Hashable, Codable, Sendable {
     var name: String
     var createdAt: Date
     var packageURL: URL?
+    var storageMode: LibraryStorageMode
+    var libraryZoneName: String
+    var cloudAccountID: String?
+    var syncState: CloudLibrarySyncState
 
-    init(id: String, name: String, createdAt: Date, packageURL: URL? = nil) {
+    init(
+        id: String,
+        name: String,
+        createdAt: Date,
+        packageURL: URL? = nil,
+        storageMode: LibraryStorageMode = .local,
+        libraryZoneName: String = "",
+        cloudAccountID: String? = nil,
+        syncState: CloudLibrarySyncState = .synced
+    ) {
         self.id = id
         self.name = name
         self.createdAt = createdAt
         self.packageURL = packageURL
+        self.storageMode = storageMode
+        self.libraryZoneName = libraryZoneName
+        self.cloudAccountID = cloudAccountID
+        self.syncState = syncState
     }
 
     static let defaultLibrary = AssetLibrary(
@@ -204,6 +221,23 @@ nonisolated enum AssetKind: String, CaseIterable, Hashable, Codable, Sendable {
     case pdf
 }
 
+nonisolated struct AssetFileAvailability: Hashable, Codable, Sendable {
+    var original: FileAvailability
+    var thumbnail: FileAvailability
+    var lastError: String?
+}
+
+nonisolated enum FileAvailability: String, Hashable, Codable, Sendable {
+    case local
+    case downloading
+    case remoteOnly
+    case uploadPending
+    case uploadFailed
+    case generationPending
+    case failed
+    case missing
+}
+
 nonisolated struct AssetItem: Identifiable, Hashable, Codable, Sendable {
     var id: String
     var libraryID: String
@@ -231,6 +265,8 @@ nonisolated struct AssetItem: Identifiable, Hashable, Codable, Sendable {
     var trashedAt: Date?
     var importedAt: Date
     var updatedAt: Date
+    var availability: AssetFileAvailability
+    var syncState: CloudLibrarySyncState
 
     init(
         id: String,
@@ -258,7 +294,9 @@ nonisolated struct AssetItem: Identifiable, Hashable, Codable, Sendable {
         isTrashed: Bool = false,
         trashedAt: Date? = nil,
         importedAt: Date,
-        updatedAt: Date? = nil
+        updatedAt: Date? = nil,
+        availability: AssetFileAvailability? = nil,
+        syncState: CloudLibrarySyncState = .synced
     ) {
         self.id = id
         self.libraryID = libraryID
@@ -290,6 +328,12 @@ nonisolated struct AssetItem: Identifiable, Hashable, Codable, Sendable {
         self.trashedAt = trashedAt
         self.importedAt = importedAt
         self.updatedAt = updatedAt ?? importedAt
+        self.availability = availability ?? AssetFileAvailability(
+            original: .local,
+            thumbnail: thumbnailURL == nil ? .missing : .local,
+            lastError: nil
+        )
+        self.syncState = syncState
     }
 }
 

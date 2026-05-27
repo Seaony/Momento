@@ -2,6 +2,7 @@
 import CloudKit
 import CryptoKit
 import Foundation
+import Security
 
 nonisolated struct CloudAccountStateService {
     private let fetchAccountStatus: @Sendable () async throws -> CKAccountStatus
@@ -16,6 +17,20 @@ nonisolated struct CloudAccountStateService {
         self.fetchAccountStatus = fetchAccountStatus
         self.fetchUserRecordName = fetchUserRecordName
         self.currentUbiquityIdentityTokenData = currentUbiquityIdentityTokenData
+    }
+
+    init(containerIdentifier: String = CloudKitConfiguration.containerIdentifier) {
+        self.init(
+            fetchAccountStatus: {
+                try Self.validateCloudKitEntitlements(containerIdentifier: containerIdentifier)
+                return try await Self.accountStatus(for: CKContainer(identifier: containerIdentifier))
+            },
+            fetchUserRecordName: {
+                try Self.validateCloudKitEntitlements(containerIdentifier: containerIdentifier)
+                return try await Self.userRecordName(for: CKContainer(identifier: containerIdentifier))
+            },
+            currentUbiquityIdentityTokenData: Self.currentUbiquityIdentityTokenData
+        )
     }
 
     init(
@@ -113,6 +128,28 @@ nonisolated struct CloudAccountStateService {
         return recordID.recordName
     }
 
+    private static func validateCloudKitEntitlements(containerIdentifier: String) throws {
+        guard let task = SecTaskCreateFromSelf(nil) else {
+            throw CloudAccountStateServiceError.missingCloudKitEntitlement
+        }
+
+        let containerEntitlement = SecTaskCopyValueForEntitlement(
+            task,
+            "com.apple.developer.icloud-container-identifiers" as CFString,
+            nil
+        ) as? [String]
+        let serviceEntitlement = SecTaskCopyValueForEntitlement(
+            task,
+            "com.apple.developer.icloud-services" as CFString,
+            nil
+        ) as? [String]
+
+        guard containerEntitlement?.contains(containerIdentifier) == true,
+              serviceEntitlement?.contains("CloudKit") == true else {
+            throw CloudAccountStateServiceError.missingCloudKitEntitlement
+        }
+    }
+
     private static func archivedUbiquityIdentityTokenData(
         from token: (any NSCoding & NSCopying & NSObjectProtocol)?
     ) -> Data? {
@@ -132,6 +169,17 @@ nonisolated struct CloudAccountStateService {
 
     static func sha256Hex(data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+enum CloudAccountStateServiceError: LocalizedError {
+    case missingCloudKitEntitlement
+
+    var errorDescription: String? {
+        switch self {
+        case .missingCloudKitEntitlement:
+            "This build is missing the CloudKit iCloud entitlement."
+        }
     }
 }
 

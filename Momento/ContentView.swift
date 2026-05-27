@@ -174,7 +174,7 @@ struct ContentView: View {
         }
         .fileImporter(
             isPresented: $isImporterPresented,
-            allowedContentTypes: [.image, .folder],
+            allowedContentTypes: importContentTypes,
             allowsMultipleSelection: true,
             onCompletion: handleImportResult
         )
@@ -188,6 +188,9 @@ struct ContentView: View {
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .onAppear {
             validateCurrentLibraryAvailability()
+        }
+        .task {
+            await store.bootstrapCloudLibraryState()
         }
         .onOpenURL(perform: handleExternalURL)
         .onChange(of: defaultViewMode) { _, newValue in
@@ -345,7 +348,7 @@ struct ContentView: View {
                 onCommandDelete: commandDeleteSelectedAssets,
                 onContextMenuAction: handleAssetContextMenuAction,
                 assetSourceAccessValidator: {
-                    try store.currentLiveLocalLibrarySourceAccessValidator()
+                    try store.currentLibraryAssetSourceAccessValidator()
                 },
                 assetSourceReadValidator: {
                     sourceReadValidator
@@ -1188,6 +1191,14 @@ struct ContentView: View {
         AssetViewMode(rawValue: defaultViewModeRawValue) ?? .masonry
     }
 
+    private var importContentTypes: [UTType] {
+        var types: [UTType] = [.folder, .image, .movie, .video, .pdf]
+        if let svgType = UTType(filenameExtension: "svg") {
+            types.append(svgType)
+        }
+        return types
+    }
+
     private func collapseInspectorForTagManagementIfNeeded(_ selection: SidebarSelection) {
         guard case .tagManagement = selection, isInspectorPresented else {
             return
@@ -1468,7 +1479,7 @@ struct ContentView: View {
     private func previewURL(for asset: AssetItem) -> URL? {
         let sourceAccessValidator: @Sendable () throws -> Void
         do {
-            sourceAccessValidator = try store.currentLiveLocalLibrarySourceAccessValidator()
+            sourceAccessValidator = try store.currentLibraryAssetSourceAccessValidator()
             try sourceAccessValidator()
         } catch {
             handleAssetSourceAccessError(error)
@@ -1533,6 +1544,8 @@ struct ContentView: View {
             if preview(asset) {
                 showAssetActionToast(action)
             }
+        case .downloadOriginal:
+            downloadCloudOriginal(asset)
         case .export:
             presentAssetExportDialog(for: contextAssets.isEmpty ? [asset] : contextAssets)
         case .refreshThumbnail:
@@ -1862,6 +1875,21 @@ struct ContentView: View {
         shellToastRequest = MomentoToastRequest(message: localization.string(action.titleKey))
     }
 
+    private func downloadCloudOriginal(_ asset: AssetItem) {
+        Task {
+            do {
+                try await store.downloadCloudOriginal(assetID: asset.id)
+                await MainActor.run {
+                    shellToastRequest = MomentoToastRequest(message: localization.string("Download Original"))
+                }
+            } catch {
+                await MainActor.run {
+                    showImportError(error)
+                }
+            }
+        }
+    }
+
     private func presentAssetExportDialog(for assets: [AssetItem]) {
         let sourceReadValidator = store.currentLibrarySourceReadValidator()
         let canReadStoredSource = canReadAssetSourceFiles(sourceReadValidator)
@@ -1882,7 +1910,7 @@ struct ContentView: View {
     private func exportAssets(_ assets: [AssetItem], configuration: AssetExportConfiguration) {
         let sourceAccessValidator: @Sendable () throws -> Void
         do {
-            sourceAccessValidator = try store.currentLiveLocalLibrarySourceAccessValidator()
+            sourceAccessValidator = try store.currentLibraryAssetSourceAccessValidator()
         } catch {
             handleAssetSourceAccessError(error)
             return
@@ -1990,7 +2018,15 @@ struct ContentView: View {
 
     private func chooseLibraryDestination(named libraryName: String, storageMode: LibraryStorageMode) {
         guard storageMode == .local else {
-            showImportError(LibraryStoreError.cloudLibraryUnavailable)
+            Task {
+                do {
+                    try await store.createCloudLibrary(named: libraryName)
+                } catch {
+                    await MainActor.run {
+                        showImportError(error)
+                    }
+                }
+            }
             return
         }
 
@@ -2074,6 +2110,19 @@ struct ContentView: View {
     }
 
     private func switchLibrary(_ id: RecentLibraryReference.ID) {
+        if store.recentLibraries.first(where: { $0.id == id })?.storageMode == .cloud {
+            Task {
+                do {
+                    try await store.openCloudLibrary(id: id)
+                } catch {
+                    await MainActor.run {
+                        showImportError(error)
+                    }
+                }
+            }
+            return
+        }
+
         do {
             try store.openRecentLibrary(id: id)
         } catch {
@@ -2092,6 +2141,19 @@ struct ContentView: View {
     }
 
     private func renameLibrary(_ id: RecentLibraryReference.ID, to name: String) {
+        if store.recentLibraries.first(where: { $0.id == id })?.storageMode == .cloud {
+            Task {
+                do {
+                    try await store.renameCloudLibrary(id: id, to: name)
+                } catch {
+                    await MainActor.run {
+                        showImportError(error)
+                    }
+                }
+            }
+            return
+        }
+
         do {
             try store.renameRecentLibrary(id: id, to: name)
         } catch {
@@ -2126,6 +2188,19 @@ struct ContentView: View {
     }
 
     private func confirmDeleteLibrary(_ id: RecentLibraryReference.ID) {
+        if store.recentLibraries.first(where: { $0.id == id })?.storageMode == .cloud {
+            Task {
+                do {
+                    try await store.deleteCloudLibrary(id: id)
+                } catch {
+                    await MainActor.run {
+                        showImportError(error)
+                    }
+                }
+            }
+            return
+        }
+
         do {
             try store.deleteRecentLibrary(id: id)
         } catch {
@@ -2369,6 +2444,8 @@ private extension MomentoInspectorAsset {
             sourcePageURL: asset.sourcePageURL,
             addedDate: asset.importedAt,
             kind: localization.kindTitle(for: asset.kind),
+            syncState: asset.syncState,
+            availability: asset.availability,
             exifItems: Self.exifItems(for: asset.exifMetadata, localization: localization)
         )
     }

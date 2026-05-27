@@ -59,6 +59,10 @@ struct MomentoCreateLibraryDialog: View {
         libraryName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var primaryActionTitleKey: String {
+        mode == .create && selectedStorageMode == .cloud ? "Create Library" : mode.primaryActionKey
+    }
+
     init(
         mode: MomentoLibraryNameDialogMode = .create,
         isPresented: Binding<Bool>,
@@ -131,7 +135,7 @@ struct MomentoCreateLibraryDialog: View {
                         Button {
                             submit()
                         } label: {
-                            Text(localization.string(mode.primaryActionKey))
+                            Text(localization.string(primaryActionTitleKey))
                                 .font(.system(size: 14, weight: .semibold))
                                 .padding(.horizontal, 18)
                                 .padding(.vertical, 6)
@@ -200,7 +204,7 @@ struct MomentoCreateLibraryDialog: View {
                 mode: .cloud,
                 titleKey: "iCloud",
                 systemImage: "icloud.fill",
-                isDisabled: true
+                isDisabled: false
             )
         }
     }

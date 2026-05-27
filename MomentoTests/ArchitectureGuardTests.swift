@@ -67,7 +67,7 @@ final class ArchitectureGuardTests: XCTestCase {
         let assetGridSource = try String(contentsOf: assetGridURL(), encoding: .utf8)
         let bridgeSource = try appKitBridgeSource()
 
-        XCTAssertTrue(contentSource.contains("try store.currentLiveLocalLibrarySourceAccessValidator()"))
+        XCTAssertTrue(contentSource.contains("try store.currentLibraryAssetSourceAccessValidator()"))
         XCTAssertTrue(contentSource.contains("store.currentLibrarySourceReadValidator()"))
         XCTAssertTrue(assetGridSource.contains("assetSourceAccessValidator"))
         XCTAssertTrue(assetGridSource.contains("assetSourceReadValidator"))
@@ -93,30 +93,28 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("private var visibleCloudLibraries: [RecentLibraryReference]"))
         XCTAssertTrue(source.contains("localization.string(\"On This Mac\")"))
         XCTAssertTrue(source.contains("localization.string(\"iCloud\")"))
-        XCTAssertTrue(source.contains("if library.storageMode == .local {"))
         XCTAssertTrue(source.contains("displayedLibraries[sourceIndex].storageMode == targetLibrary.storageMode"))
-        XCTAssertTrue(source.contains("let canSwitchLibrary = library.storageMode == .local"))
-        XCTAssertTrue(source.contains("guard canSwitchLibrary else {"))
-        XCTAssertTrue(source.contains(".disabled(!canSwitchLibrary)"))
-        XCTAssertTrue(source.contains("if canSwitchLibrary {"))
+        XCTAssertTrue(source.contains("let canSwitchLibrary = true"))
+        XCTAssertTrue(source.contains("return visibleLibraries.first { $0.id == activeMoreLibraryID }"))
+        XCTAssertTrue(source.contains("if library.storageMode == .local {"))
     }
 
-    func testCreateLibraryDialogKeepsCloudModeDisabledUntilSyncExists() throws {
+    func testCreateLibraryDialogEnablesCloudModeAfterSyncExists() throws {
         let dialogSource = try String(contentsOf: createLibraryDialogURL(), encoding: .utf8)
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
 
         XCTAssertTrue(dialogSource.contains("@State private var selectedStorageMode: LibraryStorageMode = .local"))
         XCTAssertTrue(dialogSource.contains("private var storageModePicker: some View"))
         XCTAssertTrue(dialogSource.contains("mode: .cloud"))
-        XCTAssertTrue(dialogSource.contains("isDisabled: true"))
+        XCTAssertTrue(dialogSource.contains("isDisabled: false"))
         XCTAssertTrue(contentSource.contains("guard storageMode == .local else"))
-        XCTAssertTrue(contentSource.contains("showImportError(LibraryStoreError.cloudLibraryUnavailable)"))
+        XCTAssertTrue(contentSource.contains("try await store.createCloudLibrary(named: libraryName)"))
     }
 
-    func testCloudAccountServiceRequiresExplicitContainerUntilPhaseZeroIsComplete() throws {
+    func testCloudAccountServiceUsesConfiguredCloudKitContainer() throws {
         let serviceSource = try String(contentsOf: cloudAccountStateServiceURL(), encoding: .utf8)
 
-        XCTAssertTrue(serviceSource.contains("init(\n        container: CKContainer,"))
+        XCTAssertTrue(serviceSource.contains("init(containerIdentifier: String = CloudKitConfiguration.containerIdentifier)"))
         XCTAssertFalse(serviceSource.contains("container: CKContainer = .default()"))
         XCTAssertFalse(serviceSource.contains("CKContainer.default()"))
     }

@@ -1399,7 +1399,7 @@ private struct MomentoLibrarySwitcherMenu: View {
             menuPanel
 
             if let activeLibrary = activeMoreLibrary,
-               let activeIndex = visibleLocalLibraries.firstIndex(where: { $0.id == activeLibrary.id }) {
+               let activeIndex = libraryMenuRowIndex(for: activeLibrary) {
                 libraryMoreMenu(activeLibrary)
                     .offset(libraryMoreMenuOffset(for: activeIndex))
                     .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .topLeading)))
@@ -1507,7 +1507,7 @@ private struct MomentoLibrarySwitcherMenu: View {
             return nil
         }
 
-        return visibleLocalLibraries.first { $0.id == activeMoreLibraryID }
+        return visibleLibraries.first { $0.id == activeMoreLibraryID }
     }
 
     private func syncDisplayedLibraries() {
@@ -1539,7 +1539,7 @@ private struct MomentoLibrarySwitcherMenu: View {
     private func libraryRow(_ library: RecentLibraryReference) -> some View {
         let isSelected = library.id == currentLibraryID
         let isHovered = hoveredLibraryID == library.id
-        let canSwitchLibrary = library.storageMode == .local
+        let canSwitchLibrary = true
 
         let row = HStack(spacing: 8) {
             if canSwitchLibrary {
@@ -1592,28 +1592,23 @@ private struct MomentoLibrarySwitcherMenu: View {
             .buttonStyle(.plain)
             .pointerStyle(.link)
             .disabled(!canSwitchLibrary)
-            .help(canSwitchLibrary ? "" : localization.string("Cloud libraries are not available yet."))
+            .help("")
 
-            if library.storageMode == .local {
-                Button {
-                    withAnimation(.smooth(duration: 0.14)) {
-                        hoveredMoreActionID = nil
-                        activeMoreLibraryID = activeMoreLibraryID == library.id ? nil : library.id
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(isSelected || isHovered ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
-                        .frame(width: 24, height: 24)
-                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            Button {
+                withAnimation(.smooth(duration: 0.14)) {
+                    hoveredMoreActionID = nil
+                    activeMoreLibraryID = activeMoreLibraryID == library.id ? nil : library.id
                 }
-                .buttonStyle(.plain)
-                .pointerStyle(.link)
-                .help(localization.string("More Actions"))
-            } else {
-                Spacer()
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(isSelected || isHovered ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
                     .frame(width: 24, height: 24)
+                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
+            .buttonStyle(.plain)
+            .pointerStyle(.link)
+            .help(localization.string("More Actions"))
         }
         .padding(.horizontal, 7)
         .frame(height: 42)
@@ -1700,11 +1695,19 @@ private struct MomentoLibrarySwitcherMenu: View {
     }
 
     private func libraryMoreMenuOffset(for index: Int) -> CGSize {
-        let localHeaderHeight: CGFloat = visibleCloudLibraries.isEmpty ? 0 : 20
+        let sectionHeaderHeight: CGFloat = 16
+        let rowHeight: CGFloat = 42
+        let showsSectionHeaders = !visibleLocalLibraries.isEmpty && !visibleCloudLibraries.isEmpty
+        let headerHeight = showsSectionHeaders ? sectionHeaderHeight : 0
+        let cloudHeaderHeight = showsSectionHeaders && index >= visibleLocalLibraries.count ? sectionHeaderHeight : 0
         return CGSize(
             width: MomentoTheme.librarySwitcherWidth - 11,
-            height: 15 + localHeaderHeight + CGFloat(index) * 44
+            height: 15 + headerHeight + cloudHeaderHeight + CGFloat(index) * rowHeight
         )
+    }
+
+    private func libraryMenuRowIndex(for library: RecentLibraryReference) -> Int? {
+        (visibleLocalLibraries + visibleCloudLibraries).firstIndex { $0.id == library.id }
     }
 
     private func libraryMoreMenu(_ library: RecentLibraryReference) -> some View {
@@ -1719,14 +1722,16 @@ private struct MomentoLibrarySwitcherMenu: View {
                 onRenameLibrary(library.id)
             }
 
-            libraryMoreActionRow(
-                id: "\(library.id)-reveal",
-                title: localization.string("Reveal in Finder"),
-                systemImage: "finder",
-                isDestructive: false
-            ) {
-                activeMoreLibraryID = nil
-                onRevealLibrary(library.id)
+            if library.storageMode == .local {
+                libraryMoreActionRow(
+                    id: "\(library.id)-reveal",
+                    title: localization.string("Reveal in Finder"),
+                    systemImage: "finder",
+                    isDestructive: false
+                ) {
+                    activeMoreLibraryID = nil
+                    onRevealLibrary(library.id)
+                }
             }
 
             librarySwitcherSeparator

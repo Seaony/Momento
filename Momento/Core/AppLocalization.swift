@@ -134,6 +134,52 @@ struct AppLocalization: Equatable {
         }
     }
 
+    func title(for syncState: CloudLibrarySyncState) -> String {
+        switch syncState {
+        case .synced:
+            string("Synced")
+        case .syncing:
+            string("Syncing")
+        case .waitingForNetwork:
+            string("Waiting for network")
+        case .waitingForICloudSignIn:
+            string("Waiting for iCloud")
+        case .uploadFailed:
+            string("Upload failed")
+        case .downloadFailed:
+            string("Download failed")
+        case .quotaBlocked:
+            string("Storage blocked")
+        case .unsupportedSchema:
+            string("Needs newer Momento")
+        case .conflictResolved:
+            string("Conflict resolved")
+        case .accountMismatch:
+            string("Account mismatch")
+        }
+    }
+
+    func title(for availability: FileAvailability) -> String {
+        switch availability {
+        case .local:
+            string("Local")
+        case .downloading:
+            string("Downloading")
+        case .remoteOnly:
+            string("Remote")
+        case .uploadPending:
+            string("Upload pending")
+        case .uploadFailed:
+            string("Upload failed")
+        case .generationPending:
+            string("Generating")
+        case .failed:
+            string("Failed")
+        case .missing:
+            string("Missing")
+        }
+    }
+
     func errorMessage(_ error: Error) -> String {
         guard let libraryError = error as? LibraryStoreError else {
             if let storageError = error as? LibraryStorageError {
@@ -155,6 +201,12 @@ struct AppLocalization: Equatable {
             string("This recent library is no longer available.")
         case .cloudLibraryUnavailable:
             string("Cloud libraries are not available yet.")
+        case .cloudAccountUnavailable:
+            string("Sign in to iCloud before using cloud libraries.")
+        case .localLibraryRequired:
+            string("This action requires a local library.")
+        case .unsupportedCloudLibrary:
+            string("This iCloud library uses a newer sync schema. Update Momento before making changes.")
         case .unsupportedLibraryURL:
             string("Choose a .momento package.")
         case .duplicateLibraryID:
@@ -165,10 +217,14 @@ struct AppLocalization: Equatable {
             string("Enter an asset title.")
         case .invalidTagName:
             string("Enter a tag name.")
+        case .invalidFolderName:
+            string("Enter a folder name.")
         case .missingAsset:
             string("This asset is no longer available.")
         case .missingTag:
             string("This tag is no longer available.")
+        case .missingFolder:
+            string("This folder is no longer available.")
         }
     }
 

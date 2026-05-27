@@ -2,6 +2,11 @@
 import Foundation
 import Observation
 
+private enum PendingCloudRelationshipWriteKey: Hashable, Sendable {
+    case tag(String)
+    case folder(String)
+}
+
 @MainActor
 @Observable
 final class LibraryStore {
@@ -26,8 +31,21 @@ final class LibraryStore {
     private let colorAnalysisService: AssetColorAnalysisService
     private let storage: LibraryStorage
     private let recentStore: RecentLibraryStore
+    private let cloudAccountService: CloudAccountStateService
+    private let cloudCatalogService: CloudLibraryCatalogService
+    private let cloudLibraryManagementService: any CloudLibraryManaging
+    private let cloudAssetCatalogService: CloudAssetCatalogService
+    private let cloudRelationshipService: CloudLibraryRelationshipService
+    private let cloudImportService: any CloudImporting
+    private let cloudAssetUploadService: any CloudAssetUploading
+    private let cloudAssetMetadataService: any CloudAssetMetadataWriting
+    private let cloudAssetDeleteService: any CloudAssetDeleting
+    private let cloudAssetRelationshipService: any CloudAssetRelationshipWriting
+    private let cloudAssetDownloadService: any CloudAssetDownloading
     private var metadataStore: LibraryMetadataStore?
     private var libraryAccessScope: LibraryAccessScope?
+    private var cloudWriteSequencesByAssetID: [AssetItem.ID: Int]
+    private var pendingRelationshipWriteSequencesByAssetID: [AssetItem.ID: [PendingCloudRelationshipWriteKey: Int]]
 
     init(
         libraries: [AssetLibrary]? = nil,
@@ -36,6 +54,17 @@ final class LibraryStore {
         importService: AssetImportService = AssetImportService(),
         storage: LibraryStorage = LibraryStorage(),
         recentStore: RecentLibraryStore = RecentLibraryStore(),
+        cloudAccountService: CloudAccountStateService = CloudAccountStateService(),
+        cloudCatalogService: CloudLibraryCatalogService = CloudLibraryCatalogService(),
+        cloudLibraryManagementService: any CloudLibraryManaging = CloudLibraryManagementService(),
+        cloudAssetCatalogService: CloudAssetCatalogService = CloudAssetCatalogService(),
+        cloudRelationshipService: CloudLibraryRelationshipService = CloudLibraryRelationshipService(),
+        cloudImportService: any CloudImporting = CloudImportService(),
+        cloudAssetUploadService: any CloudAssetUploading = CloudAssetUploadService(),
+        cloudAssetMetadataService: any CloudAssetMetadataWriting = CloudAssetUploadService(),
+        cloudAssetDeleteService: any CloudAssetDeleting = CloudAssetUploadService(),
+        cloudAssetRelationshipService: any CloudAssetRelationshipWriting = CloudLibraryRelationshipWriteService(),
+        cloudAssetDownloadService: any CloudAssetDownloading = CloudAssetDownloadService(),
         loadRecentLibrary: Bool = true
     ) {
         self.libraries = []
@@ -51,6 +80,19 @@ final class LibraryStore {
         self.thumbnailService = AssetThumbnailService(storage: storage)
         self.colorAnalysisService = AssetColorAnalysisService()
         self.recentStore = recentStore
+        self.cloudAccountService = cloudAccountService
+        self.cloudCatalogService = cloudCatalogService
+        self.cloudLibraryManagementService = cloudLibraryManagementService
+        self.cloudAssetCatalogService = cloudAssetCatalogService
+        self.cloudRelationshipService = cloudRelationshipService
+        self.cloudImportService = cloudImportService
+        self.cloudAssetUploadService = cloudAssetUploadService
+        self.cloudAssetMetadataService = cloudAssetMetadataService
+        self.cloudAssetDeleteService = cloudAssetDeleteService
+        self.cloudAssetRelationshipService = cloudAssetRelationshipService
+        self.cloudAssetDownloadService = cloudAssetDownloadService
+        self.cloudWriteSequencesByAssetID = [:]
+        self.pendingRelationshipWriteSequencesByAssetID = [:]
         self.recentLibraries = recentStore.load()
         self.libraryErrorMessage = nil
 
@@ -185,6 +227,90 @@ final class LibraryStore {
         try saveRecentLibrary(library)
     }
 
+    func bootstrapCloudLibraryState() async {
+        let accountState = await cloudAccountService.currentState()
+        guard case .available = accountState else {
+            return
+        }
+
+        do {
+            let descriptors = try await cloudCatalogService.fetchLibraries()
+            for descriptor in descriptors {
+                try saveRecentCloudLibrary(Self.assetLibrary(from: descriptor, accountState: accountState), accountState: accountState)
+            }
+            recentLibraries = recentStore.load()
+
+            guard currentLibrary == nil,
+                  let firstDescriptor = descriptors.first else {
+                return
+            }
+            try await activateCloudLibrary(Self.assetLibrary(from: firstDescriptor, accountState: accountState))
+        } catch {
+            libraryErrorMessage = libraryErrorMessage(for: error)
+        }
+    }
+
+    func createCloudLibrary(named name: String) async throws {
+        let accountState = await cloudAccountService.currentState()
+        guard accountState.canCreateCloudLibraryPlaceholder else {
+            throw LibraryStoreError.cloudAccountUnavailable
+        }
+
+        let descriptor = try await cloudLibraryManagementService.createLibrary(named: name)
+        let library = Self.assetLibrary(from: descriptor, accountState: accountState)
+        try saveRecentCloudLibrary(library, accountState: accountState)
+        activateEmptyCloudLibrary(library)
+    }
+
+    func openCloudLibrary(id referenceID: RecentLibraryReference.ID) async throws {
+        guard let reference = recentLibraries.first(where: { $0.id == referenceID && $0.storageMode == .cloud }),
+              let cloudLibraryID = reference.cloudLibraryID?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let cloudAccountID = reference.cloudAccountID?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !cloudLibraryID.isEmpty,
+              !cloudAccountID.isEmpty else {
+            throw LibraryStoreError.missingRecentLibrary
+        }
+
+        let accountState = await cloudAccountService.currentState(expectedCloudAccountID: cloudAccountID)
+        guard case .available = accountState else {
+            throw LibraryStoreError.cloudAccountUnavailable
+        }
+
+        let syncState = reference.lastKnownSyncState.flatMap(CloudLibrarySyncState.init(rawValue:)) ?? .synced
+        let library = AssetLibrary(
+            id: cloudLibraryID,
+            name: reference.name,
+            createdAt: reference.lastOpenedAt ?? Date(),
+            packageURL: nil,
+            storageMode: .cloud,
+            libraryZoneName: CloudRecordNaming.libraryZoneName(libraryID: cloudLibraryID),
+            cloudAccountID: cloudAccountID,
+            syncState: syncState
+        )
+        try await activateCloudLibrary(library)
+    }
+
+    func renameCloudLibrary(id referenceID: RecentLibraryReference.ID, to name: String) async throws {
+        let library = try cloudLibrary(for: referenceID)
+        let descriptor = try await cloudLibraryManagementService.renameLibrary(library, to: name)
+        let accountState = try availableAccountState(for: library)
+        let updatedLibrary = Self.assetLibrary(from: descriptor, accountState: accountState)
+        try saveRecentCloudLibrary(updatedLibrary, accountState: accountState)
+        if currentLibrary?.id == updatedLibrary.id {
+            currentLibrary = updatedLibrary
+        }
+    }
+
+    func deleteCloudLibrary(id referenceID: RecentLibraryReference.ID) async throws {
+        let library = try cloudLibrary(for: referenceID)
+        _ = try await cloudLibraryManagementService.deleteLibrary(library)
+        try recentStore.remove(id: referenceID)
+        recentLibraries = recentStore.load()
+        if currentLibrary?.id == library.id {
+            closeCurrentLibrary()
+        }
+    }
+
     func importLibrary(from sourceURL: URL, destinationRootURL: URL? = nil) throws {
         guard LibraryStorage.supportedPackageExtensions.contains(sourceURL.pathExtension) else {
             throw LibraryStoreError.unsupportedLibraryURL
@@ -241,8 +367,19 @@ final class LibraryStore {
         }
     }
 
+    func currentLibraryAssetSourceAccessValidator() throws -> @Sendable () throws -> Void {
+        let currentLibrary = try requireCurrentLibrary()
+        guard currentLibrary.storageMode == .local else {
+            return {}
+        }
+        return try currentLiveLocalLibrarySourceAccessValidator()
+    }
+
     func currentLibrarySourceReadValidator() -> (@Sendable () throws -> Void)? {
         guard let currentLibrary else {
+            return nil
+        }
+        guard currentLibrary.storageMode == .local else {
             return nil
         }
 
@@ -331,6 +468,9 @@ final class LibraryStore {
 
     func validateCurrentLibraryAvailability() throws {
         guard let currentLibrary else {
+            return
+        }
+        guard currentLibrary.storageMode == .local else {
             return
         }
 
@@ -497,8 +637,39 @@ final class LibraryStore {
               let index = assets.firstIndex(where: { $0.id == selectedAssetID }) else {
             return
         }
-        let currentLibrary = try requireCurrentLiveLocalLibrary()
+        let currentLibrary = try requireCurrentLibrary()
 
+        if currentLibrary.storageMode == .cloud {
+            let updatedTags = try resolveCloudTags(named: names, in: currentLibrary)
+            let existingTags = assets[index].tags
+            let existingTagIDs = Set(existingTags.map(\.id))
+            let updatedTagIDs = Set(updatedTags.map(\.id))
+            assets[index].tags = updatedTags
+            markCloudWritePending(&assets[index])
+            let updatedAt = assets[index].updatedAt
+            for tag in updatedTags where !existingTagIDs.contains(tag.id) {
+                scheduleTagMembershipSave(
+                    assetID: selectedAssetID,
+                    tag: tag,
+                    isMember: true,
+                    in: currentLibrary,
+                    updatedAt: updatedAt
+                )
+            }
+            for tag in existingTags where !updatedTagIDs.contains(tag.id) {
+                scheduleTagMembershipSave(
+                    assetID: selectedAssetID,
+                    tag: tag,
+                    isMember: false,
+                    in: currentLibrary,
+                    updatedAt: updatedAt
+                )
+            }
+            tags = Self.uniqueTags(from: assets, libraryID: currentLibrary.id)
+            return
+        }
+
+        try requireCurrentLiveLocalLibrary()
         if let metadataStore {
             mergeAssets([try metadataStore.setTagNames(names, forAssetID: selectedAssetID)])
             tags = try metadataStore.loadTags()
@@ -515,8 +686,49 @@ final class LibraryStore {
             throw LibraryStoreError.invalidTagName
         }
 
-        let currentLibrary = try requireCurrentLiveLocalLibrary()
+        let currentLibrary = try requireCurrentLibrary()
 
+        if currentLibrary.storageMode == .cloud {
+            guard let existingTag = tags.first(where: { $0.id == tagID }) else {
+                throw LibraryStoreError.missingTag
+            }
+            if tags.contains(where: { $0.id != tagID && $0.name.caseInsensitiveCompare(trimmedName) == .orderedSame }) {
+                throw LibraryStoreError.invalidTagName
+            }
+
+            let updatedTag = TagItem(id: existingTag.id, name: trimmedName, colorHex: existingTag.colorHex)
+            Task { [self] in
+                do {
+                    try await cloudAssetRelationshipService.saveTag(
+                        updatedTag,
+                        in: currentLibrary,
+                        createdAt: nil,
+                        updatedAt: Date(),
+                        deletedAt: nil
+                    )
+                    tags = Self.uniqueTags(
+                        from: assets.map { asset in
+                            var updatedAsset = asset
+                            updatedAsset.tags = asset.tags.map { $0.id == tagID ? updatedTag : $0 }
+                            return updatedAsset
+                        },
+                        libraryID: currentLibrary.id
+                    )
+                    for index in assets.indices where assets[index].libraryID == currentLibrary.id {
+                        assets[index].tags = assets[index].tags.map { $0.id == tagID ? updatedTag : $0 }
+                    }
+                    if case .tag(let selectedTagID) = sidebarSelection, selectedTagID == tagID {
+                        sidebarSelection = .tag(updatedTag.id)
+                    }
+                    pruneSelectedAssetsIfNeeded()
+                } catch {
+                    libraryErrorMessage = libraryErrorMessage(for: error)
+                }
+            }
+            return
+        }
+
+        try requireCurrentLiveLocalLibrary()
         if let metadataStore {
             mergeAssets(try metadataStore.renameTag(id: tagID, to: trimmedName))
             tags = try metadataStore.loadTags()
@@ -559,8 +771,37 @@ final class LibraryStore {
             throw LibraryStoreError.invalidTagName
         }
 
-        try requireCurrentLiveLocalLibrary()
+        let currentLibrary = try requireCurrentLibrary()
 
+        if currentLibrary.storageMode == .cloud {
+            guard !tags.contains(where: { $0.name.caseInsensitiveCompare(trimmedName) == .orderedSame }) else {
+                return
+            }
+
+            let now = Date()
+            let tag = TagItem(id: UUID().uuidString, name: trimmedName, colorHex: nil)
+            tags.append(tag)
+            tags.sort {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+            Task { [self] in
+                do {
+                    try await cloudAssetRelationshipService.saveTag(
+                        tag,
+                        in: currentLibrary,
+                        createdAt: now,
+                        updatedAt: now,
+                        deletedAt: nil
+                    )
+                } catch {
+                    libraryErrorMessage = libraryErrorMessage(for: error)
+                    tags.removeAll { $0.id == tag.id }
+                }
+            }
+            return
+        }
+
+        try requireCurrentLiveLocalLibrary()
         if let metadataStore {
             _ = try metadataStore.resolveOrCreateTags(named: [trimmedName])
             tags = try metadataStore.loadTags()
@@ -579,8 +820,44 @@ final class LibraryStore {
     }
 
     func deleteTag(id tagID: TagItem.ID) throws {
-        let currentLibrary = try requireCurrentLiveLocalLibrary()
+        let currentLibrary = try requireCurrentLibrary()
 
+        if currentLibrary.storageMode == .cloud {
+            guard let tag = tags.first(where: { $0.id == tagID }) else {
+                throw LibraryStoreError.missingTag
+            }
+
+            let affectedAssetIDs = assets
+                .filter { $0.libraryID == currentLibrary.id && $0.tags.contains { $0.id == tagID } }
+                .map(\.id)
+            let deletedAt = Date()
+            markCloudRelationshipWritePending(assetIDs: affectedAssetIDs)
+            Task { [self] in
+                do {
+                    try await cloudAssetRelationshipService.deleteTag(
+                        tag,
+                        affectedAssetIDs: affectedAssetIDs,
+                        in: currentLibrary,
+                        deletedAt: deletedAt
+                    )
+                    tags.removeAll { $0.id == tagID }
+                    for index in assets.indices where assets[index].libraryID == currentLibrary.id {
+                        assets[index].tags.removeAll { $0.id == tagID }
+                    }
+                    markCloudRelationshipWriteSucceeded(assetIDs: affectedAssetIDs)
+                    if case .tag(let selectedTagID) = sidebarSelection, selectedTagID == tagID {
+                        sidebarSelection = .tagManagement
+                    }
+                    pruneSelectedAssetsIfNeeded()
+                } catch {
+                    markCloudRelationshipWriteFailed(assetIDs: affectedAssetIDs, message: error.localizedDescription)
+                    libraryErrorMessage = libraryErrorMessage(for: error)
+                }
+            }
+            return
+        }
+
+        try requireCurrentLiveLocalLibrary()
         if let metadataStore {
             mergeAssets(try metadataStore.deleteTag(id: tagID))
             tags = try metadataStore.loadTags()
@@ -609,6 +886,30 @@ final class LibraryStore {
     }
 
     func addTag(id tagID: TagItem.ID, toAssets assetIDs: Set<AssetItem.ID>) throws {
+        let currentLibrary = try requireCurrentLibrary()
+        if currentLibrary.storageMode == .cloud {
+            guard let tag = tags.first(where: { $0.id == tagID }) else {
+                throw LibraryStoreError.missingTag
+            }
+
+            for assetID in activeAssetIDs(in: assetIDs) {
+                guard let index = assets.firstIndex(where: { $0.id == assetID && $0.libraryID == currentLibrary.id }),
+                      !assets[index].tags.contains(where: { $0.id == tag.id }) else {
+                    continue
+                }
+                assets[index].tags.append(tag)
+                markCloudWritePending(&assets[index])
+                scheduleTagMembershipSave(
+                    assetID: assetID,
+                    tag: tag,
+                    isMember: true,
+                    in: currentLibrary,
+                    updatedAt: assets[index].updatedAt
+                )
+            }
+            return
+        }
+
         try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
@@ -625,6 +926,15 @@ final class LibraryStore {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
             throw LibraryStoreError.invalidTagName
+        }
+
+        let currentLibrary = try requireCurrentLibrary()
+        if currentLibrary.storageMode == .cloud {
+            guard let tag = try resolveCloudTags(named: [trimmedName], in: currentLibrary).first else {
+                throw LibraryStoreError.invalidTagName
+            }
+            try addTag(id: tag.id, toAssets: assetIDs)
+            return
         }
 
         try requireCurrentLiveLocalLibrary()
@@ -649,6 +959,27 @@ final class LibraryStore {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
             throw LibraryStoreError.invalidTagName
+        }
+
+        let currentLibrary = try requireCurrentLibrary()
+        if currentLibrary.storageMode == .cloud {
+            let normalizedName = trimmedName.lowercased()
+            for assetID in activeAssetIDs(in: assetIDs) {
+                guard let index = assets.firstIndex(where: { $0.id == assetID && $0.libraryID == currentLibrary.id }),
+                      let removedTag = assets[index].tags.first(where: { $0.name.lowercased() == normalizedName }) else {
+                    continue
+                }
+                assets[index].tags.removeAll { $0.id == removedTag.id }
+                markCloudWritePending(&assets[index])
+                scheduleTagMembershipSave(
+                    assetID: assetID,
+                    tag: removedTag,
+                    isMember: false,
+                    in: currentLibrary,
+                    updatedAt: assets[index].updatedAt
+                )
+            }
+            return
         }
 
         try requireCurrentLiveLocalLibrary()
@@ -678,6 +1009,40 @@ final class LibraryStore {
     }
 
     func createFolder(name: String? = nil, parentID: AssetFolder.ID? = nil) throws {
+        let currentLibrary = try requireCurrentLibrary()
+
+        if currentLibrary.storageMode == .cloud {
+            if let parentID, !folders.contains(where: { $0.id == parentID && $0.libraryID == currentLibrary.id }) {
+                throw LibraryStoreError.missingFolder
+            }
+
+            let now = Date()
+            let folder = AssetFolder(
+                libraryID: currentLibrary.id,
+                name: name ?? nextFolderName(parentID: parentID),
+                parentID: parentID,
+                sortIndex: nextFolderSortIndex(parentID: parentID),
+                createdAt: now,
+                updatedAt: now
+            )
+            folders = sortedFolders(folders + [folder])
+            sidebarSelection = .folder(folder.id)
+            selectedAssetIDs = []
+            selectedAssetID = nil
+            Task { [self] in
+                do {
+                    try await cloudAssetRelationshipService.saveFolder(folder, in: currentLibrary, deletedAt: nil)
+                } catch {
+                    libraryErrorMessage = libraryErrorMessage(for: error)
+                    folders.removeAll { $0.id == folder.id }
+                    if case .folder(let selectedFolderID) = sidebarSelection, selectedFolderID == folder.id {
+                        sidebarSelection = .library(currentLibrary.id)
+                    }
+                }
+            }
+            return
+        }
+
         try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
@@ -694,6 +1059,32 @@ final class LibraryStore {
     }
 
     func renameFolder(id: AssetFolder.ID, to name: String) throws {
+        let currentLibrary = try requireCurrentLibrary()
+
+        if currentLibrary.storageMode == .cloud {
+            let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedName.isEmpty else {
+                throw LibraryStoreError.invalidFolderName
+            }
+            guard let folder = folders.first(where: { $0.id == id && $0.libraryID == currentLibrary.id }) else {
+                throw LibraryStoreError.missingFolder
+            }
+
+            var updatedFolder = folder
+            updatedFolder.name = trimmedName
+            updatedFolder.updatedAt = Date()
+            folders = sortedFolders(folders.map { $0.id == id ? updatedFolder : $0 })
+            Task { [self] in
+                do {
+                    try await cloudAssetRelationshipService.saveFolder(updatedFolder, in: currentLibrary, deletedAt: nil)
+                } catch {
+                    libraryErrorMessage = libraryErrorMessage(for: error)
+                    folders = sortedFolders(folders.map { $0.id == id ? folder : $0 })
+                }
+            }
+            return
+        }
+
         try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
@@ -709,6 +1100,65 @@ final class LibraryStore {
         relativeTo targetID: AssetFolder.ID?,
         insertAfterTarget: Bool
     ) throws {
+        let currentLibrary = try requireCurrentLibrary()
+
+        if currentLibrary.storageMode == .cloud {
+            guard let folder = folders.first(where: { $0.id == id && $0.libraryID == currentLibrary.id }) else {
+                throw LibraryStoreError.missingFolder
+            }
+            if let parentID, !folders.contains(where: { $0.id == parentID && $0.libraryID == currentLibrary.id }) {
+                throw LibraryStoreError.missingFolder
+            }
+            let descendantIDs = descendantFolderIDs(startingAt: id)
+            if parentID == id || parentID.map(descendantIDs.contains) == true || targetID.map(descendantIDs.contains) == true {
+                throw LibraryStoreError.missingFolder
+            }
+
+            let originalFolders = folders
+            var movedFolder = folder
+            movedFolder.parentID = parentID
+            let siblingIndexes = folders
+                .filter { $0.id != id }
+                .filter { $0.libraryID == currentLibrary.id && $0.parentID == parentID }
+                .sorted(by: folderTreeSort)
+                .map(\.id)
+            let targetIndex = targetID.flatMap { siblingIndexes.firstIndex(of: $0) }
+            let insertIndex = targetIndex.map { insertAfterTarget ? $0 + 1 : $0 } ?? siblingIndexes.count
+            let boundedInsertIndex = min(max(insertIndex, 0), siblingIndexes.count)
+            let orderedSiblingIDs = Array(siblingIndexes.prefix(boundedInsertIndex)) + [id] + Array(siblingIndexes.suffix(siblingIndexes.count - boundedInsertIndex))
+            var sortIndexesByID: [AssetFolder.ID: Int] = [:]
+            for (index, siblingID) in orderedSiblingIDs.enumerated() {
+                sortIndexesByID[siblingID] = index
+            }
+            let updatedAt = Date()
+            var changedFolders: [AssetFolder] = []
+            folders = sortedFolders(folders.map { candidate in
+                guard let sortIndex = sortIndexesByID[candidate.id] else {
+                    return candidate
+                }
+
+                var updatedFolder = candidate.id == id ? movedFolder : candidate
+                if candidate.id == id || candidate.parentID != parentID || candidate.sortIndex != sortIndex {
+                    updatedFolder.parentID = parentID
+                    updatedFolder.sortIndex = sortIndex
+                    updatedFolder.updatedAt = updatedAt
+                    changedFolders.append(updatedFolder)
+                }
+                return updatedFolder
+            })
+            Task { [self] in
+                do {
+                    for changedFolder in changedFolders {
+                        try await cloudAssetRelationshipService.saveFolder(changedFolder, in: currentLibrary, deletedAt: nil)
+                    }
+                } catch {
+                    libraryErrorMessage = libraryErrorMessage(for: error)
+                    folders = originalFolders
+                }
+            }
+            return
+        }
+
         try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
@@ -724,6 +1174,57 @@ final class LibraryStore {
     }
 
     func deleteFolder(id: AssetFolder.ID) throws {
+        let currentLibrary = try requireCurrentLibrary()
+
+        if currentLibrary.storageMode == .cloud {
+            guard folders.contains(where: { $0.id == id && $0.libraryID == currentLibrary.id }) else {
+                throw LibraryStoreError.missingFolder
+            }
+
+            let deletedIDs = descendantFolderIDs(startingAt: id)
+            let deletedFolders = folders.filter { deletedIDs.contains($0.id) }
+            let deletedAt = Date()
+            let affectedAssetIDs = assets
+                .filter { $0.libraryID == currentLibrary.id && !$0.folderIDs.filter(deletedIDs.contains).isEmpty }
+                .map(\.id)
+            let deletedFoldersByID = Dictionary(uniqueKeysWithValues: deletedFolders.map { ($0.id, $0) })
+            let affectedMemberships = assets
+                .filter { $0.libraryID == currentLibrary.id }
+                .flatMap { asset in
+                    asset.folderIDs.compactMap { removedFolderID -> CloudFolderMembershipMutation? in
+                        guard deletedIDs.contains(removedFolderID),
+                              let folder = deletedFoldersByID[removedFolderID] else {
+                            return nil
+                        }
+                        return CloudFolderMembershipMutation(assetID: asset.id, folder: folder, isMember: false)
+                    }
+                }
+            markCloudRelationshipWritePending(assetIDs: affectedAssetIDs)
+            Task { [self] in
+                do {
+                    try await cloudAssetRelationshipService.deleteFolders(
+                        deletedFolders,
+                        affectedMemberships: affectedMemberships,
+                        in: currentLibrary,
+                        deletedAt: deletedAt
+                    )
+                    folders.removeAll { deletedIDs.contains($0.id) }
+                    for index in assets.indices where assets[index].libraryID == currentLibrary.id {
+                        assets[index].folderIDs.removeAll { deletedIDs.contains($0) }
+                    }
+                    markCloudRelationshipWriteSucceeded(assetIDs: affectedAssetIDs)
+                    if case .folder(let selectedFolderID) = sidebarSelection, deletedIDs.contains(selectedFolderID) {
+                        sidebarSelection = .library(currentLibrary.id)
+                    }
+                    pruneSelectedAssetsIfNeeded()
+                } catch {
+                    markCloudRelationshipWriteFailed(assetIDs: affectedAssetIDs, message: error.localizedDescription)
+                    libraryErrorMessage = libraryErrorMessage(for: error)
+                }
+            }
+            return
+        }
+
         try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
@@ -734,13 +1235,38 @@ final class LibraryStore {
         assets = try metadataStore.loadAssets()
 
         if case .folder(let selectedFolderID) = sidebarSelection, deletedIDs.contains(selectedFolderID) {
-            sidebarSelection = .library(currentLibrary?.id ?? "")
+            sidebarSelection = .library(currentLibrary.id)
         }
 
         pruneSelectedAssetsIfNeeded()
     }
 
     func assignAssets(ids: Set<AssetItem.ID>, to folderID: AssetFolder.ID) throws {
+        let currentLibrary = try requireCurrentLibrary()
+
+        if currentLibrary.storageMode == .cloud {
+            guard let folder = folders.first(where: { $0.id == folderID && $0.libraryID == currentLibrary.id }) else {
+                throw LibraryStoreError.missingFolder
+            }
+
+            for assetID in activeAssetIDs(in: ids) {
+                guard let index = assets.firstIndex(where: { $0.id == assetID && $0.libraryID == currentLibrary.id }),
+                      !assets[index].folderIDs.contains(folderID) else {
+                    continue
+                }
+                assets[index].folderIDs.append(folderID)
+                markCloudWritePending(&assets[index])
+                scheduleFolderMembershipSave(
+                    assetID: assetID,
+                    folder: folder,
+                    isMember: true,
+                    in: currentLibrary,
+                    updatedAt: assets[index].updatedAt
+                )
+            }
+            return
+        }
+
         try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
@@ -750,6 +1276,31 @@ final class LibraryStore {
     }
 
     func unassignAssets(ids: Set<AssetItem.ID>, from folderID: AssetFolder.ID) throws {
+        let currentLibrary = try requireCurrentLibrary()
+
+        if currentLibrary.storageMode == .cloud {
+            guard let folder = folders.first(where: { $0.id == folderID && $0.libraryID == currentLibrary.id }) else {
+                throw LibraryStoreError.missingFolder
+            }
+
+            for assetID in activeAssetIDs(in: ids) {
+                guard let index = assets.firstIndex(where: { $0.id == assetID && $0.libraryID == currentLibrary.id }),
+                      assets[index].folderIDs.contains(folderID) else {
+                    continue
+                }
+                assets[index].folderIDs.removeAll { $0 == folderID }
+                markCloudWritePending(&assets[index])
+                scheduleFolderMembershipSave(
+                    assetID: assetID,
+                    folder: folder,
+                    isMember: false,
+                    in: currentLibrary,
+                    updatedAt: assets[index].updatedAt
+                )
+            }
+            return
+        }
+
         try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
@@ -759,7 +1310,20 @@ final class LibraryStore {
     }
 
     func toggleFavorite(for assetID: AssetItem.ID) throws {
-        let currentLibrary = try requireCurrentLiveLocalLibrary()
+        let currentLibrary = try requireCurrentLibrary()
+
+        if currentLibrary.storageMode == .cloud {
+            guard let index = assets.firstIndex(where: { $0.id == assetID && $0.libraryID == currentLibrary.id }) else {
+                throw LibraryStoreError.missingAsset
+            }
+            assets[index].isFavorite.toggle()
+            markCloudWritePending(&assets[index])
+            scheduleAssetMetadataSave(assetID: assetID, in: currentLibrary, updatedAt: assets[index].updatedAt)
+            pruneSelectedAssetsIfNeeded()
+            return
+        }
+
+        try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
@@ -778,7 +1342,20 @@ final class LibraryStore {
             throw LibraryStoreError.invalidAssetName
         }
 
-        let currentLibrary = try requireCurrentLiveLocalLibrary()
+        let currentLibrary = try requireCurrentLibrary()
+
+        if currentLibrary.storageMode == .cloud {
+            guard let index = assets.firstIndex(where: { $0.id == assetID && $0.libraryID == currentLibrary.id }) else {
+                throw LibraryStoreError.missingAsset
+            }
+            assets[index].displayName = trimmedName
+            markCloudWritePending(&assets[index])
+            scheduleAssetMetadataSave(assetID: assetID, in: currentLibrary, updatedAt: assets[index].updatedAt)
+            pruneSelectedAssetsIfNeeded()
+            return
+        }
+
+        try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
@@ -800,7 +1377,21 @@ final class LibraryStore {
     }
 
     func updateNote(_ note: String, forAssetID assetID: AssetItem.ID) throws {
-        let currentLibrary = try requireCurrentLiveLocalLibrary()
+        let currentLibrary = try requireCurrentLibrary()
+
+        if currentLibrary.storageMode == .cloud {
+            guard let index = assets.firstIndex(where: { $0.id == assetID && $0.libraryID == currentLibrary.id }) else {
+                throw LibraryStoreError.missingAsset
+            }
+            let storedNote = note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : note
+            assets[index].note = storedNote
+            markCloudWritePending(&assets[index])
+            scheduleAssetMetadataSave(assetID: assetID, in: currentLibrary, updatedAt: assets[index].updatedAt)
+            pruneSelectedAssetsIfNeeded()
+            return
+        }
+
+        try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
@@ -855,7 +1446,21 @@ final class LibraryStore {
     }
 
     func moveAssetToTrash(id assetID: AssetItem.ID) throws {
-        let currentLibrary = try requireCurrentLiveLocalLibrary()
+        let currentLibrary = try requireCurrentLibrary()
+
+        if currentLibrary.storageMode == .cloud {
+            guard let index = assets.firstIndex(where: { $0.id == assetID && $0.libraryID == currentLibrary.id }) else {
+                throw LibraryStoreError.missingAsset
+            }
+            assets[index].isTrashed = true
+            assets[index].trashedAt = Date()
+            markCloudWritePending(&assets[index])
+            scheduleAssetMetadataSave(assetID: assetID, in: currentLibrary, updatedAt: assets[index].updatedAt)
+            pruneSelectedAssetsIfNeeded()
+            return
+        }
+
+        try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
@@ -869,7 +1474,29 @@ final class LibraryStore {
     }
 
     func moveAssetsToTrash(ids assetIDs: Set<AssetItem.ID>) throws {
-        let currentLibrary = try requireCurrentLiveLocalLibrary()
+        let currentLibrary = try requireCurrentLibrary()
+
+        if currentLibrary.storageMode == .cloud {
+            let validAssetIDs = Set(assets.compactMap { asset in
+                assetIDs.contains(asset.id) && asset.libraryID == currentLibrary.id && !asset.isTrashed ? asset.id : nil
+            })
+            guard !validAssetIDs.isEmpty else {
+                return
+            }
+            for assetID in validAssetIDs {
+                guard let index = assets.firstIndex(where: { $0.id == assetID }) else {
+                    continue
+                }
+                assets[index].isTrashed = true
+                assets[index].trashedAt = Date()
+                markCloudWritePending(&assets[index])
+                scheduleAssetMetadataSave(assetID: assetID, in: currentLibrary, updatedAt: assets[index].updatedAt)
+            }
+            pruneSelectedAssetsIfNeeded()
+            return
+        }
+
+        try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
@@ -886,6 +1513,22 @@ final class LibraryStore {
     }
 
     func restoreAssets(ids assetIDs: Set<AssetItem.ID>) throws {
+        let currentLibrary = try requireCurrentLibrary()
+
+        if currentLibrary.storageMode == .cloud {
+            for assetID in assetIDs {
+                guard let index = assets.firstIndex(where: { $0.id == assetID && $0.libraryID == currentLibrary.id }) else {
+                    continue
+                }
+                assets[index].isTrashed = false
+                assets[index].trashedAt = nil
+                markCloudWritePending(&assets[index])
+                scheduleAssetMetadataSave(assetID: assetID, in: currentLibrary, updatedAt: assets[index].updatedAt)
+            }
+            pruneSelectedAssetsIfNeeded()
+            return
+        }
+
         try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
@@ -896,7 +1539,19 @@ final class LibraryStore {
     }
 
     func deleteAssetPermanently(id assetID: AssetItem.ID) throws {
-        let currentLibrary = try requireCurrentLiveLocalLibrary()
+        let currentLibrary = try requireCurrentLibrary()
+
+        if currentLibrary.storageMode == .cloud {
+            guard let asset = allCurrentLibraryAssets.first(where: { $0.id == assetID }) else {
+                throw LibraryStoreError.missingAsset
+            }
+            Task { [self] in
+                await deleteCloudAssets([asset], from: currentLibrary)
+            }
+            return
+        }
+
+        try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
@@ -912,7 +1567,20 @@ final class LibraryStore {
     }
 
     func emptyTrash() throws {
-        let currentLibrary = try requireCurrentLiveLocalLibrary()
+        let currentLibrary = try requireCurrentLibrary()
+
+        if currentLibrary.storageMode == .cloud {
+            let trashedAssets = allCurrentLibraryAssets.filter(\.isTrashed)
+            guard !trashedAssets.isEmpty else {
+                return
+            }
+            Task { [self] in
+                await deleteCloudAssets(trashedAssets, from: currentLibrary)
+            }
+            return
+        }
+
+        try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
         }
@@ -932,6 +1600,14 @@ final class LibraryStore {
         sourcePageURL: URL? = nil,
         progressHandler: AssetImportProgressHandler? = nil
     ) async throws {
+        guard let selectedLibrary = currentLibrary else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+        if selectedLibrary.storageMode == .cloud {
+            try await importCloudItems(from: urls, into: selectedLibrary, sourcePageURL: sourcePageURL)
+            return
+        }
+
         let currentLibrary = try requireCurrentLiveLocalLibrary()
         guard let metadataStore else {
             throw LibraryStoreError.noCurrentLibrary
@@ -971,12 +1647,49 @@ final class LibraryStore {
         pruneSelectedAssetsIfNeeded()
     }
 
+    private func importCloudItems(
+        from urls: [URL],
+        into library: AssetLibrary,
+        sourcePageURL: URL?
+    ) async throws {
+        let importingLibraryID = library.id
+        let existingContentHashes = Set(allCurrentLibraryAssets.map(\.contentHash))
+        let result = try await cloudImportService.importFiles(
+            from: urls,
+            into: library,
+            excludingContentHashes: existingContentHashes,
+            sourcePageURL: sourcePageURL
+        )
+
+        guard currentLibrary?.id == importingLibraryID else {
+            return
+        }
+        if let firstImportedAssetID = result.assets.first?.id {
+            mergeAssets(result.assets)
+            selectAsset(id: firstImportedAssetID)
+        }
+
+        do {
+            let uploadedAssets = try await cloudAssetUploadService.uploadAssets(result.assets, to: library)
+            guard currentLibrary?.id == importingLibraryID else {
+                return
+            }
+            mergeAssets(uploadedAssets)
+        } catch {
+            markUploadFailed(assetIDs: Set(result.assets.map(\.id)), message: error.localizedDescription)
+            throw error
+        }
+        pruneSelectedAssetsIfNeeded()
+    }
+
     func importRemoteImage(
         from url: URL,
         sourcePageURL: URL? = nil,
         progressHandler: AssetImportProgressHandler? = nil
     ) async throws {
-        try requireCurrentLiveLocalLibrary()
+        guard currentLibrary != nil else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
         let downloadedURL = try await RemoteImageImportService().downloadImage(from: url)
         defer {
             try? FileManager.default.removeItem(at: downloadedURL)
@@ -987,6 +1700,28 @@ final class LibraryStore {
             sourcePageURL: sourcePageURL,
             progressHandler: progressHandler
         )
+    }
+
+    func downloadCloudOriginal(assetID: AssetItem.ID) async throws {
+        guard let currentLibrary, currentLibrary.storageMode == .cloud else {
+            throw LibraryStoreError.cloudLibraryUnavailable
+        }
+        guard let asset = assets.first(where: { $0.id == assetID && $0.libraryID == currentLibrary.id }) else {
+            throw LibraryStoreError.missingAsset
+        }
+        if let index = assets.firstIndex(where: { $0.id == assetID }) {
+            assets[index].availability.original = .downloading
+            assets[index].availability.lastError = nil
+            assets[index].syncState = .syncing
+        }
+
+        do {
+            let downloadedAssets = try await cloudAssetDownloadService.downloadOriginals(for: [asset], in: currentLibrary)
+            mergeAssets(downloadedAssets)
+        } catch {
+            markCloudDownloadFailed(assetID: assetID, message: error.localizedDescription)
+            throw error
+        }
     }
 
     private func openRecentLibrary(_ reference: RecentLibraryReference) throws {
@@ -1040,9 +1775,23 @@ final class LibraryStore {
     }
 
     @discardableResult
+    private func requireCurrentLibrary() throws -> AssetLibrary {
+        guard let currentLibrary else {
+            throw LibraryStoreError.noCurrentLibrary
+        }
+        if currentLibrary.storageMode == .cloud && currentLibrary.syncState == .unsupportedSchema {
+            throw LibraryStoreError.unsupportedCloudLibrary
+        }
+        return currentLibrary
+    }
+
+    @discardableResult
     private func requireCurrentLiveLocalLibrary() throws -> AssetLibrary {
         guard let currentLibrary else {
             throw LibraryStoreError.noCurrentLibrary
+        }
+        guard currentLibrary.storageMode == .local else {
+            throw LibraryStoreError.localLibraryRequired
         }
 
         do {
@@ -1222,9 +1971,120 @@ final class LibraryStore {
         libraryErrorMessage = nil
     }
 
+    private func activateCloudLibrary(_ library: AssetLibrary) async throws {
+        async let loadedAssets = cloudAssetCatalogService.fetchAssets(in: library)
+        async let loadedRelationships = cloudRelationshipService.fetchRelationships(in: library.libraryZoneName)
+        let (assets, relationships) = try await (loadedAssets, loadedRelationships)
+
+        libraryAccessScope = nil
+        metadataStore = nil
+        currentLibrary = library
+        libraries = [library]
+        self.assets = hydrate(assets, with: relationships)
+        folders = relationships.folders
+        tags = relationships.tags
+        selectedAssetIDs = []
+        selectedAssetID = nil
+        searchQuery = ""
+        filterState = AssetFilterState()
+        sortOption = .addedTime
+        sortDirection = .descending
+        sidebarSelection = .library(library.id)
+        libraryErrorMessage = nil
+    }
+
+    private func activateEmptyCloudLibrary(_ library: AssetLibrary) {
+        libraryAccessScope = nil
+        metadataStore = nil
+        currentLibrary = library
+        libraries = [library]
+        assets = []
+        folders = []
+        tags = []
+        selectedAssetIDs = []
+        selectedAssetID = nil
+        searchQuery = ""
+        filterState = AssetFilterState()
+        sortOption = .addedTime
+        sortDirection = .descending
+        sidebarSelection = .library(library.id)
+        libraryErrorMessage = nil
+    }
+
     private func saveRecentLibrary(_ library: AssetLibrary) throws {
         try recentStore.save(library)
         recentLibraries = recentStore.load()
+    }
+
+    private func saveRecentCloudLibrary(_ library: AssetLibrary, accountState: CloudAccountState) throws {
+        try recentStore.saveCloudPlaceholder(
+            id: library.id,
+            name: library.name,
+            cloudLibraryID: library.id,
+            accountState: accountState,
+            lastKnownSyncState: library.syncState.rawValue
+        )
+        recentLibraries = recentStore.load()
+    }
+
+    private func hydrate(_ assets: [AssetItem], with relationships: CloudLibraryRelationships) -> [AssetItem] {
+        assets.map { asset in
+            var hydratedAsset = asset
+            hydratedAsset.folderIDs = relationships.folderIDsByAssetID[asset.id] ?? []
+            hydratedAsset.tags = relationships.tagsByAssetID[asset.id] ?? []
+            return hydratedAsset
+        }
+    }
+
+    private func cloudLibrary(for referenceID: RecentLibraryReference.ID) throws -> AssetLibrary {
+        if let currentLibrary,
+           currentLibrary.id == referenceID,
+           currentLibrary.storageMode == .cloud {
+            return currentLibrary
+        }
+
+        guard let reference = recentLibraries.first(where: { $0.id == referenceID && $0.storageMode == .cloud }),
+              let cloudLibraryID = reference.cloudLibraryID?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let cloudAccountID = reference.cloudAccountID?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !cloudLibraryID.isEmpty,
+              !cloudAccountID.isEmpty else {
+            throw LibraryStoreError.missingRecentLibrary
+        }
+
+        return AssetLibrary(
+            id: cloudLibraryID,
+            name: reference.name,
+            createdAt: reference.lastOpenedAt ?? Date(),
+            packageURL: nil,
+            storageMode: .cloud,
+            libraryZoneName: CloudRecordNaming.libraryZoneName(libraryID: cloudLibraryID),
+            cloudAccountID: cloudAccountID,
+            syncState: reference.lastKnownSyncState.flatMap(CloudLibrarySyncState.init(rawValue:)) ?? .synced
+        )
+    }
+
+    private func availableAccountState(for library: AssetLibrary) throws -> CloudAccountState {
+        guard let cloudAccountID = library.cloudAccountID?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !cloudAccountID.isEmpty else {
+            throw LibraryStoreError.cloudAccountUnavailable
+        }
+        return .available(CloudAccountIdentity(cloudAccountID: cloudAccountID))
+    }
+
+    private static func assetLibrary(
+        from descriptor: CloudLibraryDescriptor,
+        accountState: CloudAccountState
+    ) -> AssetLibrary {
+        AssetLibrary(
+            id: descriptor.id,
+            name: descriptor.displayName,
+            createdAt: descriptor.createdAt,
+            packageURL: nil,
+            storageMode: .cloud,
+            libraryZoneName: descriptor.libraryZoneName,
+            cloudAccountID: accountState.cloudAccountID,
+            syncState: descriptor.syncState
+        )
     }
 
     private func mergeAssets(_ updatedAssets: [AssetItem]) {
@@ -1235,6 +2095,411 @@ final class LibraryStore {
                 assets.append(asset)
             }
         }
+    }
+
+    private func markUploadFailed(assetIDs: Set<AssetItem.ID>, message: String) {
+        for assetID in assetIDs {
+            guard let index = assets.firstIndex(where: { $0.id == assetID }) else {
+                continue
+            }
+            assets[index].availability.original = .uploadFailed
+            assets[index].availability.lastError = message
+            assets[index].syncState = .uploadFailed
+        }
+    }
+
+    private func resolveCloudTags(named names: [String], in library: AssetLibrary) throws -> [TagItem] {
+        var resolvedTags: [TagItem] = []
+        var tagsByName = Dictionary(
+            tags.map { ($0.name.lowercased(), $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        var seenNames = Set<String>()
+
+        for name in names {
+            let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedName.isEmpty else {
+                continue
+            }
+
+            let normalizedName = trimmedName.lowercased()
+            guard seenNames.insert(normalizedName).inserted else {
+                continue
+            }
+
+            if let tag = tagsByName[normalizedName] {
+                resolvedTags.append(tag)
+                continue
+            }
+
+            let now = Date()
+            let tag = TagItem(id: UUID().uuidString, name: trimmedName, colorHex: nil)
+            tagsByName[normalizedName] = tag
+            tags.append(tag)
+            resolvedTags.append(tag)
+            Task { [self] in
+                do {
+                    try await cloudAssetRelationshipService.saveTag(
+                        tag,
+                        in: library,
+                        createdAt: now,
+                        updatedAt: now,
+                        deletedAt: nil
+                    )
+                } catch {
+                    libraryErrorMessage = libraryErrorMessage(for: error)
+                    tags.removeAll { $0.id == tag.id }
+                }
+            }
+        }
+
+        tags.sort {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+        guard !names.contains(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) || !resolvedTags.isEmpty else {
+            throw LibraryStoreError.invalidTagName
+        }
+        return resolvedTags
+    }
+
+    private func markCloudWritePending(_ asset: inout AssetItem) {
+        asset.updatedAt = Date()
+        asset.availability.lastError = nil
+        asset.syncState = .syncing
+    }
+
+    private func scheduleAssetMetadataSave(
+        assetID: AssetItem.ID,
+        in library: AssetLibrary,
+        updatedAt: Date
+    ) {
+        guard let asset = assets.first(where: { $0.id == assetID && $0.libraryID == library.id }) else {
+            return
+        }
+
+        let sequence = nextCloudWriteSequence(for: assetID)
+        Task { [self] in
+            await persistAssetMetadata(asset, in: library, updatedAt: updatedAt, sequence: sequence)
+        }
+    }
+
+    private func scheduleTagMembershipSave(
+        assetID: AssetItem.ID,
+        tag: TagItem,
+        isMember: Bool,
+        in library: AssetLibrary,
+        updatedAt: Date
+    ) {
+        let sequence = nextCloudWriteSequence(for: assetID)
+        let key = PendingCloudRelationshipWriteKey.tag(tag.id)
+        insertPendingRelationshipWrite(assetID: assetID, key: key, sequence: sequence)
+        Task { [self] in
+            await persistTagMembership(
+                assetID: assetID,
+                tag: tag,
+                isMember: isMember,
+                in: library,
+                updatedAt: updatedAt,
+                key: key,
+                sequence: sequence
+            )
+        }
+    }
+
+    private func scheduleFolderMembershipSave(
+        assetID: AssetItem.ID,
+        folder: AssetFolder,
+        isMember: Bool,
+        in library: AssetLibrary,
+        updatedAt: Date
+    ) {
+        let sequence = nextCloudWriteSequence(for: assetID)
+        let key = PendingCloudRelationshipWriteKey.folder(folder.id)
+        insertPendingRelationshipWrite(assetID: assetID, key: key, sequence: sequence)
+        Task { [self] in
+            await persistFolderMembership(
+                assetID: assetID,
+                folder: folder,
+                isMember: isMember,
+                in: library,
+                updatedAt: updatedAt,
+                key: key,
+                sequence: sequence
+            )
+        }
+    }
+
+    private func nextCloudWriteSequence(for assetID: AssetItem.ID) -> Int {
+        let sequence = (cloudWriteSequencesByAssetID[assetID] ?? 0) + 1
+        cloudWriteSequencesByAssetID[assetID] = sequence
+        return sequence
+    }
+
+    private func persistAssetMetadata(
+        _ asset: AssetItem,
+        in library: AssetLibrary,
+        updatedAt: Date,
+        sequence: Int
+    ) async {
+        do {
+            _ = try await cloudAssetMetadataService.saveAssetMetadata([asset], to: library)
+            markCloudWriteSucceeded(assetID: asset.id, updatedAt: updatedAt, sequence: sequence)
+        } catch {
+            markCloudWriteFailed(
+                assetID: asset.id,
+                updatedAt: updatedAt,
+                sequence: sequence,
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    private func persistTagMembership(
+        assetID: AssetItem.ID,
+        tag: TagItem,
+        isMember: Bool,
+        in library: AssetLibrary,
+        updatedAt: Date,
+        key: PendingCloudRelationshipWriteKey,
+        sequence: Int
+    ) async {
+        do {
+            try await cloudAssetRelationshipService.saveTagMembership(
+                assetID: assetID,
+                tag: tag,
+                isMember: isMember,
+                in: library
+            )
+            markCloudRelationshipWriteSucceeded(assetID: assetID, updatedAt: updatedAt, key: key, sequence: sequence)
+        } catch {
+            markCloudRelationshipWriteFailed(
+                assetID: assetID,
+                updatedAt: updatedAt,
+                key: key,
+                sequence: sequence,
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    private func persistFolderMembership(
+        assetID: AssetItem.ID,
+        folder: AssetFolder,
+        isMember: Bool,
+        in library: AssetLibrary,
+        updatedAt: Date,
+        key: PendingCloudRelationshipWriteKey,
+        sequence: Int
+    ) async {
+        do {
+            try await cloudAssetRelationshipService.saveFolderMembership(
+                assetID: assetID,
+                folder: folder,
+                isMember: isMember,
+                in: library
+            )
+            markCloudRelationshipWriteSucceeded(assetID: assetID, updatedAt: updatedAt, key: key, sequence: sequence)
+        } catch {
+            markCloudRelationshipWriteFailed(
+                assetID: assetID,
+                updatedAt: updatedAt,
+                key: key,
+                sequence: sequence,
+                message: error.localizedDescription
+            )
+        }
+    }
+
+    private func deleteCloudAssets(_ assetsToDelete: [AssetItem], from library: AssetLibrary) async {
+        do {
+            try await cloudAssetDeleteService.deleteAssets(assetsToDelete, from: library)
+            let deletedIDs = Set(assetsToDelete.map(\.id))
+            assets.removeAll { deletedIDs.contains($0.id) }
+            pruneSelectedAssetsIfNeeded()
+        } catch {
+            for asset in assetsToDelete {
+                markCloudDeleteFailed(assetID: asset.id, message: error.localizedDescription)
+            }
+        }
+    }
+
+    private func markCloudWriteSucceeded(assetID: AssetItem.ID, updatedAt: Date, sequence: Int) {
+        guard cloudWriteSequencesByAssetID[assetID] == sequence,
+              let index = assets.firstIndex(where: { $0.id == assetID }),
+              assets[index].updatedAt == updatedAt,
+              pendingRelationshipWriteSequencesByAssetID[assetID] == nil,
+              assets[index].availability.lastError == nil else {
+            return
+        }
+
+        assets[index].syncState = .synced
+    }
+
+    private func markCloudWriteFailed(assetID: AssetItem.ID, updatedAt: Date, sequence: Int, message: String) {
+        guard cloudWriteSequencesByAssetID[assetID] == sequence,
+              let index = assets.firstIndex(where: { $0.id == assetID }),
+              assets[index].updatedAt == updatedAt else {
+            return
+        }
+
+        assets[index].availability.lastError = message
+        assets[index].syncState = .uploadFailed
+    }
+
+    private func markCloudRelationshipWritePending(assetIDs: [AssetItem.ID]) {
+        let affectedIDs = Set(assetIDs)
+        guard !affectedIDs.isEmpty else {
+            return
+        }
+
+        let updatedAt = Date()
+        for index in assets.indices where affectedIDs.contains(assets[index].id) {
+            assets[index].updatedAt = updatedAt
+            assets[index].availability.lastError = nil
+            assets[index].syncState = .syncing
+        }
+    }
+
+    private func markCloudRelationshipWriteSucceeded(assetIDs: [AssetItem.ID]) {
+        let affectedIDs = Set(assetIDs)
+        guard !affectedIDs.isEmpty else {
+            return
+        }
+
+        for index in assets.indices where affectedIDs.contains(assets[index].id) {
+            assets[index].availability.lastError = nil
+            assets[index].syncState = .synced
+        }
+    }
+
+    private func markCloudRelationshipWriteFailed(assetIDs: [AssetItem.ID], message: String) {
+        let affectedIDs = Set(assetIDs)
+        guard !affectedIDs.isEmpty else {
+            return
+        }
+
+        for index in assets.indices where affectedIDs.contains(assets[index].id) {
+            assets[index].availability.lastError = message
+            assets[index].syncState = .uploadFailed
+        }
+    }
+
+    private func insertPendingRelationshipWrite(
+        assetID: AssetItem.ID,
+        key: PendingCloudRelationshipWriteKey,
+        sequence: Int
+    ) {
+        pendingRelationshipWriteSequencesByAssetID[assetID, default: [:]][key] = sequence
+    }
+
+    @discardableResult
+    private func removePendingRelationshipWrite(
+        assetID: AssetItem.ID,
+        key: PendingCloudRelationshipWriteKey,
+        sequence: Int
+    ) -> Bool {
+        guard var pendingSequences = pendingRelationshipWriteSequencesByAssetID[assetID],
+              pendingSequences[key] == sequence else {
+            return false
+        }
+
+        pendingSequences[key] = nil
+        pendingRelationshipWriteSequencesByAssetID[assetID] = pendingSequences.isEmpty ? nil : pendingSequences
+        return true
+    }
+
+    private func markCloudRelationshipWriteSucceeded(
+        assetID: AssetItem.ID,
+        updatedAt: Date,
+        key: PendingCloudRelationshipWriteKey,
+        sequence: Int
+    ) {
+        guard removePendingRelationshipWrite(assetID: assetID, key: key, sequence: sequence) else {
+            return
+        }
+
+        guard pendingRelationshipWriteSequencesByAssetID[assetID] == nil,
+              let index = assets.firstIndex(where: { $0.id == assetID }),
+              assets[index].updatedAt == updatedAt,
+              assets[index].availability.lastError == nil else {
+            return
+        }
+
+        assets[index].syncState = .synced
+    }
+
+    private func markCloudRelationshipWriteFailed(
+        assetID: AssetItem.ID,
+        updatedAt: Date,
+        key: PendingCloudRelationshipWriteKey,
+        sequence: Int,
+        message: String
+    ) {
+        guard removePendingRelationshipWrite(assetID: assetID, key: key, sequence: sequence) else {
+            return
+        }
+
+        guard let index = assets.firstIndex(where: { $0.id == assetID }),
+              assets[index].updatedAt == updatedAt else {
+            return
+        }
+
+        assets[index].availability.lastError = message
+        assets[index].syncState = .uploadFailed
+    }
+
+    private func markCloudDeleteFailed(assetID: AssetItem.ID, message: String) {
+        guard let index = assets.firstIndex(where: { $0.id == assetID }) else {
+            return
+        }
+
+        assets[index].availability.lastError = message
+        assets[index].syncState = .uploadFailed
+    }
+
+    private func markCloudDownloadFailed(assetID: AssetItem.ID, message: String) {
+        guard let index = assets.firstIndex(where: { $0.id == assetID }) else {
+            return
+        }
+
+        assets[index].availability.original = .failed
+        assets[index].availability.lastError = message
+        assets[index].syncState = .downloadFailed
+    }
+
+    private func sortedFolders(_ folders: [AssetFolder]) -> [AssetFolder] {
+        folders.sorted(by: folderTreeSort)
+    }
+
+    private func folderTreeSort(_ lhs: AssetFolder, _ rhs: AssetFolder) -> Bool {
+        if lhs.parentID != rhs.parentID {
+            return (lhs.parentID ?? "") < (rhs.parentID ?? "")
+        }
+        if lhs.sortIndex != rhs.sortIndex {
+            return lhs.sortIndex < rhs.sortIndex
+        }
+        return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+    }
+
+    private func nextFolderSortIndex(parentID: AssetFolder.ID?) -> Int {
+        let maxSortIndex = folders
+            .filter { $0.parentID == parentID }
+            .map(\.sortIndex)
+            .max() ?? -1
+        return maxSortIndex + 1
+    }
+
+    private func descendantFolderIDs(startingAt folderID: AssetFolder.ID) -> Set<AssetFolder.ID> {
+        var deletedIDs: Set<AssetFolder.ID> = [folderID]
+        var didInsert = true
+        while didInsert {
+            didInsert = false
+            for folder in folders where folder.parentID.map(deletedIDs.contains) == true && !deletedIDs.contains(folder.id) {
+                deletedIDs.insert(folder.id)
+                didInsert = true
+            }
+        }
+        return deletedIDs
     }
 
     private func updateAssetsWithTag(
@@ -1559,13 +2824,18 @@ enum LibraryStoreError: LocalizedError {
     case noCurrentLibrary
     case missingRecentLibrary
     case cloudLibraryUnavailable
+    case cloudAccountUnavailable
+    case localLibraryRequired
+    case unsupportedCloudLibrary
     case unsupportedLibraryURL
     case duplicateLibraryID
     case invalidLibraryName
     case invalidAssetName
     case invalidTagName
+    case invalidFolderName
     case missingAsset
     case missingTag
+    case missingFolder
 
     var errorDescription: String? {
         switch self {
@@ -1575,6 +2845,12 @@ enum LibraryStoreError: LocalizedError {
             "This recent library is no longer available."
         case .cloudLibraryUnavailable:
             "Cloud libraries are not available yet."
+        case .cloudAccountUnavailable:
+            "Sign in to iCloud before using cloud libraries."
+        case .localLibraryRequired:
+            "This action requires a local library."
+        case .unsupportedCloudLibrary:
+            "This iCloud library uses a newer sync schema. Update Momento before making changes."
         case .unsupportedLibraryURL:
             "Choose a .momento package."
         case .duplicateLibraryID:
@@ -1585,10 +2861,14 @@ enum LibraryStoreError: LocalizedError {
             "Enter an asset title."
         case .invalidTagName:
             "Enter a tag name."
+        case .invalidFolderName:
+            "Enter a folder name."
         case .missingAsset:
             "This asset is no longer available."
         case .missingTag:
             "This tag is no longer available."
+        case .missingFolder:
+            "This folder is no longer available."
         }
     }
 }

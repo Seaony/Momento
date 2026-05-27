@@ -4,7 +4,7 @@ nonisolated enum CloudKitConfiguration {
     static let containerIdentifier = "iCloud.com.seaony.Momento"
 }
 
-enum CloudRecordType: String, CaseIterable, Hashable, Codable, Sendable {
+nonisolated enum CloudRecordType: String, CaseIterable, Hashable, Codable, Sendable {
     case library = "CloudLibrary"
     case asset = "CloudAsset"
     case assetColor = "CloudAssetColor"
@@ -15,7 +15,7 @@ enum CloudRecordType: String, CaseIterable, Hashable, Codable, Sendable {
     case tagMembership = "CloudTagMembership"
 }
 
-struct CloudLibraryDescriptor: Identifiable, Hashable, Codable, Sendable {
+nonisolated struct CloudLibraryDescriptor: Identifiable, Hashable, Codable, Sendable {
     var id: String
     var displayName: String
     var libraryZoneName: String
@@ -27,7 +27,7 @@ struct CloudLibraryDescriptor: Identifiable, Hashable, Codable, Sendable {
     var lastError: String?
 }
 
-enum CloudLibrarySyncState: String, Hashable, Codable, Sendable {
+nonisolated enum CloudLibrarySyncState: String, Hashable, Codable, Sendable {
     case synced
     case syncing
     case waitingForNetwork
@@ -36,6 +36,33 @@ enum CloudLibrarySyncState: String, Hashable, Codable, Sendable {
     case downloadFailed
     case quotaBlocked
     case unsupportedSchema
+    case conflictResolved
+    case accountMismatch
+
+    var systemImageName: String {
+        switch self {
+        case .synced:
+            "checkmark.icloud"
+        case .syncing:
+            "arrow.triangle.2.circlepath.icloud"
+        case .waitingForNetwork:
+            "wifi.exclamationmark"
+        case .waitingForICloudSignIn:
+            "person.crop.circle.badge.exclamationmark"
+        case .uploadFailed:
+            "icloud.slash"
+        case .downloadFailed:
+            "exclamationmark.icloud"
+        case .quotaBlocked:
+            "externaldrive.badge.icloud"
+        case .unsupportedSchema:
+            "exclamationmark.lock"
+        case .conflictResolved:
+            "checkmark.seal"
+        case .accountMismatch:
+            "person.2.slash"
+        }
+    }
 }
 
 nonisolated enum CloudLibraryRecordField {
@@ -225,7 +252,7 @@ nonisolated enum CloudTagMembershipRecordField {
     ]
 }
 
-struct CloudRecordIdentity: Hashable, Codable, Sendable {
+nonisolated struct CloudRecordIdentity: Hashable, Codable, Sendable {
     var recordType: CloudRecordType
     var recordName: String
     var zoneName: String

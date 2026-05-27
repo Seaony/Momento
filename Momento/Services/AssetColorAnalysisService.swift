@@ -3,7 +3,7 @@ import CoreGraphics
 import Foundation
 import ImageIO
 
-struct AssetColorAnalysisService: Sendable {
+nonisolated struct AssetColorAnalysisService: Sendable {
     private let sampleMaxPixelSize: Int
     private let mergeDistance: Double
 
