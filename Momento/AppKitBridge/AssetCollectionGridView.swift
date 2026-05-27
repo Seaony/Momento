@@ -309,16 +309,45 @@ struct AssetCollectionGridView: NSViewRepresentable {
     }
 
     private func configureScrollView(_ scrollView: NSScrollView) {
-        scrollView.drawsBackground = false
-        scrollView.hasVerticalScroller = false
-        scrollView.hasHorizontalScroller = false
-        scrollView.verticalScroller = nil
-        scrollView.horizontalScroller = nil
-        scrollView.autohidesScrollers = true
-        scrollView.scrollerStyle = .overlay
-        scrollView.automaticallyAdjustsContentInsets = false
-        scrollView.contentInsets = AssetCollectionMetrics.zeroEdgeInsets
-        scrollView.scrollerInsets = AssetCollectionMetrics.zeroEdgeInsets
+        if scrollView.drawsBackground {
+            scrollView.drawsBackground = false
+        }
+
+        if scrollView.hasVerticalScroller {
+            scrollView.hasVerticalScroller = false
+        }
+
+        if scrollView.hasHorizontalScroller {
+            scrollView.hasHorizontalScroller = false
+        }
+
+        if scrollView.verticalScroller != nil {
+            scrollView.verticalScroller = nil
+        }
+
+        if scrollView.horizontalScroller != nil {
+            scrollView.horizontalScroller = nil
+        }
+
+        if !scrollView.autohidesScrollers {
+            scrollView.autohidesScrollers = true
+        }
+
+        if scrollView.scrollerStyle != .overlay {
+            scrollView.scrollerStyle = .overlay
+        }
+
+        if scrollView.automaticallyAdjustsContentInsets {
+            scrollView.automaticallyAdjustsContentInsets = false
+        }
+
+        if !scrollView.contentInsets.areZero {
+            scrollView.contentInsets = AssetCollectionMetrics.zeroEdgeInsets
+        }
+
+        if !scrollView.scrollerInsets.areZero {
+            scrollView.scrollerInsets = AssetCollectionMetrics.zeroEdgeInsets
+        }
     }
 
     private func applyAssetChanges(to collectionView: NSCollectionView, coordinator: Coordinator) {

@@ -85,26 +85,29 @@ struct ContentView: View {
         store.selectedAssetIDs
     }
 
-    private var selectedInspectorAssets: [AssetItem] {
-        store.visibleAssets.filter { selectedAssetIDs.contains($0.id) }
+    private func selectedInspectorAssets(from visibleAssets: [AssetItem]) -> [AssetItem] {
+        visibleAssets.filter { selectedAssetIDs.contains($0.id) }
     }
 
-    private var inspectorAssets: [MomentoInspectorAsset] {
-        selectedInspectorAssets.map { MomentoInspectorAsset(asset: $0, localization: localization) }
+    private func currentSelectedInspectorAssets() -> [AssetItem] {
+        selectedInspectorAssets(from: store.visibleAssets)
     }
 
-    private var selectedTags: Binding<[String]> {
+    private func inspectorAssets(from selectedAssets: [AssetItem]) -> [MomentoInspectorAsset] {
+        selectedAssets.map { MomentoInspectorAsset(asset: $0, localization: localization) }
+    }
+
+    private func selectedTags(for renderedSelectedAssets: [AssetItem]) -> Binding<[String]> {
         Binding {
-            let assets = selectedInspectorAssets
-            guard assets.count > 1 else {
+            guard renderedSelectedAssets.count > 1 else {
                 return store.selectedAsset?.tags.map(\.name) ?? []
             }
 
-            return batchTagNames(for: assets)
+            return batchTagNames(for: renderedSelectedAssets)
         } set: { names in
-            let assets = selectedInspectorAssets
-            if assets.count > 1 {
-                updateBatchTags(names, for: assets)
+            let currentAssets = currentSelectedInspectorAssets()
+            if currentAssets.count > 1 {
+                updateBatchTags(names, for: currentAssets)
             } else {
                 do {
                     try store.updateSelectedTags(names)
@@ -119,18 +122,17 @@ struct ContentView: View {
         store.tags.map(\.name)
     }
 
-    private var selectedFolderIDs: Binding<[AssetFolder.ID]> {
+    private func selectedFolderIDs(for renderedSelectedAssets: [AssetItem]) -> Binding<[AssetFolder.ID]> {
         Binding {
-            let assets = selectedInspectorAssets
-            guard assets.count > 1 else {
+            guard renderedSelectedAssets.count > 1 else {
                 return store.selectedAsset?.folderIDs ?? []
             }
 
-            return batchFolderIDs(for: assets)
+            return batchFolderIDs(for: renderedSelectedAssets)
         } set: { folderIDs in
-            let assets = selectedInspectorAssets
-            if assets.count > 1 {
-                updateBatchFolders(folderIDs, for: assets)
+            let currentAssets = currentSelectedInspectorAssets()
+            if currentAssets.count > 1 {
+                updateBatchFolders(folderIDs, for: currentAssets)
             } else {
                 updateSelectedFolders(folderIDs)
             }
@@ -190,6 +192,7 @@ struct ContentView: View {
 
     private var libraryBody: some View {
         let visibleAssets = store.visibleAssets
+        let selectedInspectorAssets = selectedInspectorAssets(from: visibleAssets)
 
         return MomentoShellView(
             sidebarSelection: sidebarSelection,
@@ -220,10 +223,10 @@ struct ContentView: View {
             title: title,
             subtitle: localization.itemCount(visibleAssets.count),
             inspectorAsset: store.selectedAsset.map { MomentoInspectorAsset(asset: $0, localization: localization) },
-            inspectorAssets: inspectorAssets,
-            inspectorTags: selectedTags,
+            inspectorAssets: inspectorAssets(from: selectedInspectorAssets),
+            inspectorTags: selectedTags(for: selectedInspectorAssets),
             inspectorAvailableTags: availableTagNames,
-            inspectorFolderIDs: selectedFolderIDs,
+            inspectorFolderIDs: selectedFolderIDs(for: selectedInspectorAssets),
             inspectorFolders: store.folders,
             toastRequest: $shellToastRequest,
             onRenameInspectorAsset: renameAssetTitle

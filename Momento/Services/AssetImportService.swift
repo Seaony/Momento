@@ -91,7 +91,8 @@ struct AssetImportService: Sendable {
         }
 
         return try await Task.detached(priority: .userInitiated) {
-            await reportImportProgress(.preparing(), using: progressHandler)
+            var progressReporter = AssetImportProgressReporter(handler: progressHandler)
+            await progressReporter.report(.preparing(), force: true)
             try storage.prepareLibraryDirectories(for: library)
 
             let candidates = try collectImportCandidates(from: urls)
@@ -103,7 +104,7 @@ struct AssetImportService: Sendable {
             var skippedFileCount = 0
             let totalFileCount = candidates.count
 
-            await reportImportProgress(
+            await progressReporter.report(
                 AssetImportProgress(
                     phase: .importing,
                     totalFileCount: totalFileCount,
@@ -112,7 +113,7 @@ struct AssetImportService: Sendable {
                     skippedFileCount: skippedFileCount,
                     currentFileName: candidates.first?.sourceURL.lastPathComponent
                 ),
-                using: progressHandler
+                force: true
             )
 
             for candidate in candidates {
@@ -120,7 +121,7 @@ struct AssetImportService: Sendable {
                 guard let kind = assetKind(for: fileURL) else {
                     processedFileCount += 1
                     skippedFileCount += 1
-                    await reportImportProgress(
+                    await progressReporter.report(
                         AssetImportProgress(
                             phase: .importing,
                             totalFileCount: totalFileCount,
@@ -129,7 +130,7 @@ struct AssetImportService: Sendable {
                             skippedFileCount: skippedFileCount,
                             currentFileName: nextFileName(after: processedFileCount, in: candidates)
                         ),
-                        using: progressHandler
+                        force: processedFileCount == totalFileCount
                     )
                     continue
                 }
@@ -148,7 +149,7 @@ struct AssetImportService: Sendable {
                 guard seenHashes.insert(hash).inserted else {
                     processedFileCount += 1
                     skippedFileCount += 1
-                    await reportImportProgress(
+                    await progressReporter.report(
                         AssetImportProgress(
                             phase: .importing,
                             totalFileCount: totalFileCount,
@@ -157,7 +158,7 @@ struct AssetImportService: Sendable {
                             skippedFileCount: skippedFileCount,
                             currentFileName: nextFileName(after: processedFileCount, in: candidates)
                         ),
-                        using: progressHandler
+                        force: processedFileCount == totalFileCount
                     )
                     continue
                 }
@@ -191,7 +192,7 @@ struct AssetImportService: Sendable {
                 )
 
                 let values = try fileURL.resourceValues(forKeys: [.fileSizeKey])
-                let exifMetadata = imageExifMetadata(for: fileURL)
+                let imageProperties = imageImportProperties(for: fileURL)
                 let importedAt = Date()
                 imported.append(
                     AssetItem(
@@ -207,9 +208,9 @@ struct AssetImportService: Sendable {
                         utiIdentifier: UTType(filenameExtension: fileExtension)?.identifier,
                         byteSize: Int64(values.fileSize ?? 0),
                         contentHash: hash,
-                        dimensions: imageDimensions(for: fileURL),
-                        exifMetadata: exifMetadata,
-                        colorProfileName: exifMetadata?.profileName,
+                        dimensions: imageProperties.dimensions,
+                        exifMetadata: imageProperties.exifMetadata,
+                        colorProfileName: imageProperties.exifMetadata?.profileName,
                         tags: [],
                         paletteColors: paletteColors,
                         thumbnailURL: thumbnailURL,
@@ -220,7 +221,7 @@ struct AssetImportService: Sendable {
                 )
                 processedFileCount += 1
                 importedFileCount += 1
-                await reportImportProgress(
+                await progressReporter.report(
                     AssetImportProgress(
                         phase: .importing,
                         totalFileCount: totalFileCount,
@@ -229,11 +230,11 @@ struct AssetImportService: Sendable {
                         skippedFileCount: skippedFileCount,
                         currentFileName: nextFileName(after: processedFileCount, in: candidates)
                     ),
-                    using: progressHandler
+                    force: processedFileCount == totalFileCount
                 )
             }
 
-            await reportImportProgress(
+            await progressReporter.report(
                 AssetImportProgress(
                     phase: .finalizing,
                     totalFileCount: totalFileCount,
@@ -242,7 +243,7 @@ struct AssetImportService: Sendable {
                     skippedFileCount: skippedFileCount,
                     currentFileName: nil
                 ),
-                using: progressHandler
+                force: true
             )
 
             return AssetImportBatch(
@@ -253,15 +254,34 @@ struct AssetImportService: Sendable {
     }
 }
 
-nonisolated private func reportImportProgress(
-    _ progress: AssetImportProgress,
-    using progressHandler: AssetImportProgressHandler?
-) async {
-    guard let progressHandler else {
-        return
+nonisolated private struct AssetImportProgressReporter: Sendable {
+    private let handler: AssetImportProgressHandler?
+    private let minimumReportInterval: TimeInterval = 0.1
+    private var lastReportedAt: Date?
+
+    init(handler: AssetImportProgressHandler?) {
+        self.handler = handler
     }
 
-    await progressHandler(progress)
+    mutating func report(_ progress: AssetImportProgress, force: Bool = false) async {
+        guard let handler else {
+            return
+        }
+
+        let now = Date()
+        if force || shouldReportProgress(now: now) {
+            lastReportedAt = now
+            await handler(progress)
+        }
+    }
+
+    private func shouldReportProgress(now: Date) -> Bool {
+        guard let lastReportedAt else {
+            return true
+        }
+
+        return now.timeIntervalSince(lastReportedAt) >= minimumReportInterval
+    }
 }
 
 nonisolated private func nextFileName(
@@ -397,12 +417,32 @@ nonisolated private func contentHash(for url: URL) throws -> String {
     return hasher.finalize().map { String(format: "%02x", $0) }.joined()
 }
 
-nonisolated private func imageDimensions(for url: URL) -> AssetDimensions? {
+nonisolated private struct ImageImportProperties: Sendable {
+    var dimensions: AssetDimensions?
+    var exifMetadata: AssetExifMetadata?
+}
+
+nonisolated private func imageImportProperties(for url: URL) -> ImageImportProperties {
+    let resourceValues = try? url.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey])
     guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
           let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] else {
-        return nil
+        let metadata = AssetExifMetadata(
+            fileCreatedAt: resourceValues?.creationDate,
+            fileModifiedAt: resourceValues?.contentModificationDate
+        )
+        return ImageImportProperties(
+            dimensions: nil,
+            exifMetadata: metadata.isEmpty ? nil : metadata
+        )
     }
 
+    return ImageImportProperties(
+        dimensions: imageDimensions(from: properties),
+        exifMetadata: imageExifMetadata(from: properties, resourceValues: resourceValues)
+    )
+}
+
+nonisolated private func imageDimensions(from properties: [CFString: Any]) -> AssetDimensions? {
     guard let width = properties[kCGImagePropertyPixelWidth] as? Int,
           let height = properties[kCGImagePropertyPixelHeight] as? Int else {
         return nil
@@ -411,18 +451,10 @@ nonisolated private func imageDimensions(for url: URL) -> AssetDimensions? {
     return AssetDimensions(width: width, height: height)
 }
 
-nonisolated private func imageExifMetadata(for url: URL) -> AssetExifMetadata? {
-    let resourceValues = try? url.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey])
-
-    guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-          let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] else {
-        let metadata = AssetExifMetadata(
-            fileCreatedAt: resourceValues?.creationDate,
-            fileModifiedAt: resourceValues?.contentModificationDate
-        )
-        return metadata.isEmpty ? nil : metadata
-    }
-
+nonisolated private func imageExifMetadata(
+    from properties: [CFString: Any],
+    resourceValues: URLResourceValues?
+) -> AssetExifMetadata? {
     let exif = properties[kCGImagePropertyExifDictionary] as? [CFString: Any] ?? [:]
     let tiff = properties[kCGImagePropertyTIFFDictionary] as? [CFString: Any] ?? [:]
 
