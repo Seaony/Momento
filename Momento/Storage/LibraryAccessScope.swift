@@ -142,12 +142,13 @@ final class LibraryAccessScope {
 struct RecentLibraryStore {
     private let defaults: UserDefaults
     private let key = "recentLibraries"
+    private let recentLibraryLimitPerStorageMode = 10
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
     }
 
-    func load(includeLocalLibraries: Bool = true) -> [RecentLibraryReference] {
+    func load(includeLocalLibraries: Bool = true, cloudAccountID: String? = nil) -> [RecentLibraryReference] {
         guard let data = defaults.data(forKey: key),
               let decodedReferences = decodeReferences(from: data) else {
             return []
@@ -159,7 +160,13 @@ struct RecentLibraryStore {
         guard !includeLocalLibraries else {
             return validReferences
         }
-        return validReferences.filter { $0.storageMode != .local }
+        guard let cloudAccountID = Self.normalizedIdentifier(cloudAccountID) else {
+            return []
+        }
+        return validReferences.filter { reference in
+            reference.storageMode == .cloud
+                && Self.normalizedIdentifier(reference.cloudAccountID) == cloudAccountID
+        }
     }
 
     func save(_ library: AssetLibrary) throws {
@@ -181,9 +188,11 @@ struct RecentLibraryStore {
             lastOpenedAt: Date(),
             lastKnownSyncState: nil
         )
-        var references = load().filter { $0.id != library.id }
+        var references = load().filter { reference in
+            reference.storageMode != .local || reference.id != library.id
+        }
         references.insert(reference, at: 0)
-        try saveReferences(Array(references.prefix(10)))
+        try saveReferences(limitedReferences(references))
     }
 
     func saveCloudPlaceholder(
@@ -213,19 +222,28 @@ struct RecentLibraryStore {
         guard reference.isValidStorageDescriptor else {
             throw RecentLibraryStoreError.invalidCloudLibraryDescriptor
         }
-        var references = load().filter { existingReference in
-            guard existingReference.id != trimmedID else {
+        let loadedReferences = load()
+        guard !loadedReferences.contains(where: { existingReference in
+            guard existingReference.storageMode == .cloud,
+                  existingReference.id == trimmedID else {
                 return false
             }
+            let existingCloudLibraryID = Self.normalizedIdentifier(existingReference.cloudLibraryID)
+            let existingCloudAccountID = Self.normalizedIdentifier(existingReference.cloudAccountID)
+            return existingCloudLibraryID != trimmedCloudLibraryID || existingCloudAccountID != trimmedCloudAccountID
+        }) else {
+            throw RecentLibraryStoreError.invalidCloudLibraryDescriptor
+        }
+        var references = loadedReferences.filter { existingReference in
             guard existingReference.storageMode == .cloud else {
                 return true
             }
-            let existingCloudLibraryID = existingReference.cloudLibraryID?.trimmingCharacters(in: .whitespacesAndNewlines)
-            let existingCloudAccountID = existingReference.cloudAccountID?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let existingCloudLibraryID = Self.normalizedIdentifier(existingReference.cloudLibraryID)
+            let existingCloudAccountID = Self.normalizedIdentifier(existingReference.cloudAccountID)
             return existingCloudLibraryID != trimmedCloudLibraryID || existingCloudAccountID != trimmedCloudAccountID
         }
         references.insert(reference, at: 0)
-        try saveReferences(Array(references.prefix(10)))
+        try saveReferences(limitedReferences(references))
     }
 
     func updateName(id: RecentLibraryReference.ID, name: String) throws {
@@ -273,6 +291,21 @@ struct RecentLibraryStore {
         defaults.set(data, forKey: key)
     }
 
+    private func limitedReferences(_ references: [RecentLibraryReference]) -> [RecentLibraryReference] {
+        var localCount = 0
+        var cloudCount = 0
+        return references.filter { reference in
+            switch reference.storageMode {
+            case .local:
+                localCount += 1
+                return localCount <= recentLibraryLimitPerStorageMode
+            case .cloud:
+                cloudCount += 1
+                return cloudCount <= recentLibraryLimitPerStorageMode
+            }
+        }
+    }
+
     private func decodeReferences(from data: Data) -> (references: [RecentLibraryReference], requiresCleanup: Bool)? {
         if let references = try? JSONDecoder.momento.decode([RecentLibraryReference].self, from: data) {
             return (references, false)
@@ -297,6 +330,11 @@ struct RecentLibraryStore {
             bookmarkDataIsStale: &isStale
         )
         return (url, isStale)
+    }
+
+    private static func normalizedIdentifier(_ value: String?) -> String? {
+        let trimmedValue = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmedValue.isEmpty ? nil : trimmedValue
     }
 }
 

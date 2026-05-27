@@ -1374,10 +1374,21 @@ final class LibraryPackagePersistenceTests: XCTestCase {
             cloudLibraryID: "cloud-library",
             accountState: testCloudAccountState()
         )
+        try recentStore.saveCloudPlaceholder(
+            id: "other-account-cloud-library",
+            name: "Other Account Cloud Library",
+            cloudLibraryID: "other-account-cloud-library",
+            accountState: testCloudAccountState("other-cloud-account")
+        )
 
-        XCTAssertEqual(recentStore.load().map(\.storageMode), [.cloud, .local])
+        XCTAssertEqual(recentStore.load().map(\.storageMode), [.cloud, .cloud, .local])
 
-        let cloudVisibleReferences = recentStore.load(includeLocalLibraries: false)
+        XCTAssertEqual(recentStore.load(includeLocalLibraries: false).map(\.id), [])
+
+        let cloudVisibleReferences = recentStore.load(
+            includeLocalLibraries: false,
+            cloudAccountID: testCloudAccountIdentity().cloudAccountID
+        )
         XCTAssertEqual(cloudVisibleReferences.map(\.id), ["cloud-library"])
         XCTAssertEqual(cloudVisibleReferences.first?.storageMode, .cloud)
     }
@@ -1437,7 +1448,13 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         let recentStore = RecentLibraryStore(defaults: environment.defaults)
 
         XCTAssertEqual(recentStore.load().map(\.id), ["valid-cloud"])
-        XCTAssertEqual(recentStore.load(includeLocalLibraries: false).map(\.id), ["valid-cloud"])
+        XCTAssertEqual(
+            recentStore.load(
+                includeLocalLibraries: false,
+                cloudAccountID: testCloudAccountIdentity().cloudAccountID
+            ).map(\.id),
+            ["valid-cloud"]
+        )
 
         let cleanedData = try XCTUnwrap(environment.defaults.data(forKey: "recentLibraries"))
         let persistedReferences = try JSONDecoder.momento.decode([RecentLibraryReference].self, from: cleanedData)
@@ -1451,32 +1468,39 @@ final class LibraryPackagePersistenceTests: XCTestCase {
 
         let recentStore = RecentLibraryStore(defaults: environment.defaults)
 
-        XCTAssertThrowsError(
-            try recentStore.saveCloudPlaceholder(
-                id: "cloud-library",
-                name: "Cloud Library",
-                cloudLibraryID: "cloud-library",
-                accountState: .unavailable(.noAccount)
-            )
-        ) { error in
-            guard let registryError = error as? RecentLibraryStoreError,
-                  case .invalidCloudLibraryDescriptor = registryError else {
-                return XCTFail("Unexpected error: \(error)")
+        func assertRejects(
+            _ accountState: CloudAccountState,
+            id: String,
+            line: UInt = #line
+        ) {
+            XCTAssertThrowsError(
+                try recentStore.saveCloudPlaceholder(
+                    id: id,
+                    name: "Cloud Library",
+                    cloudLibraryID: "cloud-library",
+                    accountState: accountState
+                ),
+                line: line
+            ) { error in
+                guard let registryError = error as? RecentLibraryStoreError,
+                      case .invalidCloudLibraryDescriptor = registryError else {
+                    return XCTFail("Unexpected error: \(error)", line: line)
+                }
             }
         }
-        XCTAssertThrowsError(
-            try recentStore.saveCloudPlaceholder(
-                id: "cloud-library-blank-account",
-                name: "Cloud Library",
-                cloudLibraryID: "cloud-library",
-                accountState: .available(CloudAccountIdentity(cloudAccountID: " "))
-            )
-        ) { error in
-            guard let registryError = error as? RecentLibraryStoreError,
-                  case .invalidCloudLibraryDescriptor = registryError else {
-                return XCTFail("Unexpected error: \(error)")
-            }
-        }
+
+        assertRejects(.unavailable(.noAccount), id: "cloud-library")
+        assertRejects(.restricted, id: "cloud-library-restricted")
+        assertRejects(.error("CloudKit account failed"), id: "cloud-library-error")
+        assertRejects(
+            .mismatch(expectedCloudAccountID: "previous-account", actualCloudAccountID: "current-account"),
+            id: "cloud-library-mismatch"
+        )
+        assertRejects(
+            .available(CloudAccountIdentity(cloudAccountID: " ")),
+            id: "cloud-library-blank-account"
+        )
+
         XCTAssertTrue(recentStore.load().isEmpty)
     }
 
@@ -1578,6 +1602,87 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         XCTAssertEqual(references.map(\.id), ["second-account-descriptor", "first-account-descriptor"])
         XCTAssertEqual(references.map(\.cloudAccountID), ["second-account", "first-account"])
         XCTAssertEqual(references.map(\.cloudLibraryID), ["cloud-library", "cloud-library"])
+    }
+
+    @MainActor
+    func testSavingCloudPlaceholderRejectsDescriptorIDCollisionAcrossAccounts() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let recentStore = RecentLibraryStore(defaults: environment.defaults)
+        try recentStore.saveCloudPlaceholder(
+            id: "cloud-library",
+            name: "First Account",
+            cloudLibraryID: "cloud-library",
+            accountState: testCloudAccountState("first-account")
+        )
+
+        XCTAssertThrowsError(
+            try recentStore.saveCloudPlaceholder(
+                id: "cloud-library",
+                name: "Second Account",
+                cloudLibraryID: "cloud-library",
+                accountState: testCloudAccountState("second-account")
+            )
+        ) { error in
+            guard let registryError = error as? RecentLibraryStoreError,
+                  case .invalidCloudLibraryDescriptor = registryError else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+        }
+
+        let references = recentStore.load()
+        XCTAssertEqual(references.map(\.id), ["cloud-library"])
+        XCTAssertEqual(references.first?.cloudAccountID, "first-account")
+    }
+
+    @MainActor
+    func testRecentLibraryStoreKeepsSeparateRecentLimitsForLocalAndCloudLibraries() throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let storage = LibraryStorage()
+        let recentStore = RecentLibraryStore(defaults: environment.defaults)
+
+        for index in 0..<10 {
+            let library = try storage.createLibraryPackage(
+                at: environment.rootURL.appendingPathComponent("Local-\(index).momento", isDirectory: true),
+                name: "Local \(index)"
+            )
+            try recentStore.save(library)
+        }
+
+        try recentStore.saveCloudPlaceholder(
+            id: "cloud-library",
+            name: "Cloud Library",
+            cloudLibraryID: "cloud-library",
+            accountState: testCloudAccountState()
+        )
+
+        var references = recentStore.load()
+        XCTAssertEqual(references.filter { $0.storageMode == .local }.count, 10)
+        XCTAssertEqual(references.filter { $0.storageMode == .cloud }.map(\.id), ["cloud-library"])
+
+        for index in 0..<9 {
+            try recentStore.saveCloudPlaceholder(
+                id: "cloud-library-\(index)",
+                name: "Cloud Library \(index)",
+                cloudLibraryID: "cloud-library-\(index)",
+                accountState: testCloudAccountState()
+            )
+        }
+
+        let extraLocal = try storage.createLibraryPackage(
+            at: environment.rootURL.appendingPathComponent("Local-extra.momento", isDirectory: true),
+            name: "Local Extra"
+        )
+        try recentStore.save(extraLocal)
+
+        references = recentStore.load()
+        XCTAssertEqual(references.filter { $0.storageMode == .local }.count, 10)
+        XCTAssertEqual(references.filter { $0.storageMode == .cloud }.count, 10)
+        XCTAssertTrue(references.contains { $0.name == "Local Extra" })
+        XCTAssertTrue(references.contains { $0.id == "cloud-library" })
     }
 
     @MainActor
