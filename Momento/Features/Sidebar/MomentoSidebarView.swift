@@ -71,7 +71,7 @@ struct MomentoSidebarView: View {
     @State private var isRootFolderDropTargeted = false
     @State private var draggingFolderID: AssetFolder.ID?
     @State private var pendingFolderExpansionID: AssetFolder.ID?
-    @State private var forcedFolderIntoDropID: AssetFolder.ID?
+    @State private var springLoadedFolderDropID: AssetFolder.ID?
     @State private var isFolderSectionHovered = false
     @State private var isFolderSectionExpanded = true
     @State private var expandedFolderIDs: Set<AssetFolder.ID> = []
@@ -543,7 +543,7 @@ struct MomentoSidebarView: View {
             folders: folders,
             draggingFolderID: $draggingFolderID,
             targetedFolderDrop: $targetedFolderDrop,
-            forcedFolderIntoDropID: $forcedFolderIntoDropID,
+            springLoadedFolderDropID: $springLoadedFolderDropID,
             onScheduleExpansion: scheduleFolderExpansionAfterDropHover,
             onClearExpansion: clearPendingFolderExpansion,
             onExpandFolder: expandFolderAfterDrop,
@@ -616,7 +616,7 @@ struct MomentoSidebarView: View {
 
             withAnimation(.smooth(duration: 0.16)) {
                 _ = expandedFolderIDs.insert(folderID)
-                forcedFolderIntoDropID = folderID
+                springLoadedFolderDropID = folderID
             }
         }
     }
@@ -626,8 +626,8 @@ struct MomentoSidebarView: View {
             pendingFolderExpansionID = nil
         }
 
-        if folderID == nil || forcedFolderIntoDropID == folderID {
-            forcedFolderIntoDropID = nil
+        if folderID == nil || springLoadedFolderDropID == folderID {
+            springLoadedFolderDropID = nil
         }
     }
 
@@ -992,11 +992,11 @@ nonisolated enum MomentoSidebarFolderDropPlacementResolver {
         edgeZoneHeight: CGFloat
     ) -> MomentoSidebarFolderDropPlacement {
         let clampedY = min(max(localY, 0), rowHeight)
-        if rowHeight - clampedY <= edgeZoneHeight {
+        if clampedY <= edgeZoneHeight {
             return .before
         }
 
-        if clampedY <= edgeZoneHeight {
+        if rowHeight - clampedY <= edgeZoneHeight {
             return .after
         }
 
@@ -1008,9 +1008,9 @@ nonisolated enum MomentoSidebarFolderDropPlacementResolver {
         draggedID: AssetFolder.ID,
         targetFolder: AssetFolder,
         folders: [AssetFolder],
-        forcedIntoFolderID: AssetFolder.ID?
+        prefersNesting: Bool
     ) -> MomentoSidebarFolderDropPlacement {
-        if forcedIntoFolderID == targetFolder.id {
+        if rawPlacement == .into, prefersNesting {
             return .into
         }
 
@@ -1139,7 +1139,7 @@ private struct MomentoSidebarFolderDropDelegate: DropDelegate {
     var folders: [AssetFolder]
     @Binding var draggingFolderID: AssetFolder.ID?
     @Binding var targetedFolderDrop: MomentoSidebarFolderDropTarget?
-    @Binding var forcedFolderIntoDropID: AssetFolder.ID?
+    @Binding var springLoadedFolderDropID: AssetFolder.ID?
     var onScheduleExpansion: (AssetFolder.ID) -> Void
     var onClearExpansion: (AssetFolder.ID?) -> Void
     var onExpandFolder: (AssetFolder.ID) -> Void
@@ -1253,12 +1253,13 @@ private struct MomentoSidebarFolderDropDelegate: DropDelegate {
             return rawPlacement
         }
 
+        let prefersNesting = rawPlacement == .into && springLoadedFolderDropID == row.folder.id
         return MomentoSidebarFolderDropPlacementResolver.effectivePlacement(
             rawPlacement: rawPlacement,
             draggedID: draggingFolderID,
             targetFolder: row.folder,
             folders: folders,
-            forcedIntoFolderID: forcedFolderIntoDropID
+            prefersNesting: prefersNesting
         )
     }
 

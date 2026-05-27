@@ -5,7 +5,7 @@ final class SidebarFolderDropPlacementResolverTests: XCTestCase {
     func testTopEdgeMapsToBeforePlacement() {
         XCTAssertEqual(
             MomentoSidebarFolderDropPlacementResolver.placement(
-                localY: 29,
+                localY: 1,
                 rowHeight: 30,
                 edgeZoneHeight: 8
             ),
@@ -16,7 +16,7 @@ final class SidebarFolderDropPlacementResolverTests: XCTestCase {
     func testBottomEdgeMapsToAfterPlacement() {
         XCTAssertEqual(
             MomentoSidebarFolderDropPlacementResolver.placement(
-                localY: 1,
+                localY: 29,
                 rowHeight: 30,
                 edgeZoneHeight: 8
             ),
@@ -47,7 +47,7 @@ final class SidebarFolderDropPlacementResolverTests: XCTestCase {
                 draggedID: "beta",
                 targetFolder: folders[0],
                 folders: folders,
-                forcedIntoFolderID: nil
+                prefersNesting: false
             ),
             .before
         )
@@ -65,7 +65,7 @@ final class SidebarFolderDropPlacementResolverTests: XCTestCase {
                 draggedID: "beta",
                 targetFolder: folders[0],
                 folders: folders,
-                forcedIntoFolderID: nil
+                prefersNesting: false
             ),
             .before
         )
@@ -83,13 +83,13 @@ final class SidebarFolderDropPlacementResolverTests: XCTestCase {
                 draggedID: "alpha",
                 targetFolder: folders[1],
                 folders: folders,
-                forcedIntoFolderID: nil
+                prefersNesting: false
             ),
             .after
         )
     }
 
-    func testForcedIntoPlacementOverridesSiblingSortPlacement() {
+    func testSameParentDragCanStillNestWhenPointerPrefersNesting() {
         let folders = [
             folder(id: "alpha", sortIndex: 0),
             folder(id: "beta", sortIndex: 1)
@@ -101,7 +101,7 @@ final class SidebarFolderDropPlacementResolverTests: XCTestCase {
                 draggedID: "beta",
                 targetFolder: folders[0],
                 folders: folders,
-                forcedIntoFolderID: "alpha"
+                prefersNesting: true
             ),
             .into
         )
