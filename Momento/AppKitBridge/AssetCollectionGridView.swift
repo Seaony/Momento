@@ -501,7 +501,6 @@ struct AssetCollectionGridView: NSViewRepresentable {
         collectionView.performBatchUpdates {
             coordinator.currentAssets = assets
             coordinator.rebuildAssetIndex(for: assets)
-            prepareLayout(for: collectionView)
 
             if !changeSet.deletedIndexPaths.isEmpty {
                 collectionView.deleteItems(at: changeSet.deletedIndexPaths)
@@ -514,6 +513,8 @@ struct AssetCollectionGridView: NSViewRepresentable {
             for move in changeSet.movedIndexPaths {
                 collectionView.moveItem(at: move.from, to: move.to)
             }
+
+            prepareLayout(for: collectionView)
         } completionHandler: { _ in
             coordinator.refreshVisibleItems()
         }

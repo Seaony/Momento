@@ -179,14 +179,24 @@ final class ArchitectureGuardTests: XCTestCase {
                 range: currentAssetsUpdate.upperBound..<assetGridSource.endIndex
             )
         )
+        let firstDeleteOperation = try XCTUnwrap(
+            assetGridSource.range(
+                of: "collectionView.deleteItems(at: changeSet.deletedIndexPaths)",
+                range: currentAssetsUpdate.upperBound..<assetGridSource.endIndex
+            )
+        )
 
         XCTAssertTrue(batchStart.lowerBound > reflowStart.lowerBound)
         XCTAssertTrue(currentAssetsUpdate.lowerBound > batchStart.lowerBound)
-        XCTAssertTrue(layoutPreparation.lowerBound > currentAssetsUpdate.lowerBound)
+        XCTAssertTrue(firstDeleteOperation.lowerBound > currentAssetsUpdate.lowerBound)
+        XCTAssertTrue(layoutPreparation.lowerBound > firstDeleteOperation.lowerBound)
 
         let preBatchSource = String(assetGridSource[reflowStart.upperBound..<batchStart.lowerBound])
         XCTAssertFalse(preBatchSource.contains("coordinator.currentAssets = assets"))
         XCTAssertFalse(preBatchSource.contains("prepareLayout(for: collectionView)"))
+
+        let preOperationSource = String(assetGridSource[currentAssetsUpdate.upperBound..<firstDeleteOperation.lowerBound])
+        XCTAssertFalse(preOperationSource.contains("prepareLayout(for: collectionView)"))
     }
 
     func testAssetGridSupportsCommandDeleteAssetShortcut() throws {
