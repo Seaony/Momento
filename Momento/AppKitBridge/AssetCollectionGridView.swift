@@ -720,11 +720,6 @@ extension AssetCollectionGridView {
             }
 
             activeDragPrimaryAssetID = asset.id
-            if !collectionView.selectionIndexPaths.contains(indexPath) {
-                collectionView.selectionIndexPaths = [indexPath]
-                publishSelection(from: collectionView)
-            }
-
             return true
         }
 
@@ -793,7 +788,9 @@ extension AssetCollectionGridView {
             activeDragPrimaryAssetID = nil
             activeDragExportBatch = nil
             hideDragSourcePlaceholders()
-            applyDeferredAssetChangesAfterDragIfNeeded()
+            DispatchQueue.main.async { [weak self] in
+                self?.applyDeferredAssetChangesAfterDragIfNeeded()
+            }
         }
 
         var shouldDeferAssetChangesForActiveDrag: Bool {
@@ -1041,6 +1038,11 @@ extension AssetCollectionGridView {
             in collectionView: NSCollectionView
         ) -> [AssetItem.ID] {
             let selectedIndexPaths = collectionView.selectionIndexPaths
+            guard let primaryIndex = assetIndexByID[primaryAssetID],
+                  selectedIndexPaths.contains(IndexPath(item: primaryIndex, section: 0)) else {
+                return [primaryAssetID]
+            }
+
             let orderedIDs = currentAssets.enumerated().compactMap { index, asset in
                 selectedIndexPaths.contains(IndexPath(item: index, section: 0)) && !asset.isTrashed ? asset.id : nil
             }

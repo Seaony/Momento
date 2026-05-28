@@ -142,7 +142,9 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(assetGridSource.contains("collectionView(_ collectionView: NSCollectionView, pasteboardWriterForItemAt indexPath: IndexPath)"))
         XCTAssertTrue(assetGridSource.contains("showDragSourcePlaceholders(for: indexPaths.union(collectionView.selectionIndexPaths), in: collectionView)"))
         XCTAssertTrue(assetGridSource.contains("deferAssetChangesUntilDragEnds()"))
-        XCTAssertTrue(assetGridSource.contains("applyDeferredAssetChangesAfterDragIfNeeded()"))
+        XCTAssertTrue(assetGridSource.contains("DispatchQueue.main.async { [weak self] in\n                self?.applyDeferredAssetChangesAfterDragIfNeeded()"))
+        XCTAssertTrue(assetGridSource.contains("return [primaryAssetID]"))
+        XCTAssertFalse(assetGridSource.contains("activeDragPrimaryAssetID = asset.id\n            if !collectionView.selectionIndexPaths.contains(indexPath)"))
         XCTAssertTrue(bridgeSource.contains("NSFilePromiseProvider"))
         XCTAssertTrue(bridgeSource.contains("com.seaony.momento.asset-ids"))
     }
