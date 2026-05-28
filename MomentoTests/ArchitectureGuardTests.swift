@@ -166,6 +166,19 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(buttonSource.contains(".environment(\\.appearsActive, true)"))
     }
 
+    func testSettingsWindowUsesTransparentGlassChromeAndControls() throws {
+        let source = try String(contentsOf: settingsURL(), encoding: .utf8)
+
+        XCTAssertTrue(source.contains("WindowTransparencyConfigurator()"))
+        XCTAssertTrue(source.contains(".toolbarBackgroundVisibility(.hidden, for: .windowToolbar)"))
+        XCTAssertTrue(source.contains("MomentoGlassBackground(cornerRadius: 0)"))
+        XCTAssertTrue(source.contains(".buttonStyle(.glass)"))
+        XCTAssertTrue(source.contains(".pickerStyle(.menu)"))
+        XCTAssertTrue(source.contains(".environment(\\.appearsActive, true)"))
+        XCTAssertFalse(source.contains(".buttonStyle(.glass(.clear))"))
+        XCTAssertFalse(source.contains("Form("))
+    }
+
     func testSparkleUpdatesAreConfiguredForGitHubAppcast() throws {
         let infoData = try Data(contentsOf: infoPlistURL())
         let infoPlist = try XCTUnwrap(PropertyListSerialization.propertyList(from: infoData, options: [], format: nil) as? [String: Any])

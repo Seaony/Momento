@@ -1,53 +1,101 @@
 // 中文注释：设置页只绑定用户偏好状态，网格等主工作区设置不在这里重复维护。
 import SwiftUI
 
+private enum MomentoSettingsMetrics {
+    static let windowWidth: CGFloat = 460
+    static let minWindowHeight: CGFloat = 312
+    static let sectionSpacing: CGFloat = 14
+    static let rowHeight: CGFloat = 38
+    static let controlWidth: CGFloat = 196
+    static let controlHeight: CGFloat = 34
+    static let sectionRadius: CGFloat = 16
+}
+
 struct MomentoSettingsView: View {
     @Environment(\.appLocalization) private var localization
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @Binding var appLanguage: AppLanguage
     @ObservedObject var updateService: AppUpdateService
 
+    @State private var isUpdateButtonHovered = false
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            settingsSection(localization.string("Language")) {
-                settingsRow(label: localization.string("App Language")) {
-                    Picker("", selection: $appLanguage) {
-                        ForEach(AppLanguage.allCases) { language in
-                            Text(localization.title(for: language))
-                                .tag(language)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .buttonStyle(.glass(.clear))
-                    .frame(width: 190)
-                }
-            }
-
-            settingsSection(localization.string("Updates")) {
-                settingsRow(label: localization.string("App Updates")) {
-                    Button(localization.string("Check for Updates...")) {
-                        updateService.checkForUpdates()
-                    }
-                    .buttonStyle(.glass)
-                    .disabled(!updateService.canCheckForUpdates)
-                }
-            }
-
-            settingsSection(localization.string("About")) {
-                settingsInfoRow(label: localization.string("Name"), value: "Momento")
-                settingsInfoRow(label: localization.string("Version"), value: versionText)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(20)
-        .background {
+        ZStack {
             MomentoGlassBackground(cornerRadius: 0)
                 .ignoresSafeArea()
+
+            VStack(alignment: .leading, spacing: 18) {
+                Text(localization.string("Settings"))
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(MomentoTheme.primaryText)
+
+                VStack(alignment: .leading, spacing: MomentoSettingsMetrics.sectionSpacing) {
+                    settingsSection(localization.string("Language")) {
+                        settingsRow(label: localization.string("App Language")) {
+                            Picker("", selection: $appLanguage) {
+                                ForEach(AppLanguage.allCases) { language in
+                                    Text(localization.title(for: language))
+                                        .tag(language)
+                                }
+                            }
+                            .labelsHidden()
+                            .pickerStyle(.menu)
+                            .buttonStyle(.glass)
+                            .controlSize(.large)
+                            .frame(
+                                width: MomentoSettingsMetrics.controlWidth,
+                                height: MomentoSettingsMetrics.controlHeight
+                            )
+                            .environment(\.appearsActive, true)
+                        }
+                    }
+
+                    settingsSection(localization.string("Updates")) {
+                        settingsRow(label: localization.string("App Updates")) {
+                            Button {
+                                updateService.checkForUpdates()
+                            } label: {
+                                Label(localization.string("Check for Updates..."), systemImage: "arrow.triangle.2.circlepath")
+                                    .labelStyle(.titleAndIcon)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .frame(
+                                        width: MomentoSettingsMetrics.controlWidth,
+                                        height: MomentoSettingsMetrics.controlHeight
+                                    )
+                            }
+                            .buttonStyle(.glass)
+                            .controlSize(.large)
+                            .foregroundStyle(MomentoTheme.primaryText)
+                            .environment(\.appearsActive, true)
+                            .disabled(!updateService.canCheckForUpdates)
+                            .pointerStyle(.link)
+                            .settingsButtonHoverFeedback(isHovered: isUpdateButtonHovered, reduceMotion: reduceMotion)
+                            .onHover { isHovered in
+                                isUpdateButtonHovered = isHovered
+                            }
+                        }
+                    }
+
+                    settingsSection(localization.string("About")) {
+                        settingsInfoRow(label: localization.string("Name"), value: "Momento")
+                        settingsDivider
+                        settingsInfoRow(label: localization.string("Version"), value: versionText)
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 46)
+            .padding(.horizontal, 22)
+            .padding(.bottom, 22)
         }
-        .frame(width: 420, alignment: .topLeading)
-        .frame(minHeight: 220, alignment: .topLeading)
+        .background {
+            WindowTransparencyConfigurator()
+        }
+        .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .frame(width: MomentoSettingsMetrics.windowWidth, alignment: .topLeading)
+        .frame(minHeight: MomentoSettingsMetrics.minWindowHeight, alignment: .topLeading)
     }
 
     private var versionText: String {
@@ -73,9 +121,13 @@ struct MomentoSettingsView: View {
             .padding(.vertical, 10)
             .background {
                 MomentoGlassBackground(
-                    glass: .regular.tint(Color.black.opacity(0.12)),
-                    cornerRadius: 16
+                    glass: .regular.tint(Color.white.opacity(0.05)).interactive(true),
+                    cornerRadius: MomentoSettingsMetrics.sectionRadius
                 )
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: MomentoSettingsMetrics.sectionRadius, style: .continuous)
+                    .strokeBorder(MomentoTheme.subtleStroke.opacity(0.38), lineWidth: 0.6)
             }
         }
     }
@@ -93,7 +145,7 @@ struct MomentoSettingsView: View {
             content()
         }
         .font(.system(size: 13, weight: .medium))
-        .frame(minHeight: 34)
+        .frame(height: MomentoSettingsMetrics.rowHeight)
     }
 
     private func settingsInfoRow(label: String, value: String) -> some View {
@@ -108,7 +160,21 @@ struct MomentoSettingsView: View {
                 .multilineTextAlignment(.trailing)
         }
         .font(.system(size: 13, weight: .medium))
-        .frame(minHeight: 30)
+        .frame(height: MomentoSettingsMetrics.rowHeight)
+    }
+
+    private var settingsDivider: some View {
+        Rectangle()
+            .fill(MomentoTheme.subtleStroke.opacity(0.34))
+            .frame(height: 0.6)
+    }
+}
+
+private extension View {
+    func settingsButtonHoverFeedback(isHovered: Bool, reduceMotion: Bool) -> some View {
+        scaleEffect(isHovered && !reduceMotion ? 1.025 : 1)
+            .brightness(isHovered ? 0.06 : 0)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.16), value: isHovered)
     }
 }
 
@@ -120,4 +186,5 @@ struct MomentoSettingsView: View {
         updateService: AppUpdateService()
     )
         .environment(\.appLocalization, AppLocalization(language: language))
+        .frame(width: 460, height: 312)
 }
