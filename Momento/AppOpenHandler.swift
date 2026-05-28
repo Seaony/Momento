@@ -6,19 +6,6 @@ final class AppOpenHandler: NSObject, NSApplicationDelegate {
     var onOpenLibraryURLs: (([URL]) -> Bool)?
     private var pendingOpenURLs: [URL] = []
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApplication.shared.registerForRemoteNotifications()
-    }
-
-    func application(
-        _ application: NSApplication,
-        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
-    ) {
-    }
-
-    func application(_ application: NSApplication, didFailToRegisterForRemoteNotificationsWithError error: any Error) {
-    }
-
     func application(_ sender: NSApplication, openFiles filenames: [String]) {
         let urls = filenames.map(URL.init(fileURLWithPath:))
 

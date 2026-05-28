@@ -57,8 +57,6 @@ struct MomentoInspectorAsset: Identifiable, Hashable {
     var sourcePageURL: URL?
     var addedDate: Date?
     var kind: String?
-    var syncState: CloudLibrarySyncState?
-    var availability: AssetFileAvailability?
     var exifItems: [MomentoInspectorInfoItem]
 
     init(
@@ -74,8 +72,6 @@ struct MomentoInspectorAsset: Identifiable, Hashable {
         sourcePageURL: URL? = nil,
         addedDate: Date? = nil,
         kind: String? = nil,
-        syncState: CloudLibrarySyncState? = nil,
-        availability: AssetFileAvailability? = nil,
         exifItems: [MomentoInspectorInfoItem] = []
     ) {
         self.id = id
@@ -89,8 +85,6 @@ struct MomentoInspectorAsset: Identifiable, Hashable {
         self.sourcePageURL = sourcePageURL
         self.addedDate = addedDate
         self.kind = kind
-        self.syncState = syncState
-        self.availability = availability
         self.exifItems = exifItems
     }
 }
@@ -213,7 +207,6 @@ struct MomentoInspectorView: View {
                     VStack(alignment: .leading, spacing: Self.inspectorSectionSpacing) {
                         preview(asset)
                         metadata(asset)
-                        syncMetadata(asset)
                         tagEditor
                         folderEditor
                         exifMetadata(asset)
@@ -485,24 +478,6 @@ struct MomentoInspectorView: View {
             }
             if let sourcePageURL = asset.sourcePageURL {
                 linkRow(localization.string("Link"), sourcePageURL)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func syncMetadata(_ asset: MomentoInspectorAsset) -> some View {
-        if let syncState = asset.syncState, let availability = asset.availability {
-            inspectorSection(localization.string("Cloud")) {
-                infoRow(localization.string("Sync"), localization.title(for: syncState))
-                infoRow(localization.string("Original"), localization.title(for: availability.original))
-                infoRow(localization.string("Thumbnail"), localization.title(for: availability.thumbnail))
-                if let lastError = availability.lastError, !lastError.isEmpty {
-                    Text(lastError)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.red)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
             }
         }
     }

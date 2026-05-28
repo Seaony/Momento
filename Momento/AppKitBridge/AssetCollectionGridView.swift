@@ -46,10 +46,6 @@ private enum AssetCollectionMetrics {
     static let favoriteButtonAppearanceAnimationDuration: CFTimeInterval = 0.14
     static let favoriteButtonBackgroundAnimationDuration: CFTimeInterval = 0.12
     static let favoriteButtonEntranceScale: CGFloat = 0.9
-    static let syncBadgeSize: CGFloat = 22
-    static let syncBadgeTrailingInset: CGFloat = 7
-    static let syncBadgeBottomInset: CGFloat = 7
-    static let syncBadgeSymbolPointSize: CGFloat = 12
     static let selectionBackgroundAnimationDuration: CFTimeInterval = 0.12
     static let titleTextColor = NSColor.labelColor.withAlphaComponent(0.5)
     static let subtitleTextColor = NSColor.labelColor.withAlphaComponent(0.3)
@@ -118,7 +114,6 @@ private struct AssetColumnLayout {
 
 enum AssetContextMenuAction: CaseIterable {
     case previewOriginal
-    case downloadOriginal
     case export
     case refreshThumbnail
     case reanalyzeColors
@@ -128,17 +123,8 @@ enum AssetContextMenuAction: CaseIterable {
     case deletePermanently
 
     static func actions(for asset: AssetItem) -> [AssetContextMenuAction] {
-        let needsOriginalDownload = asset.availability.original == .remoteOnly || asset.availability.original == .failed
-
         if asset.isTrashed {
-            if needsOriginalDownload {
-                return [.downloadOriginal, .restore, .deletePermanently]
-            }
             return [.previewOriginal, .export, .revealInFinder, .restore, .deletePermanently]
-        }
-
-        if needsOriginalDownload {
-            return [.downloadOriginal, .moveToTrash]
         }
 
         return [.previewOriginal, .export, .refreshThumbnail, .reanalyzeColors, .revealInFinder, .moveToTrash]
@@ -148,8 +134,6 @@ enum AssetContextMenuAction: CaseIterable {
         switch self {
         case .previewOriginal:
             "Preview Original"
-        case .downloadOriginal:
-            "Download Original"
         case .export:
             "Export"
         case .refreshThumbnail:
@@ -171,8 +155,6 @@ enum AssetContextMenuAction: CaseIterable {
         switch self {
         case .previewOriginal:
             "eye"
-        case .downloadOriginal:
-            "icloud.and.arrow.down"
         case .export:
             "square.and.arrow.up"
         case .refreshThumbnail:
@@ -470,8 +452,6 @@ struct AssetCollectionGridView: NSViewRepresentable {
         comparableOldAsset.isFavorite = newAsset.isFavorite
         comparableOldAsset.importedAt = newAsset.importedAt
         comparableOldAsset.updatedAt = newAsset.updatedAt
-        comparableOldAsset.availability = newAsset.availability
-        comparableOldAsset.syncState = newAsset.syncState
         return comparableOldAsset == newAsset
     }
 
@@ -1822,7 +1802,6 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     private let contentView = HoverSelectionView()
     private let previewImageView = AssetPreviewImageView()
     private let favoriteButton = FavoriteButton()
-    private let syncBadgeView = SyncBadgeView()
     private let fileNameLabel = NSTextField(labelWithString: "")
     private let subtitleLabel = NSTextField(labelWithString: "")
     private let dateLabel = NSTextField(labelWithString: "")
@@ -1885,9 +1864,6 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         favoriteButton.toolTip = localization.string("Favorites")
         favoriteButton.isHidden = true
 
-        syncBadgeView.translatesAutoresizingMaskIntoConstraints = false
-        syncBadgeView.isHidden = true
-
         fileNameLabel.lineBreakMode = .byTruncatingTail
         fileNameLabel.maximumNumberOfLines = 1
         fileNameLabel.cell?.truncatesLastVisibleLine = true
@@ -1935,7 +1911,6 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         contentView.addSubview(dimensionBadgeView)
         contentView.addSubview(separatorView)
         contentView.addSubview(favoriteButton)
-        contentView.addSubview(syncBadgeView)
         containerView.addSubview(contentView)
         view = containerView
 
@@ -1965,17 +1940,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
                 constant: AssetCollectionMetrics.favoriteButtonTopInset
             ),
             favoriteButton.widthAnchor.constraint(equalToConstant: AssetCollectionMetrics.favoriteButtonWidth),
-            favoriteButton.heightAnchor.constraint(equalToConstant: AssetCollectionMetrics.favoriteButtonHeight),
-            syncBadgeView.trailingAnchor.constraint(
-                equalTo: previewImageView.trailingAnchor,
-                constant: -AssetCollectionMetrics.syncBadgeTrailingInset
-            ),
-            syncBadgeView.bottomAnchor.constraint(
-                equalTo: previewImageView.bottomAnchor,
-                constant: -AssetCollectionMetrics.syncBadgeBottomInset
-            ),
-            syncBadgeView.widthAnchor.constraint(equalToConstant: AssetCollectionMetrics.syncBadgeSize),
-            syncBadgeView.heightAnchor.constraint(equalToConstant: AssetCollectionMetrics.syncBadgeSize)
+            favoriteButton.heightAnchor.constraint(equalToConstant: AssetCollectionMetrics.favoriteButtonHeight)
         ])
 
         gridConstraints = [
@@ -2039,7 +2004,6 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         dateLabel.stringValue = ""
         dimensionBadgeView.stringValue = ""
         dimensionBadgeView.isHidden = true
-        syncBadgeView.reset()
         separatorView.isHidden = true
         containerView.resetHoverState()
         favoriteButton.resetAppearance()
@@ -2110,7 +2074,6 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         }
         previewImageView.contentMode = imageContentMode(for: asset, viewMode: viewMode)
         applyModeLayout()
-        updateSyncBadge()
         updateFavoriteButton(animated: false)
         containerView.synchronizeHoverStateWithPointer()
         favoriteButton.synchronizeHoverStateWithPointer()
@@ -2128,7 +2091,6 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         dateLabel.stringValue = viewMode == .list ? localization.relativeOrDateTime(asset.importedAt) : ""
         dimensionBadgeView.stringValue = dimensionsSubtitle(for: asset)
         dimensionBadgeView.isHidden = viewMode != .masonry || dimensionBadgeView.stringValue.isEmpty
-        updateSyncBadge()
         updateFavoriteButton(animated: true)
         updateTextColors()
     }
@@ -2244,15 +2206,6 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         favoriteButton.setHoverBackgroundVisible(isVisible && favoriteButton.isPointerInside, animated: animated)
         favoriteButton.setVisible(isVisible, animated: animated)
         favoriteButton.toolTip = localization.string(asset.isFavorite ? "Favorited" : "Favorites")
-    }
-
-    private func updateSyncBadge() {
-        guard let asset else {
-            syncBadgeView.reset()
-            return
-        }
-
-        syncBadgeView.configure(state: asset.syncState, localization: localization)
     }
 
     private func favoriteImage(isFavorite: Bool) -> NSImage? {
@@ -2497,69 +2450,6 @@ private final class DimensionBadgeView: NSView {
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -AssetCollectionMetrics.dimensionBadgeHorizontalPadding),
             label.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
-    }
-}
-
-private final class SyncBadgeView: NSView {
-    private let imageView = NSImageView()
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        setUpView()
-    }
-
-    required init?(coder: NSCoder) {
-        super.init(coder: coder)
-        setUpView()
-    }
-
-    func configure(state: CloudLibrarySyncState, localization: AppLocalization) {
-        imageView.image = NSImage(
-            systemSymbolName: state.systemImageName,
-            accessibilityDescription: localization.title(for: state)
-        )?.withSymbolConfiguration(
-            .init(pointSize: AssetCollectionMetrics.syncBadgeSymbolPointSize, weight: .semibold)
-        )
-        imageView.contentTintColor = tintColor(for: state)
-        toolTip = localization.title(for: state)
-        isHidden = false
-    }
-
-    func reset() {
-        imageView.image = nil
-        toolTip = nil
-        isHidden = true
-    }
-
-    private func setUpView() {
-        wantsLayer = true
-        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.34).cgColor
-        layer?.cornerRadius = AssetCollectionMetrics.syncBadgeSize / 2
-        layer?.cornerCurve = .continuous
-
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        imageView.imageScaling = .scaleProportionallyDown
-        addSubview(imageView)
-
-        NSLayoutConstraint.activate([
-            imageView.centerXAnchor.constraint(equalTo: centerXAnchor),
-            imageView.centerYAnchor.constraint(equalTo: centerYAnchor),
-            imageView.widthAnchor.constraint(equalToConstant: AssetCollectionMetrics.syncBadgeSize - 8),
-            imageView.heightAnchor.constraint(equalToConstant: AssetCollectionMetrics.syncBadgeSize - 8)
-        ])
-    }
-
-    private func tintColor(for state: CloudLibrarySyncState) -> NSColor {
-        switch state {
-        case .synced, .conflictResolved:
-            .systemGreen
-        case .syncing, .waitingForNetwork:
-            .systemBlue
-        case .waitingForICloudSignIn, .unsupportedSchema:
-            .systemOrange
-        case .uploadFailed, .downloadFailed, .quotaBlocked, .accountMismatch:
-            .systemRed
-        }
     }
 }
 

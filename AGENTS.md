@@ -44,7 +44,6 @@ Momento 是原生 macOS 资产管理应用，使用 SwiftUI + AppKit，不使用
 
 - `Core/LibraryStore.swift` 是 `@MainActor @Observable` 中央状态对象。UI 通过 store 修改状态，不直接访问存储层。
 - `Core/AssetModels.swift` 存放 `nonisolated Sendable` 值类型，跨 actor 边界传递。
-- `Cloud/` 存放 CloudKit 同步、缓存、record 命名、库与资产上传下载逻辑。
 - `Storage/` 存放本地 `.momentolibrary` 包、Core Data、manifest、security-scoped bookmark、recent libraries。
 - `Services/` 存放导入、哈希、缩略图、颜色分析等后台任务。
 - `AppKitBridge/AssetCollectionGridView.swift` 是 100k+ 资产渲染路径，不要替换成 `LazyVGrid`。
@@ -84,7 +83,6 @@ xcodebuild -project Momento.xcodeproj -scheme Momento -destination 'platform=mac
 
 - 资源库创建、打开、重命名、删除、最近资源库、缺失资源库检测等文件系统和数据生命周期测试。
 - 导入、去重、缓存清理、元数据持久化等会影响用户数据安全的行为测试。
-- CloudKit record 命名、缓存路径、同步状态和关系写入测试。
 - 本地化目录完整性测试。
 - 少量粗粒度架构护栏测试，例如原生 Liquid Glass、窗口透明工具栏、主窗口最小尺寸这类容易反复回归的规则。
 
@@ -92,7 +90,7 @@ xcodebuild -project Momento.xcodeproj -scheme Momento -destination 'platform=mac
 
 ## Documentation
 
-涉及 Apple / SwiftUI / AppKit / CloudKit / 第三方 API 的实现细节时，先查官方文档或 Context7。纯文档更新、测试清理、简单字符串调整不需要为了形式而查文档。
+涉及 Apple / SwiftUI / AppKit / 第三方 API 的实现细节时，先查官方文档或 Context7。纯文档更新、测试清理、简单字符串调整不需要为了形式而查文档。
 
 ## Validation
 

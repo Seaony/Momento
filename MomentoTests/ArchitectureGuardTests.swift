@@ -62,18 +62,6 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("store.validateCurrentLibraryAvailability()"))
     }
 
-    func testAssetExportValidatesCurrentLibraryBeforeReadingStoredFiles() throws {
-        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
-        let assetGridSource = try String(contentsOf: assetGridURL(), encoding: .utf8)
-        let bridgeSource = try appKitBridgeSource()
-
-        XCTAssertTrue(contentSource.contains("try store.currentLibraryAssetSourceAccessValidator()"))
-        XCTAssertTrue(contentSource.contains("store.currentLibrarySourceReadValidator()"))
-        XCTAssertTrue(assetGridSource.contains("assetSourceAccessValidator"))
-        XCTAssertTrue(assetGridSource.contains("assetSourceReadValidator"))
-        XCTAssertTrue(bridgeSource.contains("sourceAccessValidator"))
-    }
-
     func testRecentLibraryMutationsUseSecurityScopedAccess() throws {
         let source = try String(contentsOf: libraryStoreURL(), encoding: .utf8)
 
@@ -84,39 +72,6 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("try storage.renameLibraryPackage(at: resolvedURL, to: trimmedName)"))
         XCTAssertTrue(source.contains("try withSecurityScopedRecentLibraryURL(reference) { resolvedURL in"))
         XCTAssertTrue(source.contains("try storage.deleteLibraryPackage(at: resolvedURL)"))
-    }
-
-    func testLibrarySwitcherSeparatesLocalAndCloudLibraries() throws {
-        let source = try String(contentsOf: sidebarURL(), encoding: .utf8)
-
-        XCTAssertTrue(source.contains("private var visibleLocalLibraries: [RecentLibraryReference]"))
-        XCTAssertTrue(source.contains("private var visibleCloudLibraries: [RecentLibraryReference]"))
-        XCTAssertTrue(source.contains("localization.string(\"On This Mac\")"))
-        XCTAssertTrue(source.contains("localization.string(\"iCloud\")"))
-        XCTAssertTrue(source.contains("displayedLibraries[sourceIndex].storageMode == targetLibrary.storageMode"))
-        XCTAssertTrue(source.contains("let canSwitchLibrary = true"))
-        XCTAssertTrue(source.contains("return visibleLibraries.first { $0.id == activeMoreLibraryID }"))
-        XCTAssertTrue(source.contains("if library.storageMode == .local {"))
-    }
-
-    func testCreateLibraryDialogEnablesCloudModeAfterSyncExists() throws {
-        let dialogSource = try String(contentsOf: createLibraryDialogURL(), encoding: .utf8)
-        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
-
-        XCTAssertTrue(dialogSource.contains("@State private var selectedStorageMode: LibraryStorageMode = .local"))
-        XCTAssertTrue(dialogSource.contains("private var storageModePicker: some View"))
-        XCTAssertTrue(dialogSource.contains("mode: .cloud"))
-        XCTAssertTrue(dialogSource.contains("isDisabled: false"))
-        XCTAssertTrue(contentSource.contains("guard storageMode == .local else"))
-        XCTAssertTrue(contentSource.contains("try await store.createCloudLibrary(named: libraryName)"))
-    }
-
-    func testCloudAccountServiceUsesConfiguredCloudKitContainer() throws {
-        let serviceSource = try String(contentsOf: cloudAccountStateServiceURL(), encoding: .utf8)
-
-        XCTAssertTrue(serviceSource.contains("init(containerIdentifier: String = CloudKitConfiguration.containerIdentifier)"))
-        XCTAssertFalse(serviceSource.contains("container: CKContainer = .default()"))
-        XCTAssertFalse(serviceSource.contains("CKContainer.default()"))
     }
 
     func testCustomDialogsDoNotHideToolbarChrome() throws {
@@ -345,14 +300,6 @@ final class ArchitectureGuardTests: XCTestCase {
 
     private func inspectorURL() -> URL {
         repositoryRoot().appendingPathComponent("Momento/Features/Inspector/MomentoInspectorView.swift")
-    }
-
-    private func createLibraryDialogURL() -> URL {
-        repositoryRoot().appendingPathComponent("Momento/Features/Library/MomentoCreateLibraryDialog.swift")
-    }
-
-    private func cloudAccountStateServiceURL() -> URL {
-        repositoryRoot().appendingPathComponent("Momento/Services/CloudAccountStateService.swift")
     }
 
     private func settingsURL() -> URL {

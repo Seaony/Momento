@@ -1,126 +1,10 @@
 // 中文注释：本文件封装资源库 security-scoped bookmark 的解析和访问生命周期。
 import Foundation
 
-enum LibraryStorageMode: String, Codable, Sendable {
-    case local
-    case cloud
-}
-
-enum RecentLibraryStoreError: LocalizedError {
-    case invalidCloudLibraryDescriptor
-    case duplicateLibraryDescriptorID
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidCloudLibraryDescriptor:
-            "Cloud library descriptors require a cloud library ID and iCloud account ID."
-        case .duplicateLibraryDescriptorID:
-            "A recent library already uses this registry ID."
-        }
-    }
-}
-
 struct RecentLibraryReference: Identifiable, Hashable, Codable, Sendable {
     var id: String
     var name: String
-    var storageMode: LibraryStorageMode
-    var localPackageBookmarkData: Data?
-    var cloudLibraryID: String?
-    var cloudAccountID: String?
-    var lastOpenedAt: Date?
-    var lastKnownSyncState: String?
-
-    var bookmarkData: Data? {
-        localPackageBookmarkData
-    }
-
-    var isValidStorageDescriptor: Bool {
-        guard id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
-              name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
-            return false
-        }
-
-        return switch storageMode {
-        case .local:
-            localPackageBookmarkData?.isEmpty == false
-        case .cloud:
-            cloudLibraryID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-                && cloudAccountID?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-        }
-    }
-
-    init(id: String, name: String, bookmarkData: Data) {
-        self.init(
-            id: id,
-            name: name,
-            storageMode: .local,
-            localPackageBookmarkData: bookmarkData,
-            cloudLibraryID: nil,
-            cloudAccountID: nil,
-            lastOpenedAt: nil,
-            lastKnownSyncState: nil
-        )
-    }
-
-    init(
-        id: String,
-        name: String,
-        storageMode: LibraryStorageMode,
-        localPackageBookmarkData: Data?,
-        cloudLibraryID: String?,
-        cloudAccountID: String? = nil,
-        lastOpenedAt: Date?,
-        lastKnownSyncState: String?
-    ) {
-        self.id = id
-        self.name = name
-        self.storageMode = storageMode
-        self.localPackageBookmarkData = localPackageBookmarkData
-        self.cloudLibraryID = cloudLibraryID
-        self.cloudAccountID = cloudAccountID
-        self.lastOpenedAt = lastOpenedAt
-        self.lastKnownSyncState = lastKnownSyncState
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case id
-        case name
-        case storageMode
-        case localPackageBookmarkData
-        case cloudLibraryID
-        case cloudAccountID
-        case lastOpenedAt
-        case lastKnownSyncState
-        case bookmarkData
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        id = try container.decode(String.self, forKey: .id)
-        name = try container.decode(String.self, forKey: .name)
-        storageMode = try container.decodeIfPresent(LibraryStorageMode.self, forKey: .storageMode) ?? .local
-        localPackageBookmarkData = try container.decodeIfPresent(Data.self, forKey: .localPackageBookmarkData)
-            ?? container.decodeIfPresent(Data.self, forKey: .bookmarkData)
-        cloudLibraryID = try container.decodeIfPresent(String.self, forKey: .cloudLibraryID)
-        cloudAccountID = try container.decodeIfPresent(String.self, forKey: .cloudAccountID)
-        lastOpenedAt = try container.decodeIfPresent(Date.self, forKey: .lastOpenedAt)
-        lastKnownSyncState = try container.decodeIfPresent(String.self, forKey: .lastKnownSyncState)
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(id, forKey: .id)
-        try container.encode(name, forKey: .name)
-        try container.encode(storageMode, forKey: .storageMode)
-        try container.encodeIfPresent(localPackageBookmarkData, forKey: .localPackageBookmarkData)
-        try container.encodeIfPresent(cloudLibraryID, forKey: .cloudLibraryID)
-        try container.encodeIfPresent(cloudAccountID, forKey: .cloudAccountID)
-        try container.encodeIfPresent(lastOpenedAt, forKey: .lastOpenedAt)
-        try container.encodeIfPresent(lastKnownSyncState, forKey: .lastKnownSyncState)
-        if storageMode == .local {
-            try container.encodeIfPresent(localPackageBookmarkData, forKey: .bookmarkData)
-        }
-    }
+    var bookmarkData: Data
 }
 
 final class LibraryAccessScope {
@@ -145,31 +29,17 @@ final class LibraryAccessScope {
 struct RecentLibraryStore {
     private let defaults: UserDefaults
     private let key = "recentLibraries"
-    private let recentLibraryLimitPerStorageMode = 10
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
     }
 
-    func load(includeLocalLibraries: Bool = true, cloudAccountID: String? = nil) -> [RecentLibraryReference] {
+    func load() -> [RecentLibraryReference] {
         guard let data = defaults.data(forKey: key),
-              let decodedReferences = decodeReferences(from: data) else {
+              let references = try? JSONDecoder.momento.decode([RecentLibraryReference].self, from: data) else {
             return []
         }
-        let validReferences = decodedReferences.references.filter(\.isValidStorageDescriptor)
-        if decodedReferences.requiresCleanup || validReferences != decodedReferences.references {
-            try? saveReferences(validReferences)
-        }
-        guard !includeLocalLibraries else {
-            return validReferences
-        }
-        guard let cloudAccountID = Self.normalizedIdentifier(cloudAccountID) else {
-            return []
-        }
-        return validReferences.filter { reference in
-            reference.storageMode == .cloud
-                && Self.normalizedIdentifier(reference.cloudAccountID) == cloudAccountID
-        }
+        return references
     }
 
     func save(_ library: AssetLibrary) throws {
@@ -177,85 +47,15 @@ struct RecentLibraryStore {
             return
         }
 
-        let loadedReferences = load()
-        guard !loadedReferences.contains(where: { reference in
-            reference.storageMode != .local && reference.id == library.id
-        }) else {
-            throw RecentLibraryStoreError.duplicateLibraryDescriptorID
-        }
-
         let bookmarkData = try packageURL.bookmarkData(
             options: [.withSecurityScope],
             includingResourceValuesForKeys: nil,
             relativeTo: nil
         )
-        let reference = RecentLibraryReference(
-            id: library.id,
-            name: library.name,
-            storageMode: .local,
-            localPackageBookmarkData: bookmarkData,
-            cloudLibraryID: nil,
-            lastOpenedAt: Date(),
-            lastKnownSyncState: nil
-        )
-        var references = loadedReferences.filter { reference in
-            reference.storageMode != .local || reference.id != library.id
-        }
+        let reference = RecentLibraryReference(id: library.id, name: library.name, bookmarkData: bookmarkData)
+        var references = load().filter { $0.id != library.id }
         references.insert(reference, at: 0)
-        try saveReferences(limitedReferences(references))
-    }
-
-    func saveCloudPlaceholder(
-        id: String,
-        name: String,
-        cloudLibraryID: String,
-        accountState: CloudAccountState,
-        lastKnownSyncState: String? = nil
-    ) throws {
-        guard case .available(let accountIdentity) = accountState else {
-            throw RecentLibraryStoreError.invalidCloudLibraryDescriptor
-        }
-        let trimmedID = id.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedCloudLibraryID = cloudLibraryID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedCloudAccountID = accountIdentity.cloudAccountID.trimmingCharacters(in: .whitespacesAndNewlines)
-        let reference = RecentLibraryReference(
-            id: trimmedID,
-            name: trimmedName,
-            storageMode: .cloud,
-            localPackageBookmarkData: nil,
-            cloudLibraryID: trimmedCloudLibraryID,
-            cloudAccountID: trimmedCloudAccountID,
-            lastOpenedAt: nil,
-            lastKnownSyncState: lastKnownSyncState
-        )
-        guard reference.isValidStorageDescriptor else {
-            throw RecentLibraryStoreError.invalidCloudLibraryDescriptor
-        }
-        let loadedReferences = load()
-        guard !loadedReferences.contains(where: { existingReference in
-            guard existingReference.id == trimmedID else {
-                return false
-            }
-            guard existingReference.storageMode == .cloud else {
-                return true
-            }
-            let existingCloudLibraryID = Self.normalizedIdentifier(existingReference.cloudLibraryID)
-            let existingCloudAccountID = Self.normalizedIdentifier(existingReference.cloudAccountID)
-            return existingCloudLibraryID != trimmedCloudLibraryID || existingCloudAccountID != trimmedCloudAccountID
-        }) else {
-            throw RecentLibraryStoreError.duplicateLibraryDescriptorID
-        }
-        var references = loadedReferences.filter { existingReference in
-            guard existingReference.storageMode == .cloud else {
-                return true
-            }
-            let existingCloudLibraryID = Self.normalizedIdentifier(existingReference.cloudLibraryID)
-            let existingCloudAccountID = Self.normalizedIdentifier(existingReference.cloudAccountID)
-            return existingCloudLibraryID != trimmedCloudLibraryID || existingCloudAccountID != trimmedCloudAccountID
-        }
-        references.insert(reference, at: 0)
-        try saveReferences(limitedReferences(references))
+        try saveReferences(Array(references.prefix(10)))
     }
 
     func updateName(id: RecentLibraryReference.ID, name: String) throws {
@@ -282,8 +82,7 @@ struct RecentLibraryStore {
     func move(id: RecentLibraryReference.ID, relativeTo targetID: RecentLibraryReference.ID, insertAfterTarget: Bool) throws {
         var references = load()
         guard let sourceIndex = references.firstIndex(where: { $0.id == id }),
-              let targetIndexBeforeMove = references.firstIndex(where: { $0.id == targetID }),
-              references[sourceIndex].storageMode == references[targetIndexBeforeMove].storageMode,
+              references.contains(where: { $0.id == targetID }),
               id != targetID else {
             return
         }
@@ -303,57 +102,14 @@ struct RecentLibraryStore {
         defaults.set(data, forKey: key)
     }
 
-    private func limitedReferences(_ references: [RecentLibraryReference]) -> [RecentLibraryReference] {
-        var localCount = 0
-        var cloudCount = 0
-        return references.filter { reference in
-            switch reference.storageMode {
-            case .local:
-                localCount += 1
-                return localCount <= recentLibraryLimitPerStorageMode
-            case .cloud:
-                cloudCount += 1
-                return cloudCount <= recentLibraryLimitPerStorageMode
-            }
-        }
-    }
-
-    private func decodeReferences(from data: Data) -> (references: [RecentLibraryReference], requiresCleanup: Bool)? {
-        if let references = try? JSONDecoder.momento.decode([RecentLibraryReference].self, from: data) {
-            return (references, false)
-        }
-
-        guard let wrappers = try? JSONDecoder.momento.decode([LossyRecentLibraryReference].self, from: data) else {
-            return nil
-        }
-        return (wrappers.compactMap(\.reference), true)
-    }
-
     func resolve(_ reference: RecentLibraryReference) throws -> (url: URL, isStale: Bool) {
-        guard reference.storageMode == .local, let bookmarkData = reference.localPackageBookmarkData else {
-            throw CocoaError(.fileReadUnsupportedScheme)
-        }
-
         var isStale = false
         let url = try URL(
-            resolvingBookmarkData: bookmarkData,
+            resolvingBookmarkData: reference.bookmarkData,
             options: [.withSecurityScope],
             relativeTo: nil,
             bookmarkDataIsStale: &isStale
         )
         return (url, isStale)
-    }
-
-    private static func normalizedIdentifier(_ value: String?) -> String? {
-        let trimmedValue = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmedValue.isEmpty ? nil : trimmedValue
-    }
-}
-
-private struct LossyRecentLibraryReference: Decodable {
-    let reference: RecentLibraryReference?
-
-    init(from decoder: Decoder) throws {
-        reference = try? RecentLibraryReference(from: decoder)
     }
 }

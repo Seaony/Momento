@@ -47,10 +47,9 @@ struct MomentoCreateLibraryDialog: View {
 
     var mode: MomentoLibraryNameDialogMode
     var initialName: String
-    var onSubmit: (String, LibraryStorageMode) -> Void
+    var onSubmit: (String) -> Void
 
     @State private var libraryName: String
-    @State private var selectedStorageMode: LibraryStorageMode = .local
     @State private var isCancelButtonHovered = false
     @State private var isPrimaryButtonHovered = false
     @FocusState private var isNameFocused: Bool
@@ -59,15 +58,11 @@ struct MomentoCreateLibraryDialog: View {
         libraryName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var primaryActionTitleKey: String {
-        mode == .create && selectedStorageMode == .cloud ? "Create Library" : mode.primaryActionKey
-    }
-
     init(
         mode: MomentoLibraryNameDialogMode = .create,
         isPresented: Binding<Bool>,
         initialName: String,
-        onSubmit: @escaping (String, LibraryStorageMode) -> Void
+        onSubmit: @escaping (String) -> Void
     ) {
         self.mode = mode
         self._isPresented = isPresented
@@ -109,10 +104,6 @@ struct MomentoCreateLibraryDialog: View {
                         .focused($isNameFocused)
                         .onSubmit(submit)
 
-                    if mode == .create {
-                        storageModePicker
-                    }
-
                     HStack(spacing: 14) {
                         Button {
                             dismiss()
@@ -135,7 +126,7 @@ struct MomentoCreateLibraryDialog: View {
                         Button {
                             submit()
                         } label: {
-                            Text(localization.string(primaryActionTitleKey))
+                            Text(localization.string(mode.primaryActionKey))
                                 .font(.system(size: 14, weight: .semibold))
                                 .padding(.horizontal, 18)
                                 .padding(.vertical, 6)
@@ -191,84 +182,14 @@ struct MomentoCreateLibraryDialog: View {
             }
     }
 
-    private var storageModePicker: some View {
-        HStack(spacing: 8) {
-            storageModeOption(
-                mode: .local,
-                titleKey: "On This Mac",
-                systemImage: "macbook",
-                isDisabled: false
-            )
-
-            storageModeOption(
-                mode: .cloud,
-                titleKey: "iCloud",
-                systemImage: "icloud.fill",
-                isDisabled: false
-            )
-        }
-    }
-
-    private func storageModeOption(
-        mode: LibraryStorageMode,
-        titleKey: String,
-        systemImage: String,
-        isDisabled: Bool
-    ) -> some View {
-        let isSelected = selectedStorageMode == mode
-        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-
-        return Button {
-            guard !isDisabled else {
-                return
-            }
-            selectedStorageMode = mode
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: systemImage)
-                    .font(.system(size: 13, weight: .semibold))
-                    .frame(width: 16)
-
-                Text(localization.string(titleKey))
-                    .font(.system(size: 12, weight: .semibold))
-                    .lineLimit(1)
-
-                if isDisabled {
-                    Text(localization.string("Not Available"))
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(MomentoTheme.secondaryText)
-                        .lineLimit(1)
-                }
-            }
-            .foregroundStyle(isSelected ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
-            .padding(.horizontal, 10)
-            .frame(maxWidth: .infinity, minHeight: 34)
-            .background {
-                if isSelected {
-                    Color.clear.glassEffect(.regular.tint(Color.accentColor), in: shape)
-                } else {
-                    Color.clear.glassEffect(.regular, in: shape)
-                }
-            }
-            .overlay {
-                shape.strokeBorder(isSelected ? Color.accentColor : MomentoTheme.subtleStroke, lineWidth: 1)
-            }
-            .contentShape(shape)
-        }
-        .buttonStyle(.plain)
-        .disabled(isDisabled)
-        .help(isDisabled ? localization.string("Cloud libraries are not available yet.") : "")
-    }
-
     private func submit() {
         guard !trimmedLibraryName.isEmpty else {
             return
         }
 
         let name = trimmedLibraryName
-        let storageMode = selectedStorageMode
         dismiss()
-        onSubmit(name, storageMode)
+        onSubmit(name)
     }
 
     private func dismiss() {
@@ -822,7 +743,7 @@ private extension View {
     MomentoCreateLibraryDialog(
         isPresented: .constant(true),
         initialName: "Untitled Library",
-        onSubmit: { _, _ in }
+        onSubmit: { _ in }
     )
     .frame(width: 640, height: 420)
 }
