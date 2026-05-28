@@ -8,6 +8,7 @@
 - `../README.md`: 当前用户侧项目说明、构建、测试和发布入口。
 - `project-optimization-guide.md`: 当前项目优化顺序、过度设计风险和执行模板。
 - `performance-optimization-plan.md`: 当前性能优化调研、测量门槛和分阶段路线。
+- `performance-deep-review.md`: 当前实测代码走查的具体性能卡点与优化方案（含 file:line）。
 - `update-release-flow.md`: 当前发布更新流程。
 
 ## Historical
