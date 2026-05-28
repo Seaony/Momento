@@ -187,6 +187,7 @@ final class ArchitectureGuardTests: XCTestCase {
         let projectSource = try String(contentsOf: projectURL(), encoding: .utf8)
         let appSource = try String(contentsOf: appURL(), encoding: .utf8)
         let settingsSource = try String(contentsOf: settingsURL(), encoding: .utf8)
+        let updateServiceSource = try String(contentsOf: updateServiceURL(), encoding: .utf8)
 
         XCTAssertEqual(infoPlist["SUFeedURL"] as? String, "https://seaony.github.io/Momento/appcast.xml")
         XCTAssertEqual(infoPlist["SUPublicEDKey"] as? String, "GPqtCAsJ50slxZrQHqwhjvY5V6XTjxhFQFNnLq8sNu0=")
@@ -206,6 +207,9 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(appSource.contains("@StateObject private var updateService = AppUpdateService()"))
         XCTAssertTrue(appSource.contains("MomentoUpdateCommands(localization: localization, updateService: updateService)"))
         XCTAssertTrue(settingsSource.contains("updateService.checkForUpdates()"))
+        XCTAssertTrue(updateServiceSource.contains("updaterController.updater.automaticallyChecksForUpdates"))
+        XCTAssertTrue(updateServiceSource.contains("updaterController.updater.checkForUpdatesInBackground()"))
+        XCTAssertTrue(updateServiceSource.contains("return immediateFocus"))
     }
 
     func testInspectorDoesNotExposeNotesEditor() throws {
@@ -518,6 +522,10 @@ final class ArchitectureGuardTests: XCTestCase {
 
     private func browserImportFeedbackURL() -> URL {
         repositoryRoot().appendingPathComponent("Momento/Services/BrowserImportNotificationService.swift")
+    }
+
+    private func updateServiceURL() -> URL {
+        repositoryRoot().appendingPathComponent("Momento/Services/AppUpdateService.swift")
     }
 
     private func sidebarTitlebarURL() -> URL {

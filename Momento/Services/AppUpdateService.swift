@@ -19,6 +19,7 @@ final class AppUpdateService: NSObject, ObservableObject {
             updaterDelegate: self,
             userDriverDelegate: self
         )
+        checkForUpdatesInBackgroundOnLaunch()
 
         canCheckObservation = updaterController.updater.observe(
             \.canCheckForUpdates,
@@ -32,6 +33,14 @@ final class AppUpdateService: NSObject, ObservableObject {
 
     func checkForUpdates() {
         updaterController.checkForUpdates(nil)
+    }
+
+    private func checkForUpdatesInBackgroundOnLaunch() {
+        guard updaterController.updater.automaticallyChecksForUpdates else {
+            return
+        }
+
+        updaterController.updater.checkForUpdatesInBackground()
     }
 }
 
@@ -70,8 +79,7 @@ extension AppUpdateService: SPUStandardUserDriverDelegate {
         _ update: SUAppcastItem,
         andInImmediateFocus immediateFocus: Bool
     ) -> Bool {
-        availableUpdateDisplayVersion = update.displayVersionString
-        return false
+        return immediateFocus
     }
 
     func standardUserDriverWillHandleShowingUpdate(
