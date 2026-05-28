@@ -163,7 +163,7 @@ final class ArchitectureGuardTests: XCTestCase {
         )
         let batchStart = try XCTUnwrap(
             assetGridSource.range(
-                of: "collectionView.performBatchUpdates {",
+                of: "collectionView.animator().performBatchUpdates {",
                 range: reflowStart.upperBound..<assetGridSource.endIndex
             )
         )
