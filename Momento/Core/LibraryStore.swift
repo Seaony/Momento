@@ -1051,7 +1051,11 @@ final class LibraryStore {
     }
 
     private var currentLibraryAssets: [AssetItem] {
-        allCurrentLibraryAssets.filter { !$0.isTrashed }
+        guard let currentLibrary else {
+            return []
+        }
+
+        return assets.filter { $0.libraryID == currentLibrary.id && !$0.isTrashed }
     }
 
     private var allCurrentLibraryAssets: [AssetItem] {
@@ -1217,10 +1221,20 @@ final class LibraryStore {
     }
 
     private func mergeAssets(_ updatedAssets: [AssetItem]) {
+        guard !updatedAssets.isEmpty else {
+            return
+        }
+
+        var indexByID: [AssetItem.ID: Int] = Dictionary(minimumCapacity: assets.count)
+        for (index, asset) in assets.enumerated() where indexByID[asset.id] == nil {
+            indexByID[asset.id] = index
+        }
+
         for asset in updatedAssets {
-            if let index = assets.firstIndex(where: { $0.id == asset.id }) {
+            if let index = indexByID[asset.id] {
                 assets[index] = asset
             } else {
+                indexByID[asset.id] = assets.count
                 assets.append(asset)
             }
         }
