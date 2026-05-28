@@ -379,8 +379,12 @@ struct AssetCollectionGridView: NSViewRepresentable {
             previousRevision: context.coordinator.currentVisibleAssetsRevision,
             nextRevision: visibleAssetsRevision
         ) {
-            context.coordinator.currentVisibleAssetsRevision = visibleAssetsRevision
-            applyAssetChanges(to: collectionView, coordinator: context.coordinator)
+            if context.coordinator.shouldDeferAssetChangesForActiveDrag {
+                context.coordinator.deferAssetChangesUntilDragEnds()
+            } else {
+                context.coordinator.currentVisibleAssetsRevision = visibleAssetsRevision
+                applyAssetChanges(to: collectionView, coordinator: context.coordinator)
+            }
         }
 
         if context.coordinator.currentLocalization != localization {
@@ -490,6 +494,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
             return
         }
 
+        prepareAnimatedReflowLayout(for: collectionView, deletedIndexPaths: changeSet.deletedIndexPaths)
         coordinator.currentAssets = assets
         coordinator.rebuildAssetIndex(for: assets)
         prepareLayout(for: collectionView)
@@ -508,6 +513,25 @@ struct AssetCollectionGridView: NSViewRepresentable {
         } completionHandler: { _ in
             coordinator.refreshVisibleItems()
         }
+    }
+
+    private func prepareAnimatedReflowLayout(
+        for collectionView: NSCollectionView,
+        deletedIndexPaths: Set<IndexPath>
+    ) {
+        guard let layout = collectionView.collectionViewLayout as? AssetCollectionAnimatedReflowLayout,
+              !deletedIndexPaths.isEmpty else {
+            return
+        }
+
+        let disappearingFrames = deletedIndexPaths.reduce(into: [IndexPath: NSRect]()) { result, indexPath in
+            if let item = collectionView.item(at: indexPath) {
+                result[indexPath] = item.view.frame
+            } else if let attributes = collectionView.collectionViewLayout?.layoutAttributesForItem(at: indexPath) {
+                result[indexPath] = attributes.frame
+            }
+        }
+        layout.prepareForAnimatedReflow(disappearingFramesByIndexPath: disappearingFrames)
     }
 
     private func itemUpdateIndexPaths(from oldAssets: [AssetItem], to newAssets: [AssetItem]) -> Set<IndexPath>? {
@@ -579,6 +603,8 @@ extension AssetCollectionGridView {
         private var activeDragPrimaryAssetID: AssetItem.ID?
         private var activeDragExportBatch: AssetDragExportBatch?
         private var activeDragSourcePlaceholders: [NSView] = []
+        private var isAssetDragSessionActive = false
+        private var hasDeferredAssetChanges = false
 
         init(_ parent: AssetCollectionGridView) {
             self.parent = parent
@@ -593,7 +619,7 @@ extension AssetCollectionGridView {
             _ collectionView: NSCollectionView,
             numberOfItemsInSection section: Int
         ) -> Int {
-            parent.assets.count
+            currentAssets.count
         }
 
         func collectionView(
@@ -609,7 +635,7 @@ extension AssetCollectionGridView {
                 return item
             }
 
-            let asset = parent.assets[indexPath.item]
+            let asset = currentAssets[indexPath.item]
             assetItem.onHoverPreviewChange = { [weak self, assetID = asset.id] isHovered in
                 self?.updateHoveredPreviewAsset(assetID: assetID, isHovered: isHovered)
             }
@@ -632,17 +658,17 @@ extension AssetCollectionGridView {
         }
 
         func collectionView(_ collectionView: NSCollectionView, prefetchItemsAt indexPaths: [IndexPath]) {
-            for indexPath in indexPaths where parent.assets.indices.contains(indexPath.item) {
+            for indexPath in indexPaths where currentAssets.indices.contains(indexPath.item) {
                 AssetPreviewImageProvider.shared.prefetchImage(
-                    for: parent.assets[indexPath.item],
+                    for: currentAssets[indexPath.item],
                     sourceAccessValidator: parent.assetSourceReadValidator()
                 )
             }
         }
 
         func collectionView(_ collectionView: NSCollectionView, cancelPrefetchingForItemsAt indexPaths: [IndexPath]) {
-            for indexPath in indexPaths where parent.assets.indices.contains(indexPath.item) {
-                AssetPreviewImageProvider.shared.cancelPrefetch(for: parent.assets[indexPath.item])
+            for indexPath in indexPaths where currentAssets.indices.contains(indexPath.item) {
+                AssetPreviewImageProvider.shared.cancelPrefetch(for: currentAssets[indexPath.item])
             }
         }
 
@@ -684,11 +710,11 @@ extension AssetCollectionGridView {
         func collectionView(_ collectionView: NSCollectionView, canDragItemsAt indexPaths: Set<IndexPath>, with event: NSEvent) -> Bool {
             let location = collectionView.convert(event.locationInWindow, from: nil)
             guard let indexPath = collectionView.indexPathForItem(at: location),
-                  parent.assets.indices.contains(indexPath.item) else {
+                  currentAssets.indices.contains(indexPath.item) else {
                 return false
             }
 
-            let asset = parent.assets[indexPath.item]
+            let asset = currentAssets[indexPath.item]
             guard !asset.isTrashed else {
                 return false
             }
@@ -703,11 +729,11 @@ extension AssetCollectionGridView {
         }
 
         func collectionView(_ collectionView: NSCollectionView, pasteboardWriterForItemAt indexPath: IndexPath) -> NSPasteboardWriting? {
-            guard parent.assets.indices.contains(indexPath.item) else {
+            guard currentAssets.indices.contains(indexPath.item) else {
                 return nil
             }
 
-            let asset = parent.assets[indexPath.item]
+            let asset = currentAssets[indexPath.item]
             guard !asset.isTrashed else {
                 return nil
             }
@@ -753,7 +779,8 @@ extension AssetCollectionGridView {
             willBeginAt screenPoint: NSPoint,
             forItemsAt indexPaths: Set<IndexPath>
         ) {
-            showDragSourcePlaceholders(for: indexPaths, in: collectionView)
+            isAssetDragSessionActive = true
+            showDragSourcePlaceholders(for: indexPaths.union(collectionView.selectionIndexPaths), in: collectionView)
         }
 
         func collectionView(
@@ -762,9 +789,40 @@ extension AssetCollectionGridView {
             endedAt screenPoint: NSPoint,
             dragOperation operation: NSDragOperation
         ) {
+            isAssetDragSessionActive = false
             activeDragPrimaryAssetID = nil
             activeDragExportBatch = nil
             hideDragSourcePlaceholders()
+            applyDeferredAssetChangesAfterDragIfNeeded()
+        }
+
+        var shouldDeferAssetChangesForActiveDrag: Bool {
+            isAssetDragSessionActive
+        }
+
+        func deferAssetChangesUntilDragEnds() {
+            hasDeferredAssetChanges = true
+        }
+
+        func applyDeferredAssetChangesAfterDragIfNeeded() {
+            guard hasDeferredAssetChanges,
+                  let collectionView else {
+                hasDeferredAssetChanges = false
+                return
+            }
+
+            hasDeferredAssetChanges = false
+            guard AssetCollectionGridUpdateDecision.shouldApplyAssetChanges(
+                previousRevision: currentVisibleAssetsRevision,
+                nextRevision: parent.visibleAssetsRevision
+            ) else {
+                return
+            }
+
+            currentVisibleAssetsRevision = parent.visibleAssetsRevision
+            parent.applyAssetChanges(to: collectionView, coordinator: self)
+            syncSelection()
+            syncHoveredPreviewAsset()
         }
 
         func syncSelection() {
@@ -798,13 +856,13 @@ extension AssetCollectionGridView {
                 return
             }
 
-            for indexPath in collectionView.indexPathsForVisibleItems() where parent.assets.indices.contains(indexPath.item) {
+            for indexPath in collectionView.indexPathsForVisibleItems() where currentAssets.indices.contains(indexPath.item) {
                 guard let item = collectionView.item(at: indexPath) as? AssetCollectionViewItem else {
                     continue
                 }
 
                 item.updateVisibleState(
-                    with: parent.assets[indexPath.item],
+                    with: currentAssets[indexPath.item],
                     viewMode: parent.viewMode,
                     localization: parent.localization
                 )
@@ -818,23 +876,23 @@ extension AssetCollectionGridView {
 
             guard
                 let indexPath = collectionView.indexPathForItem(at: sender.location(in: collectionView)),
-                parent.assets.indices.contains(indexPath.item)
+                currentAssets.indices.contains(indexPath.item)
             else {
                 return
             }
 
-            parent.onDoubleClick(parent.assets[indexPath.item])
+            parent.onDoubleClick(currentAssets[indexPath.item])
         }
 
         func startSpacePreview() {
             guard let collectionView,
                   let indexPath = previewIndexPath(in: collectionView),
-                  parent.assets.indices.contains(indexPath.item) else {
+                  currentAssets.indices.contains(indexPath.item) else {
                 return
             }
 
             let sourceFrame = sourceFrameForPreview(at: indexPath, in: collectionView)
-            parent.onSpacePreviewStart(parent.assets[indexPath.item], sourceFrame)
+            parent.onSpacePreviewStart(currentAssets[indexPath.item], sourceFrame)
         }
 
         func endSpacePreview() {
@@ -865,55 +923,55 @@ extension AssetCollectionGridView {
 
         private func performContextMenuAction(assetID: AssetItem.ID, action: AssetContextMenuAction) {
             guard let index = assetIndexByID[assetID],
-                  parent.assets.indices.contains(index) else {
+                  currentAssets.indices.contains(index) else {
                 return
             }
 
-            let primaryAsset = parent.assets[index]
+            let primaryAsset = currentAssets[index]
             parent.onContextMenuAction(primaryAsset, contextAssets(primaryAssetID: assetID), action)
         }
 
         private func contextAssets(primaryAssetID: AssetItem.ID) -> [AssetItem] {
             guard let collectionView,
                   let primaryIndex = assetIndexByID[primaryAssetID],
-                  parent.assets.indices.contains(primaryIndex) else {
+                  currentAssets.indices.contains(primaryIndex) else {
                 return []
             }
 
             let primaryIndexPath = IndexPath(item: primaryIndex, section: 0)
             guard collectionView.selectionIndexPaths.contains(primaryIndexPath) else {
-                return [parent.assets[primaryIndex]]
+                return [currentAssets[primaryIndex]]
             }
 
             let selectedAssets = collectionView.selectionIndexPaths
                 .sorted { $0.item < $1.item }
                 .compactMap { indexPath -> AssetItem? in
-                    guard parent.assets.indices.contains(indexPath.item) else {
+                    guard currentAssets.indices.contains(indexPath.item) else {
                         return nil
                     }
-                    return parent.assets[indexPath.item]
+                    return currentAssets[indexPath.item]
                 }
 
-            return selectedAssets.isEmpty ? [parent.assets[primaryIndex]] : selectedAssets
+            return selectedAssets.isEmpty ? [currentAssets[primaryIndex]] : selectedAssets
         }
 
         private func toggleFavorite(assetID: AssetItem.ID) {
             guard let index = assetIndexByID[assetID],
-                  parent.assets.indices.contains(index) else {
+                  currentAssets.indices.contains(index) else {
                 return
             }
 
-            parent.onFavoriteToggle(parent.assets[index])
+            parent.onFavoriteToggle(currentAssets[index])
         }
 
         func toggleHoveredFavorite() -> Bool {
             guard let hoveredPreviewAssetID,
                   let index = assetIndexByID[hoveredPreviewAssetID],
-                  parent.assets.indices.contains(index) else {
+                  currentAssets.indices.contains(index) else {
                 return false
             }
 
-            parent.onFavoriteToggle(parent.assets[index])
+            parent.onFavoriteToggle(currentAssets[index])
             return true
         }
 
@@ -923,11 +981,11 @@ extension AssetCollectionGridView {
             }
 
             let selectedIDs = Set<AssetItem.ID>(collectionView.selectionIndexPaths.compactMap { indexPath in
-                guard parent.assets.indices.contains(indexPath.item) else {
+                guard currentAssets.indices.contains(indexPath.item) else {
                     return nil
                 }
 
-                return parent.assets[indexPath.item].id
+                return currentAssets[indexPath.item].id
             })
 
             guard !selectedIDs.isEmpty else {
@@ -952,7 +1010,7 @@ extension AssetCollectionGridView {
             }
 
             let selectedIDs = Set(collectionView.selectionIndexPaths.compactMap { indexPath in
-                parent.assets.indices.contains(indexPath.item) ? parent.assets[indexPath.item].id : nil
+                currentAssets.indices.contains(indexPath.item) ? currentAssets[indexPath.item].id : nil
             })
 
             parent.onSelectionChange(selectedIDs)
@@ -983,7 +1041,7 @@ extension AssetCollectionGridView {
             in collectionView: NSCollectionView
         ) -> [AssetItem.ID] {
             let selectedIndexPaths = collectionView.selectionIndexPaths
-            let orderedIDs = parent.assets.enumerated().compactMap { index, asset in
+            let orderedIDs = currentAssets.enumerated().compactMap { index, asset in
                 selectedIndexPaths.contains(IndexPath(item: index, section: 0)) && !asset.isTrashed ? asset.id : nil
             }
 
@@ -1140,12 +1198,18 @@ private final class AssetCollectionScrollView: NSScrollView {
     }
 }
 
-private final class AssetGridCollectionViewLayout: NSCollectionViewLayout {
+@MainActor
+private protocol AssetCollectionAnimatedReflowLayout: AnyObject {
+    func prepareForAnimatedReflow(disappearingFramesByIndexPath: [IndexPath: NSRect])
+}
+
+private final class AssetGridCollectionViewLayout: NSCollectionViewLayout, AssetCollectionAnimatedReflowLayout {
     private var contentSize: NSSize = .zero
     private var preparedBoundsSize: NSSize = .zero
     private var preparedColumnCount = 1
     private var preparedItemCount = 0
     private var appearingIndexPaths: Set<IndexPath> = []
+    private var pendingDisappearingFramesByIndexPath: [IndexPath: NSRect] = [:]
     private var disappearingFramesByIndexPath: [IndexPath: NSRect] = [:]
 
     private let minimumItemSize = NSSize(
@@ -1233,7 +1297,8 @@ private final class AssetGridCollectionViewLayout: NSCollectionViewLayout {
     override func prepare(forCollectionViewUpdates updateItems: [NSCollectionViewUpdateItem]) {
         super.prepare(forCollectionViewUpdates: updateItems)
         appearingIndexPaths = []
-        disappearingFramesByIndexPath = [:]
+        disappearingFramesByIndexPath = pendingDisappearingFramesByIndexPath
+        pendingDisappearingFramesByIndexPath = [:]
 
         for updateItem in updateItems {
             switch updateItem.updateAction {
@@ -1243,6 +1308,7 @@ private final class AssetGridCollectionViewLayout: NSCollectionViewLayout {
                 }
             case .delete:
                 if let indexPath = updateItem.indexPathBeforeUpdate,
+                   disappearingFramesByIndexPath[indexPath] == nil,
                    let attributes = layoutAttributes(forItem: indexPath.item) {
                     disappearingFramesByIndexPath[indexPath] = attributes.frame
                 }
@@ -1282,6 +1348,10 @@ private final class AssetGridCollectionViewLayout: NSCollectionViewLayout {
         super.finalizeCollectionViewUpdates()
         appearingIndexPaths = []
         disappearingFramesByIndexPath = [:]
+    }
+
+    func prepareForAnimatedReflow(disappearingFramesByIndexPath: [IndexPath: NSRect]) {
+        pendingDisappearingFramesByIndexPath = disappearingFramesByIndexPath
     }
 
     override func shouldInvalidateLayout(forBoundsChange newBounds: NSRect) -> Bool {
@@ -1331,7 +1401,7 @@ private final class AssetGridCollectionViewLayout: NSCollectionViewLayout {
     }
 }
 
-private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
+private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout, AssetCollectionAnimatedReflowLayout {
     var assets: [AssetItem] {
         didSet {
             invalidateLayout()
@@ -1344,6 +1414,7 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
     private var preparedColumnCount = 1
     private var preparedItemWidth = AssetCollectionMetrics.masonryItemWidth
     private var appearingIndexPaths: Set<IndexPath> = []
+    private var pendingDisappearingFramesByIndexPath: [IndexPath: NSRect] = [:]
     private var disappearingFramesByIndexPath: [IndexPath: NSRect] = [:]
 
     private let minimumItemWidth = AssetCollectionMetrics.masonryItemWidth
@@ -1451,7 +1522,8 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
     override func prepare(forCollectionViewUpdates updateItems: [NSCollectionViewUpdateItem]) {
         super.prepare(forCollectionViewUpdates: updateItems)
         appearingIndexPaths = []
-        disappearingFramesByIndexPath = [:]
+        disappearingFramesByIndexPath = pendingDisappearingFramesByIndexPath
+        pendingDisappearingFramesByIndexPath = [:]
 
         for updateItem in updateItems {
             switch updateItem.updateAction {
@@ -1461,6 +1533,7 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
                 }
             case .delete:
                 if let indexPath = updateItem.indexPathBeforeUpdate,
+                   disappearingFramesByIndexPath[indexPath] == nil,
                    cachedFrames.indices.contains(indexPath.item) {
                     disappearingFramesByIndexPath[indexPath] = cachedFrames[indexPath.item]
                 }
@@ -1500,6 +1573,10 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
         super.finalizeCollectionViewUpdates()
         appearingIndexPaths = []
         disappearingFramesByIndexPath = [:]
+    }
+
+    func prepareForAnimatedReflow(disappearingFramesByIndexPath: [IndexPath: NSRect]) {
+        pendingDisappearingFramesByIndexPath = disappearingFramesByIndexPath
     }
 
     override func shouldInvalidateLayout(forBoundsChange newBounds: NSRect) -> Bool {
