@@ -154,6 +154,41 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(bridgeSource.contains("com.seaony.momento.asset-ids"))
     }
 
+    func testAssetGridReflowKeepsLayoutMutationInsideBatchUpdates() throws {
+        let assetGridSource = try String(contentsOf: assetGridURL(), encoding: .utf8)
+        let reflowStart = try XCTUnwrap(
+            assetGridSource.range(
+                of: "prepareAnimatedReflowLayout(for: collectionView, deletedIndexPaths: changeSet.deletedIndexPaths)"
+            )
+        )
+        let batchStart = try XCTUnwrap(
+            assetGridSource.range(
+                of: "collectionView.performBatchUpdates {",
+                range: reflowStart.upperBound..<assetGridSource.endIndex
+            )
+        )
+        let currentAssetsUpdate = try XCTUnwrap(
+            assetGridSource.range(
+                of: "coordinator.currentAssets = assets",
+                range: batchStart.upperBound..<assetGridSource.endIndex
+            )
+        )
+        let layoutPreparation = try XCTUnwrap(
+            assetGridSource.range(
+                of: "prepareLayout(for: collectionView)",
+                range: currentAssetsUpdate.upperBound..<assetGridSource.endIndex
+            )
+        )
+
+        XCTAssertTrue(batchStart.lowerBound > reflowStart.lowerBound)
+        XCTAssertTrue(currentAssetsUpdate.lowerBound > batchStart.lowerBound)
+        XCTAssertTrue(layoutPreparation.lowerBound > currentAssetsUpdate.lowerBound)
+
+        let preBatchSource = String(assetGridSource[reflowStart.upperBound..<batchStart.lowerBound])
+        XCTAssertFalse(preBatchSource.contains("coordinator.currentAssets = assets"))
+        XCTAssertFalse(preBatchSource.contains("prepareLayout(for: collectionView)"))
+    }
+
     func testAssetGridSupportsCommandDeleteAssetShortcut() throws {
         let assetGridSource = try String(contentsOf: assetGridURL(), encoding: .utf8)
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)

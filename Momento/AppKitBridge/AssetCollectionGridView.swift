@@ -498,10 +498,11 @@ struct AssetCollectionGridView: NSViewRepresentable {
         }
 
         prepareAnimatedReflowLayout(for: collectionView, deletedIndexPaths: changeSet.deletedIndexPaths)
-        coordinator.currentAssets = assets
-        coordinator.rebuildAssetIndex(for: assets)
-        prepareLayout(for: collectionView)
         collectionView.performBatchUpdates {
+            coordinator.currentAssets = assets
+            coordinator.rebuildAssetIndex(for: assets)
+            prepareLayout(for: collectionView)
+
             if !changeSet.deletedIndexPaths.isEmpty {
                 collectionView.deleteItems(at: changeSet.deletedIndexPaths)
             }
