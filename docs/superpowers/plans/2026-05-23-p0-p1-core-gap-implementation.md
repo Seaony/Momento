@@ -1,5 +1,7 @@
 # P0 P1 Core Gap Implementation Plan
 
+> Status: historical execution plan. It records the implementation context from 2026-05-23; current behavior and constraints are defined by `README.md`, `AGENTS.md`, and the current review docs.
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Close Momento's P0/P1 product gaps without turning the app into a broad Eagle clone: soft trash, persistent notes, drag organization, first-class tags, folder hierarchy import, and library import/export.

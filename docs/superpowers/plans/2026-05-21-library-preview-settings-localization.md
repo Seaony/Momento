@@ -1,5 +1,7 @@
 # Library, Preview, Settings, and Localization Implementation Plan
 
+> Status: historical execution plan. It records the implementation context from 2026-05-21; current behavior and constraints are defined by `README.md`, `AGENTS.md`, and the current review docs.
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Turn Momento into an Eagle-style library-based macOS app with real library creation/opening/switching, image previews with resolution subtitles, a native Settings window, and English/Simplified Chinese localization.

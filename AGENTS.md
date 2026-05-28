@@ -44,7 +44,7 @@ Momento 是原生 macOS 资产管理应用，使用 SwiftUI + AppKit，不使用
 
 - `Core/LibraryStore.swift` 是 `@MainActor @Observable` 中央状态对象。UI 通过 store 修改状态，不直接访问存储层。
 - `Core/AssetModels.swift` 存放 `nonisolated Sendable` 值类型，跨 actor 边界传递。
-- `Storage/` 存放本地 `.momentolibrary` 包、Core Data、manifest、security-scoped bookmark、recent libraries。
+- `Storage/` 存放本地 `.momento` 包、Core Data、manifest、security-scoped bookmark、recent libraries；`.momentolibrary` 仅作为 legacy 包扩展名继续支持打开/导入。
 - `Services/` 存放导入、哈希、缩略图、颜色分析等后台任务。
 - `AppKitBridge/AssetCollectionGridView.swift` 是 100k+ 资产渲染路径，不要替换成 `LazyVGrid`。
 - `DesignSystem/MomentoGlass.swift` 是 glass、视觉材料和主题 token 的入口。
@@ -53,11 +53,11 @@ Momento 是原生 macOS 资产管理应用，使用 SwiftUI + AppKit，不使用
 库包结构遵循：
 
 ```text
-<Name>.momentolibrary/
+<Name>.momento/
 ├── manifest.json
 ├── database/library.sqlite
 ├── assets/<hashPrefix>/<sha256>.<ext>
-├── thumbnails/{small,medium,large}/
+├── thumbnails/<sha256>.png
 ├── previews/
 └── metadata/import-sessions/
 ```
