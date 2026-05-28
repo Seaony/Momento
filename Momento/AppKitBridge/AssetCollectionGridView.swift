@@ -337,6 +337,9 @@ struct AssetCollectionGridView: NSViewRepresentable {
         collectionView.onCommandDeleteShortcut = { [weak coordinator = context.coordinator] in
             coordinator?.commandDeleteSelectedAssets() ?? false
         }
+        collectionView.onPrimaryMouseUp = { [weak coordinator = context.coordinator] in
+            coordinator?.flushPendingSelectionPublish()
+        }
 
         let doubleClickRecognizer = NSClickGestureRecognizer(
             target: context.coordinator,
@@ -605,6 +608,8 @@ extension AssetCollectionGridView {
         private var activeDragSourcePlaceholders: [NSView] = []
         private var isAssetDragSessionActive = false
         private var hasDeferredAssetChanges = false
+        private weak var pendingSelectionPublishCollectionView: NSCollectionView?
+        private var hasPendingSelectionPublish = false
 
         init(_ parent: AssetCollectionGridView) {
             self.parent = parent
@@ -697,14 +702,14 @@ extension AssetCollectionGridView {
         ) {
             collectionView.window?.makeFirstResponder(collectionView)
             collapseSelectionAfterPlainClickIfNeeded(indexPaths, in: collectionView)
-            publishSelection(from: collectionView)
+            publishSelectionAfterCurrentMouseGesture(from: collectionView)
         }
 
         func collectionView(
             _ collectionView: NSCollectionView,
             didDeselectItemsAt indexPaths: Set<IndexPath>
         ) {
-            publishSelection(from: collectionView)
+            publishSelectionAfterCurrentMouseGesture(from: collectionView)
         }
 
         func collectionView(_ collectionView: NSCollectionView, canDragItemsAt indexPaths: Set<IndexPath>, with event: NSEvent) -> Bool {
@@ -719,6 +724,7 @@ extension AssetCollectionGridView {
                 return false
             }
 
+            cancelPendingSelectionPublish()
             activeDragPrimaryAssetID = asset.id
             return true
         }
@@ -774,6 +780,7 @@ extension AssetCollectionGridView {
             willBeginAt screenPoint: NSPoint,
             forItemsAt indexPaths: Set<IndexPath>
         ) {
+            cancelPendingSelectionPublish()
             isAssetDragSessionActive = true
             showDragSourcePlaceholders(for: indexPaths.union(collectionView.selectionIndexPaths), in: collectionView)
         }
@@ -788,6 +795,8 @@ extension AssetCollectionGridView {
             activeDragPrimaryAssetID = nil
             activeDragExportBatch = nil
             hideDragSourcePlaceholders()
+            cancelPendingSelectionPublish()
+            syncSelection()
             DispatchQueue.main.async { [weak self] in
                 self?.applyDeferredAssetChangesAfterDragIfNeeded()
             }
@@ -1013,6 +1022,38 @@ extension AssetCollectionGridView {
             parent.onSelectionChange(selectedIDs)
         }
 
+        private func publishSelectionAfterCurrentMouseGesture(from collectionView: NSCollectionView) {
+            guard !isSyncingSelection else {
+                return
+            }
+
+            guard let collectionView = collectionView as? AssetPreviewCollectionView,
+                  collectionView.isPrimaryMouseDown else {
+                publishSelection(from: collectionView)
+                return
+            }
+
+            pendingSelectionPublishCollectionView = collectionView
+            hasPendingSelectionPublish = true
+        }
+
+        func flushPendingSelectionPublish() {
+            guard hasPendingSelectionPublish,
+                  let collectionView = pendingSelectionPublishCollectionView else {
+                cancelPendingSelectionPublish()
+                return
+            }
+
+            hasPendingSelectionPublish = false
+            pendingSelectionPublishCollectionView = nil
+            publishSelection(from: collectionView)
+        }
+
+        private func cancelPendingSelectionPublish() {
+            hasPendingSelectionPublish = false
+            pendingSelectionPublishCollectionView = nil
+        }
+
         private func collapseSelectionAfterPlainClickIfNeeded(
             _ indexPaths: Set<IndexPath>,
             in collectionView: NSCollectionView
@@ -1102,8 +1143,10 @@ private final class AssetPreviewCollectionView: NSCollectionView {
     var onSpacePreviewEnd: (() -> Void)?
     var onFavoriteShortcut: (() -> Bool)?
     var onCommandDeleteShortcut: (() -> Bool)?
+    var onPrimaryMouseUp: (() -> Void)?
     private(set) var lastMouseDownIndexPath: IndexPath?
     private(set) var lastMouseDownModifierFlags: NSEvent.ModifierFlags = []
+    private(set) var isPrimaryMouseDown = false
 
     override var acceptsFirstResponder: Bool {
         true
@@ -1154,9 +1197,16 @@ private final class AssetPreviewCollectionView: NSCollectionView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        isPrimaryMouseDown = true
         lastMouseDownModifierFlags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         lastMouseDownIndexPath = indexPathForItem(at: convert(event.locationInWindow, from: nil))
         super.mouseDown(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        super.mouseUp(with: event)
+        isPrimaryMouseDown = false
+        onPrimaryMouseUp?()
     }
 }
 

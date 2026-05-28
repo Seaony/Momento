@@ -144,7 +144,12 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(assetGridSource.contains("deferAssetChangesUntilDragEnds()"))
         XCTAssertTrue(assetGridSource.contains("DispatchQueue.main.async { [weak self] in\n                self?.applyDeferredAssetChangesAfterDragIfNeeded()"))
         XCTAssertTrue(assetGridSource.contains("return [primaryAssetID]"))
+        XCTAssertTrue(assetGridSource.contains("collectionView.onPrimaryMouseUp"))
+        XCTAssertTrue(assetGridSource.contains("publishSelectionAfterCurrentMouseGesture(from: collectionView)"))
+        XCTAssertTrue(assetGridSource.contains("cancelPendingSelectionPublish()\n            activeDragPrimaryAssetID = asset.id"))
+        XCTAssertTrue(assetGridSource.contains("cancelPendingSelectionPublish()\n            isAssetDragSessionActive = true"))
         XCTAssertFalse(assetGridSource.contains("activeDragPrimaryAssetID = asset.id\n            if !collectionView.selectionIndexPaths.contains(indexPath)"))
+        XCTAssertFalse(assetGridSource.contains("collapseSelectionAfterPlainClickIfNeeded(indexPaths, in: collectionView)\n            publishSelection(from: collectionView)"))
         XCTAssertTrue(bridgeSource.contains("NSFilePromiseProvider"))
         XCTAssertTrue(bridgeSource.contains("com.seaony.momento.asset-ids"))
     }
