@@ -82,6 +82,18 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertFalse(source.contains(".blur(radius: isModalOverlayVisible"))
     }
 
+    func testEmptyGridBrowserExtensionButtonUsesVisibleGlassAppearance() throws {
+        let source = try String(contentsOf: contentViewURL(), encoding: .utf8)
+        let buttonStart = try XCTUnwrap(source.range(of: "Button {\n                installBrowserExtension()"))
+        let buttonEnd = try XCTUnwrap(source.range(of: ".padding(.top, 12)", range: buttonStart.upperBound..<source.endIndex))
+        let buttonSource = String(source[buttonStart.lowerBound..<buttonEnd.upperBound])
+
+        XCTAssertTrue(buttonSource.contains("Label(localization.string(\"Install Browser Extension\"), systemImage: \"puzzlepiece.extension.fill\")"))
+        XCTAssertTrue(buttonSource.contains(".buttonStyle(.glass)"))
+        XCTAssertTrue(buttonSource.contains(".foregroundStyle(MomentoTheme.primaryText)"))
+        XCTAssertTrue(buttonSource.contains(".environment(\\.appearsActive, true)"))
+    }
+
     func testSparkleUpdatesAreConfiguredForGitHubAppcast() throws {
         let infoData = try Data(contentsOf: infoPlistURL())
         let infoPlist = try XCTUnwrap(PropertyListSerialization.propertyList(from: infoData, options: [], format: nil) as? [String: Any])

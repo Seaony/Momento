@@ -1338,6 +1338,8 @@ struct ContentView: View {
             }
             .buttonStyle(.glass)
             .controlSize(.large)
+            .foregroundStyle(MomentoTheme.primaryText)
+            .environment(\.appearsActive, true)
             .scaleEffect(isInstallExtensionButtonHovered && !reduceMotion ? 1.035 : 1)
             .brightness(isInstallExtensionButtonHovered ? 0.08 : 0)
             .animation(reduceMotion ? nil : .smooth(duration: 0.16), value: isInstallExtensionButtonHovered)
