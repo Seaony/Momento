@@ -195,10 +195,9 @@ private struct InspectorTitlebarControlAccessoryView: View {
             }
         }
         .help(label)
-        .momentoTooltip(
+        .momentoTitlebarTooltip(
             label,
-            isPresented: isHovered,
-            yOffset: MomentoTheme.titlebarControlHitSize + 6
+            isPresented: isHovered
         )
         .accessibilityLabel(label)
     }

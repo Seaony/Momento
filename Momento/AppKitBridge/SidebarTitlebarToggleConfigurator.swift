@@ -310,10 +310,9 @@ private struct SidebarTitlebarToggleAccessoryView: View {
             }
         }
         .help(label)
-        .momentoTooltip(
+        .momentoTitlebarTooltip(
             label,
-            isPresented: isToggleHovered,
-            yOffset: MomentoTheme.titlebarControlHitSize + 6
+            isPresented: isToggleHovered
         )
         .accessibilityLabel(label)
     }
@@ -338,8 +337,9 @@ private struct SidebarTitlebarToggleAccessoryView: View {
                             cornerRadius: MomentoTheme.toolbarControlRadius
                         )
                     }
+                    .offset(y: MomentoTheme.sidebarTitlebarButtonHitInset)
             }
-            .frame(width: MomentoTheme.titlebarControlHitSize, height: MomentoTheme.titlebarControlHitSize)
+            .frame(width: MomentoTheme.titlebarControlHitSize, height: MomentoTheme.titlebarControlHitSize, alignment: .top)
             .contentShape(.interaction, Rectangle())
         }
         .buttonStyle(.plain)
@@ -356,10 +356,9 @@ private struct SidebarTitlebarToggleAccessoryView: View {
             }
         }
         .help(label)
-        .momentoTooltip(
+        .momentoTitlebarTooltip(
             label,
-            isPresented: isHovered,
-            yOffset: MomentoTheme.titlebarControlHitSize + 6
+            isPresented: isHovered
         )
         .accessibilityLabel(label)
     }

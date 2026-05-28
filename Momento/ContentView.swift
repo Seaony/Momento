@@ -63,7 +63,6 @@ struct ContentView: View {
     @State private var hoveredFilterFacet: AssetFilterFacet?
     @State private var hoveredFilterOptionID: String?
     @State private var hoveredSortOptionID: String?
-    @State private var isToolbarSearchHovered = false
     @State private var isEmptyImportButtonHovered = false
     @State private var isInstallExtensionButtonHovered = false
     @State private var selectedFilterFacet: AssetFilterFacet = .colors
@@ -546,17 +545,6 @@ struct ContentView: View {
             toolbarControlBackground(cornerRadius: MomentoTheme.toolbarControlRadius)
         }
         .layoutPriority(10)
-        .onHover { hovering in
-            withAnimation(.smooth(duration: 0.14)) {
-                isToolbarSearchHovered = hovering
-            }
-        }
-        .momentoTooltip(
-            placeholder,
-            isPresented: isToolbarSearchHovered,
-            yOffset: ContentToolbarMetrics.toolbarTooltipOffset
-        )
-        .help(placeholder)
     }
 
     private var toolbarFilterButton: some View {
