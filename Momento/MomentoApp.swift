@@ -46,6 +46,9 @@ struct MomentoApp: App {
             .environment(\.locale, language.locale)
             .environment(\.appLocalization, localization)
         }
+        .defaultSize(MomentoSettingsView.preferredSize)
+        .windowResizability(.contentSize)
+        .windowStyle(.hiddenTitleBar)
     }
 
     private var appLanguage: AppLanguage {

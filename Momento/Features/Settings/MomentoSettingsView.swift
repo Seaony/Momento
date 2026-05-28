@@ -2,17 +2,24 @@
 import SwiftUI
 
 private enum MomentoSettingsMetrics {
-    static let windowWidth: CGFloat = 420
-    static let minWindowHeight: CGFloat = 276
-    static let rowHeight: CGFloat = 36
-    static let labelWidth: CGFloat = 122
-    static let controlWidth: CGFloat = 178
-    static let controlHeight: CGFloat = 32
-    static let panelRadius: CGFloat = 16
-    static let headerIconSize: CGFloat = 28
+    static let windowWidth: CGFloat = 386
+    static let windowHeight: CGFloat = 232
+    static let contentTopInset: CGFloat = 52
+    static let contentHorizontalInset: CGFloat = 20
+    static let contentBottomInset: CGFloat = 18
+    static let rowHeight: CGFloat = 33
+    static let labelWidth: CGFloat = 108
+    static let controlWidth: CGFloat = 188
+    static let controlHeight: CGFloat = 28
+    static let panelRadius: CGFloat = 18
 }
 
 struct MomentoSettingsView: View {
+    static let preferredSize = CGSize(
+        width: MomentoSettingsMetrics.windowWidth,
+        height: MomentoSettingsMetrics.windowHeight
+    )
+
     @Environment(\.appLocalization) private var localization
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -27,19 +34,21 @@ struct MomentoSettingsView: View {
                 .ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 14) {
-                settingsHeader
                 settingsPanel
             }
-            .padding(.top, 30)
-            .padding(.horizontal, 18)
-            .padding(.bottom, 18)
+            .padding(.top, MomentoSettingsMetrics.contentTopInset)
+            .padding(.horizontal, MomentoSettingsMetrics.contentHorizontalInset)
+            .padding(.bottom, MomentoSettingsMetrics.contentBottomInset)
         }
         .background {
             WindowTransparencyConfigurator()
         }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
-        .frame(width: MomentoSettingsMetrics.windowWidth, alignment: .topLeading)
-        .frame(minHeight: MomentoSettingsMetrics.minWindowHeight, alignment: .topLeading)
+        .frame(
+            width: MomentoSettingsMetrics.windowWidth,
+            height: MomentoSettingsMetrics.windowHeight,
+            alignment: .topLeading
+        )
     }
 
     private var versionText: String {
@@ -48,31 +57,9 @@ struct MomentoSettingsView: View {
         return "\(version) (\(build))"
     }
 
-    private var settingsHeader: some View {
-        HStack(spacing: 9) {
-            Image(systemName: "gearshape")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(MomentoTheme.primaryText)
-                .frame(
-                    width: MomentoSettingsMetrics.headerIconSize,
-                    height: MomentoSettingsMetrics.headerIconSize
-                )
-                .background {
-                    MomentoGlassBackground(
-                        glass: .regular.tint(Color.white.opacity(0.04)).interactive(true),
-                        cornerRadius: 9
-                    )
-                }
-
-            Text(localization.string("Settings"))
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(MomentoTheme.primaryText)
-        }
-    }
-
     private var settingsPanel: some View {
         VStack(spacing: 0) {
-            settingsRow(label: localization.string("App Language")) {
+            settingsRow(label: localization.string("Language")) {
                 Picker("", selection: $appLanguage) {
                     ForEach(AppLanguage.allCases) { language in
                         Text(localization.title(for: language))
@@ -82,7 +69,7 @@ struct MomentoSettingsView: View {
                 .labelsHidden()
                 .pickerStyle(.menu)
                 .buttonStyle(.glass)
-                .controlSize(.large)
+                .controlSize(.regular)
                 .frame(
                     width: MomentoSettingsMetrics.controlWidth,
                     height: MomentoSettingsMetrics.controlHeight
@@ -92,7 +79,7 @@ struct MomentoSettingsView: View {
 
             settingsDivider
 
-            settingsRow(label: localization.string("App Updates")) {
+            settingsRow(label: localization.string("Updates")) {
                 Button {
                     updateService.checkForUpdates()
                 } label: {
@@ -105,7 +92,7 @@ struct MomentoSettingsView: View {
                         )
                 }
                 .buttonStyle(.glass)
-                .controlSize(.large)
+                .controlSize(.regular)
                 .foregroundStyle(MomentoTheme.primaryText)
                 .environment(\.appearsActive, true)
                 .disabled(!updateService.canCheckForUpdates)
@@ -123,10 +110,10 @@ struct MomentoSettingsView: View {
             settingsInfoRow(label: localization.string("Version"), value: versionText)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
         .background {
             MomentoGlassBackground(
-                glass: .regular.tint(Color.white.opacity(0.035)).interactive(true),
+                glass: .regular.tint(Color.white.opacity(0.045)).interactive(true),
                 cornerRadius: MomentoSettingsMetrics.panelRadius
             )
         }
@@ -138,15 +125,14 @@ struct MomentoSettingsView: View {
 
     private var settingsDivider: some View {
         Rectangle()
-            .fill(MomentoTheme.subtleStroke.opacity(0.3))
-            .frame(height: 0.6)
-            .padding(.vertical, 6)
+            .fill(MomentoTheme.subtleStroke.opacity(0.26))
+            .frame(height: 0.5)
     }
 
     private var settingsInsetDivider: some View {
         Rectangle()
-            .fill(MomentoTheme.subtleStroke.opacity(0.24))
-            .frame(height: 0.6)
+            .fill(MomentoTheme.subtleStroke.opacity(0.18))
+            .frame(height: 0.5)
             .padding(.leading, MomentoSettingsMetrics.labelWidth)
     }
 
@@ -159,7 +145,7 @@ struct MomentoSettingsView: View {
     }
 
     private func controlSlot<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        HStack {
+        HStack(spacing: 0) {
             Spacer(minLength: 10)
             content()
                 .frame(width: MomentoSettingsMetrics.controlWidth, alignment: .trailing)
@@ -177,7 +163,7 @@ struct MomentoSettingsView: View {
                 content()
             }
         }
-        .font(.system(size: 13, weight: .medium))
+        .font(.system(size: 12, weight: .medium))
         .frame(height: MomentoSettingsMetrics.rowHeight)
     }
 
@@ -192,7 +178,7 @@ struct MomentoSettingsView: View {
                     .multilineTextAlignment(.trailing)
             }
         }
-        .font(.system(size: 13, weight: .medium))
+        .font(.system(size: 12, weight: .medium))
         .frame(height: MomentoSettingsMetrics.rowHeight)
     }
 }
@@ -213,5 +199,5 @@ private extension View {
         updateService: AppUpdateService()
     )
         .environment(\.appLocalization, AppLocalization(language: language))
-        .frame(width: 420, height: 276)
+        .frame(width: MomentoSettingsView.preferredSize.width, height: MomentoSettingsView.preferredSize.height)
 }
