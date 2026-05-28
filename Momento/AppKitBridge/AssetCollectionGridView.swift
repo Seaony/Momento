@@ -187,6 +187,69 @@ nonisolated enum AssetCollectionGridUpdateDecision {
     }
 }
 
+nonisolated struct AssetCollectionGridChangeSet: Equatable {
+    struct Move: Equatable {
+        var from: IndexPath
+        var to: IndexPath
+    }
+
+    var deletedIndexPaths: Set<IndexPath>
+    var insertedIndexPaths: Set<IndexPath>
+    var movedIndexPaths: [Move]
+
+    var hasChanges: Bool {
+        !deletedIndexPaths.isEmpty || !insertedIndexPaths.isEmpty || !movedIndexPaths.isEmpty
+    }
+
+    static func make(from oldAssets: [AssetItem], to newAssets: [AssetItem]) -> AssetCollectionGridChangeSet? {
+        let oldIDs = oldAssets.map(\.id)
+        let newIDs = newAssets.map(\.id)
+        guard Set(oldIDs).count == oldIDs.count,
+              Set(newIDs).count == newIDs.count else {
+            return nil
+        }
+
+        let oldIndexByID = Dictionary(uniqueKeysWithValues: oldIDs.enumerated().map { ($0.element, $0.offset) })
+        let newIndexByID = Dictionary(uniqueKeysWithValues: newIDs.enumerated().map { ($0.element, $0.offset) })
+        let deletedIndexPaths = oldIDs.enumerated().reduce(into: Set<IndexPath>()) { result, item in
+            if newIndexByID[item.element] == nil {
+                result.insert(IndexPath(item: item.offset, section: 0))
+            }
+        }
+        let insertedIndexPaths = newIDs.enumerated().reduce(into: Set<IndexPath>()) { result, item in
+            if oldIndexByID[item.element] == nil {
+                result.insert(IndexPath(item: item.offset, section: 0))
+            }
+        }
+
+        let oldCommonIDs = oldIDs.filter { newIndexByID[$0] != nil }
+        let newCommonIDs = newIDs.filter { oldIndexByID[$0] != nil }
+        let movedIndexPaths: [Move]
+        if oldCommonIDs == newCommonIDs {
+            movedIndexPaths = []
+        } else {
+            movedIndexPaths = newCommonIDs.compactMap { id in
+                guard let oldIndex = oldIndexByID[id],
+                      let newIndex = newIndexByID[id],
+                      oldIndex != newIndex else {
+                    return nil
+                }
+
+                return Move(
+                    from: IndexPath(item: oldIndex, section: 0),
+                    to: IndexPath(item: newIndex, section: 0)
+                )
+            }
+        }
+
+        return AssetCollectionGridChangeSet(
+            deletedIndexPaths: deletedIndexPaths,
+            insertedIndexPaths: insertedIndexPaths,
+            movedIndexPaths: movedIndexPaths
+        )
+    }
+}
+
 struct AssetCollectionGridView: NSViewRepresentable {
     var assets: [AssetItem]
     var visibleAssetsRevision: UInt64
@@ -417,10 +480,34 @@ struct AssetCollectionGridView: NSViewRepresentable {
             return
         }
 
+        guard let changeSet = AssetCollectionGridChangeSet.make(from: coordinator.currentAssets, to: assets),
+              changeSet.hasChanges,
+              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            coordinator.currentAssets = assets
+            coordinator.rebuildAssetIndex(for: assets)
+            prepareLayout(for: collectionView)
+            collectionView.reloadData()
+            return
+        }
+
         coordinator.currentAssets = assets
         coordinator.rebuildAssetIndex(for: assets)
         prepareLayout(for: collectionView)
-        collectionView.reloadData()
+        collectionView.performBatchUpdates {
+            if !changeSet.deletedIndexPaths.isEmpty {
+                collectionView.deleteItems(at: changeSet.deletedIndexPaths)
+            }
+
+            if !changeSet.insertedIndexPaths.isEmpty {
+                collectionView.insertItems(at: changeSet.insertedIndexPaths)
+            }
+
+            for move in changeSet.movedIndexPaths {
+                collectionView.moveItem(at: move.from, to: move.to)
+            }
+        } completionHandler: { _ in
+            coordinator.refreshVisibleItems()
+        }
     }
 
     private func itemUpdateIndexPaths(from oldAssets: [AssetItem], to newAssets: [AssetItem]) -> Set<IndexPath>? {
@@ -704,6 +791,24 @@ extension AssetCollectionGridView {
 
         func rebuildAssetIndex(for assets: [AssetItem]) {
             assetIndexByID = Self.assetIndexByID(for: assets)
+        }
+
+        func refreshVisibleItems() {
+            guard let collectionView else {
+                return
+            }
+
+            for indexPath in collectionView.indexPathsForVisibleItems() where parent.assets.indices.contains(indexPath.item) {
+                guard let item = collectionView.item(at: indexPath) as? AssetCollectionViewItem else {
+                    continue
+                }
+
+                item.updateVisibleState(
+                    with: parent.assets[indexPath.item],
+                    viewMode: parent.viewMode,
+                    localization: parent.localization
+                )
+            }
         }
 
         @objc func handleDoubleClick(_ sender: NSClickGestureRecognizer) {
@@ -1040,6 +1145,8 @@ private final class AssetGridCollectionViewLayout: NSCollectionViewLayout {
     private var preparedBoundsSize: NSSize = .zero
     private var preparedColumnCount = 1
     private var preparedItemCount = 0
+    private var appearingIndexPaths: Set<IndexPath> = []
+    private var disappearingFramesByIndexPath: [IndexPath: NSRect] = [:]
 
     private let minimumItemSize = NSSize(
         width: AssetCollectionMetrics.gridItemWidth,
@@ -1123,6 +1230,60 @@ private final class AssetGridCollectionViewLayout: NSCollectionViewLayout {
         layoutAttributes(forItem: indexPath.item)
     }
 
+    override func prepare(forCollectionViewUpdates updateItems: [NSCollectionViewUpdateItem]) {
+        super.prepare(forCollectionViewUpdates: updateItems)
+        appearingIndexPaths = []
+        disappearingFramesByIndexPath = [:]
+
+        for updateItem in updateItems {
+            switch updateItem.updateAction {
+            case .insert:
+                if let indexPath = updateItem.indexPathAfterUpdate {
+                    appearingIndexPaths.insert(indexPath)
+                }
+            case .delete:
+                if let indexPath = updateItem.indexPathBeforeUpdate,
+                   let attributes = layoutAttributes(forItem: indexPath.item) {
+                    disappearingFramesByIndexPath[indexPath] = attributes.frame
+                }
+            default:
+                continue
+            }
+        }
+    }
+
+    override func initialLayoutAttributesForAppearingItem(
+        at itemIndexPath: IndexPath
+    ) -> NSCollectionViewLayoutAttributes? {
+        guard appearingIndexPaths.contains(itemIndexPath),
+              let attributes = super.initialLayoutAttributesForAppearingItem(at: itemIndexPath)
+                ?? layoutAttributesForItem(at: itemIndexPath) else {
+            return super.initialLayoutAttributesForAppearingItem(at: itemIndexPath)
+        }
+
+        attributes.alpha = 0
+        return attributes
+    }
+
+    override func finalLayoutAttributesForDisappearingItem(
+        at itemIndexPath: IndexPath
+    ) -> NSCollectionViewLayoutAttributes? {
+        guard let frame = disappearingFramesByIndexPath[itemIndexPath] else {
+            return super.finalLayoutAttributesForDisappearingItem(at: itemIndexPath)
+        }
+
+        let attributes = NSCollectionViewLayoutAttributes(forItemWith: itemIndexPath)
+        attributes.frame = frame
+        attributes.alpha = 0
+        return attributes
+    }
+
+    override func finalizeCollectionViewUpdates() {
+        super.finalizeCollectionViewUpdates()
+        appearingIndexPaths = []
+        disappearingFramesByIndexPath = [:]
+    }
+
     override func shouldInvalidateLayout(forBoundsChange newBounds: NSRect) -> Bool {
         guard let collectionView, collectionView.inLiveResize else {
             return newBounds.size != preparedBoundsSize
@@ -1182,6 +1343,8 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
     private var preparedBoundsSize: NSSize = .zero
     private var preparedColumnCount = 1
     private var preparedItemWidth = AssetCollectionMetrics.masonryItemWidth
+    private var appearingIndexPaths: Set<IndexPath> = []
+    private var disappearingFramesByIndexPath: [IndexPath: NSRect] = [:]
 
     private let minimumItemWidth = AssetCollectionMetrics.masonryItemWidth
     private let interitemSpacing: CGFloat = 4
@@ -1283,6 +1446,60 @@ private final class AssetMasonryCollectionViewLayout: NSCollectionViewLayout {
         }
 
         return layoutAttributes(forItem: indexPath.item, frame: cachedFrames[indexPath.item])
+    }
+
+    override func prepare(forCollectionViewUpdates updateItems: [NSCollectionViewUpdateItem]) {
+        super.prepare(forCollectionViewUpdates: updateItems)
+        appearingIndexPaths = []
+        disappearingFramesByIndexPath = [:]
+
+        for updateItem in updateItems {
+            switch updateItem.updateAction {
+            case .insert:
+                if let indexPath = updateItem.indexPathAfterUpdate {
+                    appearingIndexPaths.insert(indexPath)
+                }
+            case .delete:
+                if let indexPath = updateItem.indexPathBeforeUpdate,
+                   cachedFrames.indices.contains(indexPath.item) {
+                    disappearingFramesByIndexPath[indexPath] = cachedFrames[indexPath.item]
+                }
+            default:
+                continue
+            }
+        }
+    }
+
+    override func initialLayoutAttributesForAppearingItem(
+        at itemIndexPath: IndexPath
+    ) -> NSCollectionViewLayoutAttributes? {
+        guard appearingIndexPaths.contains(itemIndexPath),
+              let attributes = super.initialLayoutAttributesForAppearingItem(at: itemIndexPath)
+                ?? layoutAttributesForItem(at: itemIndexPath) else {
+            return super.initialLayoutAttributesForAppearingItem(at: itemIndexPath)
+        }
+
+        attributes.alpha = 0
+        return attributes
+    }
+
+    override func finalLayoutAttributesForDisappearingItem(
+        at itemIndexPath: IndexPath
+    ) -> NSCollectionViewLayoutAttributes? {
+        guard let frame = disappearingFramesByIndexPath[itemIndexPath] else {
+            return super.finalLayoutAttributesForDisappearingItem(at: itemIndexPath)
+        }
+
+        let attributes = NSCollectionViewLayoutAttributes(forItemWith: itemIndexPath)
+        attributes.frame = frame
+        attributes.alpha = 0
+        return attributes
+    }
+
+    override func finalizeCollectionViewUpdates() {
+        super.finalizeCollectionViewUpdates()
+        appearingIndexPaths = []
+        disappearingFramesByIndexPath = [:]
     }
 
     override func shouldInvalidateLayout(forBoundsChange newBounds: NSRect) -> Bool {
