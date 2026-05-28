@@ -62,6 +62,7 @@ struct ContentView: View {
     @State private var hoveredFilterOptionID: String?
     @State private var hoveredSortOptionID: String?
     @State private var isEmptyImportButtonHovered = false
+    @State private var isInstallExtensionButtonHovered = false
     @State private var selectedFilterFacet: AssetFilterFacet = .colors
     @State private var filterTagSearchQuery = ""
     @State private var isFilterPopoverPresented = false
@@ -1258,6 +1259,22 @@ struct ContentView: View {
                 isEmptyImportButtonHovered = isHovered
             }
             .padding(.top, 30)
+
+            Button {
+                installBrowserExtension()
+            } label: {
+                Label(localization.string("Install Browser Extension"), systemImage: "puzzlepiece.extension.fill")
+            }
+            .buttonStyle(.glass)
+            .controlSize(.large)
+            .scaleEffect(isInstallExtensionButtonHovered && !reduceMotion ? 1.035 : 1)
+            .brightness(isInstallExtensionButtonHovered ? 0.08 : 0)
+            .animation(reduceMotion ? nil : .smooth(duration: 0.16), value: isInstallExtensionButtonHovered)
+            .pointerStyle(.link)
+            .onHover { isHovered in
+                isInstallExtensionButtonHovered = isHovered
+            }
+            .padding(.top, 12)
         }
         .padding(.horizontal, 28)
         .padding(.vertical, 24)
@@ -1574,6 +1591,11 @@ struct ContentView: View {
         } catch {
             showImportError(error)
         }
+    }
+
+    private func installBrowserExtension() {
+        let releaseURL = URL(string: "https://github.com/Seaony/Momento-Chomre-Extension/releases/latest")!
+        NSWorkspace.shared.open(releaseURL)
     }
 
     private func updateSelectedFolders(_ folderIDs: [AssetFolder.ID]) {
