@@ -35,6 +35,7 @@ struct MomentoShellView<Content: View>: View {
     var onReloadLibrary: () -> Void
     var onCloseLibrary: () -> Void
     var onImportAssets: () -> Void
+    var onInstallBrowserExtension: () -> Void
     var onCreateFolder: (AssetFolder.ID?) -> Void
     var onRenameFolder: (AssetFolder.ID) -> Void
     var onDeleteFolder: (AssetFolder.ID) -> Void
@@ -81,6 +82,7 @@ struct MomentoShellView<Content: View>: View {
         onReloadLibrary: @escaping () -> Void = {},
         onCloseLibrary: @escaping () -> Void = {},
         onImportAssets: @escaping () -> Void = {},
+        onInstallBrowserExtension: @escaping () -> Void = {},
         onCreateFolder: @escaping (AssetFolder.ID?) -> Void = { _ in },
         onRenameFolder: @escaping (AssetFolder.ID) -> Void = { _ in },
         onDeleteFolder: @escaping (AssetFolder.ID) -> Void = { _ in },
@@ -119,6 +121,7 @@ struct MomentoShellView<Content: View>: View {
         self.onReloadLibrary = onReloadLibrary
         self.onCloseLibrary = onCloseLibrary
         self.onImportAssets = onImportAssets
+        self.onInstallBrowserExtension = onInstallBrowserExtension
         self.onCreateFolder = onCreateFolder
         self.onRenameFolder = onRenameFolder
         self.onDeleteFolder = onDeleteFolder
@@ -182,7 +185,9 @@ struct MomentoShellView<Content: View>: View {
                 importButtonMinX: titlebarImportButtonMinX,
                 label: sidebarToggleLabel,
                 importAction: onImportAssets,
-                importLabel: localization.string("Import Assets")
+                importLabel: localization.string("Import Assets"),
+                browserExtensionAction: onInstallBrowserExtension,
+                browserExtensionLabel: localization.string("Install Browser Extension")
             )
             .frame(width: 0, height: 0)
         }

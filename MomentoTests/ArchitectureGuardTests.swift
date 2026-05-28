@@ -82,6 +82,38 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertFalse(source.contains(".blur(radius: isModalOverlayVisible"))
     }
 
+    func testTitlebarImportAndExtensionButtonsUseFullHitTargets() throws {
+        let source = try String(contentsOf: sidebarTitlebarURL(), encoding: .utf8)
+        let shellSource = try String(contentsOf: shellURL(), encoding: .utf8)
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+        let actionButtonStart = try XCTUnwrap(source.range(of: "private func titlebarActionButton("))
+        let actionButtonEnd = try XCTUnwrap(source.range(of: "private var titlebarControlsWidth", range: actionButtonStart.upperBound..<source.endIndex))
+        let actionButtonSource = String(source[actionButtonStart.lowerBound..<actionButtonEnd.lowerBound])
+
+        XCTAssertTrue(source.contains("browserExtensionAction"))
+        XCTAssertTrue(source.contains("systemImage: \"square.and.arrow.down\""))
+        XCTAssertTrue(source.contains("hoverID: .importAssets"))
+        XCTAssertTrue(source.contains("systemImage: \"puzzlepiece.extension.fill\""))
+        XCTAssertTrue(source.contains("hoverID: .browserExtension"))
+        XCTAssertTrue(actionButtonSource.contains(".frame(width: MomentoTheme.titlebarControlHitSize, height: MomentoTheme.titlebarControlHitSize)"))
+        XCTAssertTrue(actionButtonSource.contains(".contentShape(.interaction, Rectangle())"))
+        XCTAssertTrue(shellSource.contains("browserExtensionAction: onInstallBrowserExtension"))
+        XCTAssertTrue(contentSource.contains("onInstallBrowserExtension: installBrowserExtension"))
+    }
+
+    func testTopToolbarControlsUseCustomMomentoTooltips() throws {
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+        let sidebarTitlebarSource = try String(contentsOf: sidebarTitlebarURL(), encoding: .utf8)
+        let inspectorTitlebarSource = try String(contentsOf: inspectorTitlebarURL(), encoding: .utf8)
+        let designSource = try String(contentsOf: designSystemURL(), encoding: .utf8)
+
+        XCTAssertTrue(designSource.contains("struct MomentoTooltipBubble"))
+        XCTAssertTrue(designSource.contains("glass: .regular.tint(Color.black.opacity(0.34))"))
+        XCTAssertTrue(contentSource.contains(".momentoTooltip("))
+        XCTAssertTrue(sidebarTitlebarSource.contains(".momentoTooltip("))
+        XCTAssertTrue(inspectorTitlebarSource.contains(".momentoTooltip("))
+    }
+
     func testEmptyGridBrowserExtensionButtonUsesVisibleGlassAppearance() throws {
         let source = try String(contentsOf: contentViewURL(), encoding: .utf8)
         let buttonStart = try XCTUnwrap(source.range(of: "Button {\n                installBrowserExtension()"))
@@ -426,6 +458,14 @@ final class ArchitectureGuardTests: XCTestCase {
 
     private func browserImportFeedbackURL() -> URL {
         repositoryRoot().appendingPathComponent("Momento/Services/BrowserImportNotificationService.swift")
+    }
+
+    private func sidebarTitlebarURL() -> URL {
+        repositoryRoot().appendingPathComponent("Momento/AppKitBridge/SidebarTitlebarToggleConfigurator.swift")
+    }
+
+    private func inspectorTitlebarURL() -> URL {
+        repositoryRoot().appendingPathComponent("Momento/AppKitBridge/InspectorTitlebarSpacerConfigurator.swift")
     }
 
     private func appKitBridgeSource() throws -> String {

@@ -10,6 +10,8 @@ struct SidebarTitlebarToggleConfigurator: NSViewRepresentable {
     var label: String
     var importAction: (() -> Void)?
     var importLabel: String?
+    var browserExtensionAction: (() -> Void)?
+    var browserExtensionLabel: String?
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -35,7 +37,9 @@ struct SidebarTitlebarToggleConfigurator: NSViewRepresentable {
                 importButtonMinX: importButtonMinX,
                 label: label,
                 importAction: importAction,
-                importLabel: importLabel
+                importLabel: importLabel,
+                browserExtensionAction: browserExtensionAction,
+                browserExtensionLabel: browserExtensionLabel
             )
         )
         context.coordinator.attach(to: nsView.window)
@@ -54,6 +58,8 @@ struct SidebarTitlebarToggleConfigurator: NSViewRepresentable {
         var label: String
         var importAction: (() -> Void)?
         var importLabel: String?
+        var browserExtensionAction: (() -> Void)?
+        var browserExtensionLabel: String?
     }
 
     final class TitlebarToggleAnchorView: NSView {
@@ -131,6 +137,8 @@ extension SidebarTitlebarToggleConfigurator {
                 label: configuration.label,
                 importAction: configuration.importAction,
                 importLabel: configuration.importLabel,
+                browserExtensionAction: configuration.browserExtensionAction,
+                browserExtensionLabel: configuration.browserExtensionLabel,
                 importButtonOffset: importButtonOffset(configuration: configuration)
             )
             let controlsWidth = titlebarControlsWidth(configuration: configuration)
@@ -155,6 +163,8 @@ extension SidebarTitlebarToggleConfigurator {
                 label: configuration.label,
                 importAction: configuration.importAction,
                 importLabel: configuration.importLabel,
+                browserExtensionAction: configuration.browserExtensionAction,
+                browserExtensionLabel: configuration.browserExtensionLabel,
                 importButtonOffset: importButtonOffset(configuration: configuration)
             )
             let controlsWidth = titlebarControlsWidth(configuration: configuration)
@@ -180,18 +190,19 @@ extension SidebarTitlebarToggleConfigurator {
         }
 
         private func titlebarControlsWidth(configuration: Configuration) -> CGFloat {
-            if configuration.importAction == nil {
+            let actionButtonCount = titlebarActionButtonCount(configuration: configuration)
+            if actionButtonCount == 0 {
                 return MomentoTheme.titlebarControlHitSize
             }
 
             return importButtonOffset(configuration: configuration)
                 + MomentoTheme.sidebarTitlebarButtonHitInset
                 - MomentoTheme.toolbarIconButtonHitInset
-                + MomentoTheme.titlebarControlHitSize
+                + CGFloat(actionButtonCount) * MomentoTheme.titlebarControlHitSize
         }
 
         private func importButtonOffset(configuration: Configuration) -> CGFloat {
-            guard configuration.importAction != nil else {
+            guard titlebarActionButtonCount(configuration: configuration) > 0 else {
                 return 0
             }
 
@@ -200,6 +211,11 @@ extension SidebarTitlebarToggleConfigurator {
                 MomentoTheme.sidebarTitlebarButtonSize + 10,
                 requestedMinX - configuration.buttonMinX
             )
+        }
+
+        private func titlebarActionButtonCount(configuration: Configuration) -> Int {
+            (configuration.importAction == nil ? 0 : 1)
+                + (configuration.browserExtensionAction == nil ? 0 : 1)
         }
 
         private func accessorySize(buttonMinX: CGFloat, controlsWidth: CGFloat) -> NSSize {
@@ -216,18 +232,45 @@ private struct SidebarTitlebarToggleAccessoryView: View {
     var label: String
     var importAction: (() -> Void)?
     var importLabel: String?
+    var browserExtensionAction: (() -> Void)?
+    var browserExtensionLabel: String?
     var importButtonOffset: CGFloat
 
     @State private var isToggleHovered = false
+    @State private var hoveredAction: TitlebarAction?
+
+    private enum TitlebarAction {
+        case importAssets
+        case browserExtension
+    }
 
     var body: some View {
         ZStack(alignment: .leading) {
             sidebarToggleButton
 
             if let importAction, let importLabel {
-                importButton(action: importAction, label: importLabel)
+                titlebarActionButton(
+                    action: importAction,
+                    label: importLabel,
+                    systemImage: "square.and.arrow.down",
+                    hoverID: .importAssets
+                )
                     .offset(
                         x: importButtonOffset
+                            + MomentoTheme.sidebarTitlebarButtonHitInset
+                            - MomentoTheme.toolbarIconButtonHitInset
+                    )
+            }
+
+            if let browserExtensionAction, let browserExtensionLabel {
+                titlebarActionButton(
+                    action: browserExtensionAction,
+                    label: browserExtensionLabel,
+                    systemImage: "puzzlepiece.extension.fill",
+                    hoverID: .browserExtension
+                )
+                    .offset(
+                        x: browserExtensionButtonOffset
                             + MomentoTheme.sidebarTitlebarButtonHitInset
                             - MomentoTheme.toolbarIconButtonHitInset
                     )
@@ -267,43 +310,82 @@ private struct SidebarTitlebarToggleAccessoryView: View {
             }
         }
         .help(label)
+        .momentoTooltip(
+            label,
+            isPresented: isToggleHovered,
+            yOffset: MomentoTheme.titlebarControlHitSize + 6
+        )
         .accessibilityLabel(label)
     }
 
-    private func importButton(action: @escaping () -> Void, label: String) -> some View {
+    private func titlebarActionButton(
+        action: @escaping () -> Void,
+        label: String,
+        systemImage: String,
+        hoverID: TitlebarAction
+    ) -> some View {
+        let isHovered = hoveredAction == hoverID
+
         return Button(action: action) {
-            Image(systemName: "square.and.arrow.down")
-                .font(.system(size: MomentoTheme.toolbarIconSize, weight: .semibold))
-                .foregroundStyle(MomentoTheme.primaryText)
-                .frame(width: MomentoTheme.toolbarIconButtonWidth, height: MomentoTheme.toolbarControlHeight)
-                .background {
-                    MomentoGlassBackground(
-                        glass: .regular.interactive(true),
-                        cornerRadius: MomentoTheme.toolbarControlRadius
-                    )
-                }
+            ZStack {
+                Image(systemName: systemImage)
+                    .font(.system(size: MomentoTheme.toolbarIconSize, weight: .semibold))
+                    .foregroundStyle(MomentoTheme.primaryText)
+                    .frame(width: MomentoTheme.toolbarIconButtonWidth, height: MomentoTheme.toolbarControlHeight)
+                    .background {
+                        MomentoGlassBackground(
+                            glass: .regular.interactive(isHovered),
+                            cornerRadius: MomentoTheme.toolbarControlRadius
+                        )
+                    }
+            }
+            .frame(width: MomentoTheme.titlebarControlHitSize, height: MomentoTheme.titlebarControlHitSize)
+            .contentShape(.interaction, Rectangle())
         }
         .buttonStyle(.plain)
         .frame(width: MomentoTheme.titlebarControlHitSize, height: MomentoTheme.titlebarControlHitSize)
-        .contentShape(RoundedRectangle(cornerRadius: MomentoTheme.toolbarControlRadius, style: .continuous))
+        .contentShape(.interaction, Rectangle())
         .pointerStyle(.link)
+        .onHover { hovering in
+            withAnimation(.smooth(duration: 0.14)) {
+                if hovering {
+                    hoveredAction = hoverID
+                } else if hoveredAction == hoverID {
+                    hoveredAction = nil
+                }
+            }
+        }
         .help(label)
+        .momentoTooltip(
+            label,
+            isPresented: isHovered,
+            yOffset: MomentoTheme.titlebarControlHitSize + 6
+        )
         .accessibilityLabel(label)
     }
 
     private var titlebarControlsWidth: CGFloat {
-        if importAction == nil {
+        if titlebarActionButtonCount == 0 {
             return MomentoTheme.titlebarControlHitSize
         }
 
         return importButtonOffset
             + MomentoTheme.sidebarTitlebarButtonHitInset
             - MomentoTheme.toolbarIconButtonHitInset
-            + MomentoTheme.titlebarControlHitSize
+            + CGFloat(titlebarActionButtonCount) * MomentoTheme.titlebarControlHitSize
     }
 
     private var titlebarControlsHeight: CGFloat {
         MomentoTheme.titlebarControlHitSize
+    }
+
+    var titlebarActionButtonCount: Int {
+        (importAction == nil ? 0 : 1)
+            + (browserExtensionAction == nil ? 0 : 1)
+    }
+
+    private var browserExtensionButtonOffset: CGFloat {
+        importButtonOffset + (importAction == nil ? 0 : MomentoTheme.titlebarControlHitSize)
     }
 }
 
@@ -312,7 +394,8 @@ private final class SidebarTitlebarToggleContainerView: NSView {
     private var buttonMinX: CGFloat = 0
     private var controlsWidth: CGFloat = MomentoTheme.titlebarControlHitSize
     private var controlsHeight: CGFloat = MomentoTheme.titlebarControlHitSize
-    private var importButtonOffset: CGFloat?
+    private var actionButtonOffset: CGFloat?
+    private var actionButtonCount = 0
 
     override var isFlipped: Bool {
         true
@@ -334,7 +417,8 @@ private final class SidebarTitlebarToggleContainerView: NSView {
         self.buttonMinX = buttonMinX
         self.controlsWidth = controlsWidth
         self.controlsHeight = MomentoTheme.titlebarControlHitSize
-        self.importButtonOffset = rootView.importAction == nil ? nil : rootView.importButtonOffset
+        self.actionButtonOffset = rootView.titlebarActionButtonCount == 0 ? nil : rootView.importButtonOffset
+        self.actionButtonCount = rootView.titlebarActionButtonCount
         needsLayout = true
     }
 
@@ -367,19 +451,22 @@ private final class SidebarTitlebarToggleContainerView: NSView {
             width: MomentoTheme.titlebarControlHitSize,
             height: MomentoTheme.titlebarControlHitSize
         )
-        let importFrame = importButtonOffset.map { offset in
-            NSRect(
-                x: hostingView.frame.minX
-                    + offset
-                    + MomentoTheme.sidebarTitlebarButtonHitInset
-                    - MomentoTheme.toolbarIconButtonHitInset,
-                y: hostingView.frame.minY,
-                width: MomentoTheme.titlebarControlHitSize,
-                height: MomentoTheme.titlebarControlHitSize
-            )
-        }
+        let actionFrames = actionButtonOffset.map { offset in
+            (0..<actionButtonCount).map { index in
+                NSRect(
+                    x: hostingView.frame.minX
+                        + offset
+                        + CGFloat(index) * MomentoTheme.titlebarControlHitSize
+                        + MomentoTheme.sidebarTitlebarButtonHitInset
+                        - MomentoTheme.toolbarIconButtonHitInset,
+                    y: hostingView.frame.minY,
+                    width: MomentoTheme.titlebarControlHitSize,
+                    height: MomentoTheme.titlebarControlHitSize
+                )
+            }
+        } ?? []
 
-        guard toggleFrame.contains(point) || importFrame?.contains(point) == true else {
+        guard toggleFrame.contains(point) || actionFrames.contains(where: { $0.contains(point) }) else {
             return nil
         }
 

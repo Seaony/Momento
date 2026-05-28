@@ -984,25 +984,7 @@ struct MomentoInspectorView: View {
     }
 
     private func colorTooltip(_ color: MomentoInspectorColor) -> some View {
-        Text(color.helpText)
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(.white)
-            .lineLimit(1)
-            .fixedSize()
-            .padding(.horizontal, 10)
-            .frame(height: 30)
-            .background {
-                MomentoGlassBackground(
-                    glass: .regular.tint(Color.black.opacity(0.34)),
-                    cornerRadius: 9
-                )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
-                    }
-            }
-            .shadow(color: Color.black.opacity(0.28), radius: 12, y: 6)
-            .allowsHitTesting(false)
+        MomentoTooltipBubble(text: color.helpText)
     }
 
     private func fileSection(_ asset: MomentoInspectorAsset) -> some View {

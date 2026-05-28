@@ -34,6 +34,7 @@ private enum ContentToolbarMetrics {
     static let iconButtonWidth: CGFloat = 38
     static let updateButtonWidth: CGFloat = 82
     static let viewModeSwitcherWidth: CGFloat = 112
+    static let toolbarTooltipOffset = MomentoTheme.toolbarControlHeight + 8
     static let searchDebounceDelay = Duration.milliseconds(300)
     static let filterPopoverWidth: CGFloat = 340
     static let filterScrollableContentMaxHeight: CGFloat = 220
@@ -62,6 +63,7 @@ struct ContentView: View {
     @State private var hoveredFilterFacet: AssetFilterFacet?
     @State private var hoveredFilterOptionID: String?
     @State private var hoveredSortOptionID: String?
+    @State private var isToolbarSearchHovered = false
     @State private var isEmptyImportButtonHovered = false
     @State private var isInstallExtensionButtonHovered = false
     @State private var selectedFilterFacet: AssetFilterFacet = .colors
@@ -294,6 +296,7 @@ struct ContentView: View {
             onReloadLibrary: reloadLibrary,
             onCloseLibrary: closeLibrary,
             onImportAssets: { isImporterPresented = true },
+            onInstallBrowserExtension: installBrowserExtension,
             onCreateFolder: presentCreateFolderDialog,
             onRenameFolder: presentRenameFolderDialog,
             onDeleteFolder: presentDeleteFolderDialog,
@@ -388,6 +391,11 @@ struct ContentView: View {
                 }
             }
         }
+        .momentoTooltip(
+            version.map { localization.format("Update to %@", $0) } ?? localization.string("Update Available"),
+            isPresented: isHovered,
+            yOffset: ContentToolbarMetrics.toolbarTooltipOffset
+        )
     }
 
     private var isTagManagementSelected: Bool {
@@ -474,6 +482,11 @@ struct ContentView: View {
                         }
                     }
                 }
+                .momentoTooltip(
+                    localization.title(for: viewMode),
+                    isPresented: isHovered,
+                    yOffset: ContentToolbarMetrics.toolbarTooltipOffset
+                )
             }
         }
         .padding(3)
@@ -533,6 +546,16 @@ struct ContentView: View {
             toolbarControlBackground(cornerRadius: MomentoTheme.toolbarControlRadius)
         }
         .layoutPriority(10)
+        .onHover { hovering in
+            withAnimation(.smooth(duration: 0.14)) {
+                isToolbarSearchHovered = hovering
+            }
+        }
+        .momentoTooltip(
+            placeholder,
+            isPresented: isToolbarSearchHovered,
+            yOffset: ContentToolbarMetrics.toolbarTooltipOffset
+        )
         .help(placeholder)
     }
 
@@ -608,6 +631,11 @@ struct ContentView: View {
                 }
             }
         }
+        .momentoTooltip(
+            label,
+            isPresented: isHovered,
+            yOffset: ContentToolbarMetrics.toolbarTooltipOffset
+        )
     }
 
     private var filterPopover: some View {

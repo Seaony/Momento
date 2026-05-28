@@ -33,6 +33,32 @@ struct MomentoGlassPanelModifier: ViewModifier {
     }
 }
 
+struct MomentoTooltipBubble: View {
+    var text: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.white)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 10)
+            .frame(height: 30)
+            .background {
+                MomentoGlassBackground(
+                    glass: .regular.tint(Color.black.opacity(0.34)),
+                    cornerRadius: 9
+                )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+                    }
+            }
+            .shadow(color: Color.black.opacity(0.28), radius: 12, y: 6)
+            .allowsHitTesting(false)
+    }
+}
+
 extension View {
     func momentoGlassPanel(
         glass: Glass = .regular,
@@ -46,6 +72,18 @@ extension View {
                 padding: padding
             )
         )
+    }
+
+    func momentoTooltip(_ text: String, isPresented: Bool, yOffset: CGFloat) -> some View {
+        overlay(alignment: .top) {
+            if isPresented {
+                MomentoTooltipBubble(text: text)
+                    .offset(y: yOffset)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
+                    .zIndex(20)
+            }
+        }
+        .animation(.smooth(duration: 0.12), value: isPresented)
     }
 }
 
