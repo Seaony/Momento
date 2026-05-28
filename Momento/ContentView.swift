@@ -1315,39 +1315,42 @@ struct ContentView: View {
                 .frame(maxWidth: 360)
                 .padding(.top, 12)
 
-            Button {
-                isImporterPresented = true
-            } label: {
-                Label(localization.string("Import Assets"), systemImage: "square.and.arrow.down")
-            }
-            .buttonStyle(.glassProminent)
-            .controlSize(.large)
-            .scaleEffect(isEmptyImportButtonHovered && !reduceMotion ? 1.035 : 1)
-            .brightness(isEmptyImportButtonHovered ? 0.08 : 0)
-            .animation(reduceMotion ? nil : .smooth(duration: 0.16), value: isEmptyImportButtonHovered)
-            .pointerStyle(.link)
-            .onHover { isHovered in
-                isEmptyImportButtonHovered = isHovered
+            HStack(spacing: 12) {
+                Button {
+                    isImporterPresented = true
+                } label: {
+                    Label(localization.string("Import Assets"), systemImage: "square.and.arrow.down")
+                }
+                .buttonStyle(.glassProminent)
+                .controlSize(.large)
+                .frame(height: 38)
+                .scaleEffect(isEmptyImportButtonHovered && !reduceMotion ? 1.035 : 1)
+                .brightness(isEmptyImportButtonHovered ? 0.08 : 0)
+                .animation(reduceMotion ? nil : .smooth(duration: 0.16), value: isEmptyImportButtonHovered)
+                .pointerStyle(.link)
+                .onHover { isHovered in
+                    isEmptyImportButtonHovered = isHovered
+                }
+
+                Button {
+                    installBrowserExtension()
+                } label: {
+                    Label(localization.string("Install Browser Extension"), systemImage: "backpack")
+                }
+                .buttonStyle(.glass)
+                .controlSize(.large)
+                .frame(height: 38)
+                .foregroundStyle(MomentoTheme.primaryText)
+                .environment(\.appearsActive, true)
+                .scaleEffect(isInstallExtensionButtonHovered && !reduceMotion ? 1.035 : 1)
+                .brightness(isInstallExtensionButtonHovered ? 0.08 : 0)
+                .animation(reduceMotion ? nil : .smooth(duration: 0.16), value: isInstallExtensionButtonHovered)
+                .pointerStyle(.link)
+                .onHover { isHovered in
+                    isInstallExtensionButtonHovered = isHovered
+                }
             }
             .padding(.top, 30)
-
-            Button {
-                installBrowserExtension()
-            } label: {
-                Label(localization.string("Install Browser Extension"), systemImage: "backpack")
-            }
-            .buttonStyle(.glass)
-            .controlSize(.large)
-            .foregroundStyle(MomentoTheme.primaryText)
-            .environment(\.appearsActive, true)
-            .scaleEffect(isInstallExtensionButtonHovered && !reduceMotion ? 1.035 : 1)
-            .brightness(isInstallExtensionButtonHovered ? 0.08 : 0)
-            .animation(reduceMotion ? nil : .smooth(duration: 0.16), value: isInstallExtensionButtonHovered)
-            .pointerStyle(.link)
-            .onHover { isHovered in
-                isInstallExtensionButtonHovered = isHovered
-            }
-            .padding(.top, 12)
         }
         .padding(.horizontal, 28)
         .padding(.vertical, 24)

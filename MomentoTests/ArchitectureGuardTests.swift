@@ -147,11 +147,19 @@ final class ArchitectureGuardTests: XCTestCase {
 
     func testEmptyGridBrowserExtensionButtonUsesVisibleGlassAppearance() throws {
         let source = try String(contentsOf: contentViewURL(), encoding: .utf8)
-        let buttonStart = try XCTUnwrap(source.range(of: "Button {\n                installBrowserExtension()"))
-        let buttonEnd = try XCTUnwrap(source.range(of: ".padding(.top, 12)", range: buttonStart.upperBound..<source.endIndex))
-        let buttonSource = String(source[buttonStart.lowerBound..<buttonEnd.upperBound])
+        let emptyStateSource = try sourceBlock(
+            in: source,
+            from: "private var emptyGridState",
+            to: "private func importErrorBanner"
+        )
+        let buttonRowStart = try XCTUnwrap(emptyStateSource.range(of: "HStack(spacing: 12)"))
+        let buttonRowEnd = try XCTUnwrap(emptyStateSource.range(of: ".padding(.top, 30)", range: buttonRowStart.upperBound..<emptyStateSource.endIndex))
+        let buttonSource = String(emptyStateSource[buttonRowStart.lowerBound..<buttonRowEnd.upperBound])
 
+        XCTAssertTrue(buttonSource.contains("Label(localization.string(\"Import Assets\"), systemImage: \"square.and.arrow.down\")"))
         XCTAssertTrue(buttonSource.contains("Label(localization.string(\"Install Browser Extension\"), systemImage: \"backpack\")"))
+        XCTAssertEqual(buttonSource.components(separatedBy: ".frame(height: 38)").count - 1, 2)
+        XCTAssertFalse(buttonSource.contains(".padding(.top, 12)"))
         XCTAssertFalse(buttonSource.contains("puzzlepiece.extension"))
         XCTAssertTrue(buttonSource.contains(".buttonStyle(.glass)"))
         XCTAssertTrue(buttonSource.contains(".foregroundStyle(MomentoTheme.primaryText)"))
