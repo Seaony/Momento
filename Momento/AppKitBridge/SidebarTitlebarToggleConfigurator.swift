@@ -266,7 +266,7 @@ private struct SidebarTitlebarToggleAccessoryView: View {
                 titlebarActionButton(
                     action: browserExtensionAction,
                     label: browserExtensionLabel,
-                    systemImage: "puzzlepiece.extension.fill",
+                    systemImage: "puzzlepiece.extension",
                     hoverID: .browserExtension
                 )
                     .offset(
@@ -309,10 +309,7 @@ private struct SidebarTitlebarToggleAccessoryView: View {
                 isToggleHovered = hovering
             }
         }
-        .momentoTitlebarTooltip(
-            label,
-            isPresented: isToggleHovered
-        )
+        .help(label)
         .accessibilityLabel(label)
     }
 
@@ -354,10 +351,7 @@ private struct SidebarTitlebarToggleAccessoryView: View {
                 }
             }
         }
-        .momentoTitlebarTooltip(
-            label,
-            isPresented: isHovered
-        )
+        .help(label)
         .accessibilityLabel(label)
     }
 

@@ -194,10 +194,7 @@ private struct InspectorTitlebarControlAccessoryView: View {
                 isHovered = hovering
             }
         }
-        .momentoTitlebarTooltip(
-            label,
-            isPresented: isHovered
-        )
+        .help(label)
         .accessibilityLabel(label)
     }
 }

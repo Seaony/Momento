@@ -93,7 +93,8 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("browserExtensionAction"))
         XCTAssertTrue(source.contains("systemImage: \"square.and.arrow.down\""))
         XCTAssertTrue(source.contains("hoverID: .importAssets"))
-        XCTAssertTrue(source.contains("systemImage: \"puzzlepiece.extension.fill\""))
+        XCTAssertTrue(source.contains("systemImage: \"puzzlepiece.extension\""))
+        XCTAssertFalse(source.contains("systemImage: \"puzzlepiece.extension.fill\""))
         XCTAssertTrue(source.contains("hoverID: .browserExtension"))
         XCTAssertTrue(actionButtonSource.contains(".frame(width: MomentoTheme.titlebarControlHitSize, height: MomentoTheme.titlebarControlHitSize)"))
         XCTAssertTrue(actionButtonSource.contains(".contentShape(.interaction, Rectangle())"))
@@ -102,26 +103,7 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(contentSource.contains("onInstallBrowserExtension: installBrowserExtension"))
     }
 
-    func testTopToolbarControlsUseCustomMomentoTooltips() throws {
-        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
-        let sidebarTitlebarSource = try String(contentsOf: sidebarTitlebarURL(), encoding: .utf8)
-        let inspectorTitlebarSource = try String(contentsOf: inspectorTitlebarURL(), encoding: .utf8)
-        let titlebarTooltipSource = try String(contentsOf: titlebarTooltipURL(), encoding: .utf8)
-        let designSource = try String(contentsOf: designSystemURL(), encoding: .utf8)
-
-        XCTAssertTrue(designSource.contains("struct MomentoTooltipBubble"))
-        XCTAssertTrue(designSource.contains("glass: .regular.tint(Color.black.opacity(0.34))"))
-        XCTAssertTrue(contentSource.contains(".momentoTooltip("))
-        XCTAssertTrue(sidebarTitlebarSource.contains(".momentoTitlebarTooltip("))
-        XCTAssertTrue(inspectorTitlebarSource.contains(".momentoTitlebarTooltip("))
-        XCTAssertTrue(titlebarTooltipSource.contains("NSPanel"))
-        XCTAssertTrue(titlebarTooltipSource.contains("addChildWindow(panel, ordered: .above)"))
-        XCTAssertTrue(titlebarTooltipSource.contains("override func hitTest(_ point: NSPoint) -> NSView? {\n        nil\n    }"))
-        XCTAssertFalse(sidebarTitlebarSource.contains(".momentoTooltip("))
-        XCTAssertFalse(inspectorTitlebarSource.contains(".momentoTooltip("))
-    }
-
-    func testCustomTooltipControlsDoNotAlsoUseNativeHelpTooltips() throws {
+    func testToolbarControlsUseNativeHelpTooltips() throws {
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
         let sidebarTitlebarSource = try String(contentsOf: sidebarTitlebarURL(), encoding: .utf8)
         let inspectorTitlebarSource = try String(contentsOf: inspectorTitlebarURL(), encoding: .utf8)
@@ -141,14 +123,15 @@ final class ArchitectureGuardTests: XCTestCase {
             to: "private var filterPopover"
         )
 
-        XCTAssertTrue(updateButtonSource.contains(".momentoTooltip("))
-        XCTAssertTrue(viewModeSource.contains(".momentoTooltip("))
-        XCTAssertTrue(toolbarIconButtonSource.contains(".momentoTooltip("))
-        XCTAssertFalse(updateButtonSource.contains(".help("))
-        XCTAssertFalse(viewModeSource.contains(".help("))
-        XCTAssertFalse(toolbarIconButtonSource.contains(".help("))
-        XCTAssertFalse(sidebarTitlebarSource.contains(".help(label)"))
-        XCTAssertFalse(inspectorTitlebarSource.contains(".help(label)"))
+        XCTAssertTrue(updateButtonSource.contains(".help("))
+        XCTAssertTrue(viewModeSource.contains(".help("))
+        XCTAssertTrue(toolbarIconButtonSource.contains(".help(label)"))
+        XCTAssertTrue(sidebarTitlebarSource.contains(".help(label)"))
+        XCTAssertTrue(inspectorTitlebarSource.contains(".help(label)"))
+        XCTAssertFalse(contentSource.contains(".momentoTooltip("))
+        XCTAssertFalse(sidebarTitlebarSource.contains(".momentoTitlebarTooltip("))
+        XCTAssertFalse(inspectorTitlebarSource.contains(".momentoTitlebarTooltip("))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: titlebarTooltipURL().path))
     }
 
     func testToolbarSearchControlDoesNotShowTooltip() throws {
@@ -167,7 +150,8 @@ final class ArchitectureGuardTests: XCTestCase {
         let buttonEnd = try XCTUnwrap(source.range(of: ".padding(.top, 12)", range: buttonStart.upperBound..<source.endIndex))
         let buttonSource = String(source[buttonStart.lowerBound..<buttonEnd.upperBound])
 
-        XCTAssertTrue(buttonSource.contains("Label(localization.string(\"Install Browser Extension\"), systemImage: \"puzzlepiece.extension.fill\")"))
+        XCTAssertTrue(buttonSource.contains("Label(localization.string(\"Install Browser Extension\"), systemImage: \"puzzlepiece.extension\")"))
+        XCTAssertFalse(buttonSource.contains("puzzlepiece.extension.fill"))
         XCTAssertTrue(buttonSource.contains(".buttonStyle(.glass)"))
         XCTAssertTrue(buttonSource.contains(".foregroundStyle(MomentoTheme.primaryText)"))
         XCTAssertTrue(buttonSource.contains(".environment(\\.appearsActive, true)"))

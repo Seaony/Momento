@@ -73,18 +73,6 @@ extension View {
             )
         )
     }
-
-    func momentoTooltip(_ text: String, isPresented: Bool, yOffset: CGFloat) -> some View {
-        overlay(alignment: .top) {
-            if isPresented {
-                MomentoTooltipBubble(text: text)
-                    .offset(y: yOffset)
-                    .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .top)))
-                    .zIndex(20)
-            }
-        }
-        .animation(.smooth(duration: 0.12), value: isPresented)
-    }
 }
 
 enum MomentoTheme {

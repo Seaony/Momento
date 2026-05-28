@@ -34,7 +34,6 @@ private enum ContentToolbarMetrics {
     static let iconButtonWidth: CGFloat = 38
     static let updateButtonWidth: CGFloat = 82
     static let viewModeSwitcherWidth: CGFloat = 112
-    static let toolbarTooltipOffset = MomentoTheme.toolbarControlHeight + 8
     static let searchDebounceDelay = Duration.milliseconds(300)
     static let filterPopoverWidth: CGFloat = 340
     static let filterScrollableContentMaxHeight: CGFloat = 220
@@ -379,6 +378,7 @@ struct ContentView: View {
         .buttonStyle(.plain)
         .pointerStyle(.link)
         .disabled(!updateService.canCheckForUpdates)
+        .help(version.map { localization.format("Update to %@", $0) } ?? localization.string("Update Available"))
         .accessibilityLabel(localization.string("Update Available"))
         .onHover { hovering in
             withAnimation(.smooth(duration: 0.14)) {
@@ -389,11 +389,6 @@ struct ContentView: View {
                 }
             }
         }
-        .momentoTooltip(
-            version.map { localization.format("Update to %@", $0) } ?? localization.string("Update Available"),
-            isPresented: isHovered,
-            yOffset: ContentToolbarMetrics.toolbarTooltipOffset
-        )
     }
 
     private var isTagManagementSelected: Bool {
@@ -469,6 +464,7 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
                 .pointerStyle(.link)
+                .help(localization.title(for: viewMode))
                 .accessibilityLabel(localization.title(for: viewMode))
                 .onHover { hovering in
                     withAnimation(.smooth(duration: 0.14)) {
@@ -479,11 +475,6 @@ struct ContentView: View {
                         }
                     }
                 }
-                .momentoTooltip(
-                    localization.title(for: viewMode),
-                    isPresented: isHovered,
-                    yOffset: ContentToolbarMetrics.toolbarTooltipOffset
-                )
             }
         }
         .padding(3)
@@ -606,6 +597,7 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .pointerStyle(.link)
+        .help(label)
         .accessibilityLabel(label)
         .onHover { hovering in
             withAnimation(.smooth(duration: 0.14)) {
@@ -616,11 +608,6 @@ struct ContentView: View {
                 }
             }
         }
-        .momentoTooltip(
-            label,
-            isPresented: isHovered,
-            yOffset: ContentToolbarMetrics.toolbarTooltipOffset
-        )
     }
 
     private var filterPopover: some View {
@@ -1347,7 +1334,7 @@ struct ContentView: View {
             Button {
                 installBrowserExtension()
             } label: {
-                Label(localization.string("Install Browser Extension"), systemImage: "puzzlepiece.extension.fill")
+                Label(localization.string("Install Browser Extension"), systemImage: "puzzlepiece.extension")
             }
             .buttonStyle(.glass)
             .controlSize(.large)
