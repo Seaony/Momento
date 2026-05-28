@@ -1334,7 +1334,7 @@ struct ContentView: View {
             Button {
                 installBrowserExtension()
             } label: {
-                Label(localization.string("Install Browser Extension"), systemImage: "puzzlepiece.extension")
+                Label(localization.string("Install Browser Extension"), systemImage: "square.grid.2x2")
             }
             .buttonStyle(.glass)
             .controlSize(.large)
