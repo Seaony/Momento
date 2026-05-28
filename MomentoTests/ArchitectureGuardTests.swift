@@ -245,10 +245,13 @@ final class ArchitectureGuardTests: XCTestCase {
     func testSidebarAcceptsInternalAssetDropsForOrganization() throws {
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
         let sidebarSource = try String(contentsOf: sidebarURL(), encoding: .utf8)
+        let bridgeSource = try appKitBridgeSource()
 
-        XCTAssertTrue(sidebarSource.contains("MomentoSidebarAssetDropDelegate"))
-        XCTAssertTrue(sidebarSource.contains("AssetDragPasteboardWriter.assetIDsUTType"))
+        XCTAssertTrue(sidebarSource.contains("SidebarFolderAssetDropView("))
         XCTAssertTrue(sidebarSource.contains("onAssignDroppedAssetsToFolder(assetIDs, folder.id)"))
+        XCTAssertTrue(bridgeSource.contains("registerForDraggedTypes([AssetDragPasteboardWriter.assetIDsPasteboardType])"))
+        XCTAssertTrue(bridgeSource.contains("performAssetDrop(from pasteboard: NSPasteboard) -> Bool"))
+        XCTAssertFalse(sidebarSource.contains("MomentoSidebarAssetDropDelegate"))
         XCTAssertFalse(sidebarSource.contains("sidebarTagSection"))
         XCTAssertFalse(sidebarSource.contains("onAssignDroppedAssetsToTag"))
         XCTAssertTrue(contentSource.contains("try store.assignAssets(ids: assetIDs, to: folderID)"))

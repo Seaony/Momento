@@ -518,13 +518,23 @@ struct MomentoSidebarView: View {
         .contextMenu {
             folderContextMenuItems(for: folder)
         }
-        .onDrop(of: [AssetDragPasteboardWriter.assetIDsUTType], delegate: MomentoSidebarAssetDropDelegate(
-            currentLibraryID: currentLibraryID,
-            targetID: rowID,
-            targetedAssetDropID: $targetedAssetDropID
-        ) { assetIDs in
-            onAssignDroppedAssetsToFolder(assetIDs, folder.id)
-        })
+        .background(
+            SidebarFolderAssetDropView(
+                currentLibraryID: currentLibraryID,
+                onTargetedChange: { isTargeted in
+                    withAnimation(.smooth(duration: 0.12)) {
+                        if isTargeted {
+                            targetedAssetDropID = rowID
+                        } else if targetedAssetDropID == rowID {
+                            targetedAssetDropID = nil
+                        }
+                    }
+                },
+                onDropAssetIDs: { assetIDs in
+                    onAssignDroppedAssetsToFolder(assetIDs, folder.id)
+                }
+            )
+        )
         .onDrag {
             guard let currentLibraryID else {
                 return NSItemProvider()
@@ -1300,74 +1310,6 @@ private struct MomentoSidebarRootFolderDropDelegate: DropDelegate {
             folders: folders,
             placement: .rootEnd
         )
-    }
-}
-
-private struct MomentoSidebarAssetDropDelegate: DropDelegate {
-    var currentLibraryID: AssetLibrary.ID?
-    var targetID: String
-    @Binding var targetedAssetDropID: String?
-    var onDropAssetIDs: (Set<AssetItem.ID>) -> Void
-
-    func validateDrop(info: DropInfo) -> Bool {
-        currentLibraryID != nil &&
-            info.hasItemsConforming(to: [AssetDragPasteboardWriter.assetIDsUTType])
-    }
-
-    func dropEntered(info: DropInfo) {
-        guard validateDrop(info: info) else {
-            return
-        }
-
-        withAnimation(.smooth(duration: 0.12)) {
-            targetedAssetDropID = targetID
-        }
-    }
-
-    func dropExited(info: DropInfo) {
-        clearTargetIfNeeded()
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        guard validateDrop(info: info) else {
-            return nil
-        }
-
-        return DropProposal(operation: .copy)
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        clearTargetIfNeeded()
-
-        guard validateDrop(info: info),
-              let provider = info.itemProviders(for: [AssetDragPasteboardWriter.assetIDsUTType]).first else {
-            return false
-        }
-
-        let expectedLibraryID = currentLibraryID
-        provider.loadDataRepresentation(forTypeIdentifier: AssetDragPasteboardWriter.assetIDsTypeIdentifier) { data, _ in
-            guard let data,
-                  let payload = try? JSONDecoder.momento.decode(AssetDragPasteboardPayload.self, from: data),
-                  payload.libraryID == expectedLibraryID else {
-                return
-            }
-
-            Task { @MainActor in
-                onDropAssetIDs(Set(payload.assetIDs))
-            }
-        }
-
-        return true
-    }
-
-    private func clearTargetIfNeeded() {
-        guard targetedAssetDropID == targetID else {
-            return
-        }
-
-        withAnimation(.smooth(duration: 0.12)) {
-            targetedAssetDropID = nil
-        }
     }
 }
 
