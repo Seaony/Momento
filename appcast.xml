@@ -6,16 +6,16 @@
     <description>Release updates for Momento.</description>
     <language>zh-CN</language>
     <item>
-      <title>Momento 1.0.4</title>
-      <link>https://github.com/Seaony/Momento/releases/tag/1.0.4</link>
-      <sparkle:version>5</sparkle:version>
-      <sparkle:shortVersionString>1.0.4</sparkle:shortVersionString>
+      <title>Momento 1.0.5</title>
+      <link>https://github.com/Seaony/Momento/releases/tag/1.0.5</link>
+      <sparkle:version>6</sparkle:version>
+      <sparkle:shortVersionString>1.0.5</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-      <pubDate>Thu, 28 May 2026 14:44:27 +0000</pubDate>
+      <pubDate>Thu, 28 May 2026 17:46:03 +0000</pubDate>
       <enclosure
-        url="https://github.com/Seaony/Momento/releases/download/1.0.4/Momento-1.0.4.dmg"
-        sparkle:edSignature="bAbCV6M0EGzDWvwRibaMmTm8KiPAYAZCrIT/xg5pfZMQ/Lu2gjU/Jf7giVFYQLdAFqgzwoCejgQakDbfgrIeDg=="
-        length="5513061"
+        url="https://github.com/Seaony/Momento/releases/download/1.0.5/Momento-1.0.5.dmg"
+        sparkle:edSignature="hMb82q1SxZIlHYTYY4fLQzQl9e/Y6XJPKiBkpKgsvBFm0tldkECx6VllWl4eXSzeaDtwADS/VDoA2jE3lM5wCg=="
+        length="5537905"
         type="application/octet-stream" />
     </item>
   </channel>
