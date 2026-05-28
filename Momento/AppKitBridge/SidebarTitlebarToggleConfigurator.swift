@@ -266,7 +266,7 @@ private struct SidebarTitlebarToggleAccessoryView: View {
                 titlebarActionButton(
                     action: browserExtensionAction,
                     label: browserExtensionLabel,
-                    systemImage: "square.grid.2x2",
+                    systemImage: "backpack",
                     hoverID: .browserExtension
                 )
                     .offset(

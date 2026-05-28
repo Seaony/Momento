@@ -93,7 +93,7 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("browserExtensionAction"))
         XCTAssertTrue(source.contains("systemImage: \"square.and.arrow.down\""))
         XCTAssertTrue(source.contains("hoverID: .importAssets"))
-        XCTAssertTrue(source.contains("systemImage: \"square.grid.2x2\""))
+        XCTAssertTrue(source.contains("systemImage: \"backpack\""))
         XCTAssertFalse(source.contains("systemImage: \"puzzlepiece.extension\""))
         XCTAssertTrue(source.contains("hoverID: .browserExtension"))
         XCTAssertTrue(actionButtonSource.contains(".frame(width: MomentoTheme.titlebarControlHitSize, height: MomentoTheme.titlebarControlHitSize)"))
@@ -150,7 +150,7 @@ final class ArchitectureGuardTests: XCTestCase {
         let buttonEnd = try XCTUnwrap(source.range(of: ".padding(.top, 12)", range: buttonStart.upperBound..<source.endIndex))
         let buttonSource = String(source[buttonStart.lowerBound..<buttonEnd.upperBound])
 
-        XCTAssertTrue(buttonSource.contains("Label(localization.string(\"Install Browser Extension\"), systemImage: \"square.grid.2x2\")"))
+        XCTAssertTrue(buttonSource.contains("Label(localization.string(\"Install Browser Extension\"), systemImage: \"backpack\")"))
         XCTAssertFalse(buttonSource.contains("puzzlepiece.extension"))
         XCTAssertTrue(buttonSource.contains(".buttonStyle(.glass)"))
         XCTAssertTrue(buttonSource.contains(".foregroundStyle(MomentoTheme.primaryText)"))
