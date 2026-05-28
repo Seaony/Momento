@@ -98,6 +98,7 @@ enum MomentoTheme {
     }
     static let sidebarTitlebarButtonTopInset: CGFloat = 14
     static let sidebarTitlebarButtonTrailingInset: CGFloat = 14
+    static let shellBackgroundTint = Color.white.opacity(0.07)
     static let collapsedSidebarToggleLeadingInset: CGFloat = 92
     static let sidebarIconHoverBackground = Color.white.opacity(0.08)
     static let toolbarIconButtonWidth: CGFloat = 38

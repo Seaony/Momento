@@ -200,7 +200,10 @@ struct MomentoShellView<Content: View>: View {
             .frame(width: 0, height: 0)
         }
         .background {
-            MomentoGlassBackground(cornerRadius: 0)
+            MomentoGlassBackground(
+                glass: .regular.tint(MomentoTheme.shellBackgroundTint),
+                cornerRadius: 0
+            )
                 .ignoresSafeArea()
         }
     }
