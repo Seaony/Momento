@@ -8,6 +8,7 @@ final class LibraryStore {
     var libraries: [AssetLibrary]
     var currentLibrary: AssetLibrary?
     var assets: [AssetItem]
+    @ObservationIgnored private(set) var assetsVersion: UInt64 = 0
     var folders: [AssetFolder]
     var tags: [TagItem]
     var selectedAssetIDs: Set<AssetItem.ID>
@@ -429,6 +430,7 @@ final class LibraryStore {
         currentLibrary = nil
         libraries = []
         assets = []
+        bumpAssetsVersion()
         folders = []
         tags = []
         selectedAssetIDs = []
@@ -502,6 +504,7 @@ final class LibraryStore {
         } else {
             let updatedTags = normalizedTags(from: names)
             assets[index].tags = updatedTags
+            bumpAssetsVersion()
             tags = Self.uniqueTags(from: assets, libraryID: currentLibrary.id)
         }
     }
@@ -729,6 +732,7 @@ final class LibraryStore {
         let deletedIDs = Set(try metadataStore.deleteFolder(id: id))
         folders = try metadataStore.loadFolders()
         assets = try metadataStore.loadAssets()
+        bumpAssetsVersion()
 
         if case .folder(let selectedFolderID) = sidebarSelection, deletedIDs.contains(selectedFolderID) {
             sidebarSelection = .library(currentLibrary?.id ?? "")
@@ -829,6 +833,7 @@ final class LibraryStore {
         )
         asset.thumbnailURL = thumbnailURL
         assets[index] = asset
+        bumpAssetsVersion()
         return asset
     }
 
@@ -905,6 +910,7 @@ final class LibraryStore {
         try storage.removeStoredAssetFiles(for: asset, in: currentLibrary)
         try metadataStore.deleteAsset(id: assetID)
         assets.removeAll { $0.id == assetID }
+        bumpAssetsVersion()
         pruneSelectedAssetsIfNeeded()
     }
 
@@ -920,7 +926,10 @@ final class LibraryStore {
         }
 
         let deletedIDs = Set(try metadataStore.emptyTrash())
-        assets.removeAll { deletedIDs.contains($0.id) }
+        if !deletedIDs.isEmpty {
+            assets.removeAll { deletedIDs.contains($0.id) }
+            bumpAssetsVersion()
+        }
         pruneSelectedAssetsIfNeeded()
     }
 
@@ -1203,6 +1212,7 @@ final class LibraryStore {
         currentLibrary = library
         libraries = [library]
         assets = loadedAssets
+        bumpAssetsVersion()
         folders = loadedFolders
         tags = loadedTags
         selectedAssetIDs = []
@@ -1218,6 +1228,10 @@ final class LibraryStore {
     private func saveRecentLibrary(_ library: AssetLibrary) throws {
         try recentStore.save(library)
         recentLibraries = recentStore.load()
+    }
+
+    private func bumpAssetsVersion() {
+        assetsVersion &+= 1
     }
 
     private func mergeAssets(_ updatedAssets: [AssetItem]) {
@@ -1238,6 +1252,7 @@ final class LibraryStore {
                 assets.append(asset)
             }
         }
+        bumpAssetsVersion()
     }
 
     private func updateAssetsWithTag(
@@ -1277,6 +1292,7 @@ final class LibraryStore {
                 }
                 assets[index].tags = transform(assets[index].tags)
             }
+            bumpAssetsVersion()
         }
 
         pruneSelectedAssetsIfNeeded()
@@ -1458,6 +1474,7 @@ final class LibraryStore {
 
         mergeAssets(repairedAssets)
         assets = try metadataStore.loadAssets()
+        bumpAssetsVersion()
     }
 
     private func libraryErrorMessage(for error: Error) -> String {
