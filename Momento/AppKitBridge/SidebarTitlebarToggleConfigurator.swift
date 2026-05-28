@@ -320,6 +320,7 @@ private struct SidebarTitlebarToggleAccessoryView: View {
         hoverID: TitlebarAction
     ) -> some View {
         let isHovered = hoveredAction == hoverID
+        let shape = RoundedRectangle(cornerRadius: MomentoTheme.toolbarControlRadius, style: .continuous)
 
         return Button(action: action) {
             ZStack {
@@ -333,6 +334,12 @@ private struct SidebarTitlebarToggleAccessoryView: View {
                             cornerRadius: MomentoTheme.toolbarControlRadius
                         )
                     }
+                    .overlay {
+                        if isHovered {
+                            shape.fill(MomentoTheme.sidebarIconHoverBackground)
+                        }
+                    }
+                    .contentShape(shape)
                     .offset(y: MomentoTheme.sidebarTitlebarButtonHitInset)
             }
             .frame(width: MomentoTheme.titlebarControlHitSize, height: MomentoTheme.titlebarControlHitSize, alignment: .top)
