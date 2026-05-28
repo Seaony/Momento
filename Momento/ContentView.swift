@@ -212,7 +212,7 @@ struct ContentView: View {
             currentLibraryID: store.currentLibrary?.id,
             recentLibraries: store.recentLibraries,
             folders: store.folders,
-            sidebarCounts: sidebarAssetCounts,
+            sidebarCounts: store.sidebarAssetCounts,
             onCreateLibrary: createLibrary,
             onOpenLibrary: openLibrary,
             onImportLibrary: importLibrary,
@@ -250,7 +250,11 @@ struct ContentView: View {
             if isTagManagementSelected {
                 tagManagementContent
             } else {
-                assetGridContent(visibleAssets, sourceReadValidator: sourceReadValidator)
+                assetGridContent(
+                    visibleAssets,
+                    visibleAssetsRevision: store.visibleAssetsRevision,
+                    sourceReadValidator: sourceReadValidator
+                )
             }
         }
         .toolbar {
@@ -327,11 +331,13 @@ struct ContentView: View {
     @ViewBuilder
     private func assetGridContent(
         _ visibleAssets: [AssetItem],
+        visibleAssetsRevision: UInt64,
         sourceReadValidator: (@Sendable () throws -> Void)?
     ) -> some View {
         ZStack {
             AssetCollectionGridView(
                 assets: visibleAssets,
+                visibleAssetsRevision: visibleAssetsRevision,
                 selectedAssetIDs: selectedAssetIDs,
                 viewMode: store.viewMode,
                 localization: localization,
@@ -1223,49 +1229,6 @@ struct ContentView: View {
         case .trash:
             localization.string("Trash")
         }
-    }
-
-    private var sidebarAssetCounts: MomentoSidebarAssetCounts {
-        guard let currentLibrary = store.currentLibrary else {
-            return .empty
-        }
-
-        var libraryAssetCount = 0
-        var favoriteCount = 0
-        var uncategorizedCount = 0
-        var untaggedCount = 0
-        var trashCount = 0
-        var folderCounts: [AssetFolder.ID: Int] = [:]
-
-        for asset in store.assets where asset.libraryID == currentLibrary.id {
-            guard !asset.isTrashed else {
-                trashCount += 1
-                continue
-            }
-
-            libraryAssetCount += 1
-            if asset.isFavorite {
-                favoriteCount += 1
-            }
-            if asset.folderIDs.isEmpty {
-                uncategorizedCount += 1
-            }
-            if asset.tags.isEmpty {
-                untaggedCount += 1
-            }
-            for folderID in asset.folderIDs {
-                folderCounts[folderID, default: 0] += 1
-            }
-        }
-
-        return MomentoSidebarAssetCounts(
-            all: libraryAssetCount,
-            favorites: favoriteCount,
-            uncategorized: uncategorizedCount,
-            untagged: untaggedCount,
-            trash: trashCount,
-            folders: folderCounts
-        )
     }
 
     private var emptyGridState: some View {

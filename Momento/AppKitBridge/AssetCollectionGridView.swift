@@ -181,8 +181,15 @@ enum AssetContextMenuAction: CaseIterable {
     }
 }
 
+nonisolated enum AssetCollectionGridUpdateDecision {
+    static func shouldApplyAssetChanges(previousRevision: UInt64, nextRevision: UInt64) -> Bool {
+        previousRevision != nextRevision
+    }
+}
+
 struct AssetCollectionGridView: NSViewRepresentable {
     var assets: [AssetItem]
+    var visibleAssetsRevision: UInt64
     var selectedAssetIDs: Set<AssetItem.ID>
     var viewMode: AssetViewMode
     var localization: AppLocalization
@@ -203,6 +210,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
 
     init(
         assets: [AssetItem],
+        visibleAssetsRevision: UInt64,
         selectedAssetIDs: Set<AssetItem.ID> = [],
         viewMode: AssetViewMode = .grid,
         localization: AppLocalization = AppLocalization(language: .system),
@@ -218,6 +226,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
         onAssetSourceAccessError: @escaping (Error) -> Void = { _ in }
     ) {
         self.assets = assets
+        self.visibleAssetsRevision = visibleAssetsRevision
         self.selectedAssetIDs = selectedAssetIDs
         self.viewMode = viewMode
         self.localization = localization
@@ -294,6 +303,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
             collectionView.collectionViewLayout = makeLayout(for: viewMode, assets: assets)
             context.coordinator.currentViewMode = viewMode
             context.coordinator.currentAssets = assets
+            context.coordinator.currentVisibleAssetsRevision = visibleAssetsRevision
             context.coordinator.rebuildAssetIndex(for: assets)
             context.coordinator.currentLocalization = localization
             collectionView.reloadData()
@@ -302,7 +312,11 @@ struct AssetCollectionGridView: NSViewRepresentable {
             return
         }
 
-        if context.coordinator.currentAssets != assets {
+        if AssetCollectionGridUpdateDecision.shouldApplyAssetChanges(
+            previousRevision: context.coordinator.currentVisibleAssetsRevision,
+            nextRevision: visibleAssetsRevision
+        ) {
+            context.coordinator.currentVisibleAssetsRevision = visibleAssetsRevision
             applyAssetChanges(to: collectionView, coordinator: context.coordinator)
         }
 
@@ -470,6 +484,7 @@ extension AssetCollectionGridView {
         weak var collectionView: NSCollectionView?
         var currentViewMode: AssetViewMode
         var currentAssets: [AssetItem]
+        var currentVisibleAssetsRevision: UInt64
         var currentLocalization: AppLocalization
         private var isSyncingSelection = false
         private var hoveredPreviewAssetID: AssetItem.ID?
@@ -482,6 +497,7 @@ extension AssetCollectionGridView {
             self.parent = parent
             self.currentViewMode = parent.viewMode
             self.currentAssets = parent.assets
+            self.currentVisibleAssetsRevision = parent.visibleAssetsRevision
             self.currentLocalization = parent.localization
             self.assetIndexByID = Self.assetIndexByID(for: parent.assets)
         }

@@ -139,7 +139,7 @@ final class LibraryStoreAssetsVersionTests: XCTestCase {
     }
 }
 
-private struct AssetsVersionTestEnvironment {
+struct AssetsVersionTestEnvironment {
     let rootURL: URL
     let packageURL: URL
     let inputURL: URL

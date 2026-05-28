@@ -9,6 +9,11 @@ final class LibraryStore {
     var currentLibrary: AssetLibrary?
     var assets: [AssetItem]
     @ObservationIgnored private(set) var assetsVersion: UInt64 = 0
+    @ObservationIgnored private(set) var visibleAssetsRevision: UInt64 = 0
+    @ObservationIgnored private var visibleAssetsCache: [AssetItem]?
+    @ObservationIgnored private var visibleAssetsCacheKey: VisibleAssetsCacheKey?
+    @ObservationIgnored private var sidebarAssetCountsCache: MomentoSidebarAssetCounts?
+    @ObservationIgnored private var sidebarAssetCountsCacheKey: SidebarAssetCountsCacheKey?
     var folders: [AssetFolder]
     var tags: [TagItem]
     var selectedAssetIDs: Set<AssetItem.ID>
@@ -76,6 +81,47 @@ final class LibraryStore {
     }
 
     var visibleAssets: [AssetItem] {
+        _ = assets
+        let normalizedQuery = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cacheKey = VisibleAssetsCacheKey(
+            assetsVersion: assetsVersion,
+            libraryID: currentLibrary?.id,
+            sidebarSelection: sidebarSelection,
+            filterState: filterState,
+            normalizedQuery: normalizedQuery,
+            sortOption: sortOption,
+            sortDirection: sortDirection
+        )
+
+        if visibleAssetsCacheKey == cacheKey, let visibleAssetsCache {
+            return visibleAssetsCache
+        }
+
+        let computedAssets = computeVisibleAssets(normalizedQuery: normalizedQuery)
+        visibleAssetsCache = computedAssets
+        visibleAssetsCacheKey = cacheKey
+        bumpVisibleAssetsRevision()
+        return computedAssets
+    }
+
+    var sidebarAssetCounts: MomentoSidebarAssetCounts {
+        _ = assets
+        let cacheKey = SidebarAssetCountsCacheKey(
+            assetsVersion: assetsVersion,
+            libraryID: currentLibrary?.id
+        )
+
+        if sidebarAssetCountsCacheKey == cacheKey, let sidebarAssetCountsCache {
+            return sidebarAssetCountsCache
+        }
+
+        let computedCounts = computeSidebarAssetCounts()
+        sidebarAssetCountsCache = computedCounts
+        sidebarAssetCountsCacheKey = cacheKey
+        return computedCounts
+    }
+
+    private func computeVisibleAssets(normalizedQuery query: String) -> [AssetItem] {
         guard currentLibrary != nil else {
             return []
         }
@@ -107,7 +153,6 @@ final class LibraryStore {
         }
 
         let filteredAssets = applyFilters(to: scopedAssets)
-        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !query.isEmpty else {
             return sortAssets(filteredAssets)
@@ -1059,6 +1104,21 @@ final class LibraryStore {
         libraryErrorMessage = LibraryStorageError.ubiquitousLibraryPackageUnsupported.errorDescription
     }
 
+    private struct VisibleAssetsCacheKey: Equatable {
+        let assetsVersion: UInt64
+        let libraryID: AssetLibrary.ID?
+        let sidebarSelection: SidebarSelection
+        let filterState: AssetFilterState
+        let normalizedQuery: String
+        let sortOption: AssetSortOption
+        let sortDirection: AssetSortDirection
+    }
+
+    private struct SidebarAssetCountsCacheKey: Equatable {
+        let assetsVersion: UInt64
+        let libraryID: AssetLibrary.ID?
+    }
+
     private var currentLibraryAssets: [AssetItem] {
         guard let currentLibrary else {
             return []
@@ -1089,6 +1149,49 @@ final class LibraryStore {
         }
 
         return assets.filter(assetMatchesFilters)
+    }
+
+    private func computeSidebarAssetCounts() -> MomentoSidebarAssetCounts {
+        guard let currentLibrary else {
+            return .empty
+        }
+
+        var libraryAssetCount = 0
+        var favoriteCount = 0
+        var uncategorizedCount = 0
+        var untaggedCount = 0
+        var trashCount = 0
+        var folderCounts: [AssetFolder.ID: Int] = [:]
+
+        for asset in assets where asset.libraryID == currentLibrary.id {
+            guard !asset.isTrashed else {
+                trashCount += 1
+                continue
+            }
+
+            libraryAssetCount += 1
+            if asset.isFavorite {
+                favoriteCount += 1
+            }
+            if asset.folderIDs.isEmpty {
+                uncategorizedCount += 1
+            }
+            if asset.tags.isEmpty {
+                untaggedCount += 1
+            }
+            for folderID in asset.folderIDs {
+                folderCounts[folderID, default: 0] += 1
+            }
+        }
+
+        return MomentoSidebarAssetCounts(
+            all: libraryAssetCount,
+            favorites: favoriteCount,
+            uncategorized: uncategorizedCount,
+            untagged: untaggedCount,
+            trash: trashCount,
+            folders: folderCounts
+        )
     }
 
     private func isAssetVisible(_ asset: AssetItem) -> Bool {
@@ -1232,6 +1335,10 @@ final class LibraryStore {
 
     private func bumpAssetsVersion() {
         assetsVersion &+= 1
+    }
+
+    private func bumpVisibleAssetsRevision() {
+        visibleAssetsRevision &+= 1
     }
 
     private func mergeAssets(_ updatedAssets: [AssetItem]) {
