@@ -518,7 +518,20 @@ struct MomentoSidebarView: View {
         .contextMenu {
             folderContextMenuItems(for: folder)
         }
-        .background(
+        .onDrag {
+            guard let currentLibraryID else {
+                return NSItemProvider()
+            }
+
+            draggingFolderID = folder.id
+            return FolderDragPasteboardWriter.itemProvider(libraryID: currentLibraryID, folderID: folder.id)
+        } preview: {
+            folderDragPreview(row)
+        }
+        .overlay {
+            folderDropOverlay(row)
+        }
+        .overlay {
             SidebarFolderAssetDropView(
                 currentLibraryID: currentLibraryID,
                 onTargetedChange: { isTargeted in
@@ -534,19 +547,7 @@ struct MomentoSidebarView: View {
                     onAssignDroppedAssetsToFolder(assetIDs, folder.id)
                 }
             )
-        )
-        .onDrag {
-            guard let currentLibraryID else {
-                return NSItemProvider()
-            }
-
-            draggingFolderID = folder.id
-            return FolderDragPasteboardWriter.itemProvider(libraryID: currentLibraryID, folderID: folder.id)
-        } preview: {
-            folderDragPreview(row)
-        }
-        .overlay {
-            folderDropOverlay(row)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .help(folder.name)
         .accessibilityLabel(folder.name)

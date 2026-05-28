@@ -64,6 +64,11 @@ protocol AssetFolderDropTargetHandlers: AnyObject {
 final class AssetFolderDropTargetView: NSView {
     weak var handlers: AssetFolderDropTargetHandlers?
 
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        // Let SwiftUI keep handling normal row clicks while this view remains a drag destination.
+        nil
+    }
+
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
         guard handlers?.canAcceptAssetDrop() == true,
               sender.draggingPasteboard.availableType(from: [AssetDragPasteboardWriter.assetIDsPasteboardType]) != nil else {

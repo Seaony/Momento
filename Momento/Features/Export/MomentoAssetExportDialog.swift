@@ -44,7 +44,7 @@ struct MomentoAssetExportDialog: View {
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .onTapGesture {}
         }
-        .transition(.opacity)
+        .transition(reduceMotion ? .opacity : .scale(scale: 0.96).combined(with: .opacity))
         .onExitCommand {
             dismiss()
         }
@@ -196,7 +196,7 @@ struct MomentoAssetExportDialog: View {
     }
 
     private func dismiss() {
-        withAnimation(.smooth(duration: 0.16)) {
+        withAnimation(.smooth(duration: reduceMotion ? 0.08 : 0.16)) {
             isPresented = false
         }
     }

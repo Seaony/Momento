@@ -248,13 +248,53 @@ final class ArchitectureGuardTests: XCTestCase {
         let bridgeSource = try appKitBridgeSource()
 
         XCTAssertTrue(sidebarSource.contains("SidebarFolderAssetDropView("))
+        XCTAssertTrue(sidebarSource.contains(".overlay {\n            SidebarFolderAssetDropView("))
         XCTAssertTrue(sidebarSource.contains("onAssignDroppedAssetsToFolder(assetIDs, folder.id)"))
         XCTAssertTrue(bridgeSource.contains("registerForDraggedTypes([AssetDragPasteboardWriter.assetIDsPasteboardType])"))
+        XCTAssertTrue(bridgeSource.contains("override func hitTest(_ point: NSPoint) -> NSView?"))
         XCTAssertTrue(bridgeSource.contains("performAssetDrop(from pasteboard: NSPasteboard) -> Bool"))
+        XCTAssertFalse(sidebarSource.contains(".background(\n            SidebarFolderAssetDropView("))
         XCTAssertFalse(sidebarSource.contains("MomentoSidebarAssetDropDelegate"))
         XCTAssertFalse(sidebarSource.contains("sidebarTagSection"))
         XCTAssertFalse(sidebarSource.contains("onAssignDroppedAssetsToTag"))
         XCTAssertTrue(contentSource.contains("try store.assignAssets(ids: assetIDs, to: folderID)"))
+    }
+
+    func testToolbarSearchUsesDebouncedDraftState() throws {
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+
+        XCTAssertTrue(contentSource.contains("@State private var toolbarSearchDraft = \"\""))
+        XCTAssertTrue(contentSource.contains("@State private var toolbarSearchDebounceTask: Task<Void, Never>?"))
+        XCTAssertTrue(contentSource.contains("static let searchDebounceDelay = Duration.milliseconds(300)"))
+        XCTAssertTrue(contentSource.contains("TextField(placeholder, text: toolbarSearchText)"))
+        XCTAssertTrue(contentSource.contains("Task.sleep(for: ContentToolbarMetrics.searchDebounceDelay)"))
+        XCTAssertTrue(contentSource.contains("syncToolbarSearchDraftFromStore()"))
+        XCTAssertFalse(contentSource.contains("TextField(placeholder, text: $store.searchQuery)"))
+    }
+
+    func testCustomDialogsUseAnimatedTransitionAndDarkerBackdrop() throws {
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+        let libraryDialogSource = try String(
+            contentsOf: repositoryRoot().appendingPathComponent("Momento/Features/Library/MomentoCreateLibraryDialog.swift"),
+            encoding: .utf8
+        )
+        let exportDialogSource = try String(
+            contentsOf: repositoryRoot().appendingPathComponent("Momento/Features/Export/MomentoAssetExportDialog.swift"),
+            encoding: .utf8
+        )
+        let tagManagementSource = try String(
+            contentsOf: repositoryRoot().appendingPathComponent("Momento/Features/Tags/MomentoTagManagementView.swift"),
+            encoding: .utf8
+        )
+
+        XCTAssertTrue(contentSource.contains("private var modalDialogAnimation: Animation"))
+        XCTAssertTrue(contentSource.contains(".animation(modalDialogAnimation, value: isCreateLibraryDialogPresented)"))
+        XCTAssertTrue(contentSource.contains(".animation(modalDialogAnimation, value: pendingPermanentAssetDeletion != nil)"))
+        XCTAssertTrue(libraryDialogSource.contains("Color.black.opacity(0.50)"))
+        XCTAssertFalse(libraryDialogSource.contains("Color.black.opacity(0.35)"))
+        XCTAssertTrue(libraryDialogSource.contains(".scale(scale: 0.96).combined(with: .opacity)"))
+        XCTAssertTrue(exportDialogSource.contains(".scale(scale: 0.96).combined(with: .opacity)"))
+        XCTAssertTrue(tagManagementSource.contains(".animation(.smooth(duration: reduceMotion ? 0.08 : 0.18), value: deletingTag != nil)"))
     }
 
     private func repositoryRoot() -> URL {

@@ -10,6 +10,7 @@ struct MomentoTagManagementView: View {
     private static let toolbarHeight: CGFloat = 38
 
     @Environment(\.appLocalization) private var localization
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var tags: [TagSummary]
     var onCreateTag: (String) -> Void
@@ -57,6 +58,7 @@ struct MomentoTagManagementView: View {
                 .zIndex(30)
             }
         }
+        .animation(.smooth(duration: reduceMotion ? 0.08 : 0.18), value: deletingTag != nil)
     }
 
     private var managementToolbar: some View {
@@ -323,7 +325,9 @@ struct MomentoTagManagementView: View {
             }
 
             Button(role: .destructive) {
-                deletingTag = summary
+                withAnimation(.smooth(duration: reduceMotion ? 0.08 : 0.18)) {
+                    deletingTag = summary
+                }
             } label: {
                 Label(localization.string("Delete Tag"), systemImage: "trash")
             }

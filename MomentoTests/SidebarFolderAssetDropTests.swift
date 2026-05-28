@@ -4,6 +4,13 @@ import XCTest
 
 final class SidebarFolderAssetDropTests: XCTestCase {
     @MainActor
+    func testDropTargetKeepsNormalRowHitTestingTransparent() {
+        let targetView = AssetFolderDropTargetView(frame: NSRect(x: 0, y: 0, width: 120, height: 30))
+
+        XCTAssertNil(targetView.hitTest(NSPoint(x: 12, y: 12)))
+    }
+
+    @MainActor
     func testPerformsSameLibraryAssetDropFromPasteboard() throws {
         var capturedAssetIDs: Set<AssetItem.ID>?
         let view = SidebarFolderAssetDropView(

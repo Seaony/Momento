@@ -34,6 +34,7 @@ private enum ContentToolbarMetrics {
     static let iconButtonWidth: CGFloat = 38
     static let updateButtonWidth: CGFloat = 82
     static let viewModeSwitcherWidth: CGFloat = 112
+    static let searchDebounceDelay = Duration.milliseconds(300)
     static let filterPopoverWidth: CGFloat = 340
     static let filterScrollableContentMaxHeight: CGFloat = 220
     static let sortPopoverWidth: CGFloat = 156
@@ -65,6 +66,8 @@ struct ContentView: View {
     @State private var isInstallExtensionButtonHovered = false
     @State private var selectedFilterFacet: AssetFilterFacet = .colors
     @State private var filterTagSearchQuery = ""
+    @State private var toolbarSearchDraft = ""
+    @State private var toolbarSearchDebounceTask: Task<Void, Never>?
     @State private var isFilterPopoverPresented = false
     @State private var isSortPopoverPresented = false
     @State private var shellToastRequest: MomentoToastRequest?
@@ -149,6 +152,56 @@ struct ContentView: View {
         }
     }
 
+    private var modalDialogAnimation: Animation {
+        .smooth(duration: reduceMotion ? 0.08 : 0.18)
+    }
+
+    private var toolbarSearchText: Binding<String> {
+        Binding {
+            toolbarSearchDraft
+        } set: { newValue in
+            toolbarSearchDraft = newValue
+            scheduleToolbarSearchCommit(newValue)
+        }
+    }
+
+    private func syncToolbarSearchDraftFromStore() {
+        guard toolbarSearchDraft != store.searchQuery else {
+            return
+        }
+
+        toolbarSearchDebounceTask?.cancel()
+        toolbarSearchDraft = store.searchQuery
+    }
+
+    private func scheduleToolbarSearchCommit(_ query: String) {
+        toolbarSearchDebounceTask?.cancel()
+        toolbarSearchDebounceTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: ContentToolbarMetrics.searchDebounceDelay)
+            } catch {
+                return
+            }
+
+            guard !Task.isCancelled,
+                  toolbarSearchDraft == query,
+                  store.searchQuery != query else {
+                return
+            }
+
+            store.searchQuery = query
+        }
+    }
+
+    private func clearToolbarSearch() {
+        toolbarSearchDebounceTask?.cancel()
+        toolbarSearchDraft = ""
+        if !store.searchQuery.isEmpty {
+            store.searchQuery = ""
+        }
+        isToolbarSearchFocused = true
+    }
+
     var body: some View {
         Group {
             if store.currentLibrary == nil {
@@ -169,6 +222,14 @@ struct ContentView: View {
         }
         .overlay {
             libraryDialogOverlay
+                .animation(modalDialogAnimation, value: isCreateLibraryDialogPresented)
+                .animation(modalDialogAnimation, value: editingLibrary != nil)
+                .animation(modalDialogAnimation, value: deletingLibrary != nil)
+                .animation(modalDialogAnimation, value: creatingFolder != nil)
+                .animation(modalDialogAnimation, value: editingFolder != nil)
+                .animation(modalDialogAnimation, value: deletingFolder != nil)
+                .animation(modalDialogAnimation, value: pendingAssetExport != nil)
+                .animation(modalDialogAnimation, value: pendingPermanentAssetDeletion != nil)
         }
         .overlay {
             importProgressOverlay
@@ -188,7 +249,14 @@ struct ContentView: View {
         }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .onAppear {
+            syncToolbarSearchDraftFromStore()
             validateCurrentLibraryAvailability()
+        }
+        .onDisappear {
+            toolbarSearchDebounceTask?.cancel()
+        }
+        .onChange(of: store.searchQuery) { _, _ in
+            syncToolbarSearchDraftFromStore()
         }
         .onOpenURL(perform: handleExternalURL)
         .onChange(of: defaultViewMode) { _, newValue in
@@ -417,28 +485,31 @@ struct ContentView: View {
 
     private func toolbarSearchControl(resultCount: Int) -> some View {
         let placeholder = localization.string("Search image name")
-        let hasQuery = !store.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasDraftQuery = !toolbarSearchDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let hasCommittedQuery = !store.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let shouldShowResultCount = hasDraftQuery && hasCommittedQuery && toolbarSearchDraft == store.searchQuery
 
         return HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: MomentoTheme.toolbarIconSize, weight: .semibold))
                 .foregroundStyle(MomentoTheme.primaryText)
 
-            TextField(placeholder, text: $store.searchQuery)
+            TextField(placeholder, text: toolbarSearchText)
                 .textFieldStyle(.plain)
                 .frame(maxWidth: .infinity)
                 .focused($isToolbarSearchFocused)
                 .accessibilityLabel(placeholder)
 
-            if hasQuery {
-                Text("\(resultCount)")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(MomentoTheme.secondaryText)
-                    .monospacedDigit()
+            if hasDraftQuery {
+                if shouldShowResultCount {
+                    Text("\(resultCount)")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(MomentoTheme.secondaryText)
+                        .monospacedDigit()
+                }
 
                 Button {
-                    store.searchQuery = ""
-                    isToolbarSearchFocused = true
+                    clearToolbarSearch()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 12, weight: .semibold))
@@ -1798,7 +1869,9 @@ struct ContentView: View {
             return false
         }
 
-        pendingPermanentAssetDeletion = PermanentAssetDeletionRequest(assets: selectedAssets)
+        withAnimation(modalDialogAnimation) {
+            pendingPermanentAssetDeletion = PermanentAssetDeletionRequest(assets: selectedAssets)
+        }
         return true
     }
 
@@ -1807,7 +1880,9 @@ struct ContentView: View {
             return false
         }
 
-        pendingPermanentAssetDeletion = PermanentAssetDeletionRequest(assets: [asset])
+        withAnimation(modalDialogAnimation) {
+            pendingPermanentAssetDeletion = PermanentAssetDeletionRequest(assets: [asset])
+        }
         return true
     }
 
@@ -1859,7 +1934,7 @@ struct ContentView: View {
             return
         }
 
-        withAnimation(.smooth(duration: 0.16)) {
+        withAnimation(modalDialogAnimation) {
             pendingAssetExport = AssetExportRequest(assets: exportableAssets)
         }
     }
@@ -1968,7 +2043,7 @@ struct ContentView: View {
     }
 
     private func createLibrary() {
-        withAnimation(.smooth(duration: 0.16)) {
+        withAnimation(modalDialogAnimation) {
             isCreateLibraryDialogPresented = true
         }
     }
@@ -2066,7 +2141,7 @@ struct ContentView: View {
             return
         }
 
-        withAnimation(.smooth(duration: 0.16)) {
+        withAnimation(modalDialogAnimation) {
             editingLibrary = library
         }
     }
@@ -2084,7 +2159,7 @@ struct ContentView: View {
             return
         }
 
-        withAnimation(.smooth(duration: 0.16)) {
+        withAnimation(modalDialogAnimation) {
             deletingLibrary = library
         }
     }
@@ -2134,7 +2209,7 @@ struct ContentView: View {
     }
 
     private func presentCreateFolderDialog(parentID: AssetFolder.ID?) {
-        withAnimation(.smooth(duration: 0.16)) {
+        withAnimation(modalDialogAnimation) {
             creatingFolder = FolderCreationRequest(parentID: parentID)
         }
     }
@@ -2144,7 +2219,7 @@ struct ContentView: View {
             return
         }
 
-        withAnimation(.smooth(duration: 0.16)) {
+        withAnimation(modalDialogAnimation) {
             editingFolder = folder
         }
     }
@@ -2154,7 +2229,7 @@ struct ContentView: View {
             return
         }
 
-        withAnimation(.smooth(duration: 0.16)) {
+        withAnimation(modalDialogAnimation) {
             deletingFolder = folder
         }
     }

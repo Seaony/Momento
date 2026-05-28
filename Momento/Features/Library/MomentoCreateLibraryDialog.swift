@@ -156,7 +156,7 @@ struct MomentoCreateLibraryDialog: View {
                 isNameFocused = true
             }
         }
-        .transition(.opacity)
+        .transition(reduceMotion ? .opacity : .scale(scale: 0.96).combined(with: .opacity))
         .onExitCommand {
             dismiss()
         }
@@ -193,7 +193,7 @@ struct MomentoCreateLibraryDialog: View {
     }
 
     private func dismiss() {
-        withAnimation(.smooth(duration: 0.16)) {
+        withAnimation(.smooth(duration: reduceMotion ? 0.08 : 0.16)) {
             isPresented = false
         }
     }
@@ -278,7 +278,7 @@ struct MomentoDeleteLibraryDialog: View {
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .onTapGesture {}
         }
-        .transition(.opacity)
+        .transition(reduceMotion ? .opacity : .scale(scale: 0.96).combined(with: .opacity))
         .onExitCommand {
             dismiss()
         }
@@ -300,7 +300,7 @@ struct MomentoDeleteLibraryDialog: View {
     }
 
     private func dismiss() {
-        withAnimation(.smooth(duration: 0.16)) {
+        withAnimation(.smooth(duration: reduceMotion ? 0.08 : 0.16)) {
             isPresented = false
         }
     }
@@ -463,7 +463,7 @@ struct MomentoFolderNameDialog: View {
                 isNameFocused = true
             }
         }
-        .transition(.opacity)
+        .transition(reduceMotion ? .opacity : .scale(scale: 0.96).combined(with: .opacity))
         .onExitCommand {
             dismiss()
         }
@@ -500,7 +500,7 @@ struct MomentoFolderNameDialog: View {
     }
 
     private func dismiss() {
-        withAnimation(.smooth(duration: 0.16)) {
+        withAnimation(.smooth(duration: reduceMotion ? 0.08 : 0.16)) {
             isPresented = false
         }
     }
@@ -585,7 +585,7 @@ struct MomentoDeleteFolderDialog: View {
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .onTapGesture {}
         }
-        .transition(.opacity)
+        .transition(reduceMotion ? .opacity : .scale(scale: 0.96).combined(with: .opacity))
         .onExitCommand {
             dismiss()
         }
@@ -607,7 +607,7 @@ struct MomentoDeleteFolderDialog: View {
     }
 
     private func dismiss() {
-        withAnimation(.smooth(duration: 0.16)) {
+        withAnimation(.smooth(duration: reduceMotion ? 0.08 : 0.16)) {
             isPresented = false
         }
     }
@@ -618,7 +618,7 @@ struct MomentoDialogBackdrop: View {
 
     var body: some View {
         Rectangle()
-            .fill(Color.black.opacity(0.35))
+            .fill(Color.black.opacity(0.50))
             .ignoresSafeArea()
             .contentShape(Rectangle())
             .onTapGesture(perform: dismiss)
@@ -713,7 +713,7 @@ struct MomentoDestructiveConfirmationDialog: View {
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .onTapGesture {}
         }
-        .transition(.opacity)
+        .transition(reduceMotion ? .opacity : .scale(scale: 0.96).combined(with: .opacity))
         .onExitCommand {
             dismiss()
         }
@@ -725,7 +725,7 @@ struct MomentoDestructiveConfirmationDialog: View {
     }
 
     private func dismiss() {
-        withAnimation(.smooth(duration: 0.16)) {
+        withAnimation(.smooth(duration: reduceMotion ? 0.08 : 0.16)) {
             isPresented = false
         }
     }
