@@ -1,17 +1,26 @@
-// 中文注释：设置页只绑定用户偏好状态，网格等主工作区设置不在这里重复维护。
+// 中文注释：设置页采用「品牌标识 + 玻璃偏好卡片 + 独立动作按钮」的层次结构，只呈现真实存在的偏好（语言）与动作（检查更新），不堆砌占位项。
+import AppKit
 import SwiftUI
 
 private enum MomentoSettingsMetrics {
-    static let windowWidth: CGFloat = 386
-    static let windowHeight: CGFloat = 232
-    static let contentTopInset: CGFloat = 52
-    static let contentHorizontalInset: CGFloat = 20
-    static let contentBottomInset: CGFloat = 18
-    static let rowHeight: CGFloat = 33
-    static let labelWidth: CGFloat = 108
-    static let controlWidth: CGFloat = 188
-    static let controlHeight: CGFloat = 28
-    static let panelRadius: CGFloat = 18
+    static let windowWidth: CGFloat = 400
+    static let windowHeight: CGFloat = 326
+
+    static let topInset: CGFloat = 42          // 让出隐藏标题栏与窗口关闭按钮的区域
+    static let horizontalInset: CGFloat = 20
+    static let bottomInset: CGFloat = 24
+
+    static let iconSize: CGFloat = 76
+    static let cardRadius: CGFloat = 18
+    static let rowHeight: CGFloat = 44
+    static let rowHorizontalInset: CGFloat = 16
+    static let pickerWidth: CGFloat = 172
+    static let actionButtonHeight: CGFloat = 30
+    static let actionButtonRadius: CGFloat = 10
+
+    static var cardWidth: CGFloat {
+        windowWidth - horizontalInset * 2
+    }
 }
 
 struct MomentoSettingsView: View {
@@ -26,131 +35,85 @@ struct MomentoSettingsView: View {
     @Binding var appLanguage: AppLanguage
     @ObservedObject var updateService: AppUpdateService
 
-    @State private var isUpdateButtonHovered = false
+    @State private var isUpdateHovered = false
 
     var body: some View {
         ZStack {
             MomentoGlassBackground(cornerRadius: 0)
                 .ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: 14) {
-                settingsPanel
+            VStack(spacing: 0) {
+                identityHeader
+                    .padding(.bottom, 22)
+                settingsCard
+                    .padding(.bottom, 16)
+                updateButton
             }
-            .padding(.top, MomentoSettingsMetrics.contentTopInset)
-            .padding(.horizontal, MomentoSettingsMetrics.contentHorizontalInset)
-            .padding(.bottom, MomentoSettingsMetrics.contentBottomInset)
+            .padding(.top, MomentoSettingsMetrics.topInset)
+            .padding(.horizontal, MomentoSettingsMetrics.horizontalInset)
+            .padding(.bottom, MomentoSettingsMetrics.bottomInset)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .background {
-            WindowTransparencyConfigurator()
+            WindowTransparencyConfigurator(fixedContentSize: Self.preferredSize)
         }
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         .frame(
             width: MomentoSettingsMetrics.windowWidth,
             height: MomentoSettingsMetrics.windowHeight,
-            alignment: .topLeading
+            alignment: .top
         )
+    }
+
+    // MARK: - 品牌标识
+
+    private var identityHeader: some View {
+        VStack(spacing: 0) {
+            Image(nsImage: NSApplication.shared.applicationIconImage)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: MomentoSettingsMetrics.iconSize, height: MomentoSettingsMetrics.iconSize)
+                .shadow(color: Color.black.opacity(0.22), radius: 10, y: 5)
+                .padding(.bottom, 12)
+
+            Text(verbatim: "Momento")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(MomentoTheme.primaryText)
+                .tracking(0.2)
+
+            Text(versionText)
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(MomentoTheme.secondaryText)
+                .padding(.top, 3)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var versionText: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
-        return "\(version) (\(build))"
+        return "\(localization.string("Version")) \(version) (\(build))"
     }
 
-    private var settingsPanel: some View {
-        VStack(spacing: 0) {
-            settingsRow(label: localization.string("Language")) {
-                Picker("", selection: $appLanguage) {
-                    ForEach(AppLanguage.allCases) { language in
-                        Text(localization.title(for: language))
-                            .tag(language)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .buttonStyle(.glass)
-                .controlSize(.regular)
-                .frame(
-                    width: MomentoSettingsMetrics.controlWidth,
-                    height: MomentoSettingsMetrics.controlHeight
-                )
-                .environment(\.appearsActive, true)
-            }
+    // MARK: - 偏好卡片
 
-            settingsDivider
-
-            settingsRow(label: localization.string("Updates")) {
-                Button {
-                    updateService.checkForUpdates()
-                } label: {
-                    Label(localization.string("Check for Updates..."), systemImage: "arrow.triangle.2.circlepath")
-                        .labelStyle(.titleAndIcon)
-                        .font(.system(size: 12, weight: .semibold))
-                        .frame(
-                            width: MomentoSettingsMetrics.controlWidth,
-                            height: MomentoSettingsMetrics.controlHeight
-                        )
-                }
-                .buttonStyle(.glass)
-                .controlSize(.regular)
-                .foregroundStyle(MomentoTheme.primaryText)
-                .environment(\.appearsActive, true)
-                .disabled(!updateService.canCheckForUpdates)
-                .pointerStyle(.link)
-                .settingsButtonHoverFeedback(isHovered: isUpdateButtonHovered, reduceMotion: reduceMotion)
-                .onHover { isHovered in
-                    isUpdateButtonHovered = isHovered
-                }
-            }
-
-            settingsDivider
-
-            settingsInfoRow(label: localization.string("Name"), value: "Momento")
-            settingsInsetDivider
-            settingsInfoRow(label: localization.string("Version"), value: versionText)
+    private var settingsCard: some View {
+        settingsRow(label: localization.string("Language")) {
+            languagePicker
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.vertical, 6)
+        .frame(width: MomentoSettingsMetrics.cardWidth)
         .background {
             MomentoGlassBackground(
-                glass: .regular.tint(Color.white.opacity(0.045)).interactive(true),
-                cornerRadius: MomentoSettingsMetrics.panelRadius
+                glass: .regular.tint(Color.white.opacity(0.05)).interactive(true),
+                cornerRadius: MomentoSettingsMetrics.cardRadius
             )
         }
         .overlay {
-            RoundedRectangle(cornerRadius: MomentoSettingsMetrics.panelRadius, style: .continuous)
-                .strokeBorder(MomentoTheme.subtleStroke.opacity(0.34), lineWidth: 0.6)
+            RoundedRectangle(cornerRadius: MomentoSettingsMetrics.cardRadius, style: .continuous)
+                .strokeBorder(MomentoTheme.subtleStroke.opacity(0.35), lineWidth: 0.6)
         }
-    }
-
-    private var settingsDivider: some View {
-        Rectangle()
-            .fill(MomentoTheme.subtleStroke.opacity(0.26))
-            .frame(height: 0.5)
-    }
-
-    private var settingsInsetDivider: some View {
-        Rectangle()
-            .fill(MomentoTheme.subtleStroke.opacity(0.18))
-            .frame(height: 0.5)
-            .padding(.leading, MomentoSettingsMetrics.labelWidth)
-    }
-
-    private func settingsLabel(_ label: String, color: Color) -> some View {
-        Text(label)
-            .foregroundStyle(color)
-            .frame(width: MomentoSettingsMetrics.labelWidth, alignment: .leading)
-            .lineLimit(1)
-            .minimumScaleFactor(0.86)
-    }
-
-    private func controlSlot<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        HStack(spacing: 0) {
-            Spacer(minLength: 10)
-            content()
-                .frame(width: MomentoSettingsMetrics.controlWidth, alignment: .trailing)
-        }
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        .shadow(color: Color.black.opacity(0.1), radius: 12, y: 4)
     }
 
     private func settingsRow<Content: View>(
@@ -158,36 +121,81 @@ struct MomentoSettingsView: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         HStack(spacing: 12) {
-            settingsLabel(label, color: MomentoTheme.primaryText)
-            controlSlot {
-                content()
-            }
+            Text(label)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(MomentoTheme.primaryText)
+            Spacer(minLength: 8)
+            content()
         }
-        .font(.system(size: 12, weight: .medium))
+        .padding(.horizontal, MomentoSettingsMetrics.rowHorizontalInset)
         .frame(height: MomentoSettingsMetrics.rowHeight)
     }
 
-    private func settingsInfoRow(label: String, value: String) -> some View {
-        HStack(spacing: 12) {
-            settingsLabel(label, color: MomentoTheme.secondaryText)
-            controlSlot {
-                Text(value)
-                    .foregroundStyle(MomentoTheme.primaryText)
+    private var languagePicker: some View {
+        Picker("", selection: $appLanguage) {
+            ForEach(AppLanguage.allCases) { language in
+                Text(localization.title(for: language))
+                    .tag(language)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .buttonStyle(.glass)
+        .controlSize(.regular)
+        .frame(width: MomentoSettingsMetrics.pickerWidth)
+        .environment(\.appearsActive, true)
+    }
+
+    // MARK: - 检查更新
+
+    private var updateButton: some View {
+        let hasUpdate = updateService.availableUpdateDisplayVersion != nil
+        let shape = RoundedRectangle(cornerRadius: MomentoSettingsMetrics.actionButtonRadius, style: .continuous)
+
+        return Button {
+            updateService.checkForUpdates()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: hasUpdate ? "arrow.down.circle.fill" : "arrow.triangle.2.circlepath")
+                Text(updateButtonTitle)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-                    .multilineTextAlignment(.trailing)
             }
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(hasUpdate ? Color.white : MomentoTheme.primaryText)
+            .fixedSize()
+            .padding(.horizontal, 16)
+            .frame(height: MomentoSettingsMetrics.actionButtonHeight)
+            .glassEffect(
+                hasUpdate
+                    ? .regular.tint(Color.accentColor).interactive(true)
+                    : .regular.interactive(true),
+                in: shape
+            )
+            .contentShape(shape)
         }
-        .font(.system(size: 12, weight: .medium))
-        .frame(height: MomentoSettingsMetrics.rowHeight)
+        .buttonStyle(.plain)
+        .scaleEffect(isUpdateHovered && !reduceMotion ? 1.03 : 1)
+        .brightness(isUpdateHovered ? 0.06 : 0)
+        .shadow(
+            color: Color.black.opacity(isUpdateHovered ? 0.2 : 0),
+            radius: isUpdateHovered ? 7 : 0,
+            y: isUpdateHovered ? 3 : 0
+        )
+        .environment(\.appearsActive, true)
+        .disabled(!updateService.canCheckForUpdates)
+        .opacity(updateService.canCheckForUpdates ? 1 : 0.55)
+        .pointerStyle(.link)
+        .animation(.smooth(duration: 0.15), value: isUpdateHovered)
+        .onHover { hovering in
+            isUpdateHovered = hovering
+        }
     }
-}
 
-private extension View {
-    func settingsButtonHoverFeedback(isHovered: Bool, reduceMotion: Bool) -> some View {
-        scaleEffect(isHovered && !reduceMotion ? 1.025 : 1)
-            .brightness(isHovered ? 0.06 : 0)
-            .animation(reduceMotion ? nil : .smooth(duration: 0.16), value: isHovered)
+    private var updateButtonTitle: String {
+        if let version = updateService.availableUpdateDisplayVersion {
+            return "\(localization.string("Update Available")) · \(version)"
+        }
+        return localization.string("Check for Updates")
     }
 }
 
@@ -198,6 +206,6 @@ private extension View {
         appLanguage: $language,
         updateService: AppUpdateService()
     )
-        .environment(\.appLocalization, AppLocalization(language: language))
-        .frame(width: MomentoSettingsView.preferredSize.width, height: MomentoSettingsView.preferredSize.height)
+    .environment(\.appLocalization, AppLocalization(language: language))
+    .frame(width: MomentoSettingsView.preferredSize.width, height: MomentoSettingsView.preferredSize.height)
 }

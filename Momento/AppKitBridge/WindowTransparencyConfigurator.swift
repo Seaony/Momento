@@ -12,6 +12,12 @@ struct WindowTransparencyConfigurator: NSViewRepresentable {
     /// opaque 背景，因此这个值就是整 App 视觉密度的唯一入口。
     static let backingOpacity: CGFloat = 0.9
 
+    var fixedContentSize: CGSize?
+
+    init(fixedContentSize: CGSize? = nil) {
+        self.fixedContentSize = fixedContentSize
+    }
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
         DispatchQueue.main.async { applyTransparency(to: view.window) }
@@ -19,7 +25,10 @@ struct WindowTransparencyConfigurator: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
-        guard let window = nsView.window else { return }
+        guard let window = nsView.window else {
+            DispatchQueue.main.async { applyTransparency(to: nsView.window) }
+            return
+        }
         applyTransparency(to: window)
     }
 
@@ -30,5 +39,11 @@ struct WindowTransparencyConfigurator: NSViewRepresentable {
         window.titleVisibility = .hidden
         window.isOpaque = false
         window.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(Self.backingOpacity)
+
+        if let fixedContentSize {
+            window.contentMinSize = fixedContentSize
+            window.contentMaxSize = fixedContentSize
+            window.setContentSize(fixedContentSize)
+        }
     }
 }
