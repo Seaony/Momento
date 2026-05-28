@@ -379,7 +379,6 @@ struct ContentView: View {
         .buttonStyle(.plain)
         .pointerStyle(.link)
         .disabled(!updateService.canCheckForUpdates)
-        .help(version.map { localization.format("Update to %@", $0) } ?? localization.string("Update Available"))
         .accessibilityLabel(localization.string("Update Available"))
         .onHover { hovering in
             withAnimation(.smooth(duration: 0.14)) {
@@ -470,7 +469,6 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
                 .pointerStyle(.link)
-                .help(localization.title(for: viewMode))
                 .accessibilityLabel(localization.title(for: viewMode))
                 .onHover { hovering in
                     withAnimation(.smooth(duration: 0.14)) {
@@ -608,7 +606,6 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .pointerStyle(.link)
-        .help(label)
         .accessibilityLabel(label)
         .onHover { hovering in
             withAnimation(.smooth(duration: 0.14)) {

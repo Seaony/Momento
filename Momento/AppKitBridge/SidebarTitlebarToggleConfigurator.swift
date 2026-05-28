@@ -309,7 +309,6 @@ private struct SidebarTitlebarToggleAccessoryView: View {
                 isToggleHovered = hovering
             }
         }
-        .help(label)
         .momentoTitlebarTooltip(
             label,
             isPresented: isToggleHovered
@@ -355,7 +354,6 @@ private struct SidebarTitlebarToggleAccessoryView: View {
                 }
             }
         }
-        .help(label)
         .momentoTitlebarTooltip(
             label,
             isPresented: isHovered

@@ -121,6 +121,36 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertFalse(inspectorTitlebarSource.contains(".momentoTooltip("))
     }
 
+    func testCustomTooltipControlsDoNotAlsoUseNativeHelpTooltips() throws {
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+        let sidebarTitlebarSource = try String(contentsOf: sidebarTitlebarURL(), encoding: .utf8)
+        let inspectorTitlebarSource = try String(contentsOf: inspectorTitlebarURL(), encoding: .utf8)
+        let updateButtonSource = try sourceBlock(
+            in: contentSource,
+            from: "private var toolbarUpdateButton",
+            to: "private var isTagManagementSelected"
+        )
+        let viewModeSource = try sourceBlock(
+            in: contentSource,
+            from: "private var toolbarViewModeSwitcher",
+            to: "private func toolbarSearchControl"
+        )
+        let toolbarIconButtonSource = try sourceBlock(
+            in: contentSource,
+            from: "private func toolbarIconButton(",
+            to: "private var filterPopover"
+        )
+
+        XCTAssertTrue(updateButtonSource.contains(".momentoTooltip("))
+        XCTAssertTrue(viewModeSource.contains(".momentoTooltip("))
+        XCTAssertTrue(toolbarIconButtonSource.contains(".momentoTooltip("))
+        XCTAssertFalse(updateButtonSource.contains(".help("))
+        XCTAssertFalse(viewModeSource.contains(".help("))
+        XCTAssertFalse(toolbarIconButtonSource.contains(".help("))
+        XCTAssertFalse(sidebarTitlebarSource.contains(".help(label)"))
+        XCTAssertFalse(inspectorTitlebarSource.contains(".help(label)"))
+    }
+
     func testToolbarSearchControlDoesNotShowTooltip() throws {
         let source = try String(contentsOf: contentViewURL(), encoding: .utf8)
         let searchStart = try XCTUnwrap(source.range(of: "private func toolbarSearchControl(resultCount: Int) -> some View"))
@@ -423,6 +453,13 @@ final class ArchitectureGuardTests: XCTestCase {
         try XCTUnwrap(exportedTypes.first { type in
             type["UTTypeIdentifier"] as? String == identifier
         })
+    }
+
+    private func sourceBlock(in source: String, from startMarker: String, to endMarker: String) throws -> String {
+        let start = try XCTUnwrap(source.range(of: startMarker))
+        let end = try XCTUnwrap(source.range(of: endMarker, range: start.upperBound..<source.endIndex))
+
+        return String(source[start.lowerBound..<end.lowerBound])
     }
 
     private func appURL() -> URL {
