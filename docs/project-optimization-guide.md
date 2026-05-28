@@ -12,11 +12,13 @@
 
 本轮只做文档审计，不直接修改业务代码。
 
+执行原则：这份指南不能被当成“大重构清单”。每个后续优化都必须先有明确证据、明确文件范围、可运行验证和回滚方式；没有证据的抽象、拆层、缓存和批量迁移一律不做。
+
 ## 当前结论
 
 Momento 当前主体方向是健康的：本地 `.momento` package、Core Data + SQLite、SwiftUI shell + AppKit `NSCollectionView`、security-scoped bookmark、String Catalog、Sparkle 更新和数据生命周期测试都符合这个项目的目标。
 
-主要问题不是“架构错误”，而是功能快速推进后留下的几个维护压力点：
+主要问题不是“架构错误”，而是功能快速推进后留下的几个维护压力点。它们不要求立刻大规模重构，应该按真实改动和验证证据逐步处理：
 
 1. 大文件继续变大，尤其 `LibraryStore`、`ContentView`、`AssetCollectionGridView` 和 `LibraryMetadataStore`。
 2. 部分架构护栏测试依赖源码字符串，能防回归但偏脆。
@@ -30,7 +32,7 @@ Momento 当前主体方向是健康的：本地 `.momento` package、Core Data +
 
 `Momento/AppKitBridge/AssetCollectionGridView.swift` 使用 `NSCollectionView` 是合理的。这个路径承担高数量素材渲染、拖拽、file promise、hover/selection 和异步缩略图解码，直接替换成 `LazyVGrid` 会丢失已有 AppKit 能力，也不符合 `AGENTS.md` 的架构约束。
 
-优化方向不是重写，而是继续收窄职责：把纯逻辑、pasteboard payload、layout resolver、preview provider 这类可以独立测试的部分逐步拆出去。
+优化方向不是重写，而是继续收窄职责：后续改到对应功能时，把纯逻辑、pasteboard payload、layout resolver、preview provider 这类可以独立测试的部分从文件边缘小步提取。
 
 ### 本地资源库安全 guard
 
@@ -46,7 +48,7 @@ Momento 当前主体方向是健康的：本地 `.momento` package、Core Data +
 
 ## 发现的问题
 
-### P1：核心状态对象职责过宽
+### P2：核心状态对象职责正在变宽，但不应独立大拆
 
 文件：
 
@@ -65,11 +67,11 @@ Momento 当前主体方向是健康的：本地 `.momento` package、Core Data +
 
 建议：
 
-短期不要拆大架构。后续遇到真实功能改动时，按这些自然边界小步提取：
+短期不要把这项作为独立大重构执行。后续遇到真实功能改动时，只按被触及的自然边界小步提取，且每个 PR 必须保持外部行为不变：
 
-- `LibraryStore+Selection` 或独立 selection resolver：只放选择集合、primary selection、prune 规则。
-- `LibraryStore+RecentLibraries` 或 `RecentLibraryCoordinator`：只处理 recent library open/rename/delete/move。
-- `AssetCommandHandler` 或局部 helper：收敛 `ContentView` 中批量删除、导出、刷新缩略图等命令包装。
+- selection：只有修改选择、批量操作或 prune 规则时，才提取可测试的纯 resolver；否则继续留在现有 store 中。
+- recent libraries：只有修改 recent library open/rename/delete/move 行为时，才收敛相关逻辑；先用现有文件 extension 或局部 helper，不预设 coordinator 层。
+- `ContentView` 命令包装：只有命令逻辑继续增长或出现真实重复时，才提取局部 helper；不要提前引入通用 command handler。
 
 禁止：
 
@@ -87,7 +89,7 @@ Momento 当前主体方向是健康的：本地 `.momento` package、Core Data +
 
 问题：
 
-文档里同时存在目标规格、历史执行计划、已经实现的决策和未来不做项。例如 `FEATURE.md` 还描述 `ThumbnailRecord`、`SearchIndex`、SVG/PDF/video 等长线能力；旧计划文档中也保留 `cloud sync` 作为非目标。这些不是当前代码问题，但会影响后续 agent 或人工 review 的判断。
+文档里同时存在目标规格、历史执行计划、已经实现的决策和未来不做项。例如 `FEATURE.md` 还描述 `ThumbnailRecord`、`SearchIndex`、SVG/PDF/video 等长线能力；旧计划文档中也保留已废弃方向的非目标描述。这些不是当前代码问题，但会影响后续 agent 或人工 review 的判断。
 
 建议：
 
@@ -98,6 +100,12 @@ Momento 当前主体方向是健康的：本地 `.momento` package、Core Data +
 - `future`: 产品愿景，不代表当前实现。
 
 同时在历史计划顶部加一句“此文档为历史执行计划，当前实现以 README、AGENTS 和最新 review 文档为准”。
+
+可执行标准：
+
+- 优先新增 `docs/README.md` 作为索引，不重写所有文档。
+- 只给历史计划加顶部状态说明，不改计划正文，避免制造无意义 diff。
+- 如果某份文档状态无法判断，先标 `needs-review`，不要猜成 current。
 
 ### P2：源码字符串测试偏脆
 
@@ -143,8 +151,8 @@ Momento 当前主体方向是健康的：本地 `.momento` package、Core Data +
 
 下一轮性能工作只做 Phase 0：
 
-- 给 `visibleAssets`、`activateLibrary`、`AssetCollectionGridView.updateNSView`、masonry `prepare`、import pipeline 加 Debug-only signpost。
-- 建一个固定 10k asset 样本库，记录打开、滚动、搜索、resize、导入的 baseline。
+- 给 `visibleAssets`、`activateLibrary`、`AssetCollectionGridView.updateNSView`、masonry `prepare`、import pipeline 加 Debug-only signpost；不得改变 release 行为。
+- 先用本地脚本或临时 fixture 生成 10k asset benchmark 数据，记录打开、滚动、搜索、resize、导入的 baseline；不要把大样本库提交进仓库。
 - 更新 `docs/performance-optimization-plan.md`，删除已过期项：导入时图片尺寸和 EXIF 已经共享一次 ImageIO properties 读取。
 
 ### P2：Xcode 用户级 metadata 被 tracked
@@ -162,7 +170,8 @@ Momento 当前主体方向是健康的：本地 `.momento` package、Core Data +
 
 单独做一个小清理：
 
-- 从 git 中移除 `Momento.xcodeproj/xcuserdata/...`。
+- 先确认 shared scheme 足够执行 `xcodebuild -list` 和现有测试 target。
+- 从 git 中移除 `Momento.xcodeproj/xcuserdata/...`，只移除跟踪关系，不删除用户本地偏好。
 - `.gitignore` 增加 `*.xcuserstate`、`xcuserdata/`、`.DS_Store`。
 - 保留 shared scheme：`Momento.xcodeproj/xcshareddata/xcschemes/Momento.xcscheme`。
 
@@ -181,7 +190,8 @@ Momento 当前主体方向是健康的：本地 `.momento` package、Core Data +
 下次开始功能改动前先处理：
 
 - 如果确认不是用户有意修改，回退这个 diff。
-- 如果 Xcode 会持续重排，单独提交一次“normalize project file ordering”，不要混进业务提交。
+- 只有确认 Xcode 会稳定产生同一类重排、且团队接受该顺序时，才单独提交一次“normalize project file ordering”。
+- 不要为了“干净”提交一次无法解释来源的 project file churn。
 
 ### P2：导入 pipeline 进度刷新需要继续约束
 
@@ -249,27 +259,36 @@ Momento 当前主体方向是健康的：本地 `.momento` package、Core Data +
 
 ## 推荐优化顺序
 
-### 第一阶段：低风险整理
+### 第零阶段：先清理 review 噪声
 
-1. 清理或隔离 `project.pbxproj` section-order diff。
-2. 移除 tracked Xcode `xcuserdata`，补 `.gitignore`。
-3. 给 docs 加状态索引，标记历史计划和当前约束。
-4. 更新 `docs/performance-optimization-plan.md` 中已过期的导入性能建议。
+1. 处理当前 `project.pbxproj` section-order diff：确认来源后回退，或单独解释并提交。
+2. 不把这个 diff 混进任何功能、文档或性能提交。
+
+### 第一阶段：最小文档治理
+
+1. 给 docs 加状态索引，标记历史计划和当前约束。
+2. 只在历史计划顶部加状态说明，不重写历史计划正文。
+3. 如需触碰 `docs/performance-optimization-plan.md`，只更新已明确过期的导入性能建议。
 
 ### 第二阶段：测量优先
 
 1. 加 Debug-only signpost。
-2. 固化 10k asset benchmark 数据。
+2. 用脚本或本地 fixture 生成 10k asset benchmark 数据，不提交大样本库。
 3. 用 profile 决定是否继续优化 `visibleAssets`、masonry layout、thumbnail decode 或 import progress。
 
-### 第三阶段：按真实改动拆边界
+### 第三阶段：仓库卫生
 
-1. 做 recent library 功能时，提取 recent library 边界。
-2. 做选择/批量操作时，提取 selection resolver。
+1. 移除 tracked Xcode `xcuserdata`，补 `.gitignore`。
+2. 验证 shared scheme 仍能被 `xcodebuild` 发现。
+
+### 第四阶段：按真实改动拆边界
+
+1. 做 recent library 功能时，才提取 recent library 边界。
+2. 做选择/批量操作时，才提取 selection resolver。
 3. 做 sidebar 拖拽时，只提取 drop resolver，不改整个 Sidebar 架构。
 4. 做 asset grid 性能时，只提取 preview provider / layout / pasteboard 的纯逻辑，不重写 AppKit bridge。
 
-### 第四阶段：大规模能力只在有证据时进入
+### 第五阶段：大规模能力只在有证据时进入
 
 只有 50k-100k asset profile 证明现有架构无法达标时，才讨论：
 
