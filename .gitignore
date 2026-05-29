@@ -1,6 +1,7 @@
 /build/
 /dist/
 /.worktrees/
+/docs/
 
 # Local machine and agent state
 .DS_Store
