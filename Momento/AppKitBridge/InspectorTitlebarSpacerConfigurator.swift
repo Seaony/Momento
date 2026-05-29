@@ -140,9 +140,6 @@ extension InspectorTitlebarSpacerConfigurator {
 
             let accessoryController = NSTitlebarAccessoryViewController()
             accessoryController.layoutAttribute = .right
-            if #available(macOS 26.1, *) {
-                accessoryController.preferredScrollEdgeEffectStyle = .soft
-            }
             accessoryController.view = containerView
 
             self.containerView = containerView

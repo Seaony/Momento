@@ -54,6 +54,7 @@ struct WindowTransparencyConfigurator: NSViewRepresentable {
         guard let window else { return }
         window.styleMask.insert(.fullSizeContentView)
         window.titlebarAppearsTransparent = true
+        window.titlebarSeparatorStyle = .none
         window.titleVisibility = .hidden
         window.isOpaque = false
         window.backgroundColor = Self.adaptiveBackingColor()

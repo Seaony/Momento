@@ -22,6 +22,7 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(contentSource.contains(".toolbarBackgroundVisibility(.hidden, for: .windowToolbar)"))
         XCTAssertFalse(contentSource.contains(".toolbarVisibility("))
         XCTAssertTrue(windowSource.contains("window.titlebarAppearsTransparent = true"))
+        XCTAssertTrue(windowSource.contains("window.titlebarSeparatorStyle = .none"))
         XCTAssertTrue(windowSource.contains("window.titleVisibility = .hidden"))
     }
 
@@ -108,13 +109,13 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(contentSource.contains("onInstallBrowserExtension: installBrowserExtension"))
     }
 
-    func testTitlebarAccessoriesUseSoftScrollEdgeEffect() throws {
+    func testTitlebarAccessoriesDoNotDrawScrollEdgeEffects() throws {
         let sidebarTitlebarSource = try String(contentsOf: sidebarTitlebarURL(), encoding: .utf8)
         let inspectorTitlebarSource = try String(contentsOf: inspectorTitlebarURL(), encoding: .utf8)
 
         for source in [sidebarTitlebarSource, inspectorTitlebarSource] {
-            XCTAssertTrue(source.contains("if #available(macOS 26.1, *)"))
-            XCTAssertTrue(source.contains("accessoryController.preferredScrollEdgeEffectStyle = .soft"))
+            XCTAssertFalse(source.contains("preferredScrollEdgeEffectStyle"))
+            XCTAssertFalse(source.contains("NSScrollEdgeEffectStyle"))
         }
     }
 
