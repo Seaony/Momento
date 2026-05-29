@@ -92,7 +92,10 @@ struct MomentoTagManagementView: View {
                     .frame(height: Self.toolbarHeight)
                     .background {
                         MomentoGlassBackground(
-                            glass: .regular.tint(Color.white.opacity(isCreateButtonHovered ? 0.12 : 0.04)).interactive(true),
+                            glass: .regular.tint(MomentoTheme.contrastTint(
+                                lightOpacity: isCreateButtonHovered ? 0.07 : 0.03,
+                                darkOpacity: isCreateButtonHovered ? 0.12 : 0.04
+                            )).interactive(true),
                             cornerRadius: 13
                         )
                     }
@@ -119,7 +122,7 @@ struct MomentoTagManagementView: View {
 
                     if !visibleTags.isEmpty {
                         Rectangle()
-                            .fill(Color.white.opacity(0.08))
+                            .fill(MomentoTheme.subtleGlassStroke)
                             .frame(height: 1)
                             .padding(.leading, 42)
                     }
@@ -130,7 +133,7 @@ struct MomentoTagManagementView: View {
 
                     if tag.id != visibleTags.last?.id {
                         Rectangle()
-                            .fill(Color.white.opacity(0.08))
+                            .fill(MomentoTheme.subtleGlassStroke)
                             .frame(height: 1)
                             .padding(.leading, 42)
                     }
@@ -298,7 +301,7 @@ struct MomentoTagManagementView: View {
         .frame(height: 52)
         .frame(maxWidth: .infinity)
         .background {
-            rowShape.fill(isHovered ? Color.white.opacity(0.05) : Color.clear)
+            rowShape.fill(isHovered ? MomentoTheme.contrastTint(lightOpacity: 0.04, darkOpacity: 0.05) : Color.clear)
         }
         .contentShape(rowShape)
         .onHover { hovering in
@@ -336,7 +339,10 @@ struct MomentoTagManagementView: View {
                 .font(.system(size: 14, weight: .semibold))
                 .frame(width: 30, height: 28)
                 .glassEffect(
-                    .regular.tint(Color.white.opacity(isHovered ? 0.12 : 0.04)).interactive(true),
+                    .regular.tint(MomentoTheme.contrastTint(
+                        lightOpacity: isHovered ? 0.07 : 0.03,
+                        darkOpacity: isHovered ? 0.12 : 0.04
+                    )).interactive(true),
                     in: shape
                 )
                 .contentShape(shape)
@@ -385,11 +391,20 @@ struct MomentoTagManagementView: View {
                 }
                 .overlay {
                     if isHovered {
-                        shape.fill(Color.white.opacity(isProminent ? 0.16 : 0.1))
+                        shape.fill(MomentoTheme.contrastTint(
+                            lightOpacity: isProminent ? 0.08 : 0.055,
+                            darkOpacity: isProminent ? 0.16 : 0.1
+                        ))
                     }
                 }
                 .overlay {
-                    shape.strokeBorder(Color.white.opacity(isHovered ? 0.28 : 0.14), lineWidth: 1)
+                    shape.strokeBorder(
+                        MomentoTheme.contrastTint(
+                            lightOpacity: isHovered ? 0.16 : 0.09,
+                            darkOpacity: isHovered ? 0.28 : 0.14
+                        ),
+                        lineWidth: 1
+                    )
                 }
                 .contentShape(shape)
         }

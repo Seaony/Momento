@@ -105,7 +105,7 @@ struct MomentoSettingsView: View {
         .frame(width: MomentoSettingsMetrics.cardWidth)
         .background {
             MomentoGlassBackground(
-                glass: .regular.tint(Color.white.opacity(0.05)).interactive(true),
+                glass: .regular.tint(MomentoTheme.contrastTint(lightOpacity: 0.04, darkOpacity: 0.05)).interactive(true),
                 cornerRadius: MomentoSettingsMetrics.cardRadius
             )
         }

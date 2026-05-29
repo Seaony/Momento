@@ -620,7 +620,7 @@ struct ContentView: View {
         .frame(width: ContentToolbarMetrics.filterPopoverWidth)
         .fixedSize(horizontal: false, vertical: true)
         .background {
-            MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.18)), cornerRadius: 20)
+            MomentoGlassBackground(glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 20)
         }
     }
 
@@ -643,7 +643,7 @@ struct ContentView: View {
         .padding(12)
         .frame(width: ContentToolbarMetrics.sortPopoverWidth)
         .background {
-            MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.16)), cornerRadius: 18)
+            MomentoGlassBackground(glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.16)), cornerRadius: 18)
         }
     }
 
@@ -658,12 +658,12 @@ struct ContentView: View {
         .padding(5)
         .background {
             MomentoGlassBackground(
-                glass: .regular.tint(Color.white.opacity(0.05)).interactive(true),
+                glass: .regular.tint(MomentoTheme.contrastTint(lightOpacity: 0.04, darkOpacity: 0.05)).interactive(true),
                 cornerRadius: 14
             )
         }
         .overlay {
-            shape.strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            shape.strokeBorder(MomentoTheme.subtleGlassStroke, lineWidth: 1)
         }
         .transaction(value: selectedFilterFacet) { transaction in
             transaction.disablesAnimations = true
@@ -680,7 +680,7 @@ struct ContentView: View {
         } label: {
             Text(filterFacetSegmentTitle(for: facet))
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(isSelected ? 0.96 : 0.72))
+                .foregroundStyle(isSelected ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.86)
                 .frame(maxWidth: .infinity)
@@ -690,12 +690,15 @@ struct ContentView: View {
         .buttonStyle(.plain)
         .pointerStyle(.link)
         .glassEffect(
-            .regular.tint(Color.white.opacity(isSelected ? 0.14 : (isHovered ? 0.08 : 0))).interactive(true),
+            .regular.tint(MomentoTheme.contrastTint(
+                lightOpacity: isSelected ? 0.08 : (isHovered ? 0.05 : 0),
+                darkOpacity: isSelected ? 0.14 : (isHovered ? 0.08 : 0)
+            )).interactive(true),
             in: shape
         )
         .overlay {
             if isSelected {
-                shape.strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                shape.strokeBorder(MomentoTheme.subtleGlassStroke, lineWidth: 1)
             }
         }
         .onHover { hovering in
@@ -889,7 +892,7 @@ struct ContentView: View {
                     .fill(colorSwatch(for: category))
                     .frame(width: 22, height: 22)
                     .overlay {
-                        swatchShape.strokeBorder(Color.white.opacity(0.28), lineWidth: 1)
+                        swatchShape.strokeBorder(MomentoTheme.glassStroke, lineWidth: 1)
                     }
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
@@ -900,7 +903,10 @@ struct ContentView: View {
             }
             .frame(width: 34, height: 34)
             .glassEffect(
-                .regular.tint(Color.white.opacity(isSelected || isHovered ? 0.16 : 0.06)).interactive(),
+                .regular.tint(MomentoTheme.contrastTint(
+                    lightOpacity: isSelected || isHovered ? 0.08 : 0.035,
+                    darkOpacity: isSelected || isHovered ? 0.16 : 0.06
+                )).interactive(),
                 in: shape
             )
             .contentShape(shape)
@@ -938,7 +944,10 @@ struct ContentView: View {
             .frame(height: 30)
             .frame(maxWidth: .infinity, alignment: .leading)
             .glassEffect(
-                .regular.tint(Color.white.opacity(isSelected || isHovered ? 0.16 : 0.06)).interactive(),
+                .regular.tint(MomentoTheme.contrastTint(
+                    lightOpacity: isSelected || isHovered ? 0.08 : 0.035,
+                    darkOpacity: isSelected || isHovered ? 0.16 : 0.06
+                )).interactive(),
                 in: shape
             )
             .contentShape(shape)
@@ -975,7 +984,10 @@ struct ContentView: View {
             .padding(.horizontal, 10)
             .frame(height: 32)
             .glassEffect(
-                .regular.tint(Color.white.opacity(isSelected || isHovered ? 0.16 : 0.06)).interactive(),
+                .regular.tint(MomentoTheme.contrastTint(
+                    lightOpacity: isSelected || isHovered ? 0.08 : 0.035,
+                    darkOpacity: isSelected || isHovered ? 0.16 : 0.06
+                )).interactive(),
                 in: shape
             )
             .contentShape(shape)
@@ -1386,7 +1398,7 @@ struct ContentView: View {
                     .frame(width: 38, height: 38)
                     .background {
                         MomentoGlassBackground(
-                            glass: .regular.tint(Color.white.opacity(0.08)),
+                            glass: .regular.tint(MomentoTheme.sidebarIconHoverBackground),
                             cornerRadius: 12
                         )
                     }
@@ -1427,7 +1439,7 @@ struct ContentView: View {
         .padding(18)
         .frame(width: 360, alignment: .leading)
         .background {
-            MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.18)), cornerRadius: 18)
+            MomentoGlassBackground(glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 18)
         }
         .shadow(color: .black.opacity(0.22), radius: 24, x: 0, y: 12)
     }

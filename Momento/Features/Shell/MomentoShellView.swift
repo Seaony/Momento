@@ -308,12 +308,12 @@ struct MomentoShellView<Content: View>: View {
                 .frame(height: 42)
                 .background {
                     MomentoGlassBackground(
-                        glass: .regular.tint(Color.black.opacity(0.36)),
+                        glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.36)),
                         cornerRadius: 14
                     )
                     .overlay {
                         RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+                            .strokeBorder(MomentoTheme.glassStroke, lineWidth: 1)
                     }
                 }
                 .shadow(color: Color.black.opacity(0.32), radius: 18, y: 10)

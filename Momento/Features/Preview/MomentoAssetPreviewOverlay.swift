@@ -76,7 +76,7 @@ struct MomentoAssetPreviewOverlay: View {
                     .padding(MomentoAssetPreviewMetrics.imagePanelPadding)
                     .background {
                         MomentoGlassBackground(
-                            glass: .regular.tint(Color.black.opacity(MomentoAssetPreviewMetrics.imagePanelTintOpacity)),
+                            glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: MomentoAssetPreviewMetrics.imagePanelTintOpacity)),
                             cornerRadius: MomentoAssetPreviewMetrics.imagePanelCornerRadius
                         )
                     }
@@ -129,7 +129,7 @@ struct MomentoAssetPreviewOverlay: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background {
-            MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.12)), cornerRadius: 16)
+            MomentoGlassBackground(glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.12)), cornerRadius: 16)
         }
     }
 

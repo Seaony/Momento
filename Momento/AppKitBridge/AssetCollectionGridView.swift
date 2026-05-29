@@ -36,6 +36,12 @@ private enum AssetCollectionMetrics {
     static let listThumbnailSize: CGFloat = 78
     static let listSeparatorHorizontalInset: CGFloat = 18
     static let listSeparatorAlpha: CGFloat = 0.055
+    static var listSeparatorColor: NSColor {
+        MomentoTheme.adaptiveNSColor(
+            light: NSColor.black.withAlphaComponent(listSeparatorAlpha),
+            dark: NSColor.white.withAlphaComponent(listSeparatorAlpha)
+        )
+    }
     static let favoriteButtonWidth: CGFloat = 22
     static let favoriteButtonHeight: CGFloat = 16
     static let favoriteButtonLeadingInset: CGFloat = 7
@@ -67,6 +73,24 @@ private enum AssetCollectionMetrics {
     static let contextMenuSeparatorVerticalPadding: CGFloat = 3
     static let contextMenuSeparatorAlpha: CGFloat = 0.1
     static let zeroEdgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+    static var hoverBackgroundColor: NSColor {
+        MomentoTheme.adaptiveNSColor(
+            light: NSColor.black.withAlphaComponent(0.06),
+            dark: NSColor.white.withAlphaComponent(hoverBackgroundAlpha)
+        )
+    }
+    static var contextMenuPanelTintColor: NSColor {
+        MomentoTheme.adaptiveNSColor(
+            light: NSColor.white.withAlphaComponent(0.18),
+            dark: NSColor.black.withAlphaComponent(0.16)
+        )
+    }
+    static var contextMenuPanelBorderColor: NSColor {
+        MomentoTheme.adaptiveNSColor(
+            light: NSColor.black.withAlphaComponent(0.10),
+            dark: NSColor.white.withAlphaComponent(0.12)
+        )
+    }
 
     static func columnLayout(
         availableWidth: CGFloat,
@@ -2170,7 +2194,7 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
     private let subtitleLabel = NSTextField(labelWithString: "")
     private let dateLabel = NSTextField(labelWithString: "")
     private let dimensionBadgeView = DimensionBadgeView()
-    private let separatorView = NSView()
+    private let separatorView = AssetListSeparatorView()
     private var gridConstraints: [NSLayoutConstraint] = []
     private var masonryConstraints: [NSLayoutConstraint] = []
     private var listConstraints: [NSLayoutConstraint] = []
@@ -2264,8 +2288,6 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         dimensionBadgeView.isHidden = true
 
         separatorView.translatesAutoresizingMaskIntoConstraints = false
-        separatorView.wantsLayer = true
-        separatorView.layer?.backgroundColor = NSColor.white.withAlphaComponent(AssetCollectionMetrics.listSeparatorAlpha).cgColor
         separatorView.isHidden = true
 
         contentView.addSubview(previewImageView)
@@ -2772,6 +2794,32 @@ private final class AssetPreviewImageView: NSView {
     }
 }
 
+private final class AssetListSeparatorView: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        setUpView()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        setUpView()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
+    }
+
+    private func setUpView() {
+        wantsLayer = true
+        updateAppearance()
+    }
+
+    private func updateAppearance() {
+        layer?.backgroundColor = AssetCollectionMetrics.listSeparatorColor.momentoCGColor(for: self)
+    }
+}
+
 private final class DimensionBadgeView: NSView {
     var stringValue: String {
         get {
@@ -2934,14 +2982,23 @@ private final class AssetContextMenuBackgroundView: NSGlassEffectView {
 
     private func setUpView() {
         style = .regular
-        tintColor = NSColor.black.withAlphaComponent(0.16)
         cornerRadius = AssetCollectionMetrics.contextMenuPanelCornerRadius
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
         layer?.cornerRadius = AssetCollectionMetrics.contextMenuPanelCornerRadius
         layer?.cornerCurve = .continuous
-        layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
         layer?.borderWidth = 0.6
+        updateAppearance()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
+    }
+
+    private func updateAppearance() {
+        tintColor = AssetCollectionMetrics.contextMenuPanelTintColor
+        layer?.borderColor = AssetCollectionMetrics.contextMenuPanelBorderColor.momentoCGColor(for: self)
     }
 }
 
@@ -2958,9 +3015,18 @@ private final class AssetContextMenuSeparatorView: NSView {
 
     private func setUpView() {
         wantsLayer = true
+        updateAppearance()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
+    }
+
+    private func updateAppearance() {
         layer?.backgroundColor = NSColor.separatorColor
             .withAlphaComponent(AssetCollectionMetrics.contextMenuSeparatorAlpha)
-            .cgColor
+            .momentoCGColor(for: self)
     }
 }
 
@@ -3090,8 +3156,13 @@ private final class AssetContextMenuRowView: NSView {
 
     private func updateAppearance() {
         layer?.backgroundColor = isHovered
-            ? NSColor.white.withAlphaComponent(AssetCollectionMetrics.hoverBackgroundAlpha).cgColor
+            ? AssetCollectionMetrics.hoverBackgroundColor.momentoCGColor(for: self)
             : NSColor.clear.cgColor
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
     }
 
     private func pushPointingHandCursorIfNeeded() {
@@ -3144,6 +3215,16 @@ private final class FavoriteButton: NSButton {
             resetHoverState()
         } else {
             synchronizeHoverStateWithPointer()
+        }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+
+        if showsHoverBackground {
+            layer?.backgroundColor = NSColor.black
+                .withAlphaComponent(AssetCollectionMetrics.favoriteButtonBackgroundAlpha)
+                .momentoCGColor(for: self)
         }
     }
 
@@ -3248,7 +3329,7 @@ private final class FavoriteButton: NSButton {
         }
 
         let targetColor = isVisible
-            ? NSColor.black.withAlphaComponent(AssetCollectionMetrics.favoriteButtonBackgroundAlpha).cgColor
+            ? NSColor.black.withAlphaComponent(AssetCollectionMetrics.favoriteButtonBackgroundAlpha).momentoCGColor(for: self)
             : NSColor.clear.cgColor
         let startColor = layer.presentation()?.backgroundColor ?? layer.backgroundColor ?? NSColor.clear.cgColor
 
@@ -3465,10 +3546,15 @@ private final class HoverSelectionView: NSView {
         }
 
         if isHovered {
-            return NSColor.white.withAlphaComponent(AssetCollectionMetrics.hoverBackgroundAlpha).cgColor
+            return AssetCollectionMetrics.hoverBackgroundColor.momentoCGColor(for: self)
         }
 
         return NSColor.clear.cgColor
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
     }
 
     private func updateBackgroundColor(_ targetColor: CGColor) {
@@ -3506,5 +3592,15 @@ private extension CGFloat {
 private extension NSEdgeInsets {
     var areZero: Bool {
         top == 0 && left == 0 && bottom == 0 && right == 0
+    }
+}
+
+private extension NSColor {
+    func momentoCGColor(for view: NSView) -> CGColor {
+        var cgColor = self.cgColor
+        view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            cgColor = self.cgColor
+        }
+        return cgColor
     }
 }

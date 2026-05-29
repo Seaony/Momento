@@ -1,4 +1,5 @@
 // 中文注释：本文件集中定义 Momento 的 Liquid Glass 背景、按钮样式和视觉 token。
+import AppKit
 import SwiftUI
 
 struct MomentoGlassBackground: View {
@@ -99,7 +100,7 @@ enum MomentoTheme {
     static let sidebarTitlebarButtonTopInset: CGFloat = 14
     static let sidebarTitlebarButtonTrailingInset: CGFloat = 14
     static let collapsedSidebarToggleLeadingInset: CGFloat = 92
-    static let sidebarIconHoverBackground = Color.white.opacity(0.08)
+    static let sidebarIconHoverBackground = contrastTint(lightOpacity: 0.06, darkOpacity: 0.08)
     static let toolbarIconButtonWidth: CGFloat = 38
     static let toolbarControlHeight: CGFloat = 34
     static let toolbarControlRadius: CGFloat = 14
@@ -118,7 +119,46 @@ enum MomentoTheme {
     static let assetImageCornerRadius: CGFloat = 12
     static let panelRadius: CGFloat = 14
     static let subtleStroke = Color(nsColor: .separatorColor)
+    static let glassStroke = contrastTint(lightOpacity: 0.10, darkOpacity: 0.12)
+    static let subtleGlassStroke = contrastTint(lightOpacity: 0.08, darkOpacity: 0.08)
+    static let inspectorSectionSeparator = contrastTint(lightOpacity: 0.08, darkOpacity: 0.06)
     static let primaryText = Color(nsColor: .labelColor)
     static let secondaryText = Color(nsColor: .secondaryLabelColor)
     static let tertiaryText = Color(nsColor: .tertiaryLabelColor)
+
+    static func surfaceGlassTint(darkOpacity: CGFloat) -> Color {
+        adaptiveColor(
+            light: NSColor.white.withAlphaComponent(max(darkOpacity, 0.18)),
+            dark: NSColor.black.withAlphaComponent(darkOpacity)
+        )
+    }
+
+    static func contrastTint(lightOpacity: CGFloat, darkOpacity: CGFloat) -> Color {
+        adaptiveColor(
+            light: NSColor.black.withAlphaComponent(lightOpacity),
+            dark: NSColor.white.withAlphaComponent(darkOpacity)
+        )
+    }
+
+    static func adaptiveColor(light: NSColor, dark: NSColor) -> Color {
+        Color(nsColor: adaptiveNSColor(light: light, dark: dark))
+    }
+
+    static func adaptiveNSColor(light: NSColor, dark: NSColor) -> NSColor {
+        NSColor(name: nil) { appearance in
+            appearance.momentoUsesDarkAppearance ? dark : light
+        }
+    }
+}
+
+private extension NSAppearance {
+    var momentoUsesDarkAppearance: Bool {
+        let match = bestMatch(from: [
+            .accessibilityHighContrastDarkAqua,
+            .darkAqua,
+            .accessibilityHighContrastAqua,
+            .aqua
+        ])
+        return match == .accessibilityHighContrastDarkAqua || match == .darkAqua
+    }
 }

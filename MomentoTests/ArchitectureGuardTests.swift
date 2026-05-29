@@ -179,12 +179,20 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertFalse(source.contains("Form("))
     }
 
-    func testAppUsesDarkAppearance() throws {
+    func testAppFollowsSystemAppearance() throws {
         let source = try String(contentsOf: appURL(), encoding: .utf8)
 
-        XCTAssertTrue(source.contains("import AppKit"))
-        XCTAssertTrue(source.contains("NSApplication.shared.appearance = NSAppearance(named: .darkAqua)"))
-        XCTAssertEqual(source.components(separatedBy: ".preferredColorScheme(.dark)").count - 1, 2)
+        XCTAssertFalse(source.contains("NSApplication.shared.appearance"))
+        XCTAssertFalse(source.contains("NSAppearance(named: .darkAqua)"))
+        XCTAssertFalse(source.contains(".preferredColorScheme(.dark)"))
+    }
+
+    func testDesignSystemUsesAdaptiveAppearanceTokens() throws {
+        let source = try String(contentsOf: designSystemURL(), encoding: .utf8)
+
+        XCTAssertTrue(source.contains("static let sidebarIconHoverBackground = contrastTint"))
+        XCTAssertTrue(source.contains("adaptiveNSColor(light: NSColor, dark: NSColor)"))
+        XCTAssertTrue(source.contains("bestMatch(from:"))
     }
 
     func testSparkleUpdatesAreConfiguredForGitHubAppcast() throws {

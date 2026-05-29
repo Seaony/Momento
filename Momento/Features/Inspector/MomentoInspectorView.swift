@@ -281,7 +281,7 @@ struct MomentoInspectorView: View {
                 .frame(height: 28)
                 .background {
                     MomentoGlassBackground(
-                        glass: .regular.tint(Color.black.opacity(0.22)),
+                        glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.22)),
                         cornerRadius: 9
                     )
                 }
@@ -322,7 +322,7 @@ struct MomentoInspectorView: View {
         .frame(width: Self.multiSelectionCardWidth, height: Self.multiSelectionCardHeight)
         .clipShape(previewShape)
         .overlay {
-            previewShape.strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
+            previewShape.strokeBorder(MomentoTheme.glassStroke, lineWidth: 1)
         }
         .shadow(color: Color.black.opacity(0.24), radius: 14, x: 0, y: 8)
         .rotationEffect(.degrees(rotationDegrees))
@@ -411,10 +411,10 @@ struct MomentoInspectorView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background {
                 titleShape
-                    .fill(isHovered ? Color.white.opacity(0.06) : Color.clear)
+                    .fill(isHovered ? MomentoTheme.contrastTint(lightOpacity: 0.045, darkOpacity: 0.06) : Color.clear)
                     .overlay {
                         if isHovered {
-                            titleShape.strokeBorder(Color.white.opacity(0.1), lineWidth: 1)
+                            titleShape.strokeBorder(MomentoTheme.subtleGlassStroke, lineWidth: 1)
                         }
                     }
             }
@@ -549,7 +549,10 @@ struct MomentoInspectorView: View {
         .padding(.trailing, 9)
         .frame(height: 26)
         .glassEffect(
-            .regular.tint(Color.white.opacity(isHovered ? 0.12 : 0.04)),
+            .regular.tint(MomentoTheme.contrastTint(
+                lightOpacity: isHovered ? 0.07 : 0.03,
+                darkOpacity: isHovered ? 0.12 : 0.04
+            )),
             in: RoundedRectangle(cornerRadius: 9, style: .continuous)
         )
         .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
@@ -594,7 +597,10 @@ struct MomentoInspectorView: View {
         .padding(.trailing, 9)
         .frame(height: 26)
         .glassEffect(
-            .regular.tint(Color.white.opacity(isHovered ? 0.12 : 0.04)),
+            .regular.tint(MomentoTheme.contrastTint(
+                lightOpacity: isHovered ? 0.07 : 0.03,
+                darkOpacity: isHovered ? 0.12 : 0.04
+            )),
             in: chipShape
         )
         .contentShape(chipShape)
@@ -703,7 +709,10 @@ struct MomentoInspectorView: View {
                                 .frame(height: 34)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .glassEffect(
-                                    .regular.tint(Color.white.opacity(isCreateTagRowHovered ? 0.16 : 0.08)).interactive(),
+                                    .regular.tint(MomentoTheme.contrastTint(
+                                        lightOpacity: isCreateTagRowHovered ? 0.08 : 0.04,
+                                        darkOpacity: isCreateTagRowHovered ? 0.16 : 0.08
+                                    )).interactive(),
                                     in: RoundedRectangle(cornerRadius: 11, style: .continuous)
                                 )
                                 .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
@@ -729,7 +738,7 @@ struct MomentoInspectorView: View {
         .frame(width: Self.tagPickerWidth)
         .background {
             MomentoGlassBackground(
-                glass: .regular.tint(Color.black.opacity(0.16)),
+                glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.16)),
                 cornerRadius: 16
             )
         }
@@ -779,7 +788,7 @@ struct MomentoInspectorView: View {
         .frame(width: Self.tagPickerWidth)
         .background {
             MomentoGlassBackground(
-                glass: .regular.tint(Color.black.opacity(0.16)),
+                glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.16)),
                 cornerRadius: 16
             )
         }
@@ -812,7 +821,10 @@ struct MomentoInspectorView: View {
             .padding(.horizontal, 9)
             .frame(height: 26)
             .glassEffect(
-                .regular.tint(Color.white.opacity(isHovered || isSelected ? 0.16 : 0.08)).interactive(),
+                .regular.tint(MomentoTheme.contrastTint(
+                    lightOpacity: isHovered || isSelected ? 0.08 : 0.04,
+                    darkOpacity: isHovered || isSelected ? 0.16 : 0.08
+                )).interactive(),
                 in: tagShape
             )
             .contentShape(tagShape)
@@ -833,9 +845,12 @@ struct MomentoInspectorView: View {
         let isSelected = containsFolder(folder.id)
         let rowShape = RoundedRectangle(cornerRadius: 11, style: .continuous)
         let checkboxShape = RoundedRectangle(cornerRadius: 4.5, style: .continuous)
-        let foreground = Color.white.opacity(0.94)
-        let secondaryForeground = Color.white.opacity(0.72)
-        let checkboxFill = Color.white.opacity(isSelected ? 0.22 : 0.08)
+        let foreground = MomentoTheme.primaryText
+        let secondaryForeground = MomentoTheme.secondaryText
+        let checkboxFill = MomentoTheme.contrastTint(
+            lightOpacity: isSelected ? 0.08 : 0.035,
+            darkOpacity: isSelected ? 0.22 : 0.08
+        )
         let isHovered = hoveredFolderChoiceID == folder.id
 
         return HStack(spacing: 2) {
@@ -860,7 +875,13 @@ struct MomentoInspectorView: View {
                         checkboxShape
                             .fill(checkboxFill)
                             .overlay {
-                                checkboxShape.strokeBorder(Color.white.opacity(isSelected ? 0.42 : 0.26), lineWidth: 1)
+                                checkboxShape.strokeBorder(
+                                    MomentoTheme.contrastTint(
+                                        lightOpacity: isSelected ? 0.18 : 0.11,
+                                        darkOpacity: isSelected ? 0.42 : 0.26
+                                    ),
+                                    lineWidth: 1
+                                )
                             }
 
                         if isSelected {
@@ -916,10 +937,10 @@ struct MomentoInspectorView: View {
                     .padding(.vertical, 3)
                     .background {
                         RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(Color.black.opacity(0.24))
+                            .fill(MomentoTheme.surfaceGlassTint(darkOpacity: 0.24))
                             .overlay {
                                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                                    .strokeBorder(MomentoTheme.subtleGlassStroke, lineWidth: 1)
                             }
                     }
                     .frame(minWidth: proxy.size.width, alignment: .center)
@@ -1028,7 +1049,7 @@ struct MomentoInspectorView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: Self.inspectorSectionSpacing) {
             Rectangle()
-                .fill(Color.white.opacity(Self.inspectorSectionSeparatorOpacity))
+                .fill(MomentoTheme.inspectorSectionSeparator)
                 .frame(maxWidth: .infinity)
                 .frame(height: 1)
 

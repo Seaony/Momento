@@ -6,7 +6,6 @@
 //
 
 // 中文注释：应用入口负责注入全局 store、本地化环境、窗口命令和浏览器导入服务。
-import AppKit
 import SwiftUI
 
 @main
@@ -17,10 +16,6 @@ struct MomentoApp: App {
     @State private var browserImportServer = BrowserImportServer()
     @AppStorage(AppSettingsKeys.appLanguage) private var appLanguageRawValue = AppLanguage.system.rawValue
 
-    init() {
-        NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
-    }
-
     var body: some Scene {
         let language = appLanguage
         let localization = AppLocalization(language: language)
@@ -29,7 +24,6 @@ struct MomentoApp: App {
             ContentView(store: store, updateService: updateService)
                 .environment(\.locale, language.locale)
                 .environment(\.appLocalization, localization)
-                .preferredColorScheme(.dark)
                 .onAppear {
                     appOpenHandler.onOpenLibraryURLs = openLibraryURLs
                     appOpenHandler.flushPendingLibraryURLs()
@@ -51,7 +45,6 @@ struct MomentoApp: App {
             )
             .environment(\.locale, language.locale)
             .environment(\.appLocalization, localization)
-            .preferredColorScheme(.dark)
         }
         .defaultSize(MomentoSettingsView.preferredSize)
         .windowResizability(.contentSize)

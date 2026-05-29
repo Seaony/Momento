@@ -148,7 +148,7 @@ struct MomentoCreateLibraryDialog: View {
             .padding(.vertical, 30)
             .frame(width: createLibraryDialogWidth)
             .background {
-                MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.18)), cornerRadius: 14)
+                MomentoGlassBackground(glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 14)
             }
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .onTapGesture {}
@@ -273,7 +273,7 @@ struct MomentoDeleteLibraryDialog: View {
             .padding(.vertical, 30)
             .frame(width: deleteLibraryDialogWidth)
             .background {
-                MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.18)), cornerRadius: 14)
+                MomentoGlassBackground(glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 14)
             }
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .onTapGesture {}
@@ -455,7 +455,7 @@ struct MomentoFolderNameDialog: View {
             .padding(.vertical, 30)
             .frame(width: folderNameDialogWidth)
             .background {
-                MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.18)), cornerRadius: 14)
+                MomentoGlassBackground(glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 14)
             }
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .onTapGesture {}
@@ -580,7 +580,7 @@ struct MomentoDeleteFolderDialog: View {
             .padding(.vertical, 30)
             .frame(width: deleteLibraryDialogWidth)
             .background {
-                MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.18)), cornerRadius: 14)
+                MomentoGlassBackground(glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 14)
             }
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .onTapGesture {}
@@ -708,7 +708,7 @@ struct MomentoDestructiveConfirmationDialog: View {
             .padding(.vertical, 30)
             .frame(width: destructiveConfirmationDialogWidth)
             .background {
-                MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.18)), cornerRadius: 14)
+                MomentoGlassBackground(glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 14)
             }
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .onTapGesture {}

@@ -39,7 +39,7 @@ struct MomentoAssetExportDialog: View {
             .padding(.vertical, 28)
             .frame(width: assetExportDialogWidth)
             .background {
-                MomentoGlassBackground(glass: .regular.tint(Color.black.opacity(0.18)), cornerRadius: 14)
+                MomentoGlassBackground(glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 14)
             }
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .onTapGesture {}
@@ -112,7 +112,10 @@ struct MomentoAssetExportDialog: View {
         .background {
             MomentoGlassBackground(
                 glass: .regular
-                    .tint(selectedFormat == format ? Color.accentColor.opacity(0.16) : Color.white.opacity(0.04))
+                    .tint(selectedFormat == format
+                        ? Color.accentColor.opacity(0.16)
+                        : MomentoTheme.contrastTint(lightOpacity: 0.03, darkOpacity: 0.04)
+                    )
                     .interactive(true),
                 cornerRadius: 10
             )
