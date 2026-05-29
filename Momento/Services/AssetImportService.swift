@@ -50,6 +50,12 @@ nonisolated private struct AssetImportHashedCandidate: Sendable {
     var contentHash: String
 }
 
+nonisolated private struct AssetImportHashResult: Sendable {
+    var index: Int
+    var candidate: AssetImportCandidate
+    var hashedCandidate: AssetImportHashedCandidate?
+}
+
 nonisolated private struct AssetPhysicalImportRequest: Sendable {
     var index: Int
     var candidate: AssetImportCandidate
@@ -129,6 +135,21 @@ struct AssetImportService: Sendable {
 
             await progressReporter.report(
                 AssetImportProgress(
+                    phase: .preparing,
+                    totalFileCount: totalFileCount,
+                    processedFileCount: processedFileCount,
+                    importedFileCount: importedFileCount,
+                    skippedFileCount: skippedFileCount,
+                    currentFileName: candidates.first?.sourceURL.lastPathComponent
+                ),
+                force: true
+            )
+
+            let hashResults = try await hashImportCandidates(candidates, progressReporter: &progressReporter)
+            var physicalImportRequests: [AssetPhysicalImportRequest] = []
+
+            await progressReporter.report(
+                AssetImportProgress(
                     phase: .importing,
                     totalFileCount: totalFileCount,
                     processedFileCount: processedFileCount,
@@ -139,10 +160,24 @@ struct AssetImportService: Sendable {
                 force: true
             )
 
-            let hashedCandidates = try await hashImportCandidates(candidates)
-            var physicalImportRequests: [AssetPhysicalImportRequest] = []
+            for hashResult in hashResults {
+                guard let hashedCandidate = hashResult.hashedCandidate else {
+                    processedFileCount += 1
+                    skippedFileCount += 1
+                    await progressReporter.report(
+                        AssetImportProgress(
+                            phase: .importing,
+                            totalFileCount: totalFileCount,
+                            processedFileCount: processedFileCount,
+                            importedFileCount: importedFileCount,
+                            skippedFileCount: skippedFileCount,
+                            currentFileName: hashResult.candidate.sourceURL.lastPathComponent
+                        ),
+                        force: processedFileCount == totalFileCount
+                    )
+                    continue
+                }
 
-            for hashedCandidate in hashedCandidates {
                 if !hashedCandidate.candidate.relativeFolderComponents.isEmpty {
                     var assignedPaths = folderAssignmentsByContentHash[hashedCandidate.contentHash, default: []]
                     if !assignedPaths.contains(hashedCandidate.candidate.relativeFolderComponents) {
@@ -163,7 +198,7 @@ struct AssetImportService: Sendable {
                             processedFileCount: processedFileCount,
                             importedFileCount: importedFileCount,
                             skippedFileCount: skippedFileCount,
-                            currentFileName: nextFileName(after: processedFileCount, in: candidates)
+                            currentFileName: hashedCandidate.candidate.sourceURL.lastPathComponent
                         ),
                         force: processedFileCount == totalFileCount
                     )
@@ -228,7 +263,7 @@ struct AssetImportService: Sendable {
                             processedFileCount: processedFileCount,
                             importedFileCount: importedFileCount,
                             skippedFileCount: skippedFileCount,
-                            currentFileName: nextFileName(after: processedFileCount, in: candidates)
+                            currentFileName: result.asset.originalFileName
                         ),
                         force: processedFileCount == totalFileCount
                     )
@@ -289,22 +324,13 @@ nonisolated private struct AssetImportProgressReporter: Sendable {
     }
 }
 
-nonisolated private func nextFileName(
-    after processedFileCount: Int,
-    in candidates: [AssetImportCandidate]
-) -> String? {
-    guard processedFileCount < candidates.count else {
-        return nil
-    }
-
-    return candidates[processedFileCount].sourceURL.lastPathComponent
-}
-
 nonisolated private func hashImportCandidates(
-    _ candidates: [AssetImportCandidate]
-) async throws -> [AssetImportHashedCandidate] {
-    var results: [AssetImportHashedCandidate] = []
-    try await withThrowingTaskGroup(of: AssetImportHashedCandidate?.self) { group in
+    _ candidates: [AssetImportCandidate],
+    progressReporter: inout AssetImportProgressReporter
+) async throws -> [AssetImportHashResult] {
+    var results: [AssetImportHashResult] = []
+    var processedFileCount = 0
+    try await withThrowingTaskGroup(of: AssetImportHashResult.self) { group in
         var nextCandidateIndex = 0
         let initialTaskCount = boundedImportTaskLimit(totalCount: candidates.count)
 
@@ -317,9 +343,19 @@ nonisolated private func hashImportCandidates(
         }
 
         while let result = try await group.next() {
-            if let result {
-                results.append(result)
-            }
+            processedFileCount += 1
+            results.append(result)
+            await progressReporter.report(
+                AssetImportProgress(
+                    phase: .preparing,
+                    totalFileCount: candidates.count,
+                    processedFileCount: processedFileCount,
+                    importedFileCount: 0,
+                    skippedFileCount: 0,
+                    currentFileName: result.candidate.sourceURL.lastPathComponent
+                ),
+                force: processedFileCount == candidates.count
+            )
 
             if nextCandidateIndex < candidates.count {
                 let index = nextCandidateIndex
@@ -337,16 +373,24 @@ nonisolated private func hashImportCandidates(
 nonisolated private func hashImportCandidate(
     _ candidate: AssetImportCandidate,
     index: Int
-) throws -> AssetImportHashedCandidate? {
+) throws -> AssetImportHashResult {
     guard let kind = assetKind(for: candidate.sourceURL) else {
-        return nil
+        return AssetImportHashResult(
+            index: index,
+            candidate: candidate,
+            hashedCandidate: nil
+        )
     }
 
-    return AssetImportHashedCandidate(
+    return AssetImportHashResult(
         index: index,
         candidate: candidate,
-        kind: kind,
-        contentHash: try contentHash(for: candidate.sourceURL)
+        hashedCandidate: AssetImportHashedCandidate(
+            index: index,
+            candidate: candidate,
+            kind: kind,
+            contentHash: try contentHash(for: candidate.sourceURL)
+        )
     )
 }
 

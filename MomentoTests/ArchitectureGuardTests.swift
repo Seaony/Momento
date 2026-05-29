@@ -354,6 +354,7 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertFalse(navigationSource.contains("store.selectAsset"))
         XCTAssertFalse(navigationSource.contains("selectedAssetID"))
         XCTAssertTrue(panelSource.contains("func update("))
+        XCTAssertTrue(panelSource.contains("returnFrame = nil"))
         XCTAssertTrue(overlaySource.contains("systemName: \"chevron.left\""))
         XCTAssertTrue(overlaySource.contains("systemName: \"chevron.right\""))
         XCTAssertTrue(overlaySource.contains("localization.string(\"Previous Image\")"))

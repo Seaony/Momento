@@ -577,6 +577,11 @@ final class LibraryPackagePersistenceTests: XCTestCase {
         let values = await recorder.snapshot()
         XCTAssertEqual(values.first?.phase, .preparing)
         XCTAssertTrue(values.contains { progress in
+            progress.phase == .preparing
+                && progress.totalFileCount == 2
+                && progress.processedFileCount == 2
+        })
+        XCTAssertTrue(values.contains { progress in
             progress.phase == .importing
                 && progress.totalFileCount == 2
                 && progress.processedFileCount == 0

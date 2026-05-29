@@ -14,6 +14,7 @@ final class AssetImportServicePerformanceTests: XCTestCase {
         let snapshot = try await Self.importFixture(importService: importService)
         let elapsed = start.duration(to: clock.now)
 
+        // 中文注释：这里记录耗时供本地对比观察，不作为 CI 性能门禁。
         await XCTContext.runActivity(named: "Folder import elapsed time") { activity in
             activity.add(XCTAttachment(string: "\(elapsed)"))
         }

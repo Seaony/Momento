@@ -95,6 +95,7 @@ final class MomentoAssetPreviewPanelController: NSObject, NSWindowDelegate {
             return
         }
 
+        returnFrame = nil
         hostingController.rootView = AnyView(
             previewOverlay(
                 asset: asset,
