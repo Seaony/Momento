@@ -1063,12 +1063,14 @@ struct MomentoInspectorView: View {
             Link(destination: url) {
                 Text(url.absoluteString)
                     .font(.system(size: 12))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
                     .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
             .foregroundStyle(MomentoTheme.primaryText)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
