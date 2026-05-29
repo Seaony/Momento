@@ -125,10 +125,6 @@ enum MomentoTheme {
     static let primaryText = Color(nsColor: .labelColor)
     static let secondaryText = Color(nsColor: .secondaryLabelColor)
     static let tertiaryText = Color(nsColor: .tertiaryLabelColor)
-    static let appBackgroundGlassTint = adaptiveColor(
-        light: NSColor.white.withAlphaComponent(0.42),
-        dark: .clear
-    )
 
     static func surfaceGlassTint(darkOpacity: CGFloat) -> Color {
         adaptiveColor(
