@@ -3,25 +3,26 @@ import AppKit
 import SwiftUI
 
 struct MomentoGlassBackground: View {
-    var glass: Glass
+    var style: MomentoSurfaceStyle
     var cornerRadius: CGFloat
 
     init(
-        glass: Glass = .regular,
+        style: MomentoSurfaceStyle = .regular,
         cornerRadius: CGFloat = 16
     ) {
-        self.glass = glass
+        self.style = style
         self.cornerRadius = cornerRadius
     }
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         Color.clear
-            .glassEffect(glass, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .momentoSurface(style, in: shape)
     }
 }
 
 struct MomentoGlassPanelModifier: ViewModifier {
-    var glass: Glass
+    var style: MomentoSurfaceStyle
     var cornerRadius: CGFloat
     var padding: CGFloat
 
@@ -29,7 +30,7 @@ struct MomentoGlassPanelModifier: ViewModifier {
         content
             .padding(padding)
             .background {
-                MomentoGlassBackground(glass: glass, cornerRadius: cornerRadius)
+                MomentoGlassBackground(style: style, cornerRadius: cornerRadius)
             }
     }
 }
@@ -47,7 +48,7 @@ struct MomentoTooltipBubble: View {
             .frame(height: 30)
             .background {
                 MomentoGlassBackground(
-                    glass: .regular.tint(Color.black.opacity(0.34)),
+                    style: .tinted(Color.black.opacity(0.34), interactive: false),
                     cornerRadius: 9
                 )
                     .overlay {
@@ -62,13 +63,13 @@ struct MomentoTooltipBubble: View {
 
 extension View {
     func momentoGlassPanel(
-        glass: Glass = .regular,
+        style: MomentoSurfaceStyle = .regular,
         cornerRadius: CGFloat = 16,
         padding: CGFloat = 12
     ) -> some View {
         modifier(
             MomentoGlassPanelModifier(
-                glass: glass,
+                style: style,
                 cornerRadius: cornerRadius,
                 padding: padding
             )

@@ -3,12 +3,70 @@ import Foundation
 import XCTest
 
 final class ArchitectureGuardTests: XCTestCase {
-    func testGlassBackgroundUsesNativeSwiftUIGlassEffect() throws {
+    func testGlassCompatibilityIsIsolatedInDesignSystem() throws {
         let source = try String(contentsOf: designSystemURL(), encoding: .utf8)
+        let compatibilitySource = try String(contentsOf: surfaceCompatibilityURL(), encoding: .utf8)
 
-        XCTAssertTrue(source.contains(".glassEffect(glass, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))"))
-        XCTAssertFalse(source.contains("MomentoVisualEffectView"))
+        XCTAssertTrue(source.contains("var style: MomentoSurfaceStyle"))
+        XCTAssertTrue(source.contains(".momentoSurface(style, in: shape)"))
+        XCTAssertFalse(source.contains("var glass: Glass"))
+        XCTAssertFalse(source.contains("glass: Glass"))
+        XCTAssertFalse(source.contains(".glassEffect("))
+        XCTAssertTrue(compatibilitySource.contains("if #available(macOS 26.0, *)"))
+        XCTAssertTrue(compatibilitySource.contains("glassEffect(style.momentoGlass, in: shape)"))
+        XCTAssertTrue(compatibilitySource.contains("buttonStyle(.glass)"))
+        XCTAssertTrue(compatibilitySource.contains("buttonStyle(.glassProminent)"))
+        XCTAssertTrue(compatibilitySource.contains("NSGlassEffectView"))
         XCTAssertFalse(source.contains("NSVisualEffectView"))
+    }
+
+    func testMacOS26OnlyGlassAPIsStayInCompatibilityLayer() throws {
+        let compatibilityPath = "Momento/DesignSystem/MomentoSurfaceCompatibility.swift"
+        let toolbarPath = "Momento/ContentView.swift"
+
+        for url in try swiftSourceURLs() {
+            let relativePath = relativePath(for: url)
+            let source = try String(contentsOf: url, encoding: .utf8)
+
+            guard relativePath != compatibilityPath else {
+                continue
+            }
+
+            XCTAssertFalse(source.contains(".glassEffect("), relativePath)
+            XCTAssertFalse(source.contains(".buttonStyle(.glass"), relativePath)
+            XCTAssertFalse(source.contains("NSGlassEffectView"), relativePath)
+            XCTAssertFalse(source.contains("var glass: Glass"), relativePath)
+            XCTAssertFalse(source.contains("glass: Glass"), relativePath)
+
+            if relativePath != toolbarPath {
+                XCTAssertFalse(source.contains("ToolbarSpacer("), relativePath)
+                XCTAssertFalse(source.contains(".sharedBackgroundVisibility("), relativePath)
+            }
+
+            let sourceWithoutWrapper = source.replacingOccurrences(of: "MomentoGlassEffectContainer(", with: "")
+            XCTAssertFalse(sourceWithoutWrapper.contains("GlassEffectContainer("), relativePath)
+        }
+    }
+
+    func testMacOS26OnlyToolbarAPIsAreAvailabilityGuarded() throws {
+        let source = try String(contentsOf: contentViewURL(), encoding: .utf8)
+        let toolbarSource = try sourceBlock(
+            in: source,
+            from: ".toolbar {",
+            to: ".navigationTitle(\"\")"
+        )
+
+        XCTAssertTrue(toolbarSource.contains("if #available(macOS 26.0, *)"))
+        XCTAssertTrue(toolbarSource.contains("ToolbarSpacer(.flexible)"))
+        XCTAssertTrue(toolbarSource.contains(".sharedBackgroundVisibility(.hidden)"))
+        XCTAssertTrue(toolbarSource.contains("} else {\n                contentToolbarItems(resultCount: visibleAssets.count)\n            }"))
+    }
+
+    func testProjectDeploymentTargetSupportsMacOS15() throws {
+        let projectSource = try String(contentsOf: projectURL(), encoding: .utf8)
+
+        XCTAssertTrue(projectSource.contains("MACOSX_DEPLOYMENT_TARGET = 15.0;"))
+        XCTAssertFalse(projectSource.contains("MACOSX_DEPLOYMENT_TARGET = 26.0;"))
     }
 
     func testWindowToolbarStaysTransparentWithoutHidingControls() throws {
@@ -176,7 +234,7 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertEqual(buttonSource.components(separatedBy: ".frame(height: 38)").count - 1, 2)
         XCTAssertFalse(buttonSource.contains(".padding(.top, 12)"))
         XCTAssertFalse(buttonSource.contains("puzzlepiece.extension"))
-        XCTAssertTrue(buttonSource.contains(".buttonStyle(.glass)"))
+        XCTAssertTrue(buttonSource.contains(".momentoGlassButtonStyle()"))
         XCTAssertTrue(buttonSource.contains(".foregroundStyle(MomentoTheme.primaryText)"))
         XCTAssertTrue(buttonSource.contains(".environment(\\.appearsActive, true)"))
     }
@@ -202,7 +260,7 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("WindowTransparencyConfigurator(fixedContentSize: Self.preferredSize)"))
         XCTAssertTrue(source.contains(".toolbarBackgroundVisibility(.hidden, for: .windowToolbar)"))
         XCTAssertTrue(source.contains("MomentoGlassBackground(cornerRadius: 0)"))
-        XCTAssertTrue(source.contains(".buttonStyle(.glass)"))
+        XCTAssertTrue(source.contains(".momentoGlassButtonStyle()"))
         XCTAssertTrue(settingsRowSource.contains(".frame(width: MomentoSettingsMetrics.rowControlSlotWidth, alignment: .trailing)"))
         XCTAssertTrue(settingsRowSource.contains(".frame(maxWidth: .infinity)"))
         XCTAssertTrue(languagePickerSource.contains(".pickerStyle(.menu)"))
@@ -589,6 +647,23 @@ final class ArchitectureGuardTests: XCTestCase {
             .deletingLastPathComponent()
     }
 
+    private func swiftSourceURLs() throws -> [URL] {
+        let root = repositoryRoot().appendingPathComponent("Momento", isDirectory: true)
+        let enumerator = try XCTUnwrap(FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: nil
+        ))
+        return enumerator
+            .compactMap { $0 as? URL }
+            .filter { $0.pathExtension == "swift" }
+            .sorted { $0.path < $1.path }
+    }
+
+    private func relativePath(for url: URL) -> String {
+        let rootPath = repositoryRoot().path + "/"
+        return url.path.replacingOccurrences(of: rootPath, with: "")
+    }
+
     private func exportedType(_ identifier: String, in exportedTypes: [[String: Any]]) throws -> [String: Any] {
         try XCTUnwrap(exportedTypes.first { type in
             type["UTTypeIdentifier"] as? String == identifier
@@ -624,6 +699,10 @@ final class ArchitectureGuardTests: XCTestCase {
 
     private func designSystemURL() -> URL {
         repositoryRoot().appendingPathComponent("Momento/DesignSystem/MomentoGlass.swift")
+    }
+
+    private func surfaceCompatibilityURL() -> URL {
+        repositoryRoot().appendingPathComponent("Momento/DesignSystem/MomentoSurfaceCompatibility.swift")
     }
 
     private func shellURL() -> URL {

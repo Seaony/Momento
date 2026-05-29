@@ -17,7 +17,7 @@
     <a href="#自动更新">自动更新</a>
   </p>
   <p>
-    <img alt="macOS 26+" src="https://img.shields.io/badge/macOS-26%2B-111111?style=flat-square&labelColor=222222" />
+    <img alt="macOS 15+" src="https://img.shields.io/badge/macOS-15%2B-111111?style=flat-square&labelColor=222222" />
     <img alt="Swift" src="https://img.shields.io/badge/Swift-6-FA7343?style=flat-square&labelColor=222222" />
     <img alt="Native App" src="https://img.shields.io/badge/Native-macOS-0A84FF?style=flat-square&labelColor=222222" />
     <img alt="Updates" src="https://img.shields.io/badge/Updates-Sparkle-7A6FF0?style=flat-square&labelColor=222222" />

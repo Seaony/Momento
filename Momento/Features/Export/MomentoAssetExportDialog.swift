@@ -39,7 +39,7 @@ struct MomentoAssetExportDialog: View {
             .padding(.vertical, 28)
             .frame(width: assetExportDialogWidth)
             .background {
-                MomentoGlassBackground(glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 14)
+                MomentoGlassBackground(style: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 14)
             }
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .onTapGesture {}
@@ -56,7 +56,7 @@ struct MomentoAssetExportDialog: View {
             .foregroundStyle(.white)
             .frame(width: assetExportDialogIconSize, height: assetExportDialogIconSize)
             .background {
-                MomentoGlassBackground(glass: .regular.tint(Color.accentColor), cornerRadius: 14)
+                MomentoGlassBackground(style: .regular.tint(Color.accentColor), cornerRadius: 14)
             }
     }
 
@@ -111,7 +111,7 @@ struct MomentoAssetExportDialog: View {
         .buttonStyle(.plain)
         .background {
             MomentoGlassBackground(
-                glass: .regular
+                style: .regular
                     .tint(selectedFormat == format
                         ? Color.accentColor.opacity(0.16)
                         : MomentoTheme.contrastTint(lightOpacity: 0.03, darkOpacity: 0.04)
@@ -140,7 +140,7 @@ struct MomentoAssetExportDialog: View {
         }
         .padding(12)
         .background {
-            MomentoGlassBackground(glass: .regular.interactive(true), cornerRadius: 10)
+            MomentoGlassBackground(style: .regular.interactive(true), cornerRadius: 10)
         }
     }
 
@@ -154,7 +154,7 @@ struct MomentoAssetExportDialog: View {
                     .padding(.horizontal, 18)
                     .padding(.vertical, 6)
             }
-            .buttonStyle(.glass)
+            .momentoGlassButtonStyle()
             .buttonBorderShape(.capsule)
             .controlSize(.large)
             .contentShape(Capsule(style: .continuous))
@@ -172,7 +172,7 @@ struct MomentoAssetExportDialog: View {
                     .padding(.horizontal, 18)
                     .padding(.vertical, 6)
             }
-            .buttonStyle(.glassProminent)
+            .momentoGlassButtonStyle(.prominent)
             .buttonBorderShape(.capsule)
             .controlSize(.large)
             .contentShape(Capsule(style: .continuous))

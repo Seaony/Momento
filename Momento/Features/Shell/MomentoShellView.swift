@@ -308,7 +308,7 @@ struct MomentoShellView<Content: View>: View {
                 .frame(height: 42)
                 .background {
                     MomentoGlassBackground(
-                        glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.36)),
+                        style: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.36)),
                         cornerRadius: 14
                     )
                     .overlay {

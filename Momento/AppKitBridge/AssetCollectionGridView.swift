@@ -2969,7 +2969,11 @@ private final class AssetContextMenuView: NSView {
     }
 }
 
-private final class AssetContextMenuBackgroundView: NSGlassEffectView {
+private final class AssetContextMenuBackgroundView: NSView {
+    private let materialView = MomentoAppKitMaterialViewFactory.makeContextMenuBackgroundView(
+        cornerRadius: AssetCollectionMetrics.contextMenuPanelCornerRadius
+    )
+
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         setUpView()
@@ -2981,13 +2985,19 @@ private final class AssetContextMenuBackgroundView: NSGlassEffectView {
     }
 
     private func setUpView() {
-        style = .regular
-        cornerRadius = AssetCollectionMetrics.contextMenuPanelCornerRadius
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
         layer?.cornerRadius = AssetCollectionMetrics.contextMenuPanelCornerRadius
         layer?.cornerCurve = .continuous
         layer?.borderWidth = 0.6
+        materialView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(materialView)
+        NSLayoutConstraint.activate([
+            materialView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            materialView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            materialView.topAnchor.constraint(equalTo: topAnchor),
+            materialView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
         updateAppearance()
     }
 
@@ -2997,7 +3007,10 @@ private final class AssetContextMenuBackgroundView: NSGlassEffectView {
     }
 
     private func updateAppearance() {
-        tintColor = AssetCollectionMetrics.contextMenuPanelTintColor
+        MomentoAppKitMaterialViewFactory.updateGlassTint(
+            of: materialView,
+            tintColor: AssetCollectionMetrics.contextMenuPanelTintColor
+        )
         layer?.borderColor = AssetCollectionMetrics.contextMenuPanelBorderColor.momentoCGColor(for: self)
     }
 }
@@ -3480,7 +3493,9 @@ private final class HoverSelectionView: NSView {
         }
     }
 
-    private let glassBackgroundView = NSGlassEffectView()
+    private let glassBackgroundView = MomentoAppKitMaterialViewFactory.makeSelectionBackgroundView(
+        cornerRadius: AssetCollectionMetrics.selectionCornerRadius
+    )
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -3498,8 +3513,6 @@ private final class HoverSelectionView: NSView {
         layer?.cornerCurve = .continuous
 
         glassBackgroundView.translatesAutoresizingMaskIntoConstraints = false
-        glassBackgroundView.cornerRadius = AssetCollectionMetrics.selectionCornerRadius
-        glassBackgroundView.style = .regular
         glassBackgroundView.isHidden = true
         addSubview(glassBackgroundView)
 

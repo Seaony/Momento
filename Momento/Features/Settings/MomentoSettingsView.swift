@@ -123,7 +123,7 @@ struct MomentoSettingsView: View {
         }
         .padding(.vertical, 6)
         .frame(width: MomentoSettingsMetrics.cardWidth)
-        .glassEffect(.regular, in: shape)
+        .momentoSurface(.regular, in: shape)
         .contentShape(shape)
     }
 
@@ -153,7 +153,7 @@ struct MomentoSettingsView: View {
         }
         .labelsHidden()
         .pickerStyle(.menu)
-        .buttonStyle(.glass)
+        .momentoGlassButtonStyle()
         .controlSize(.regular)
         .environment(\.appearsActive, true)
     }
@@ -171,7 +171,7 @@ struct MomentoSettingsView: View {
         )
         .background {
             MomentoGlassBackground(
-                glass: .regular.tint(MomentoTheme.contrastTint(lightOpacity: 0.05, darkOpacity: 0.07)).interactive(true),
+                style: .regular.tint(MomentoTheme.contrastTint(lightOpacity: 0.05, darkOpacity: 0.07)).interactive(true),
                 cornerRadius: MomentoSettingsMetrics.appearancePickerRadius
             )
         }
@@ -266,7 +266,7 @@ struct MomentoSettingsView: View {
             .fixedSize()
             .padding(.horizontal, 16)
             .frame(height: MomentoSettingsMetrics.actionButtonHeight)
-            .glassEffect(
+            .momentoSurface(
                 hasUpdate
                     ? .regular.tint(Color.accentColor).interactive(true)
                     : .regular.interactive(true),

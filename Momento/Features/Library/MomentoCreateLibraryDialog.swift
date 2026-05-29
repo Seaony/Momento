@@ -113,7 +113,7 @@ struct MomentoCreateLibraryDialog: View {
                                 .padding(.horizontal, 18)
                                 .padding(.vertical, 6)
                         }
-                        .buttonStyle(.glass)
+                        .momentoGlassButtonStyle()
                         .buttonBorderShape(.capsule)
                         .controlSize(.large)
                         .contentShape(Capsule(style: .continuous))
@@ -131,7 +131,7 @@ struct MomentoCreateLibraryDialog: View {
                                 .padding(.horizontal, 18)
                                 .padding(.vertical, 6)
                         }
-                        .buttonStyle(.glassProminent)
+                        .momentoGlassButtonStyle(.prominent)
                         .buttonBorderShape(.capsule)
                         .controlSize(.large)
                         .contentShape(Capsule(style: .continuous))
@@ -148,7 +148,7 @@ struct MomentoCreateLibraryDialog: View {
             .padding(.vertical, 30)
             .frame(width: createLibraryDialogWidth)
             .background {
-                MomentoGlassBackground(glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 14)
+                MomentoGlassBackground(style: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 14)
             }
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .onTapGesture {}
@@ -168,7 +168,7 @@ struct MomentoCreateLibraryDialog: View {
             .foregroundStyle(.white)
             .frame(width: createLibraryDialogIconSize, height: createLibraryDialogIconSize)
             .background {
-                MomentoGlassBackground(glass: .regular.tint(Color.accentColor), cornerRadius: 14)
+                MomentoGlassBackground(style: .regular.tint(Color.accentColor), cornerRadius: 14)
             }
     }
 
@@ -176,7 +176,7 @@ struct MomentoCreateLibraryDialog: View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
 
         return Color.clear
-            .glassEffect(.regular, in: shape)
+            .momentoSurface(.regular, in: shape)
             .overlay {
                 shape.strokeBorder(isNameFocused ? Color.accentColor : MomentoTheme.subtleStroke, lineWidth: 2)
             }
@@ -238,7 +238,7 @@ struct MomentoDeleteLibraryDialog: View {
                                 .padding(.horizontal, 18)
                                 .padding(.vertical, 6)
                         }
-                        .buttonStyle(.glass)
+                        .momentoGlassButtonStyle()
                         .buttonBorderShape(.capsule)
                         .controlSize(.large)
                         .contentShape(Capsule(style: .continuous))
@@ -256,7 +256,7 @@ struct MomentoDeleteLibraryDialog: View {
                                 .padding(.horizontal, 18)
                                 .padding(.vertical, 6)
                         }
-                        .buttonStyle(.glassProminent)
+                        .momentoGlassButtonStyle(.prominent)
                         .buttonBorderShape(.capsule)
                         .controlSize(.large)
                         .tint(.red)
@@ -273,7 +273,7 @@ struct MomentoDeleteLibraryDialog: View {
             .padding(.vertical, 30)
             .frame(width: deleteLibraryDialogWidth)
             .background {
-                MomentoGlassBackground(glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 14)
+                MomentoGlassBackground(style: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 14)
             }
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .onTapGesture {}
@@ -290,7 +290,7 @@ struct MomentoDeleteLibraryDialog: View {
             .foregroundStyle(.white)
             .frame(width: createLibraryDialogIconSize, height: createLibraryDialogIconSize)
             .background {
-                MomentoGlassBackground(glass: .regular.tint(Color.red), cornerRadius: 14)
+                MomentoGlassBackground(style: .regular.tint(Color.red), cornerRadius: 14)
             }
     }
 
@@ -420,7 +420,7 @@ struct MomentoFolderNameDialog: View {
                                 .padding(.horizontal, 18)
                                 .padding(.vertical, 6)
                         }
-                        .buttonStyle(.glass)
+                        .momentoGlassButtonStyle()
                         .buttonBorderShape(.capsule)
                         .controlSize(.large)
                         .contentShape(Capsule(style: .continuous))
@@ -438,7 +438,7 @@ struct MomentoFolderNameDialog: View {
                                 .padding(.horizontal, 18)
                                 .padding(.vertical, 6)
                         }
-                        .buttonStyle(.glassProminent)
+                        .momentoGlassButtonStyle(.prominent)
                         .buttonBorderShape(.capsule)
                         .controlSize(.large)
                         .contentShape(Capsule(style: .continuous))
@@ -455,7 +455,7 @@ struct MomentoFolderNameDialog: View {
             .padding(.vertical, 30)
             .frame(width: folderNameDialogWidth)
             .background {
-                MomentoGlassBackground(glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 14)
+                MomentoGlassBackground(style: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 14)
             }
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .onTapGesture {}
@@ -475,7 +475,7 @@ struct MomentoFolderNameDialog: View {
             .foregroundStyle(.white)
             .frame(width: createLibraryDialogIconSize, height: createLibraryDialogIconSize)
             .background {
-                MomentoGlassBackground(glass: .regular.tint(Color.accentColor), cornerRadius: 14)
+                MomentoGlassBackground(style: .regular.tint(Color.accentColor), cornerRadius: 14)
             }
     }
 
@@ -483,7 +483,7 @@ struct MomentoFolderNameDialog: View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
 
         return Color.clear
-            .glassEffect(.regular, in: shape)
+            .momentoSurface(.regular, in: shape)
             .overlay {
                 shape.strokeBorder(isNameFocused ? Color.accentColor : MomentoTheme.subtleStroke, lineWidth: 2)
             }
@@ -545,7 +545,7 @@ struct MomentoDeleteFolderDialog: View {
                                 .padding(.horizontal, 18)
                                 .padding(.vertical, 6)
                         }
-                        .buttonStyle(.glass)
+                        .momentoGlassButtonStyle()
                         .buttonBorderShape(.capsule)
                         .controlSize(.large)
                         .contentShape(Capsule(style: .continuous))
@@ -563,7 +563,7 @@ struct MomentoDeleteFolderDialog: View {
                                 .padding(.horizontal, 18)
                                 .padding(.vertical, 6)
                         }
-                        .buttonStyle(.glassProminent)
+                        .momentoGlassButtonStyle(.prominent)
                         .buttonBorderShape(.capsule)
                         .controlSize(.large)
                         .tint(.red)
@@ -580,7 +580,7 @@ struct MomentoDeleteFolderDialog: View {
             .padding(.vertical, 30)
             .frame(width: deleteLibraryDialogWidth)
             .background {
-                MomentoGlassBackground(glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 14)
+                MomentoGlassBackground(style: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 14)
             }
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .onTapGesture {}
@@ -597,7 +597,7 @@ struct MomentoDeleteFolderDialog: View {
             .foregroundStyle(.white)
             .frame(width: createLibraryDialogIconSize, height: createLibraryDialogIconSize)
             .background {
-                MomentoGlassBackground(glass: .regular.tint(Color.red), cornerRadius: 14)
+                MomentoGlassBackground(style: .regular.tint(Color.red), cornerRadius: 14)
             }
     }
 
@@ -649,7 +649,7 @@ struct MomentoDestructiveConfirmationDialog: View {
                     .foregroundStyle(.white)
                     .frame(width: createLibraryDialogIconSize, height: createLibraryDialogIconSize)
                     .background {
-                        MomentoGlassBackground(glass: .regular.tint(Color.red), cornerRadius: 14)
+                        MomentoGlassBackground(style: .regular.tint(Color.red), cornerRadius: 14)
                     }
 
                 VStack(alignment: .leading, spacing: 18) {
@@ -673,7 +673,7 @@ struct MomentoDestructiveConfirmationDialog: View {
                                 .padding(.horizontal, 18)
                                 .padding(.vertical, 6)
                         }
-                        .buttonStyle(.glass)
+                        .momentoGlassButtonStyle()
                         .buttonBorderShape(.capsule)
                         .controlSize(.large)
                         .contentShape(Capsule(style: .continuous))
@@ -691,7 +691,7 @@ struct MomentoDestructiveConfirmationDialog: View {
                                 .padding(.horizontal, 18)
                                 .padding(.vertical, 6)
                         }
-                        .buttonStyle(.glassProminent)
+                        .momentoGlassButtonStyle(.prominent)
                         .buttonBorderShape(.capsule)
                         .controlSize(.large)
                         .tint(.red)
@@ -708,7 +708,7 @@ struct MomentoDestructiveConfirmationDialog: View {
             .padding(.vertical, 30)
             .frame(width: destructiveConfirmationDialogWidth)
             .background {
-                MomentoGlassBackground(glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 14)
+                MomentoGlassBackground(style: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 14)
             }
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .onTapGesture {}

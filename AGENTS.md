@@ -33,8 +33,8 @@
 
 Momento 是原生 macOS 资产管理应用，使用 SwiftUI + AppKit，不使用 Web 技术。完整产品规格在 `FEATURE.md`；做新功能前先读。
 
-- macOS 26+，Swift 6，严格并发。
-- Liquid Glass UI 使用 SwiftUI 原生 `.glassEffect`、`.buttonStyle(.glass)` / `.buttonStyle(.glassProminent)`。不要用自定义 blur/stroke/shadow 假造 glass。
+- macOS 15+，Swift 6，严格并发。
+- macOS 26+ 使用 SwiftUI 原生 Liquid Glass；macOS 15 到 25 使用 `DesignSystem` 兼容层 fallback。不要在业务 view 中直接引用 macOS 26-only glass API，不要用自定义 blur/stroke/shadow 假造 glass。
 - 新 `.swift` 文件放在 `Momento/` 下会被 Xcode file-system synchronized group 自动纳入，不要无理由修改 `project.pbxproj`。
 - 文件尽量保持可读和可维护，避免过度拆分或 speculative abstraction。
 

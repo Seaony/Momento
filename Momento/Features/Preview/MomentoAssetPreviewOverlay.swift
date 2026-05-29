@@ -109,7 +109,7 @@ struct MomentoAssetPreviewOverlay: View {
                     .padding(MomentoAssetPreviewMetrics.imagePanelPadding)
                     .background {
                         MomentoGlassBackground(
-                            glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: MomentoAssetPreviewMetrics.imagePanelTintOpacity)),
+                            style: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: MomentoAssetPreviewMetrics.imagePanelTintOpacity)),
                             cornerRadius: MomentoAssetPreviewMetrics.imagePanelCornerRadius
                         )
                     }
@@ -158,7 +158,7 @@ struct MomentoAssetPreviewOverlay: View {
                     height: MomentoAssetPreviewMetrics.navigationButtonSize
                 )
         }
-        .buttonStyle(.glass)
+        .momentoGlassButtonStyle()
         .buttonBorderShape(.circle)
         .opacity(isAvailable ? 1 : 0.38)
         .help(help)
@@ -202,7 +202,7 @@ struct MomentoAssetPreviewOverlay: View {
             .frame(height: 38)
             .background {
                 MomentoGlassBackground(
-                    glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.4)),
+                    style: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.4)),
                     cornerRadius: 14
                 )
             }
@@ -270,7 +270,7 @@ struct MomentoAssetPreviewOverlay: View {
                         .font(.system(size: 12, weight: .semibold))
                         .frame(width: 28, height: 28)
                 }
-                .buttonStyle(.glass)
+                .momentoGlassButtonStyle()
                 .buttonBorderShape(.circle)
                 .help(localization.string("Dismiss"))
                 .contentShape(Circle())
@@ -281,7 +281,7 @@ struct MomentoAssetPreviewOverlay: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background {
-            MomentoGlassBackground(glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.12)), cornerRadius: 16)
+            MomentoGlassBackground(style: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.12)), cornerRadius: 16)
         }
     }
 

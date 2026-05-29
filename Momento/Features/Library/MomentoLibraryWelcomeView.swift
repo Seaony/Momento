@@ -42,7 +42,7 @@ struct MomentoLibraryWelcomeView: View {
                             .font(.system(size: welcomeButtonFontSize, weight: .semibold))
                             .frame(width: welcomeButtonWidth, height: welcomeButtonHeight)
                     }
-                    .buttonStyle(.glassProminent)
+                    .momentoGlassButtonStyle(.prominent)
                     .buttonBorderShape(.capsule)
                     .tint(Color.accentColor)
                     .foregroundStyle(Color.white)
@@ -62,7 +62,7 @@ struct MomentoLibraryWelcomeView: View {
                             .font(.system(size: welcomeButtonFontSize, weight: .semibold))
                             .frame(width: welcomeButtonWidth, height: welcomeButtonHeight)
                     }
-                    .buttonStyle(.glass)
+                    .momentoGlassButtonStyle()
                     .buttonBorderShape(.capsule)
                     .foregroundStyle(Color.white)
                     .contentShape(Capsule(style: .continuous))

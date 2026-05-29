@@ -292,7 +292,7 @@ private struct SidebarTitlebarToggleAccessoryView: View {
                     .frame(width: MomentoTheme.sidebarTitlebarButtonSize, height: MomentoTheme.sidebarTitlebarButtonSize)
                     .background {
                         MomentoGlassBackground(
-                            glass: .regular.interactive(isToggleHovered),
+                            style: .regular.interactive(isToggleHovered),
                             cornerRadius: 9
                         )
                     }
@@ -330,7 +330,7 @@ private struct SidebarTitlebarToggleAccessoryView: View {
                     .frame(width: MomentoTheme.toolbarIconButtonWidth, height: MomentoTheme.toolbarControlHeight)
                     .background {
                         MomentoGlassBackground(
-                            glass: .regular.interactive(isHovered),
+                            style: .regular.interactive(isHovered),
                             cornerRadius: MomentoTheme.toolbarControlRadius
                         )
                     }

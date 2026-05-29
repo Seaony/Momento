@@ -177,7 +177,7 @@ private struct InspectorTitlebarControlAccessoryView: View {
                     .frame(width: MomentoTheme.toolbarIconButtonWidth, height: MomentoTheme.toolbarControlHeight)
                     .background {
                         MomentoGlassBackground(
-                            glass: .regular.interactive(isHovered),
+                            style: .regular.interactive(isHovered),
                             cornerRadius: MomentoTheme.toolbarControlRadius
                         )
                     }

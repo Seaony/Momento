@@ -339,23 +339,32 @@ struct ContentView: View {
             }
         }
         .toolbar {
-            ToolbarSpacer(.flexible)
-            ToolbarItemGroup(placement: .automatic) {
-                if updateService.availableUpdateDisplayVersion != nil {
-                    toolbarUpdateButton
-                        .padding(.trailing, 6)
-                }
-                toolbarFilterButton
-                toolbarSortButton
-                    .padding(.trailing, 6)
-                toolbarViewModeSwitcher
-                    .padding(.trailing, 6)
-                toolbarSearchControl(resultCount: visibleAssets.count)
+            if #available(macOS 26.0, *) {
+                ToolbarSpacer(.flexible)
+                contentToolbarItems(resultCount: visibleAssets.count)
+                    .sharedBackgroundVisibility(.hidden)
+            } else {
+                contentToolbarItems(resultCount: visibleAssets.count)
             }
-            .sharedBackgroundVisibility(.hidden)
         }
         .navigationTitle("")
         .focusedSceneValue(\.momentoMenuCommandAction, performFocusedCommand)
+    }
+
+    @ToolbarContentBuilder
+    private func contentToolbarItems(resultCount: Int) -> some ToolbarContent {
+        ToolbarItemGroup(placement: .automatic) {
+            if updateService.availableUpdateDisplayVersion != nil {
+                toolbarUpdateButton
+                    .padding(.trailing, 6)
+            }
+            toolbarFilterButton
+            toolbarSortButton
+                .padding(.trailing, 6)
+            toolbarViewModeSwitcher
+                .padding(.trailing, 6)
+            toolbarSearchControl(resultCount: resultCount)
+        }
     }
 
     private var toolbarUpdateButton: some View {
@@ -377,7 +386,7 @@ struct ContentView: View {
             .foregroundStyle(MomentoTheme.primaryText)
             .frame(width: ContentToolbarMetrics.updateButtonWidth, height: MomentoTheme.toolbarControlHeight)
             .background {
-                MomentoGlassBackground(glass: .regular.interactive(true), cornerRadius: MomentoTheme.toolbarControlRadius)
+                MomentoGlassBackground(style: .regular.interactive(true), cornerRadius: MomentoTheme.toolbarControlRadius)
             }
             .overlay {
                 if isHovered {
@@ -597,7 +606,7 @@ struct ContentView: View {
                 .foregroundStyle(isActive || isHovered ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
                 .frame(width: ContentToolbarMetrics.iconButtonWidth, height: MomentoTheme.toolbarControlHeight)
                 .background {
-                    MomentoGlassBackground(glass: .regular.interactive(true), cornerRadius: MomentoTheme.toolbarControlRadius)
+                    MomentoGlassBackground(style: .regular.interactive(true), cornerRadius: MomentoTheme.toolbarControlRadius)
                 }
                 .overlay {
                     if isHovered {
@@ -631,12 +640,12 @@ struct ContentView: View {
         .frame(width: ContentToolbarMetrics.filterPopoverWidth)
         .fixedSize(horizontal: false, vertical: true)
         .background {
-            MomentoGlassBackground(glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 20)
+            MomentoGlassBackground(style: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 20)
         }
     }
 
     private var sortPopover: some View {
-        GlassEffectContainer(spacing: 10) {
+        MomentoGlassEffectContainer(spacing: 10) {
             VStack(alignment: .leading, spacing: ContentToolbarMetrics.popoverSectionSpacing) {
                 VStack(alignment: .leading, spacing: 7) {
                     ForEach(AssetSortOption.allCases) { option in
@@ -654,7 +663,7 @@ struct ContentView: View {
         .padding(12)
         .frame(width: ContentToolbarMetrics.sortPopoverWidth)
         .background {
-            MomentoGlassBackground(glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.16)), cornerRadius: 18)
+            MomentoGlassBackground(style: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.16)), cornerRadius: 18)
         }
     }
 
@@ -669,7 +678,7 @@ struct ContentView: View {
         .padding(5)
         .background {
             MomentoGlassBackground(
-                glass: .regular.tint(MomentoTheme.contrastTint(lightOpacity: 0.04, darkOpacity: 0.05)).interactive(true),
+                style: .regular.tint(MomentoTheme.contrastTint(lightOpacity: 0.04, darkOpacity: 0.05)).interactive(true),
                 cornerRadius: 14
             )
         }
@@ -700,7 +709,7 @@ struct ContentView: View {
         }
         .buttonStyle(.plain)
         .pointerStyle(.link)
-        .glassEffect(
+        .momentoSurface(
             .regular.tint(MomentoTheme.contrastTint(
                 lightOpacity: isSelected ? 0.08 : (isHovered ? 0.05 : 0),
                 darkOpacity: isSelected ? 0.14 : (isHovered ? 0.08 : 0)
@@ -848,7 +857,7 @@ struct ContentView: View {
         .padding(.horizontal, 9)
         .frame(height: 30)
         .background {
-            MomentoGlassBackground(glass: .regular.interactive(true), cornerRadius: 10)
+            MomentoGlassBackground(style: .regular.interactive(true), cornerRadius: 10)
         }
     }
 
@@ -912,7 +921,7 @@ struct ContentView: View {
                 }
             }
             .frame(width: 34, height: 34)
-            .glassEffect(
+            .momentoSurface(
                 .regular.tint(MomentoTheme.contrastTint(
                     lightOpacity: isSelected || isHovered ? 0.08 : 0.035,
                     darkOpacity: isSelected || isHovered ? 0.16 : 0.06
@@ -953,7 +962,7 @@ struct ContentView: View {
             .padding(.horizontal, 9)
             .frame(height: 30)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .glassEffect(
+            .momentoSurface(
                 .regular.tint(MomentoTheme.contrastTint(
                     lightOpacity: isSelected || isHovered ? 0.08 : 0.035,
                     darkOpacity: isSelected || isHovered ? 0.16 : 0.06
@@ -993,7 +1002,7 @@ struct ContentView: View {
             .foregroundStyle(MomentoTheme.primaryText)
             .padding(.horizontal, 10)
             .frame(height: 32)
-            .glassEffect(
+            .momentoSurface(
                 .regular.tint(MomentoTheme.contrastTint(
                     lightOpacity: isSelected || isHovered ? 0.08 : 0.035,
                     darkOpacity: isSelected || isHovered ? 0.16 : 0.06
@@ -1105,7 +1114,7 @@ struct ContentView: View {
     }
 
     private func toolbarControlBackground(cornerRadius: CGFloat) -> some View {
-        MomentoGlassBackground(glass: .regular.interactive(true), cornerRadius: cornerRadius)
+        MomentoGlassBackground(style: .regular.interactive(true), cornerRadius: cornerRadius)
     }
 
     @ViewBuilder
@@ -1343,7 +1352,7 @@ struct ContentView: View {
                 } label: {
                     Label(localization.string("Import Assets"), systemImage: "square.and.arrow.down")
                 }
-                .buttonStyle(.glassProminent)
+                .momentoGlassButtonStyle(.prominent)
                 .controlSize(.large)
                 .frame(height: 38)
                 .scaleEffect(isEmptyImportButtonHovered && !reduceMotion ? 1.035 : 1)
@@ -1359,7 +1368,7 @@ struct ContentView: View {
                 } label: {
                     Label(localization.string("Install Browser Extension"), systemImage: "backpack")
                 }
-                .buttonStyle(.glass)
+                .momentoGlassButtonStyle()
                 .controlSize(.large)
                 .frame(height: 38)
                 .foregroundStyle(MomentoTheme.primaryText)
@@ -1389,7 +1398,7 @@ struct ContentView: View {
                     store.libraryErrorMessage = nil
                 }
             }
-            .buttonStyle(.glass)
+            .momentoGlassButtonStyle()
         }
         .font(.system(size: 12, weight: .medium))
         .padding(.horizontal, 14)
@@ -1408,7 +1417,7 @@ struct ContentView: View {
                     .frame(width: 38, height: 38)
                     .background {
                         MomentoGlassBackground(
-                            glass: .regular.tint(MomentoTheme.sidebarIconHoverBackground),
+                            style: .regular.tint(MomentoTheme.sidebarIconHoverBackground),
                             cornerRadius: 12
                         )
                     }
@@ -1449,7 +1458,7 @@ struct ContentView: View {
         .padding(18)
         .frame(width: 360, alignment: .leading)
         .background {
-            MomentoGlassBackground(glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 18)
+            MomentoGlassBackground(style: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 18)
         }
     }
 

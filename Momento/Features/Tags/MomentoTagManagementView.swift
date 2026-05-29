@@ -77,7 +77,7 @@ struct MomentoTagManagementView: View {
             .frame(height: Self.toolbarHeight)
             .background {
                 MomentoGlassBackground(
-                    glass: .regular.interactive(true),
+                    style: .regular.interactive(true),
                     cornerRadius: 13
                 )
             }
@@ -92,7 +92,7 @@ struct MomentoTagManagementView: View {
                     .frame(height: Self.toolbarHeight)
                     .background {
                         MomentoGlassBackground(
-                            glass: .regular.tint(MomentoTheme.contrastTint(
+                            style: .regular.tint(MomentoTheme.contrastTint(
                                 lightOpacity: isCreateButtonHovered ? 0.07 : 0.03,
                                 darkOpacity: isCreateButtonHovered ? 0.12 : 0.04
                             )).interactive(true),
@@ -180,7 +180,7 @@ struct MomentoTagManagementView: View {
                 .layoutPriority(1)
                 .background {
                     MomentoGlassBackground(
-                        glass: .regular.interactive(true),
+                        style: .regular.interactive(true),
                         cornerRadius: 9
                     )
                     .overlay {
@@ -246,7 +246,7 @@ struct MomentoTagManagementView: View {
                     .layoutPriority(1)
                     .background {
                         MomentoGlassBackground(
-                            glass: .regular.interactive(true),
+                            style: .regular.interactive(true),
                             cornerRadius: 9
                         )
                             .overlay {
@@ -338,7 +338,7 @@ struct MomentoTagManagementView: View {
             Image(systemName: "ellipsis")
                 .font(.system(size: 14, weight: .semibold))
                 .frame(width: 30, height: 28)
-                .glassEffect(
+                .momentoSurface(
                     .regular.tint(MomentoTheme.contrastTint(
                         lightOpacity: isHovered ? 0.07 : 0.03,
                         darkOpacity: isHovered ? 0.12 : 0.04
@@ -382,7 +382,7 @@ struct MomentoTagManagementView: View {
                 .frame(height: Self.actionButtonHeight)
                 .background {
                     Color.clear
-                        .glassEffect(
+                        .momentoSurface(
                             isProminent
                                 ? .regular.tint(Color.accentColor).interactive(true)
                                 : .regular.interactive(true),

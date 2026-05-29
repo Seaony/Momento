@@ -282,7 +282,7 @@ struct MomentoInspectorView: View {
                 .frame(height: 28)
                 .background {
                     MomentoGlassBackground(
-                        glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.22)),
+                        style: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.22)),
                         cornerRadius: 9
                     )
                 }
@@ -377,7 +377,7 @@ struct MomentoInspectorView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background {
                     MomentoGlassBackground(
-                        glass: .regular.interactive(true),
+                        style: .regular.interactive(true),
                         cornerRadius: 7
                     )
                     .overlay {
@@ -549,7 +549,7 @@ struct MomentoInspectorView: View {
         .padding(.leading, 9)
         .padding(.trailing, 9)
         .frame(height: 26)
-        .glassEffect(
+        .momentoSurface(
             .regular.tint(MomentoTheme.contrastTint(
                 lightOpacity: isHovered ? 0.07 : 0.03,
                 darkOpacity: isHovered ? 0.12 : 0.04
@@ -597,7 +597,7 @@ struct MomentoInspectorView: View {
         .padding(.leading, 9)
         .padding(.trailing, 9)
         .frame(height: 26)
-        .glassEffect(
+        .momentoSurface(
             .regular.tint(MomentoTheme.contrastTint(
                 lightOpacity: isHovered ? 0.07 : 0.03,
                 darkOpacity: isHovered ? 0.12 : 0.04
@@ -622,7 +622,7 @@ struct MomentoInspectorView: View {
             Image(systemName: "plus")
                 .font(.system(size: 12, weight: .semibold))
                 .frame(width: 34, height: 26)
-                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .momentoSurface(.regular, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -643,7 +643,7 @@ struct MomentoInspectorView: View {
             Image(systemName: "plus")
                 .font(.system(size: 12, weight: .semibold))
                 .frame(width: 34, height: 26)
-                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .momentoSurface(.regular, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -656,7 +656,7 @@ struct MomentoInspectorView: View {
     }
 
     private var tagPicker: some View {
-        GlassEffectContainer(spacing: 8) {
+        MomentoGlassEffectContainer(spacing: 8) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
@@ -671,7 +671,7 @@ struct MomentoInspectorView: View {
                 }
                 .padding(.horizontal, 10)
                 .frame(height: 34)
-                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .momentoSurface(.regular, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
@@ -709,7 +709,7 @@ struct MomentoInspectorView: View {
                                 .padding(.horizontal, 10)
                                 .frame(height: 34)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .glassEffect(
+                                .momentoSurface(
                                     .regular.tint(MomentoTheme.contrastTint(
                                         lightOpacity: isCreateTagRowHovered ? 0.08 : 0.04,
                                         darkOpacity: isCreateTagRowHovered ? 0.16 : 0.08
@@ -739,7 +739,7 @@ struct MomentoInspectorView: View {
         .frame(width: Self.tagPickerWidth)
         .background {
             MomentoGlassBackground(
-                glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.16)),
+                style: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.16)),
                 cornerRadius: 16
             )
         }
@@ -749,7 +749,7 @@ struct MomentoInspectorView: View {
     }
 
     private var folderPicker: some View {
-        GlassEffectContainer(spacing: 8) {
+        MomentoGlassEffectContainer(spacing: 8) {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
@@ -763,7 +763,7 @@ struct MomentoInspectorView: View {
                 }
                 .padding(.horizontal, 10)
                 .frame(height: 34)
-                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .momentoSurface(.regular, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: Self.folderPickerRowSpacing) {
@@ -789,7 +789,7 @@ struct MomentoInspectorView: View {
         .frame(width: Self.tagPickerWidth)
         .background {
             MomentoGlassBackground(
-                glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.16)),
+                style: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.16)),
                 cornerRadius: 16
             )
         }
@@ -821,7 +821,7 @@ struct MomentoInspectorView: View {
             .foregroundStyle(isSelected ? MomentoTheme.secondaryText : MomentoTheme.primaryText)
             .padding(.horizontal, 9)
             .frame(height: 26)
-            .glassEffect(
+            .momentoSurface(
                 .regular.tint(MomentoTheme.contrastTint(
                     lightOpacity: isHovered || isSelected ? 0.08 : 0.04,
                     darkOpacity: isHovered || isSelected ? 0.16 : 0.08
@@ -1022,7 +1022,7 @@ struct MomentoInspectorView: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: 30)
                 }
-                .buttonStyle(.glass)
+                .momentoGlassButtonStyle()
             }
         }
     }

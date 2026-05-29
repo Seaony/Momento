@@ -1412,7 +1412,7 @@ private struct MomentoLibrarySwitcherMenu: View {
         .padding(8)
         .frame(width: MomentoTheme.librarySwitcherWidth, alignment: .topLeading)
         .background {
-            MomentoGlassBackground(glass: .regular, cornerRadius: 14)
+            MomentoGlassBackground(style: .regular, cornerRadius: 14)
         }
         .overlay {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -1613,7 +1613,7 @@ private struct MomentoLibrarySwitcherMenu: View {
         .padding(6)
         .frame(width: MomentoSidebarMenuMetrics.libraryMoreMenuWidth, alignment: .leading)
         .background {
-            MomentoGlassBackground(glass: .regular, cornerRadius: 12)
+            MomentoGlassBackground(style: .regular, cornerRadius: 12)
         }
         .overlay {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -1712,7 +1712,7 @@ private struct MomentoLibrarySwitcherMenu: View {
 
         if isSelected {
             Color.clear
-                .glassEffect(.regular.tint(Color.accentColor), in: shape)
+                .momentoSurface(.regular.tint(Color.accentColor), in: shape)
         } else if isHovered {
             shape.fill(MomentoTheme.sidebarIconHoverBackground)
         } else {
