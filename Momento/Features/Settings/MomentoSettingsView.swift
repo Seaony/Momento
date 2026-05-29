@@ -107,7 +107,9 @@ struct MomentoSettingsView: View {
     // MARK: - 偏好卡片
 
     private var settingsCard: some View {
-        VStack(spacing: 0) {
+        let shape = RoundedRectangle(cornerRadius: MomentoSettingsMetrics.cardRadius, style: .continuous)
+
+        return VStack(spacing: 0) {
             settingsRow(label: localization.string("Language")) {
                 languagePicker
             }
@@ -121,16 +123,8 @@ struct MomentoSettingsView: View {
         }
         .padding(.vertical, 6)
         .frame(width: MomentoSettingsMetrics.cardWidth)
-        .background {
-            MomentoGlassBackground(
-                glass: .regular.tint(MomentoTheme.contrastTint(lightOpacity: 0.04, darkOpacity: 0.05)).interactive(true),
-                cornerRadius: MomentoSettingsMetrics.cardRadius
-            )
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: MomentoSettingsMetrics.cardRadius, style: .continuous)
-                .strokeBorder(MomentoTheme.subtleStroke.opacity(0.35), lineWidth: 0.6)
-        }
+        .glassEffect(.regular, in: shape)
+        .contentShape(shape)
     }
 
     private func settingsRow<Content: View>(
