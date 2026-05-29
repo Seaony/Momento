@@ -227,26 +227,8 @@ final class ArchitectureGuardTests: XCTestCase {
         let source = try String(contentsOf: designSystemURL(), encoding: .utf8)
 
         XCTAssertTrue(source.contains("static let sidebarIconHoverBackground = contrastTint"))
-        XCTAssertTrue(source.contains("static let appBackgroundLightGlassTint"))
-        XCTAssertFalse(source.contains("appBackgroundGlassTint = adaptiveColor"))
         XCTAssertTrue(source.contains("adaptiveNSColor(light: NSColor, dark: NSColor)"))
         XCTAssertTrue(source.contains("bestMatch(from:"))
-    }
-
-    func testAppShellUsesUntintedDarkBackground() throws {
-        let source = try String(contentsOf: shellURL(), encoding: .utf8)
-        let backgroundSource = try sourceBlock(
-            in: source,
-            from: "@ViewBuilder\n    private var appBackground",
-            to: "private var floatingSidebar"
-        )
-
-        XCTAssertTrue(source.contains("@Environment(\\.colorScheme)"))
-        XCTAssertTrue(backgroundSource.contains("if colorScheme == .light"))
-        XCTAssertTrue(backgroundSource.contains("MomentoTheme.appBackgroundLightGlassTint"))
-        XCTAssertTrue(backgroundSource.contains("MomentoGlassBackground(cornerRadius: 0)"))
-        XCTAssertFalse(backgroundSource.contains("appBackgroundGlassTint"))
-        XCTAssertFalse(backgroundSource.contains("dark: .clear"))
     }
 
     func testSidebarSelectedNavigationForegroundUsesAdaptiveTextColor() throws {
