@@ -18,6 +18,7 @@ struct MomentoAssetPreviewOverlay: View {
     var previewURL: URL
     var closesOnSpaceKeyUp = false
     var usesWindowTransition = false
+    var animatesPresentation = true
     var showsNavigationControls = false
     var canNavigatePrevious = false
     var canNavigateNext = false
@@ -41,9 +42,9 @@ struct MomentoAssetPreviewOverlay: View {
                     }
 
                 previewContent(in: proxy.size)
-                    .scaleEffect(isPresented ? 1 : 0.96)
-                    .opacity(isPresented ? 1 : 0)
-                    .animation(.spring(response: 0.24, dampingFraction: 0.86), value: isPresented)
+                    .scaleEffect(presentationScale)
+                    .opacity(presentationOpacity)
+                    .animation(presentationAnimation, value: isPresented)
 
                 if showsNavigationControls {
                     navigationControls
@@ -200,6 +201,18 @@ struct MomentoAssetPreviewOverlay: View {
         return previewURL.lastPathComponent
     }
 
+    private var presentationScale: CGFloat {
+        animatesPresentation && !isPresented ? 0.96 : 1
+    }
+
+    private var presentationOpacity: Double {
+        animatesPresentation && !isPresented ? 0 : 1
+    }
+
+    private var presentationAnimation: Animation? {
+        animatesPresentation ? .spring(response: 0.24, dampingFraction: 0.86) : nil
+    }
+
     private func loadPreviewImage() {
         previewImageTask?.cancel()
         previewImage = nil
@@ -214,7 +227,7 @@ struct MomentoAssetPreviewOverlay: View {
             }
 
             previewImage = image ?? NSWorkspace.shared.icon(forFile: url.path)
-            withAnimation(.spring(response: 0.24, dampingFraction: 0.86)) {
+            withAnimation(presentationAnimation) {
                 isPresented = true
             }
         }
