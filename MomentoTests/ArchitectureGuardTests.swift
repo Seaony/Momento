@@ -179,12 +179,12 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertFalse(source.contains("Form("))
     }
 
-    func testAppFollowsSystemAppearance() throws {
+    func testAppUsesDarkAppearance() throws {
         let source = try String(contentsOf: appURL(), encoding: .utf8)
 
-        XCTAssertFalse(source.contains("NSApplication.shared.appearance"))
-        XCTAssertFalse(source.contains("NSAppearance(named: .darkAqua)"))
-        XCTAssertFalse(source.contains(".preferredColorScheme(.dark)"))
+        XCTAssertTrue(source.contains("import AppKit"))
+        XCTAssertTrue(source.contains("NSApplication.shared.appearance = NSAppearance(named: .darkAqua)"))
+        XCTAssertEqual(source.components(separatedBy: ".preferredColorScheme(.dark)").count - 1, 2)
     }
 
     func testDesignSystemUsesAdaptiveAppearanceTokens() throws {
