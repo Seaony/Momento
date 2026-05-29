@@ -340,7 +340,7 @@ private struct SidebarTitlebarToggleAccessoryView: View {
                         }
                     }
                     .contentShape(shape)
-                    .offset(y: MomentoTheme.sidebarTitlebarButtonHitInset)
+                    .offset(y: MomentoTheme.toolbarControlHitInset)
             }
             .frame(width: MomentoTheme.titlebarControlHitSize, height: MomentoTheme.titlebarControlHitSize, alignment: .top)
             .contentShape(.interaction, Rectangle())
@@ -402,6 +402,8 @@ private final class SidebarTitlebarToggleContainerView: NSView {
     init(hostingView: SidebarTitlebarToggleHostingView) {
         self.hostingView = hostingView
         super.init(frame: .zero)
+        clipsToBounds = false
+        hostingView.clipsToBounds = false
         addSubview(hostingView)
     }
 

@@ -100,7 +100,10 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(actionButtonSource.contains(".frame(width: MomentoTheme.titlebarControlHitSize, height: MomentoTheme.titlebarControlHitSize)"))
         XCTAssertTrue(actionButtonSource.contains(".contentShape(.interaction, Rectangle())"))
         XCTAssertTrue(actionButtonSource.contains("shape.fill(MomentoTheme.sidebarIconHoverBackground)"))
-        XCTAssertTrue(actionButtonSource.contains(".offset(y: MomentoTheme.sidebarTitlebarButtonHitInset)"))
+        XCTAssertTrue(actionButtonSource.contains(".offset(y: MomentoTheme.toolbarControlHitInset)"))
+        XCTAssertFalse(actionButtonSource.contains(".offset(y: MomentoTheme.sidebarTitlebarButtonHitInset)"))
+        XCTAssertTrue(source.contains("clipsToBounds = false"))
+        XCTAssertTrue(source.contains("hostingView.clipsToBounds = false"))
         XCTAssertTrue(shellSource.contains("browserExtensionAction: onInstallBrowserExtension"))
         XCTAssertTrue(contentSource.contains("onInstallBrowserExtension: installBrowserExtension"))
     }
