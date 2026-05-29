@@ -179,6 +179,14 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertFalse(source.contains("Form("))
     }
 
+    func testAppUsesDarkAppearance() throws {
+        let source = try String(contentsOf: appURL(), encoding: .utf8)
+
+        XCTAssertTrue(source.contains("import AppKit"))
+        XCTAssertTrue(source.contains("NSApplication.shared.appearance = NSAppearance(named: .darkAqua)"))
+        XCTAssertEqual(source.components(separatedBy: ".preferredColorScheme(.dark)").count - 1, 2)
+    }
+
     func testSparkleUpdatesAreConfiguredForGitHubAppcast() throws {
         let infoData = try Data(contentsOf: infoPlistURL())
         let infoPlist = try XCTUnwrap(PropertyListSerialization.propertyList(from: infoData, options: [], format: nil) as? [String: Any])
