@@ -182,6 +182,9 @@ extension SidebarTitlebarToggleConfigurator {
 
             let accessoryController = NSTitlebarAccessoryViewController()
             accessoryController.layoutAttribute = .left
+            if #available(macOS 26.1, *) {
+                accessoryController.preferredScrollEdgeEffectStyle = .soft
+            }
             accessoryController.view = containerView
 
             self.containerView = containerView

@@ -108,6 +108,16 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(contentSource.contains("onInstallBrowserExtension: installBrowserExtension"))
     }
 
+    func testTitlebarAccessoriesUseSoftScrollEdgeEffect() throws {
+        let sidebarTitlebarSource = try String(contentsOf: sidebarTitlebarURL(), encoding: .utf8)
+        let inspectorTitlebarSource = try String(contentsOf: inspectorTitlebarURL(), encoding: .utf8)
+
+        for source in [sidebarTitlebarSource, inspectorTitlebarSource] {
+            XCTAssertTrue(source.contains("if #available(macOS 26.1, *)"))
+            XCTAssertTrue(source.contains("accessoryController.preferredScrollEdgeEffectStyle = .soft"))
+        }
+    }
+
     func testToolbarControlsUseNativeHelpTooltips() throws {
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
         let sidebarTitlebarSource = try String(contentsOf: sidebarTitlebarURL(), encoding: .utf8)
