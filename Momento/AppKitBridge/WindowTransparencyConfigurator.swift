@@ -11,15 +11,23 @@ struct WindowTransparencyConfigurator: NSViewRepresentable {
     /// 所有 Liquid Glass 面板背后的统一窗口底色透明度。单个面板不再叠自己的
     /// opaque 背景，因此这个值就是整 App 视觉密度的唯一入口。
     static let backingOpacity: CGFloat = 0.9
+    static let lightBackingWhite: CGFloat = 0.94
 
     static func adaptiveBackingColor() -> NSColor {
         NSColor(name: nil) { appearance in
-            var color = NSColor.windowBackgroundColor.withAlphaComponent(Self.backingOpacity)
-            appearance.performAsCurrentDrawingAppearance {
-                color = NSColor.windowBackgroundColor.withAlphaComponent(Self.backingOpacity)
+            if !appearance.momentoUsesDarkWindowBacking {
+                return NSColor(deviceWhite: Self.lightBackingWhite, alpha: Self.backingOpacity)
             }
-            return color
+            return systemWindowBackingColor(for: appearance)
         }
+    }
+
+    static func systemWindowBackingColor(for appearance: NSAppearance) -> NSColor {
+        var color = NSColor.windowBackgroundColor.withAlphaComponent(Self.backingOpacity)
+        appearance.performAsCurrentDrawingAppearance {
+            color = NSColor.windowBackgroundColor.withAlphaComponent(Self.backingOpacity)
+        }
+        return color
     }
 
     var fixedContentSize: CGSize?
@@ -55,5 +63,17 @@ struct WindowTransparencyConfigurator: NSViewRepresentable {
             window.contentMaxSize = fixedContentSize
             window.setContentSize(fixedContentSize)
         }
+    }
+}
+
+private extension NSAppearance {
+    var momentoUsesDarkWindowBacking: Bool {
+        let match = bestMatch(from: [
+            .accessibilityHighContrastDarkAqua,
+            .darkAqua,
+            .accessibilityHighContrastAqua,
+            .aqua
+        ])
+        return match == .accessibilityHighContrastDarkAqua || match == .darkAqua
     }
 }

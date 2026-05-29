@@ -8,8 +8,17 @@ final class WindowTransparencyConfiguratorTests: XCTestCase {
         let color = WindowTransparencyConfigurator.adaptiveBackingColor()
         let lightComponents = try components(of: color, appearanceName: .aqua)
         let darkComponents = try components(of: color, appearanceName: .darkAqua)
+        let expectedDarkComponents = try components(
+            of: WindowTransparencyConfigurator.systemWindowBackingColor(for: try XCTUnwrap(NSAppearance(named: .darkAqua))),
+            appearanceName: .darkAqua
+        )
 
-        XCTAssertGreaterThan(lightComponents.red, darkComponents.red)
+        XCTAssertEqual(lightComponents.red, WindowTransparencyConfigurator.lightBackingWhite, accuracy: 0.001)
+        XCTAssertEqual(lightComponents.green, WindowTransparencyConfigurator.lightBackingWhite, accuracy: 0.001)
+        XCTAssertEqual(lightComponents.blue, WindowTransparencyConfigurator.lightBackingWhite, accuracy: 0.001)
+        XCTAssertEqual(darkComponents.red, expectedDarkComponents.red, accuracy: 0.001)
+        XCTAssertEqual(darkComponents.green, expectedDarkComponents.green, accuracy: 0.001)
+        XCTAssertEqual(darkComponents.blue, expectedDarkComponents.blue, accuracy: 0.001)
         XCTAssertEqual(lightComponents.alpha, WindowTransparencyConfigurator.backingOpacity, accuracy: 0.001)
         XCTAssertEqual(darkComponents.alpha, WindowTransparencyConfigurator.backingOpacity, accuracy: 0.001)
     }
