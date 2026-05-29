@@ -69,6 +69,9 @@ struct MomentoAssetPreviewOverlay: View {
         .onAppear {
             loadPreviewImage()
         }
+        .onChange(of: previewURL) { _, _ in
+            loadPreviewImage()
+        }
         .onDisappear {
             previewImageTask?.cancel()
             previewImageTask = nil
@@ -220,8 +223,9 @@ struct MomentoAssetPreviewOverlay: View {
 
     private func loadPreviewImage() {
         previewImageTask?.cancel()
-        previewImage = nil
-        areNavigationControlsVisible = false
+        if previewImage == nil {
+            areNavigationControlsVisible = false
+        }
 
         let url = previewURL
         let maxPixelSize = previewMaxPixelSize

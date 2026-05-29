@@ -218,7 +218,6 @@ final class MomentoAssetPreviewPanelController: NSObject, NSWindowDelegate {
                 self?.close()
             }
         )
-        .id("\(asset.id)-\(previewURL.path)-\(closesOnSpaceKeyUp)-\(showsNavigationControls)")
         .environment(\.appLocalization, localization)
     }
 }
