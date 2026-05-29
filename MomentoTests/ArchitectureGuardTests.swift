@@ -235,6 +235,18 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertFalse(foregroundSource.contains("return .white"))
     }
 
+    func testLibrarySwitcherSelectedSubtitleUsesLightText() throws {
+        let source = try String(contentsOf: sidebarURL(), encoding: .utf8)
+        let libraryRowSource = try sourceBlock(
+            in: source,
+            from: "private func libraryRow",
+            to: "private func libraryDragPreview"
+        )
+
+        XCTAssertTrue(libraryRowSource.contains(".foregroundStyle(isSelected ? .white.opacity(0.72) : MomentoTheme.secondaryText)"))
+        XCTAssertFalse(libraryRowSource.contains("MomentoTheme.primaryText.opacity(0.82)"))
+    }
+
     func testSparkleUpdatesAreConfiguredForGitHubAppcast() throws {
         let infoData = try Data(contentsOf: infoPlistURL())
         let infoPlist = try XCTUnwrap(PropertyListSerialization.propertyList(from: infoData, options: [], format: nil) as? [String: Any])

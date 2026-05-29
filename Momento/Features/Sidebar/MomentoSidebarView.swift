@@ -1464,7 +1464,7 @@ private struct MomentoLibrarySwitcherMenu: View {
 
                         Text(libraryPath(for: library))
                             .font(.system(size: 11))
-                            .foregroundStyle(isSelected ? MomentoTheme.primaryText.opacity(0.82) : MomentoTheme.secondaryText)
+                            .foregroundStyle(isSelected ? .white.opacity(0.72) : MomentoTheme.secondaryText)
                             .lineLimit(1)
                     }
 
