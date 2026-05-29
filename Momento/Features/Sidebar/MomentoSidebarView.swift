@@ -1418,7 +1418,6 @@ private struct MomentoLibrarySwitcherMenu: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .strokeBorder(MomentoTheme.subtleStroke.opacity(0.5), lineWidth: 0.6)
         }
-        .shadow(color: .black.opacity(0.22), radius: 18, y: 10)
     }
 
     private var visibleLibraries: [RecentLibraryReference] {
@@ -1620,7 +1619,6 @@ private struct MomentoLibrarySwitcherMenu: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(MomentoTheme.subtleStroke.opacity(0.45), lineWidth: 0.6)
         }
-        .shadow(color: .black.opacity(0.2), radius: 14, y: 8)
     }
 
     private var librarySwitcherSeparator: some View {

@@ -83,7 +83,6 @@ struct MomentoSettingsView: View {
                 .resizable()
                 .interpolation(.high)
                 .frame(width: MomentoSettingsMetrics.iconSize, height: MomentoSettingsMetrics.iconSize)
-                .shadow(color: Color.black.opacity(0.22), radius: 10, y: 5)
                 .padding(.bottom, 12)
 
             Text(verbatim: "Momento")
@@ -132,7 +131,6 @@ struct MomentoSettingsView: View {
             RoundedRectangle(cornerRadius: MomentoSettingsMetrics.cardRadius, style: .continuous)
                 .strokeBorder(MomentoTheme.subtleStroke.opacity(0.35), lineWidth: 0.6)
         }
-        .shadow(color: Color.black.opacity(0.1), radius: 12, y: 4)
     }
 
     private func settingsRow<Content: View>(
@@ -285,11 +283,6 @@ struct MomentoSettingsView: View {
         .buttonStyle(.plain)
         .scaleEffect(isUpdateHovered && !reduceMotion ? 1.03 : 1)
         .brightness(isUpdateHovered ? 0.06 : 0)
-        .shadow(
-            color: Color.black.opacity(isUpdateHovered ? 0.2 : 0),
-            radius: isUpdateHovered ? 7 : 0,
-            y: isUpdateHovered ? 3 : 0
-        )
         .environment(\.appearsActive, true)
         .disabled(!updateService.canCheckForUpdates)
         .opacity(updateService.canCheckForUpdates ? 1 : 0.55)

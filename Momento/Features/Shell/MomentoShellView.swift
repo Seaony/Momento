@@ -316,7 +316,6 @@ struct MomentoShellView<Content: View>: View {
                             .strokeBorder(MomentoTheme.glassStroke, lineWidth: 1)
                     }
                 }
-                .shadow(color: Color.black.opacity(0.32), radius: 18, y: 10)
                 .transition(.opacity.combined(with: .scale(scale: 0.96)))
                 .allowsHitTesting(false)
                 .zIndex(10)

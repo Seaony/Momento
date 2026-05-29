@@ -909,7 +909,6 @@ struct ContentView: View {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(Color.white)
-                        .shadow(color: Color.black.opacity(0.32), radius: 2, x: 0, y: 1)
                 }
             }
             .frame(width: 34, height: 34)
@@ -1452,7 +1451,6 @@ struct ContentView: View {
         .background {
             MomentoGlassBackground(glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.18)), cornerRadius: 18)
         }
-        .shadow(color: .black.opacity(0.22), radius: 24, x: 0, y: 12)
     }
 
     private func importProgressTitle(_ progress: AssetImportProgress) -> String {
