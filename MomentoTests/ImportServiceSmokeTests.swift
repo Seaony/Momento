@@ -2082,6 +2082,53 @@ final class LibraryPackagePersistenceTests: XCTestCase {
     }
 
     @MainActor
+    func testImportingFolderWithSiblingSubfoldersCreatesMatchingVirtualFolders() async throws {
+        let environment = try TestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        let sourceRoot = environment.inputURL.appendingPathComponent("Source", isDirectory: true)
+        let folderAURL = sourceRoot.appendingPathComponent("A", isDirectory: true)
+        let folderBURL = sourceRoot.appendingPathComponent("B", isDirectory: true)
+        let folderCURL = sourceRoot.appendingPathComponent("C", isDirectory: true)
+        try FileManager.default.createDirectory(at: folderAURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: folderBURL, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: folderCURL, withIntermediateDirectories: true)
+        _ = try environment.writeOnePixelPNG(named: "a.png", in: folderAURL)
+        _ = try environment.writeOnePixelJPEGWithExif(named: "b.jpg", in: folderBURL)
+        _ = try environment.writeOnePixelPNG(named: "c.png", in: folderCURL, rgba: [0, 0, 255, 255])
+
+        try await store.importItems(from: [sourceRoot])
+
+        XCTAssertEqual(Set(store.folders.map(\.name)), ["A", "B", "C"])
+        XCTAssertNil(store.folders.first { $0.name == "Source" })
+        let folderAID = try XCTUnwrap(store.folders.first { $0.name == "A" }?.id)
+        let folderBID = try XCTUnwrap(store.folders.first { $0.name == "B" }?.id)
+        let folderCID = try XCTUnwrap(store.folders.first { $0.name == "C" }?.id)
+        XCTAssertTrue(try XCTUnwrap(store.assets.first { $0.displayName == "a" }).folderIDs.contains(folderAID))
+        XCTAssertTrue(try XCTUnwrap(store.assets.first { $0.displayName == "b" }).folderIDs.contains(folderBID))
+        XCTAssertTrue(try XCTUnwrap(store.assets.first { $0.displayName == "c" }).folderIDs.contains(folderCID))
+
+        let reopened = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try reopened.openLibrary(at: environment.packageURL)
+        XCTAssertEqual(Set(reopened.folders.map(\.name)), ["A", "B", "C"])
+        XCTAssertNil(reopened.folders.first { $0.name == "Source" })
+        XCTAssertTrue(try XCTUnwrap(reopened.assets.first { $0.displayName == "a" }).folderIDs.contains(folderAID))
+        XCTAssertTrue(try XCTUnwrap(reopened.assets.first { $0.displayName == "b" }).folderIDs.contains(folderBID))
+        XCTAssertTrue(try XCTUnwrap(reopened.assets.first { $0.displayName == "c" }).folderIDs.contains(folderCID))
+    }
+
+    @MainActor
     func testRenamingRecentLibraryUpdatesManifestCurrentLibraryAndRecentReference() throws {
         let environment = try TestEnvironment()
         defer { environment.cleanup() }
@@ -2250,6 +2297,45 @@ private struct TestEnvironment {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory.appendingPathComponent(fileName)
         try data.write(to: url)
+        return url
+    }
+
+    func writeOnePixelPNG(named fileName: String, in directory: URL? = nil, rgba: [UInt8]) throws -> URL {
+        let directory = directory ?? inputURL
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent(fileName)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let pixel = Data(rgba)
+        guard
+            rgba.count == 4,
+            let provider = CGDataProvider(data: pixel as CFData),
+            let image = CGImage(
+                width: 1,
+                height: 1,
+                bitsPerComponent: 8,
+                bitsPerPixel: 32,
+                bytesPerRow: 4,
+                space: colorSpace,
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                provider: provider,
+                decode: nil,
+                shouldInterpolate: false,
+                intent: .defaultIntent
+            ),
+            let destination = CGImageDestinationCreateWithURL(
+                url as CFURL,
+                UTType.png.identifier as CFString,
+                1,
+                nil
+            )
+        else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
         return url
     }
 

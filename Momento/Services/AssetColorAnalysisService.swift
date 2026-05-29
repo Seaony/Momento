@@ -7,7 +7,7 @@ struct AssetColorAnalysisService: Sendable {
     private let sampleMaxPixelSize: Int
     private let mergeDistance: Double
 
-    init(sampleMaxPixelSize: Int = 128, mergeDistance: Double = 28) {
+    nonisolated init(sampleMaxPixelSize: Int = 128, mergeDistance: Double = 28) {
         self.sampleMaxPixelSize = sampleMaxPixelSize
         self.mergeDistance = mergeDistance
     }

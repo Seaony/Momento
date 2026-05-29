@@ -13,11 +13,12 @@ final class ArchitectureGuardTests: XCTestCase {
 
     func testWindowToolbarStaysTransparentWithoutHidingControls() throws {
         let appSource = try String(contentsOf: appURL(), encoding: .utf8)
+        let mainWindowSceneSource = try sourceBlock(in: appSource, from: "WindowGroup {", to: "Settings {")
         let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
         let windowSource = try String(contentsOf: windowTransparencyURL(), encoding: .utf8)
 
         XCTAssertTrue(appSource.contains(".windowToolbarStyle(.unified)"))
-        XCTAssertFalse(appSource.contains(".windowStyle(.hiddenTitleBar)"))
+        XCTAssertFalse(mainWindowSceneSource.contains(".windowStyle(.hiddenTitleBar)"))
         XCTAssertTrue(contentSource.contains(".toolbarBackgroundVisibility(.hidden, for: .windowToolbar)"))
         XCTAssertFalse(contentSource.contains(".toolbarVisibility("))
         XCTAssertTrue(windowSource.contains("window.titlebarAppearsTransparent = true"))
@@ -169,7 +170,7 @@ final class ArchitectureGuardTests: XCTestCase {
     func testSettingsWindowUsesTransparentGlassChromeAndControls() throws {
         let source = try String(contentsOf: settingsURL(), encoding: .utf8)
 
-        XCTAssertTrue(source.contains("WindowTransparencyConfigurator()"))
+        XCTAssertTrue(source.contains("WindowTransparencyConfigurator(fixedContentSize: Self.preferredSize)"))
         XCTAssertTrue(source.contains(".toolbarBackgroundVisibility(.hidden, for: .windowToolbar)"))
         XCTAssertTrue(source.contains("MomentoGlassBackground(cornerRadius: 0)"))
         XCTAssertTrue(source.contains(".buttonStyle(.glass)"))
@@ -179,12 +180,16 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertFalse(source.contains("Form("))
     }
 
-    func testAppUsesDarkAppearance() throws {
+    func testAppAppearancePreferenceDoesNotForceDarkMode() throws {
         let source = try String(contentsOf: appURL(), encoding: .utf8)
 
         XCTAssertTrue(source.contains("import AppKit"))
-        XCTAssertTrue(source.contains("NSApplication.shared.appearance = NSAppearance(named: .darkAqua)"))
-        XCTAssertEqual(source.components(separatedBy: ".preferredColorScheme(.dark)").count - 1, 2)
+        XCTAssertTrue(source.contains("@AppStorage(AppSettingsKeys.appAppearance)"))
+        XCTAssertTrue(source.contains("Self.applyAppearance(AppSettings.appAppearance())"))
+        XCTAssertTrue(source.contains("NSApplication.shared.appearance = appearance.appKitAppearanceName.flatMap(NSAppearance.init(named:))"))
+        XCTAssertEqual(source.components(separatedBy: ".preferredColorScheme(appearance.colorScheme)").count - 1, 2)
+        XCTAssertFalse(source.contains("NSApplication.shared.appearance = NSAppearance(named: .darkAqua)"))
+        XCTAssertFalse(source.contains(".preferredColorScheme(.dark)"))
     }
 
     func testDesignSystemUsesAdaptiveAppearanceTokens() throws {
@@ -331,6 +336,30 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(contentSource.contains("return moveSelectedAssetsToTrash(assetIDs)"))
         XCTAssertTrue(contentSource.contains("try store.moveAssetsToTrash(ids: Set(selectedAssets.map(\\.id)))"))
         XCTAssertTrue(contentSource.contains("try store.deleteAssetPermanently(id: asset.id)"))
+    }
+
+    func testSpacePreviewNavigationUsesSessionSnapshotAndArrowControls() throws {
+        let contentSource = try String(contentsOf: contentViewURL(), encoding: .utf8)
+        let panelSource = try String(contentsOf: previewPanelURL(), encoding: .utf8)
+        let overlaySource = try String(contentsOf: previewOverlayURL(), encoding: .utf8)
+        let navigationSource = try sourceBlock(
+            in: contentSource,
+            from: "private func navigateSpacePreview(",
+            to: "private func canNavigateSpacePreview("
+        )
+
+        XCTAssertTrue(contentSource.contains("private struct SpacePreviewSession"))
+        XCTAssertTrue(contentSource.contains("orderedAssetIDs: visibleAssetIDs.contains(asset.id) ? visibleAssetIDs : [asset.id]"))
+        XCTAssertTrue(contentSource.contains("updatesExistingPanel: true"))
+        XCTAssertFalse(navigationSource.contains("store.selectAsset"))
+        XCTAssertFalse(navigationSource.contains("selectedAssetID"))
+        XCTAssertTrue(panelSource.contains("func update("))
+        XCTAssertTrue(overlaySource.contains("systemName: \"chevron.left\""))
+        XCTAssertTrue(overlaySource.contains("systemName: \"chevron.right\""))
+        XCTAssertTrue(overlaySource.contains("localization.string(\"Previous Image\")"))
+        XCTAssertTrue(overlaySource.contains("localization.string(\"Next Image\")"))
+        XCTAssertTrue(overlaySource.contains("private static let leftArrowKeyCode: UInt16 = 123"))
+        XCTAssertTrue(overlaySource.contains("private static let rightArrowKeyCode: UInt16 = 124"))
     }
 
     func testAssetDragWriterIsFilePromiseProviderItself() throws {
@@ -554,6 +583,14 @@ final class ArchitectureGuardTests: XCTestCase {
 
     private func titlebarTooltipURL() -> URL {
         repositoryRoot().appendingPathComponent("Momento/AppKitBridge/TitlebarTooltipPresenter.swift")
+    }
+
+    private func previewPanelURL() -> URL {
+        repositoryRoot().appendingPathComponent("Momento/AppKitBridge/MomentoAssetPreviewPanelController.swift")
+    }
+
+    private func previewOverlayURL() -> URL {
+        repositoryRoot().appendingPathComponent("Momento/Features/Preview/MomentoAssetPreviewOverlay.swift")
     }
 
     private func appKitBridgeSource() throws -> String {

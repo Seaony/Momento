@@ -16,24 +16,29 @@ struct MomentoApp: App {
     @State private var store = LibraryStore(defaultViewMode: AppSettings.defaultViewMode())
     @State private var browserImportServer = BrowserImportServer()
     @AppStorage(AppSettingsKeys.appLanguage) private var appLanguageRawValue = AppLanguage.system.rawValue
+    @AppStorage(AppSettingsKeys.appAppearance) private var appAppearanceRawValue = AppAppearanceMode.system.rawValue
 
     init() {
-        NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
+        Self.applyAppearance(AppSettings.appAppearance())
     }
 
     var body: some Scene {
         let language = appLanguage
         let localization = AppLocalization(language: language)
+        let appearance = appAppearance
 
         WindowGroup {
             ContentView(store: store, updateService: updateService)
                 .environment(\.locale, language.locale)
                 .environment(\.appLocalization, localization)
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(appearance.colorScheme)
                 .onAppear {
                     appOpenHandler.onOpenLibraryURLs = openLibraryURLs
                     appOpenHandler.flushPendingLibraryURLs()
                     startBrowserImportServer()
+                }
+                .onChange(of: appAppearanceRawValue) { _, rawValue in
+                    Self.applyAppearance(AppAppearanceMode(rawValue: rawValue) ?? .system)
                 }
         }
         .windowToolbarStyle(.unified)
@@ -47,11 +52,15 @@ struct MomentoApp: App {
         Settings {
             MomentoSettingsView(
                 appLanguage: appLanguageBinding,
+                appAppearance: appAppearanceBinding,
                 updateService: updateService
             )
             .environment(\.locale, language.locale)
             .environment(\.appLocalization, localization)
-            .preferredColorScheme(.dark)
+            .preferredColorScheme(appearance.colorScheme)
+            .onChange(of: appAppearanceRawValue) { _, rawValue in
+                Self.applyAppearance(AppAppearanceMode(rawValue: rawValue) ?? .system)
+            }
         }
         .defaultSize(MomentoSettingsView.preferredSize)
         .windowResizability(.contentSize)
@@ -62,12 +71,28 @@ struct MomentoApp: App {
         AppLanguage(rawValue: appLanguageRawValue) ?? .system
     }
 
+    private var appAppearance: AppAppearanceMode {
+        AppAppearanceMode(rawValue: appAppearanceRawValue) ?? .system
+    }
+
     private var appLanguageBinding: Binding<AppLanguage> {
         Binding {
             appLanguage
         } set: { newValue in
             appLanguageRawValue = newValue.rawValue
         }
+    }
+
+    private var appAppearanceBinding: Binding<AppAppearanceMode> {
+        Binding {
+            appAppearance
+        } set: { newValue in
+            appAppearanceRawValue = newValue.rawValue
+        }
+    }
+
+    private static func applyAppearance(_ appearance: AppAppearanceMode) {
+        NSApplication.shared.appearance = appearance.appKitAppearanceName.flatMap(NSAppearance.init(named:))
     }
 
     private func openLibraryURLs(_ urls: [URL]) -> Bool {

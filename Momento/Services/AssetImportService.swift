@@ -43,12 +43,31 @@ nonisolated private struct AssetImportCandidate: Sendable {
     var relativeFolderComponents: [String]
 }
 
+nonisolated private struct AssetImportHashedCandidate: Sendable {
+    var index: Int
+    var candidate: AssetImportCandidate
+    var kind: AssetKind
+    var contentHash: String
+}
+
+nonisolated private struct AssetPhysicalImportRequest: Sendable {
+    var index: Int
+    var candidate: AssetImportCandidate
+    var kind: AssetKind
+    var contentHash: String
+}
+
+nonisolated private struct AssetPhysicalImportResult: Sendable {
+    var index: Int
+    var asset: AssetItem
+}
+
 struct AssetImportService: Sendable {
     private let storage: LibraryStorage
     private let thumbnailService: AssetThumbnailService
     private let colorAnalysisService: AssetColorAnalysisService
 
-    init(applicationSupportRoot: URL? = nil) {
+    nonisolated init(applicationSupportRoot: URL? = nil) {
         let storage = LibraryStorage(applicationSupportRoot: applicationSupportRoot)
         self.storage = storage
         self.thumbnailService = AssetThumbnailService(storage: storage)
@@ -120,37 +139,21 @@ struct AssetImportService: Sendable {
                 force: true
             )
 
-            for candidate in candidates {
-                let fileURL = candidate.sourceURL
-                guard let kind = assetKind(for: fileURL) else {
-                    processedFileCount += 1
-                    skippedFileCount += 1
-                    await progressReporter.report(
-                        AssetImportProgress(
-                            phase: .importing,
-                            totalFileCount: totalFileCount,
-                            processedFileCount: processedFileCount,
-                            importedFileCount: importedFileCount,
-                            skippedFileCount: skippedFileCount,
-                            currentFileName: nextFileName(after: processedFileCount, in: candidates)
-                        ),
-                        force: processedFileCount == totalFileCount
-                    )
-                    continue
-                }
+            let hashedCandidates = try await hashImportCandidates(candidates)
+            var physicalImportRequests: [AssetPhysicalImportRequest] = []
 
-                let hash = try contentHash(for: fileURL)
-                if !candidate.relativeFolderComponents.isEmpty {
-                    var assignedPaths = folderAssignmentsByContentHash[hash, default: []]
-                    if !assignedPaths.contains(candidate.relativeFolderComponents) {
-                        assignedPaths.append(candidate.relativeFolderComponents)
-                        folderAssignmentsByContentHash[hash] = assignedPaths
+            for hashedCandidate in hashedCandidates {
+                if !hashedCandidate.candidate.relativeFolderComponents.isEmpty {
+                    var assignedPaths = folderAssignmentsByContentHash[hashedCandidate.contentHash, default: []]
+                    if !assignedPaths.contains(hashedCandidate.candidate.relativeFolderComponents) {
+                        assignedPaths.append(hashedCandidate.candidate.relativeFolderComponents)
+                        folderAssignmentsByContentHash[hashedCandidate.contentHash] = assignedPaths
                     }
                 }
 
                 // 导入阶段先用 hash 做一次批内和库内去重，避免重复复制物理文件；
                 // Core Data 层仍有唯一约束，负责处理并发或历史数据带来的最终一致性。
-                guard seenHashes.insert(hash).inserted else {
+                guard seenHashes.insert(hashedCandidate.contentHash).inserted else {
                     processedFileCount += 1
                     skippedFileCount += 1
                     await progressReporter.report(
@@ -167,81 +170,74 @@ struct AssetImportService: Sendable {
                     continue
                 }
 
-                let fileExtension = fileURL.pathExtension.lowercased()
-                let destination = storage.assetStorageURL(
-                    forContentHash: hash,
-                    fileExtension: fileExtension,
-                    in: library
-                )
-
-                try libraryAccessValidator?()
-                if !FileManager.default.fileExists(atPath: destination.path) {
-                    try libraryAccessValidator?()
-                    try FileManager.default.createDirectory(
-                        at: destination.deletingLastPathComponent(),
-                        withIntermediateDirectories: true
+                physicalImportRequests.append(
+                    AssetPhysicalImportRequest(
+                        index: hashedCandidate.index,
+                        candidate: hashedCandidate.candidate,
+                        kind: hashedCandidate.kind,
+                        contentHash: hashedCandidate.contentHash
                     )
-                    try libraryAccessValidator?()
-                    try FileManager.default.copyItem(at: fileURL, to: destination)
-                }
-
-                try libraryAccessValidator?()
-                let thumbnailURL = try? thumbnailService.generateThumbnail(
-                    for: destination,
-                    contentHash: hash,
-                    in: library
-                )
-                let paletteSourceURL = thumbnailURL ?? destination
-                try libraryAccessValidator?()
-                let paletteColors = colorAnalysisService.paletteColors(
-                    for: paletteSourceURL,
-                    libraryID: library.id,
-                    assetID: hash,
-                    maxColorCount: 8
-                )
-
-                let values = try fileURL.resourceValues(forKeys: [.fileSizeKey])
-                let imageProperties = imageImportProperties(for: fileURL)
-                let importedAt = Date()
-                imported.append(
-                    AssetItem(
-                        id: hash,
-                        libraryID: library.id,
-                        displayName: fileURL.deletingPathExtension().lastPathComponent,
-                        originalFileName: fileURL.lastPathComponent,
-                        originalURL: fileURL,
-                        sourcePageURL: sourcePageURL,
-                        storageURL: destination,
-                        kind: kind,
-                        fileExtension: fileExtension,
-                        utiIdentifier: UTType(filenameExtension: fileExtension)?.identifier,
-                        byteSize: Int64(values.fileSize ?? 0),
-                        contentHash: hash,
-                        dimensions: imageProperties.dimensions,
-                        exifMetadata: imageProperties.exifMetadata,
-                        colorProfileName: imageProperties.exifMetadata?.profileName,
-                        tags: [],
-                        paletteColors: paletteColors,
-                        thumbnailURL: thumbnailURL,
-                        isFavorite: false,
-                        importedAt: importedAt,
-                        updatedAt: importedAt
-                    )
-                )
-                processedFileCount += 1
-                importedFileCount += 1
-                await progressReporter.report(
-                    AssetImportProgress(
-                        phase: .importing,
-                        totalFileCount: totalFileCount,
-                        processedFileCount: processedFileCount,
-                        importedFileCount: importedFileCount,
-                        skippedFileCount: skippedFileCount,
-                        currentFileName: nextFileName(after: processedFileCount, in: candidates)
-                    ),
-                    force: processedFileCount == totalFileCount
                 )
             }
+
+            var physicalImportResults: [AssetPhysicalImportResult] = []
+            try await withThrowingTaskGroup(of: AssetPhysicalImportResult.self) { group in
+                var nextRequestIndex = 0
+                let initialTaskCount = boundedImportTaskLimit(totalCount: physicalImportRequests.count)
+
+                for _ in 0..<initialTaskCount {
+                    let request = physicalImportRequests[nextRequestIndex]
+                    nextRequestIndex += 1
+                    group.addTask {
+                        try preparePhysicalImport(
+                            request,
+                            into: library,
+                            sourcePageURL: sourcePageURL,
+                            storage: storage,
+                            thumbnailService: thumbnailService,
+                            colorAnalysisService: colorAnalysisService,
+                            libraryAccessValidator: libraryAccessValidator
+                        )
+                    }
+                }
+
+                while let result = try await group.next() {
+                    physicalImportResults.append(result)
+                    if nextRequestIndex < physicalImportRequests.count {
+                        let request = physicalImportRequests[nextRequestIndex]
+                        nextRequestIndex += 1
+                        group.addTask {
+                            try preparePhysicalImport(
+                                request,
+                                into: library,
+                                sourcePageURL: sourcePageURL,
+                                storage: storage,
+                                thumbnailService: thumbnailService,
+                                colorAnalysisService: colorAnalysisService,
+                                libraryAccessValidator: libraryAccessValidator
+                            )
+                        }
+                    }
+
+                    processedFileCount += 1
+                    importedFileCount += 1
+                    await progressReporter.report(
+                        AssetImportProgress(
+                            phase: .importing,
+                            totalFileCount: totalFileCount,
+                            processedFileCount: processedFileCount,
+                            importedFileCount: importedFileCount,
+                            skippedFileCount: skippedFileCount,
+                            currentFileName: nextFileName(after: processedFileCount, in: candidates)
+                        ),
+                        force: processedFileCount == totalFileCount
+                    )
+                }
+            }
+
+            imported = physicalImportResults
+                .sorted { $0.index < $1.index }
+                .map(\.asset)
 
             await progressReporter.report(
                 AssetImportProgress(
@@ -302,6 +298,134 @@ nonisolated private func nextFileName(
     }
 
     return candidates[processedFileCount].sourceURL.lastPathComponent
+}
+
+nonisolated private func hashImportCandidates(
+    _ candidates: [AssetImportCandidate]
+) async throws -> [AssetImportHashedCandidate] {
+    var results: [AssetImportHashedCandidate] = []
+    try await withThrowingTaskGroup(of: AssetImportHashedCandidate?.self) { group in
+        var nextCandidateIndex = 0
+        let initialTaskCount = boundedImportTaskLimit(totalCount: candidates.count)
+
+        for _ in 0..<initialTaskCount {
+            let index = nextCandidateIndex
+            nextCandidateIndex += 1
+            group.addTask {
+                try hashImportCandidate(candidates[index], index: index)
+            }
+        }
+
+        while let result = try await group.next() {
+            if let result {
+                results.append(result)
+            }
+
+            if nextCandidateIndex < candidates.count {
+                let index = nextCandidateIndex
+                nextCandidateIndex += 1
+                group.addTask {
+                    try hashImportCandidate(candidates[index], index: index)
+                }
+            }
+        }
+    }
+
+    return results.sorted { $0.index < $1.index }
+}
+
+nonisolated private func hashImportCandidate(
+    _ candidate: AssetImportCandidate,
+    index: Int
+) throws -> AssetImportHashedCandidate? {
+    guard let kind = assetKind(for: candidate.sourceURL) else {
+        return nil
+    }
+
+    return AssetImportHashedCandidate(
+        index: index,
+        candidate: candidate,
+        kind: kind,
+        contentHash: try contentHash(for: candidate.sourceURL)
+    )
+}
+
+nonisolated private func preparePhysicalImport(
+    _ request: AssetPhysicalImportRequest,
+    into library: AssetLibrary,
+    sourcePageURL: URL?,
+    storage: LibraryStorage,
+    thumbnailService: AssetThumbnailService,
+    colorAnalysisService: AssetColorAnalysisService,
+    libraryAccessValidator: (@Sendable () throws -> Void)?
+) throws -> AssetPhysicalImportResult {
+    let fileURL = request.candidate.sourceURL
+    let hash = request.contentHash
+    let fileExtension = fileURL.pathExtension.lowercased()
+    let destination = storage.assetStorageURL(
+        forContentHash: hash,
+        fileExtension: fileExtension,
+        in: library
+    )
+
+    try libraryAccessValidator?()
+    if !FileManager.default.fileExists(atPath: destination.path) {
+        try libraryAccessValidator?()
+        try FileManager.default.createDirectory(
+            at: destination.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try libraryAccessValidator?()
+        try FileManager.default.copyItem(at: fileURL, to: destination)
+    }
+
+    try libraryAccessValidator?()
+    let thumbnailURL = try? thumbnailService.generateThumbnail(
+        for: destination,
+        contentHash: hash,
+        in: library
+    )
+    let paletteSourceURL = thumbnailURL ?? destination
+    try libraryAccessValidator?()
+    let paletteColors = colorAnalysisService.paletteColors(
+        for: paletteSourceURL,
+        libraryID: library.id,
+        assetID: hash,
+        maxColorCount: 8
+    )
+
+    let values = try fileURL.resourceValues(forKeys: [.fileSizeKey])
+    let imageProperties = imageImportProperties(for: fileURL)
+    let importedAt = Date()
+    let asset = AssetItem(
+        id: hash,
+        libraryID: library.id,
+        displayName: fileURL.deletingPathExtension().lastPathComponent,
+        originalFileName: fileURL.lastPathComponent,
+        originalURL: fileURL,
+        sourcePageURL: sourcePageURL,
+        storageURL: destination,
+        kind: request.kind,
+        fileExtension: fileExtension,
+        utiIdentifier: UTType(filenameExtension: fileExtension)?.identifier,
+        byteSize: Int64(values.fileSize ?? 0),
+        contentHash: hash,
+        dimensions: imageProperties.dimensions,
+        exifMetadata: imageProperties.exifMetadata,
+        colorProfileName: imageProperties.exifMetadata?.profileName,
+        tags: [],
+        paletteColors: paletteColors,
+        thumbnailURL: thumbnailURL,
+        isFavorite: false,
+        importedAt: importedAt,
+        updatedAt: importedAt
+    )
+
+    return AssetPhysicalImportResult(index: request.index, asset: asset)
+}
+
+nonisolated private func boundedImportTaskLimit(totalCount: Int) -> Int {
+    min(totalCount, min(max(ProcessInfo.processInfo.activeProcessorCount, 2), 6))
 }
 
 nonisolated private final class SourceAccessScope: @unchecked Sendable {

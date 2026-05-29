@@ -139,6 +139,23 @@
         }
       }
     },
+    "Appearance" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Appearance"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外观"
+          }
+        }
+      }
+    },
     "Action program" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -1431,6 +1448,23 @@
         }
       }
     },
+    "Dark" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dark"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "深色"
+          }
+        }
+      }
+    },
     "Dimensions" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2553,6 +2587,23 @@
         }
       }
     },
+    "Light" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Light"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浅色"
+          }
+        }
+      }
+    },
     "Lime" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -2855,6 +2906,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "新建标签"
+          }
+        }
+      }
+    },
+    "Next Image" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next Image"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一张图片"
           }
         }
       }
@@ -3382,6 +3450,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在准备导入..."
+          }
+        }
+      }
+    },
+    "Previous Image" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Previous Image"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一张图片"
           }
         }
       }

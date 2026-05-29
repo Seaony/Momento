@@ -4,7 +4,7 @@ import SwiftUI
 
 private enum MomentoSettingsMetrics {
     static let windowWidth: CGFloat = 400
-    static let windowHeight: CGFloat = 326
+    static let windowHeight: CGFloat = 370
 
     static let topInset: CGFloat = 42          // 让出隐藏标题栏与窗口关闭按钮的区域
     static let horizontalInset: CGFloat = 20
@@ -33,6 +33,7 @@ struct MomentoSettingsView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @Binding var appLanguage: AppLanguage
+    @Binding var appAppearance: AppAppearanceMode
     @ObservedObject var updateService: AppUpdateService
 
     @State private var isUpdateHovered = false
@@ -98,8 +99,17 @@ struct MomentoSettingsView: View {
     // MARK: - 偏好卡片
 
     private var settingsCard: some View {
-        settingsRow(label: localization.string("Language")) {
-            languagePicker
+        VStack(spacing: 0) {
+            settingsRow(label: localization.string("Language")) {
+                languagePicker
+            }
+
+            Divider()
+                .padding(.leading, MomentoSettingsMetrics.rowHorizontalInset)
+
+            settingsRow(label: localization.string("Appearance")) {
+                appearancePicker
+            }
         }
         .padding(.vertical, 6)
         .frame(width: MomentoSettingsMetrics.cardWidth)
@@ -136,6 +146,21 @@ struct MomentoSettingsView: View {
             ForEach(AppLanguage.allCases) { language in
                 Text(localization.title(for: language))
                     .tag(language)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .buttonStyle(.glass)
+        .controlSize(.regular)
+        .frame(width: MomentoSettingsMetrics.pickerWidth)
+        .environment(\.appearsActive, true)
+    }
+
+    private var appearancePicker: some View {
+        Picker("", selection: $appAppearance) {
+            ForEach(AppAppearanceMode.allCases) { appearance in
+                Text(localization.title(for: appearance))
+                    .tag(appearance)
             }
         }
         .labelsHidden()
@@ -201,9 +226,11 @@ struct MomentoSettingsView: View {
 
 #Preview {
     @Previewable @State var language = AppLanguage.system
+    @Previewable @State var appearance = AppAppearanceMode.system
 
     MomentoSettingsView(
         appLanguage: $language,
+        appAppearance: $appearance,
         updateService: AppUpdateService()
     )
     .environment(\.appLocalization, AppLocalization(language: language))

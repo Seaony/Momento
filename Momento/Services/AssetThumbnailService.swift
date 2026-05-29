@@ -7,7 +7,7 @@ struct AssetThumbnailService: Sendable {
     private let storage: LibraryStorage
     private let maxPixelSize: Int
 
-    init(storage: LibraryStorage = LibraryStorage(), maxPixelSize: Int = 512) {
+    nonisolated init(storage: LibraryStorage = LibraryStorage(), maxPixelSize: Int = 512) {
         self.storage = storage
         self.maxPixelSize = maxPixelSize
     }

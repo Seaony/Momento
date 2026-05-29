@@ -7,6 +7,8 @@ private enum MomentoAssetPreviewMetrics {
     static let imagePanelCornerRadius: CGFloat = 30
     static let imagePanelPadding: CGFloat = 14
     static let imagePanelTintOpacity = 0.5
+    static let navigationButtonSize: CGFloat = 44
+    static let navigationHorizontalInset: CGFloat = 22
 }
 
 struct MomentoAssetPreviewOverlay: View {
@@ -16,6 +18,11 @@ struct MomentoAssetPreviewOverlay: View {
     var previewURL: URL
     var closesOnSpaceKeyUp = false
     var usesWindowTransition = false
+    var showsNavigationControls = false
+    var canNavigatePrevious = false
+    var canNavigateNext = false
+    var onNavigatePrevious: (() -> Void)?
+    var onNavigateNext: (() -> Void)?
     var onDismiss: () -> Void
 
     @State private var previewImage: NSImage?
@@ -37,12 +44,18 @@ struct MomentoAssetPreviewOverlay: View {
                     .scaleEffect(isPresented ? 1 : 0.96)
                     .opacity(isPresented ? 1 : 0)
                     .animation(.spring(response: 0.24, dampingFraction: 0.86), value: isPresented)
+
+                if showsNavigationControls {
+                    navigationControls
+                }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .background {
             MomentoPreviewKeyboardCapture(
                 closesOnSpaceKeyUp: closesOnSpaceKeyUp,
+                onNavigatePrevious: onNavigatePrevious,
+                onNavigateNext: onNavigateNext,
                 onDismiss: dismiss
             )
                 .frame(width: 0, height: 0)
@@ -86,6 +99,52 @@ struct MomentoAssetPreviewOverlay: View {
             previewMetadata
         }
         .padding(18)
+    }
+
+    private var navigationControls: some View {
+        HStack {
+            navigationButton(
+                systemName: "chevron.left",
+                help: localization.string("Previous Image"),
+                isEnabled: canNavigatePrevious,
+                action: onNavigatePrevious
+            )
+
+            Spacer()
+
+            navigationButton(
+                systemName: "chevron.right",
+                help: localization.string("Next Image"),
+                isEnabled: canNavigateNext,
+                action: onNavigateNext
+            )
+        }
+        .padding(.horizontal, MomentoAssetPreviewMetrics.navigationHorizontalInset)
+    }
+
+    private func navigationButton(
+        systemName: String,
+        help: String,
+        isEnabled: Bool,
+        action: (() -> Void)?
+    ) -> some View {
+        Button {
+            action?()
+        } label: {
+            Image(systemName: systemName)
+                .font(.system(size: 18, weight: .semibold))
+                .frame(
+                    width: MomentoAssetPreviewMetrics.navigationButtonSize,
+                    height: MomentoAssetPreviewMetrics.navigationButtonSize
+                )
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.38)
+        .help(help)
+        .contentShape(Circle())
+        .pointerStyle(.link)
     }
 
     private var previewMetadata: some View {
@@ -219,17 +278,23 @@ private enum PreviewImageLoader {
 
 private struct MomentoPreviewKeyboardCapture: NSViewRepresentable {
     var closesOnSpaceKeyUp: Bool
+    var onNavigatePrevious: (() -> Void)?
+    var onNavigateNext: (() -> Void)?
     var onDismiss: () -> Void
 
     func makeNSView(context: Context) -> KeyboardCaptureView {
         let view = KeyboardCaptureView()
         view.closesOnSpaceKeyUp = closesOnSpaceKeyUp
+        view.onNavigatePrevious = onNavigatePrevious
+        view.onNavigateNext = onNavigateNext
         view.onDismiss = onDismiss
         return view
     }
 
     func updateNSView(_ nsView: KeyboardCaptureView, context: Context) {
         nsView.closesOnSpaceKeyUp = closesOnSpaceKeyUp
+        nsView.onNavigatePrevious = onNavigatePrevious
+        nsView.onNavigateNext = onNavigateNext
         nsView.onDismiss = onDismiss
         DispatchQueue.main.async {
             nsView.window?.makeFirstResponder(nsView)
@@ -237,6 +302,11 @@ private struct MomentoPreviewKeyboardCapture: NSViewRepresentable {
     }
 
     final class KeyboardCaptureView: NSView {
+        private static let leftArrowKeyCode: UInt16 = 123
+        private static let rightArrowKeyCode: UInt16 = 124
+
+        var onNavigatePrevious: (() -> Void)?
+        var onNavigateNext: (() -> Void)?
         var onDismiss: (() -> Void)?
         var closesOnSpaceKeyUp = false
 
@@ -250,6 +320,20 @@ private struct MomentoPreviewKeyboardCapture: NSViewRepresentable {
         }
 
         override func keyDown(with event: NSEvent) {
+            if let onNavigatePrevious,
+               event.keyCode == Self.leftArrowKeyCode,
+               acceptsNavigationModifiers(event) {
+                onNavigatePrevious()
+                return
+            }
+
+            if let onNavigateNext,
+               event.keyCode == Self.rightArrowKeyCode,
+               acceptsNavigationModifiers(event) {
+                onNavigateNext()
+                return
+            }
+
             if event.charactersIgnoringModifiers == "\u{1b}" {
                 onDismiss?()
                 return
@@ -272,6 +356,10 @@ private struct MomentoPreviewKeyboardCapture: NSViewRepresentable {
             }
 
             super.keyUp(with: event)
+        }
+
+        private func acceptsNavigationModifiers(_ event: NSEvent) -> Bool {
+            event.modifierFlags.intersection([.command, .control, .option]).isEmpty
         }
     }
 }

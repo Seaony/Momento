@@ -18,6 +18,16 @@ private struct AssetExportRequest: Identifiable {
     var assets: [AssetItem]
 }
 
+private struct SpacePreviewSession {
+    var orderedAssetIDs: [AssetItem.ID]
+    var currentAssetID: AssetItem.ID
+}
+
+private enum SpacePreviewNavigationDirection {
+    case previous
+    case next
+}
+
 private enum AssetFilterFacet: String, CaseIterable, Hashable, Identifiable {
     case colors
     case tags
@@ -75,6 +85,7 @@ struct ContentView: View {
     @State private var activeImportID: UUID?
     @State private var importProgress: AssetImportProgress?
     @State private var pendingAssetExport: AssetExportRequest?
+    @State private var spacePreviewSession: SpacePreviewSession?
     @FocusState private var isToolbarSearchFocused: Bool
 
     private var sidebarSelection: Binding<String?> {
@@ -1510,17 +1521,57 @@ struct ContentView: View {
     }
 
     private func previewWhileSpaceIsPressed(_ asset: AssetItem, sourceFrame: NSRect?) {
-        showPreview(asset, closesOnSpaceKeyUp: true, sourceFrame: sourceFrame)
+        let visibleAssetIDs = store.visibleAssets.map(\.id)
+        spacePreviewSession = SpacePreviewSession(
+            orderedAssetIDs: visibleAssetIDs.contains(asset.id) ? visibleAssetIDs : [asset.id],
+            currentAssetID: asset.id
+        )
+
+        if !showPreview(
+            asset,
+            closesOnSpaceKeyUp: true,
+            sourceFrame: sourceFrame,
+            showsNavigationControls: true
+        ) {
+            spacePreviewSession = nil
+        }
     }
 
     private func endSpacePreview() {
+        spacePreviewSession = nil
         MomentoAssetPreviewPanelController.shared.close()
     }
 
     @discardableResult
-    private func showPreview(_ asset: AssetItem, closesOnSpaceKeyUp: Bool, sourceFrame: NSRect? = nil) -> Bool {
+    private func showPreview(
+        _ asset: AssetItem,
+        closesOnSpaceKeyUp: Bool,
+        sourceFrame: NSRect? = nil,
+        showsNavigationControls: Bool = false,
+        updatesExistingPanel: Bool = false
+    ) -> Bool {
         guard let previewURL = previewURL(for: asset) else {
             return false
+        }
+
+        let canNavigatePrevious = showsNavigationControls && canNavigateSpacePreview(.previous)
+        let canNavigateNext = showsNavigationControls && canNavigateSpacePreview(.next)
+        let onNavigatePrevious = showsNavigationControls ? { navigateSpacePreview(.previous) } : nil
+        let onNavigateNext = showsNavigationControls ? { navigateSpacePreview(.next) } : nil
+
+        if updatesExistingPanel {
+            MomentoAssetPreviewPanelController.shared.update(
+                asset: asset,
+                previewURL: previewURL,
+                localization: localization,
+                closesOnSpaceKeyUp: closesOnSpaceKeyUp,
+                showsNavigationControls: showsNavigationControls,
+                canNavigatePrevious: canNavigatePrevious,
+                canNavigateNext: canNavigateNext,
+                onNavigatePrevious: onNavigatePrevious,
+                onNavigateNext: onNavigateNext
+            )
+            return true
         }
 
         MomentoAssetPreviewPanelController.shared.show(
@@ -1528,9 +1579,67 @@ struct ContentView: View {
             previewURL: previewURL,
             localization: localization,
             closesOnSpaceKeyUp: closesOnSpaceKeyUp,
-            sourceFrame: sourceFrame
+            sourceFrame: sourceFrame,
+            showsNavigationControls: showsNavigationControls,
+            canNavigatePrevious: canNavigatePrevious,
+            canNavigateNext: canNavigateNext,
+            onNavigatePrevious: onNavigatePrevious,
+            onNavigateNext: onNavigateNext
         )
         return true
+    }
+
+    private func navigateSpacePreview(_ direction: SpacePreviewNavigationDirection) {
+        guard var session = spacePreviewSession,
+              store.assets.contains(where: { $0.id == session.currentAssetID }),
+              let currentIndex = session.orderedAssetIDs.firstIndex(of: session.currentAssetID) else {
+            endSpacePreview()
+            return
+        }
+
+        let targetIndex: Int
+        switch direction {
+        case .previous:
+            targetIndex = currentIndex - 1
+        case .next:
+            targetIndex = currentIndex + 1
+        }
+
+        guard session.orderedAssetIDs.indices.contains(targetIndex) else {
+            return
+        }
+
+        let targetAssetID = session.orderedAssetIDs[targetIndex]
+        guard let targetAsset = store.assets.first(where: { $0.id == targetAssetID }) else {
+            endSpacePreview()
+            return
+        }
+
+        session.currentAssetID = targetAssetID
+        spacePreviewSession = session
+
+        if !showPreview(
+            targetAsset,
+            closesOnSpaceKeyUp: true,
+            showsNavigationControls: true,
+            updatesExistingPanel: true
+        ) {
+            endSpacePreview()
+        }
+    }
+
+    private func canNavigateSpacePreview(_ direction: SpacePreviewNavigationDirection) -> Bool {
+        guard let session = spacePreviewSession,
+              let currentIndex = session.orderedAssetIDs.firstIndex(of: session.currentAssetID) else {
+            return false
+        }
+
+        switch direction {
+        case .previous:
+            return currentIndex > 0
+        case .next:
+            return currentIndex < session.orderedAssetIDs.count - 1
+        }
     }
 
     private func previewURL(for asset: AssetItem) -> URL? {

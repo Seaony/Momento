@@ -35,6 +35,17 @@ struct AppLocalization: Equatable {
         }
     }
 
+    func title(for appearance: AppAppearanceMode) -> String {
+        switch appearance {
+        case .system:
+            string("System")
+        case .light:
+            string("Light")
+        case .dark:
+            string("Dark")
+        }
+    }
+
     func title(for viewMode: AssetViewMode) -> String {
         switch viewMode {
         case .masonry:

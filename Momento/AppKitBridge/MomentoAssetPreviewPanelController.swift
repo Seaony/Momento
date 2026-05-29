@@ -17,22 +17,28 @@ final class MomentoAssetPreviewPanelController: NSObject, NSWindowDelegate {
         previewURL: URL,
         localization: AppLocalization,
         closesOnSpaceKeyUp: Bool,
-        sourceFrame: NSRect? = nil
+        sourceFrame: NSRect? = nil,
+        showsNavigationControls: Bool = false,
+        canNavigatePrevious: Bool = false,
+        canNavigateNext: Bool = false,
+        onNavigatePrevious: (() -> Void)? = nil,
+        onNavigateNext: (() -> Void)? = nil
     ) {
         let panel = panel ?? makePanel()
         let targetFrame = previewFrame()
         let transitionFrame = sanitizedTransitionFrame(sourceFrame)
-        let rootView = MomentoAssetPreviewOverlay(
+        let rootView = previewOverlay(
             asset: asset,
             previewURL: previewURL,
+            localization: localization,
             closesOnSpaceKeyUp: closesOnSpaceKeyUp,
             usesWindowTransition: transitionFrame != nil,
-            onDismiss: { [weak self] in
-                self?.close()
-            }
+            showsNavigationControls: showsNavigationControls,
+            canNavigatePrevious: canNavigatePrevious,
+            canNavigateNext: canNavigateNext,
+            onNavigatePrevious: onNavigatePrevious,
+            onNavigateNext: onNavigateNext
         )
-        .id("\(asset.id)-\(previewURL.path)-\(closesOnSpaceKeyUp)")
-        .environment(\.appLocalization, localization)
 
         if let hostingController {
             hostingController.rootView = AnyView(rootView)
@@ -61,6 +67,49 @@ final class MomentoAssetPreviewPanelController: NSObject, NSWindowDelegate {
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().setFrame(targetFrame, display: true)
         }
+    }
+
+    func update(
+        asset: AssetItem,
+        previewURL: URL,
+        localization: AppLocalization,
+        closesOnSpaceKeyUp: Bool,
+        showsNavigationControls: Bool,
+        canNavigatePrevious: Bool,
+        canNavigateNext: Bool,
+        onNavigatePrevious: (() -> Void)?,
+        onNavigateNext: (() -> Void)?
+    ) {
+        guard let panel, let hostingController else {
+            show(
+                asset: asset,
+                previewURL: previewURL,
+                localization: localization,
+                closesOnSpaceKeyUp: closesOnSpaceKeyUp,
+                showsNavigationControls: showsNavigationControls,
+                canNavigatePrevious: canNavigatePrevious,
+                canNavigateNext: canNavigateNext,
+                onNavigatePrevious: onNavigatePrevious,
+                onNavigateNext: onNavigateNext
+            )
+            return
+        }
+
+        hostingController.rootView = AnyView(
+            previewOverlay(
+                asset: asset,
+                previewURL: previewURL,
+                localization: localization,
+                closesOnSpaceKeyUp: closesOnSpaceKeyUp,
+                usesWindowTransition: false,
+                showsNavigationControls: showsNavigationControls,
+                canNavigatePrevious: canNavigatePrevious,
+                canNavigateNext: canNavigateNext,
+                onNavigatePrevious: onNavigatePrevious,
+                onNavigateNext: onNavigateNext
+            )
+        )
+        panel.makeKeyAndOrderFront(nil)
     }
 
     func close() {
@@ -136,6 +185,36 @@ final class MomentoAssetPreviewPanelController: NSObject, NSWindowDelegate {
         hostingController = nil
         returnFrame = nil
         isClosing = false
+    }
+
+    private func previewOverlay(
+        asset: AssetItem,
+        previewURL: URL,
+        localization: AppLocalization,
+        closesOnSpaceKeyUp: Bool,
+        usesWindowTransition: Bool,
+        showsNavigationControls: Bool,
+        canNavigatePrevious: Bool,
+        canNavigateNext: Bool,
+        onNavigatePrevious: (() -> Void)?,
+        onNavigateNext: (() -> Void)?
+    ) -> some View {
+        MomentoAssetPreviewOverlay(
+            asset: asset,
+            previewURL: previewURL,
+            closesOnSpaceKeyUp: closesOnSpaceKeyUp,
+            usesWindowTransition: usesWindowTransition,
+            showsNavigationControls: showsNavigationControls,
+            canNavigatePrevious: canNavigatePrevious,
+            canNavigateNext: canNavigateNext,
+            onNavigatePrevious: onNavigatePrevious,
+            onNavigateNext: onNavigateNext,
+            onDismiss: { [weak self] in
+                self?.close()
+            }
+        )
+        .id("\(asset.id)-\(previewURL.path)-\(closesOnSpaceKeyUp)-\(showsNavigationControls)")
+        .environment(\.appLocalization, localization)
     }
 }
 
