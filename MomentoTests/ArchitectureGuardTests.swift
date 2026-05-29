@@ -169,12 +169,35 @@ final class ArchitectureGuardTests: XCTestCase {
 
     func testSettingsWindowUsesTransparentGlassChromeAndControls() throws {
         let source = try String(contentsOf: settingsURL(), encoding: .utf8)
+        let settingsRowSource = try sourceBlock(
+            in: source,
+            from: "private func settingsRow",
+            to: "private var languagePicker"
+        )
+        let languagePickerSource = try sourceBlock(
+            in: source,
+            from: "private var languagePicker",
+            to: "private var appearancePicker"
+        )
+        let appearancePickerSource = try sourceBlock(
+            in: source,
+            from: "private var appearancePicker",
+            to: "// MARK: - 检查更新"
+        )
 
         XCTAssertTrue(source.contains("WindowTransparencyConfigurator(fixedContentSize: Self.preferredSize)"))
         XCTAssertTrue(source.contains(".toolbarBackgroundVisibility(.hidden, for: .windowToolbar)"))
         XCTAssertTrue(source.contains("MomentoGlassBackground(cornerRadius: 0)"))
         XCTAssertTrue(source.contains(".buttonStyle(.glass)"))
-        XCTAssertTrue(source.contains(".pickerStyle(.menu)"))
+        XCTAssertTrue(settingsRowSource.contains(".frame(maxWidth: .infinity)"))
+        XCTAssertTrue(languagePickerSource.contains(".pickerStyle(.menu)"))
+        XCTAssertTrue(appearancePickerSource.contains("Picker(\"\", selection: $appAppearance)"))
+        XCTAssertTrue(appearancePickerSource.contains(".pickerStyle(.segmented)"))
+        XCTAssertFalse(appearancePickerSource.contains(".pickerStyle(.menu)"))
+        XCTAssertFalse(appearancePickerSource.contains("Text(localization.title(for: appearance))"))
+        XCTAssertTrue(appearancePickerSource.contains("Label(localization.title(for: appearance), systemImage: appearanceIconName(for: appearance))"))
+        XCTAssertTrue(appearancePickerSource.contains(".labelStyle(.iconOnly)"))
+        XCTAssertTrue(appearancePickerSource.contains(".help(localization.title(for: appearance))"))
         XCTAssertTrue(source.contains(".environment(\\.appearsActive, true)"))
         XCTAssertFalse(source.contains(".buttonStyle(.glass(.clear))"))
         XCTAssertFalse(source.contains("Form("))

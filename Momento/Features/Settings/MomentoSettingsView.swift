@@ -15,6 +15,7 @@ private enum MomentoSettingsMetrics {
     static let rowHeight: CGFloat = 44
     static let rowHorizontalInset: CGFloat = 16
     static let pickerWidth: CGFloat = 172
+    static let appearancePickerWidth: CGFloat = 118
     static let actionButtonHeight: CGFloat = 30
     static let actionButtonRadius: CGFloat = 10
 
@@ -138,6 +139,7 @@ struct MomentoSettingsView: View {
             content()
         }
         .padding(.horizontal, MomentoSettingsMetrics.rowHorizontalInset)
+        .frame(maxWidth: .infinity)
         .frame(height: MomentoSettingsMetrics.rowHeight)
     }
 
@@ -159,16 +161,28 @@ struct MomentoSettingsView: View {
     private var appearancePicker: some View {
         Picker("", selection: $appAppearance) {
             ForEach(AppAppearanceMode.allCases) { appearance in
-                Text(localization.title(for: appearance))
+                Label(localization.title(for: appearance), systemImage: appearanceIconName(for: appearance))
+                    .labelStyle(.iconOnly)
+                    .help(localization.title(for: appearance))
                     .tag(appearance)
             }
         }
         .labelsHidden()
-        .pickerStyle(.menu)
-        .buttonStyle(.glass)
+        .pickerStyle(.segmented)
         .controlSize(.regular)
-        .frame(width: MomentoSettingsMetrics.pickerWidth)
+        .frame(width: MomentoSettingsMetrics.appearancePickerWidth)
         .environment(\.appearsActive, true)
+    }
+
+    private func appearanceIconName(for appearance: AppAppearanceMode) -> String {
+        switch appearance {
+        case .system:
+            "circle.lefthalf.filled"
+        case .light:
+            "sun.max.fill"
+        case .dark:
+            "moon.fill"
+        }
     }
 
     // MARK: - 检查更新
