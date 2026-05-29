@@ -14,8 +14,15 @@ private enum MomentoSettingsMetrics {
     static let cardRadius: CGFloat = 18
     static let rowHeight: CGFloat = 44
     static let rowHorizontalInset: CGFloat = 16
-    static let pickerWidth: CGFloat = 172
-    static let appearancePickerWidth: CGFloat = 118
+    static let rowControlSlotWidth: CGFloat = 172
+    static let appearancePickerWidth: CGFloat = 128
+    static let appearancePickerHeight: CGFloat = 34
+    static let appearancePickerPadding: CGFloat = 4
+    static let appearancePickerSpacing: CGFloat = 3
+    static let appearancePickerRadius: CGFloat = 16
+    static let appearancePickerSegmentWidth: CGFloat = 37
+    static let appearancePickerSegmentHeight: CGFloat = 26
+    static let appearancePickerSegmentRadius: CGFloat = 12
     static let actionButtonHeight: CGFloat = 30
     static let actionButtonRadius: CGFloat = 10
 
@@ -38,6 +45,7 @@ struct MomentoSettingsView: View {
     @ObservedObject var updateService: AppUpdateService
 
     @State private var isUpdateHovered = false
+    @State private var hoveredAppearance: AppAppearanceMode?
 
     var body: some View {
         ZStack {
@@ -137,6 +145,7 @@ struct MomentoSettingsView: View {
                 .foregroundStyle(MomentoTheme.primaryText)
             Spacer(minLength: 8)
             content()
+                .frame(width: MomentoSettingsMetrics.rowControlSlotWidth, alignment: .trailing)
         }
         .padding(.horizontal, MomentoSettingsMetrics.rowHorizontalInset)
         .frame(maxWidth: .infinity)
@@ -154,24 +163,85 @@ struct MomentoSettingsView: View {
         .pickerStyle(.menu)
         .buttonStyle(.glass)
         .controlSize(.regular)
-        .frame(width: MomentoSettingsMetrics.pickerWidth)
         .environment(\.appearsActive, true)
     }
 
     private var appearancePicker: some View {
-        Picker("", selection: $appAppearance) {
+        HStack(spacing: MomentoSettingsMetrics.appearancePickerSpacing) {
             ForEach(AppAppearanceMode.allCases) { appearance in
-                Label(localization.title(for: appearance), systemImage: appearanceIconName(for: appearance))
-                    .labelStyle(.iconOnly)
-                    .help(localization.title(for: appearance))
-                    .tag(appearance)
+                appearanceOptionButton(for: appearance)
             }
         }
-        .labelsHidden()
-        .pickerStyle(.segmented)
-        .controlSize(.regular)
-        .frame(width: MomentoSettingsMetrics.appearancePickerWidth)
+        .padding(MomentoSettingsMetrics.appearancePickerPadding)
+        .frame(
+            width: MomentoSettingsMetrics.appearancePickerWidth,
+            height: MomentoSettingsMetrics.appearancePickerHeight
+        )
+        .background {
+            MomentoGlassBackground(
+                glass: .regular.tint(MomentoTheme.contrastTint(lightOpacity: 0.05, darkOpacity: 0.07)).interactive(true),
+                cornerRadius: MomentoSettingsMetrics.appearancePickerRadius
+            )
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: MomentoSettingsMetrics.appearancePickerRadius, style: .continuous)
+                .strokeBorder(MomentoTheme.subtleGlassStroke, lineWidth: 1)
+        }
         .environment(\.appearsActive, true)
+    }
+
+    private func appearanceOptionButton(for appearance: AppAppearanceMode) -> some View {
+        let isSelected = appAppearance == appearance
+        let isHovered = hoveredAppearance == appearance
+        let shape = RoundedRectangle(
+            cornerRadius: MomentoSettingsMetrics.appearancePickerSegmentRadius,
+            style: .continuous
+        )
+
+        return Button {
+            appAppearance = appearance
+        } label: {
+            Image(systemName: appearanceIconName(for: appearance))
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(isSelected ? Color.white : (isHovered ? MomentoTheme.primaryText : MomentoTheme.secondaryText))
+                .frame(
+                    width: MomentoSettingsMetrics.appearancePickerSegmentWidth,
+                    height: MomentoSettingsMetrics.appearancePickerSegmentHeight
+                )
+                .background {
+                    appearanceOptionBackground(isSelected: isSelected, isHovered: isHovered)
+                }
+                .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.link)
+        .help(localization.title(for: appearance))
+        .accessibilityLabel(localization.title(for: appearance))
+        .onHover { hovering in
+            withAnimation(.smooth(duration: 0.12)) {
+                if hovering {
+                    hoveredAppearance = appearance
+                } else if hoveredAppearance == appearance {
+                    hoveredAppearance = nil
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func appearanceOptionBackground(isSelected: Bool, isHovered: Bool) -> some View {
+        let shape = RoundedRectangle(
+            cornerRadius: MomentoSettingsMetrics.appearancePickerSegmentRadius,
+            style: .continuous
+        )
+
+        if isSelected {
+            shape.fill(Color.accentColor)
+        } else if isHovered {
+            shape.fill(MomentoTheme.sidebarIconHoverBackground)
+        } else {
+            Color.clear
+        }
     }
 
     private func appearanceIconName(for appearance: AppAppearanceMode) -> String {
