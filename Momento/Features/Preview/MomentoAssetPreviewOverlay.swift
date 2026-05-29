@@ -10,6 +10,7 @@ private enum MomentoAssetPreviewMetrics {
     static let navigationButtonSize: CGFloat = 44
     static let navigationHorizontalInset: CGFloat = 22
     static let navigationRevealDelayNanoseconds: UInt64 = 240_000_000
+    static let navigationToastDuration: TimeInterval = 1.35
 }
 
 struct MomentoAssetPreviewOverlay: View {
@@ -32,6 +33,8 @@ struct MomentoAssetPreviewOverlay: View {
     @State private var isPresented = false
     @State private var isClosing = false
     @State private var areNavigationControlsVisible = false
+    @State private var activeNavigationToastMessage: String?
+    @State private var navigationToastToken = UUID()
 
     var body: some View {
         GeometryReader { proxy in
@@ -54,14 +57,22 @@ struct MomentoAssetPreviewOverlay: View {
                             transaction.animation = nil
                         }
                 }
+
+                if let activeNavigationToastMessage {
+                    navigationToast(activeNavigationToastMessage)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .padding(.top, 52)
+                        .allowsHitTesting(false)
+                        .zIndex(2)
+                }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .background {
             MomentoPreviewKeyboardCapture(
                 closesOnSpaceKeyUp: closesOnSpaceKeyUp,
-                onNavigatePrevious: onNavigatePrevious,
-                onNavigateNext: onNavigateNext,
+                onNavigatePrevious: keyboardNavigatePreviousAction,
+                onNavigateNext: keyboardNavigateNextAction,
                 onDismiss: dismiss
             )
                 .frame(width: 0, height: 0)
@@ -114,18 +125,18 @@ struct MomentoAssetPreviewOverlay: View {
         HStack {
             navigationButton(
                 systemName: "chevron.left",
-                help: localization.string("Previous Image"),
-                isEnabled: canNavigatePrevious,
-                action: onNavigatePrevious
+                help: previousNavigationHelp,
+                isAvailable: canNavigatePrevious,
+                action: navigatePrevious
             )
 
             Spacer()
 
             navigationButton(
                 systemName: "chevron.right",
-                help: localization.string("Next Image"),
-                isEnabled: canNavigateNext,
-                action: onNavigateNext
+                help: nextNavigationHelp,
+                isAvailable: canNavigateNext,
+                action: navigateNext
             )
         }
         .padding(.horizontal, MomentoAssetPreviewMetrics.navigationHorizontalInset)
@@ -134,7 +145,7 @@ struct MomentoAssetPreviewOverlay: View {
     private func navigationButton(
         systemName: String,
         help: String,
-        isEnabled: Bool,
+        isAvailable: Bool,
         action: (() -> Void)?
     ) -> some View {
         Button {
@@ -149,11 +160,84 @@ struct MomentoAssetPreviewOverlay: View {
         }
         .buttonStyle(.glass)
         .buttonBorderShape(.circle)
-        .disabled(!isEnabled)
-        .opacity(isEnabled ? 1 : 0.38)
+        .opacity(isAvailable ? 1 : 0.38)
         .help(help)
         .contentShape(Circle())
         .pointerStyle(.link)
+    }
+
+    private var keyboardNavigatePreviousAction: (() -> Void)? {
+        guard showsNavigationControls else {
+            return nil
+        }
+
+        return { navigatePrevious() }
+    }
+
+    private var keyboardNavigateNextAction: (() -> Void)? {
+        guard showsNavigationControls else {
+            return nil
+        }
+
+        return { navigateNext() }
+    }
+
+    private var previousNavigationHelp: String {
+        canNavigatePrevious
+            ? localization.string("Previous Image")
+            : localization.string("No previous image")
+    }
+
+    private var nextNavigationHelp: String {
+        canNavigateNext
+            ? localization.string("Next Image")
+            : localization.string("No next image")
+    }
+
+    private func navigationToast(_ message: String) -> some View {
+        Text(message)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .frame(height: 38)
+            .background {
+                MomentoGlassBackground(
+                    glass: .regular.tint(MomentoTheme.surfaceGlassTint(darkOpacity: 0.4)),
+                    cornerRadius: 14
+                )
+            }
+    }
+
+    private func navigatePrevious() {
+        guard canNavigatePrevious else {
+            showNavigationBoundaryToast(localization.string("No previous image"))
+            return
+        }
+
+        onNavigatePrevious?()
+    }
+
+    private func navigateNext() {
+        guard canNavigateNext else {
+            showNavigationBoundaryToast(localization.string("No next image"))
+            return
+        }
+
+        onNavigateNext?()
+    }
+
+    private func showNavigationBoundaryToast(_ message: String) {
+        let token = UUID()
+        navigationToastToken = token
+        activeNavigationToastMessage = message
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + MomentoAssetPreviewMetrics.navigationToastDuration) {
+            guard navigationToastToken == token else {
+                return
+            }
+
+            activeNavigationToastMessage = nil
+        }
     }
 
     private var previewMetadata: some View {

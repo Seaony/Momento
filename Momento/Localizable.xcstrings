@@ -3097,6 +3097,40 @@
         }
       }
     },
+    "No next image" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No next image"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有下一张图片了"
+          }
+        }
+      }
+    },
+    "No previous image" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No previous image"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有上一张图片了"
+          }
+        }
+      }
+    },
     "No supported files found" : {
       "extractionState" : "stale",
       "localizations" : {
