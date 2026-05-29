@@ -9,6 +9,7 @@ private enum MomentoAssetPreviewMetrics {
     static let imagePanelTintOpacity = 0.5
     static let navigationButtonSize: CGFloat = 44
     static let navigationHorizontalInset: CGFloat = 22
+    static let navigationRevealDelayNanoseconds: UInt64 = 240_000_000
 }
 
 struct MomentoAssetPreviewOverlay: View {
@@ -30,6 +31,7 @@ struct MomentoAssetPreviewOverlay: View {
     @State private var previewImageTask: Task<Void, Never>?
     @State private var isPresented = false
     @State private var isClosing = false
+    @State private var areNavigationControlsVisible = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -46,8 +48,11 @@ struct MomentoAssetPreviewOverlay: View {
                     .opacity(presentationOpacity)
                     .animation(presentationAnimation, value: isPresented)
 
-                if showsNavigationControls {
+                if showsNavigationControls, areNavigationControlsVisible {
                     navigationControls
+                        .transaction { transaction in
+                            transaction.animation = nil
+                        }
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
@@ -216,6 +221,7 @@ struct MomentoAssetPreviewOverlay: View {
     private func loadPreviewImage() {
         previewImageTask?.cancel()
         previewImage = nil
+        areNavigationControlsVisible = false
 
         let url = previewURL
         let maxPixelSize = previewMaxPixelSize
@@ -230,6 +236,15 @@ struct MomentoAssetPreviewOverlay: View {
             withAnimation(presentationAnimation) {
                 isPresented = true
             }
+
+            if animatesPresentation {
+                try? await Task.sleep(nanoseconds: MomentoAssetPreviewMetrics.navigationRevealDelayNanoseconds)
+                guard !Task.isCancelled else {
+                    return
+                }
+            }
+
+            areNavigationControlsVisible = true
         }
     }
 
