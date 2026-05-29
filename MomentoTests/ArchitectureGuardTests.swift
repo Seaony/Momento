@@ -223,6 +223,18 @@ final class ArchitectureGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("bestMatch(from:"))
     }
 
+    func testSidebarSelectedNavigationForegroundUsesAdaptiveTextColor() throws {
+        let source = try String(contentsOf: sidebarURL(), encoding: .utf8)
+        let foregroundSource = try sourceBlock(
+            in: source,
+            from: "private func sidebarNavigationForeground",
+            to: "@ViewBuilder\n    private func sidebarNavigationItemBackground"
+        )
+
+        XCTAssertTrue(foregroundSource.contains("if isSelected {\n            return MomentoTheme.primaryText\n        }"))
+        XCTAssertFalse(foregroundSource.contains("return .white"))
+    }
+
     func testSparkleUpdatesAreConfiguredForGitHubAppcast() throws {
         let infoData = try Data(contentsOf: infoPlistURL())
         let infoPlist = try XCTUnwrap(PropertyListSerialization.propertyList(from: infoData, options: [], format: nil) as? [String: Any])

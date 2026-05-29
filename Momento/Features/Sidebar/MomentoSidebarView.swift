@@ -321,7 +321,7 @@ struct MomentoSidebarView: View {
 
     private func sidebarNavigationForeground(isSelected: Bool, isHovered: Bool) -> Color {
         if isSelected {
-            return .white
+            return MomentoTheme.primaryText
         }
 
         if isHovered {
