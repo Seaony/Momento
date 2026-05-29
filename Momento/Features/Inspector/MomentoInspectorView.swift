@@ -133,6 +133,7 @@ struct MomentoInspectorView: View {
     @State private var hoveredFolderID: AssetFolder.ID?
     @State private var hoveredFolderChoiceID: AssetFolder.ID?
     @State private var isCreateTagRowHovered = false
+    @State private var hoveredLinkURL: URL?
     @State private var isTagPickerPresented = false
     @State private var isFolderPickerPresented = false
     @State private var tagSearchQuery = ""
@@ -1076,7 +1077,10 @@ struct MomentoInspectorView: View {
     }
 
     private func linkRow(_ label: String, _ url: URL) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
+        let isHovered = hoveredLinkURL == url
+        let linkShape = RoundedRectangle(cornerRadius: 7, style: .continuous)
+
+        return HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text(label)
                 .font(.system(size: 12))
                 .foregroundStyle(MomentoTheme.secondaryText)
@@ -1086,12 +1090,38 @@ struct MomentoInspectorView: View {
                     .font(.system(size: 12))
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    .underline(isHovered, color: Color.accentColor)
                     .textSelection(.enabled)
+                    .foregroundStyle(isHovered ? Color.accentColor : MomentoTheme.primaryText)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .background {
+                        linkShape.fill(
+                            isHovered
+                                ? MomentoTheme.contrastTint(lightOpacity: 0.05, darkOpacity: 0.08)
+                                : Color.clear
+                        )
+                    }
+                    .overlay {
+                        if isHovered {
+                            linkShape.strokeBorder(MomentoTheme.subtleGlassStroke, lineWidth: 1)
+                        }
+                    }
+                    .contentShape(linkShape)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(MomentoTheme.primaryText)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .pointerStyle(.link)
+            .onHover { hovering in
+                withAnimation(.smooth(duration: 0.12)) {
+                    if hovering {
+                        hoveredLinkURL = url
+                    } else if hoveredLinkURL == url {
+                        hoveredLinkURL = nil
+                    }
+                }
+            }
         }
     }
 
