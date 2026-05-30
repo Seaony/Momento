@@ -13,6 +13,7 @@ struct MomentoToastRequest: Equatable {
 
 struct MomentoShellView<Content: View>: View {
     @Environment(\.appLocalization) private var localization
+    @Environment(\.colorScheme) private var colorScheme
 
     @Binding var sidebarSelection: String?
     @Binding var searchQuery: String
@@ -200,8 +201,17 @@ struct MomentoShellView<Content: View>: View {
             .frame(width: 0, height: 0)
         }
         .background {
-            MomentoGlassBackground(cornerRadius: 0)
+            mainWindowBackground
                 .ignoresSafeArea()
+        }
+    }
+
+    @ViewBuilder
+    private var mainWindowBackground: some View {
+        if colorScheme == .dark {
+            MomentoGlassBackground(cornerRadius: 0)
+        } else {
+            Color(nsColor: WindowTransparencyConfigurator.adaptiveBackingColor())
         }
     }
 
