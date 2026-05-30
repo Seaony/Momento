@@ -11,7 +11,7 @@ struct WindowTransparencyConfigurator: NSViewRepresentable {
     /// 所有 Liquid Glass 面板背后的统一窗口底色透明度。单个面板不再叠自己的
     /// opaque 背景，因此这个值就是整 App 视觉密度的唯一入口。
     static let backingOpacity: CGFloat = 0.9
-    static let lightBackingWhite: CGFloat = 0.78
+    static let lightBackingWhite: CGFloat = 0.88
 
     static func adaptiveBackingColor() -> NSColor {
         NSColor(name: nil) { appearance in
