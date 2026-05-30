@@ -37,6 +37,7 @@ private enum MomentoSidebarMenuMetrics {
 
 struct MomentoSidebarView: View {
     @Environment(\.appLocalization) private var localization
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.openSettings) private var openSettings
 
     @Binding var selection: String?
@@ -162,7 +163,15 @@ struct MomentoSidebarView: View {
         }
         .clipShape(sidebarShape)
         .overlay {
-            sidebarShape.strokeBorder(MomentoTheme.subtleStroke.opacity(0.42), lineWidth: 1)
+            sidebarShape.strokeBorder(sidebarBorderColor, lineWidth: 1)
+        }
+    }
+
+    private var sidebarBorderColor: Color {
+        if colorScheme == .dark {
+            MomentoTheme.subtleStroke.opacity(0.42)
+        } else {
+            Color.black.opacity(0.12)
         }
     }
 

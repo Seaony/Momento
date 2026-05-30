@@ -53,9 +53,18 @@ private enum AssetCollectionMetrics {
     static let favoriteButtonBackgroundAnimationDuration: CFTimeInterval = 0.12
     static let favoriteButtonEntranceScale: CGFloat = 0.9
     static let selectionBackgroundAnimationDuration: CFTimeInterval = 0.12
-    static let titleTextColor = NSColor.labelColor.withAlphaComponent(0.5)
-    static let subtitleTextColor = NSColor.labelColor.withAlphaComponent(0.3)
-    static let listDateTextColor = NSColor.labelColor.withAlphaComponent(0.72)
+    static let titleTextColor = MomentoTheme.adaptiveNSColor(
+        light: NSColor.black.withAlphaComponent(0.64),
+        dark: NSColor.white.withAlphaComponent(0.74)
+    )
+    static let subtitleTextColor = MomentoTheme.adaptiveNSColor(
+        light: NSColor.black.withAlphaComponent(0.42),
+        dark: NSColor.white.withAlphaComponent(0.48)
+    )
+    static let listDateTextColor = MomentoTheme.adaptiveNSColor(
+        light: NSColor.black.withAlphaComponent(0.56),
+        dark: NSColor.white.withAlphaComponent(0.72)
+    )
     static let selectedTitleTextColor = NSColor.white.withAlphaComponent(0.95)
     static let selectedSubtitleTextColor = NSColor.white.withAlphaComponent(0.72)
     static let imageEntranceAnimationDuration: CFTimeInterval = 0.18
@@ -2565,13 +2574,13 @@ private final class AssetCollectionViewItem: NSCollectionViewItem {
         let usesSelectedText = isSelected && (mode == .grid || mode == .list)
         fileNameLabel.textColor = usesSelectedText
             ? AssetCollectionMetrics.selectedTitleTextColor
-            : AssetCollectionMetrics.titleTextColor
+            : AssetCollectionMetrics.titleTextColor.momentoResolvedColor(for: contentView)
         subtitleLabel.textColor = usesSelectedText
             ? AssetCollectionMetrics.selectedSubtitleTextColor
-            : AssetCollectionMetrics.subtitleTextColor
+            : AssetCollectionMetrics.subtitleTextColor.momentoResolvedColor(for: contentView)
         dateLabel.textColor = usesSelectedText
             ? AssetCollectionMetrics.selectedTitleTextColor
-            : AssetCollectionMetrics.listDateTextColor
+            : AssetCollectionMetrics.listDateTextColor.momentoResolvedColor(for: contentView)
     }
 
     private func updateFavoriteButton(animated: Bool = true) {
@@ -3609,6 +3618,14 @@ private extension NSEdgeInsets {
 }
 
 private extension NSColor {
+    func momentoResolvedColor(for view: NSView) -> NSColor {
+        var color = self
+        view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            color = self.usingColorSpace(.deviceRGB) ?? self
+        }
+        return color
+    }
+
     func momentoCGColor(for view: NSView) -> CGColor {
         var cgColor = self.cgColor
         view.effectiveAppearance.performAsCurrentDrawingAppearance {
