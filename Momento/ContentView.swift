@@ -386,7 +386,7 @@ struct ContentView: View {
             .foregroundStyle(MomentoTheme.primaryText)
             .frame(width: ContentToolbarMetrics.updateButtonWidth, height: MomentoTheme.toolbarControlHeight)
             .background {
-                MomentoGlassBackground(style: .regular.interactive(true), cornerRadius: MomentoTheme.toolbarControlRadius)
+                toolbarControlBackground(cornerRadius: MomentoTheme.toolbarControlRadius)
             }
             .overlay {
                 if isHovered {
@@ -606,7 +606,7 @@ struct ContentView: View {
                 .foregroundStyle(isActive || isHovered ? MomentoTheme.primaryText : MomentoTheme.secondaryText)
                 .frame(width: ContentToolbarMetrics.iconButtonWidth, height: MomentoTheme.toolbarControlHeight)
                 .background {
-                    MomentoGlassBackground(style: .regular.interactive(true), cornerRadius: MomentoTheme.toolbarControlRadius)
+                    toolbarControlBackground(cornerRadius: MomentoTheme.toolbarControlRadius)
                 }
                 .overlay {
                     if isHovered {
@@ -1114,7 +1114,7 @@ struct ContentView: View {
     }
 
     private func toolbarControlBackground(cornerRadius: CGFloat) -> some View {
-        MomentoGlassBackground(style: .regular.interactive(true), cornerRadius: cornerRadius)
+        MomentoToolbarControlBackground(cornerRadius: cornerRadius)
     }
 
     @ViewBuilder

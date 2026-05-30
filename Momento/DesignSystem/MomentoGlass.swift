@@ -21,6 +21,35 @@ struct MomentoGlassBackground: View {
     }
 }
 
+struct MomentoToolbarControlBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var cornerRadius: CGFloat
+    var interactive: Bool
+
+    init(
+        cornerRadius: CGFloat,
+        interactive: Bool = true
+    ) {
+        self.cornerRadius = cornerRadius
+        self.interactive = interactive
+    }
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+
+        if colorScheme == .dark {
+            MomentoGlassBackground(style: .regular.interactive(interactive), cornerRadius: cornerRadius)
+        } else {
+            shape
+                .fill(Color.white.opacity(0.84))
+                .overlay {
+                    shape.strokeBorder(Color.black.opacity(0.06), lineWidth: 1)
+                }
+        }
+    }
+}
+
 struct MomentoGlassPanelModifier: ViewModifier {
     var style: MomentoSurfaceStyle
     var cornerRadius: CGFloat

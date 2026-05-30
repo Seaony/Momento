@@ -291,10 +291,7 @@ private struct SidebarTitlebarToggleAccessoryView: View {
                     .foregroundStyle(MomentoTheme.primaryText)
                     .frame(width: MomentoTheme.sidebarTitlebarButtonSize, height: MomentoTheme.sidebarTitlebarButtonSize)
                     .background {
-                        MomentoGlassBackground(
-                            style: .regular.interactive(isToggleHovered),
-                            cornerRadius: 9
-                        )
+                        MomentoToolbarControlBackground(cornerRadius: 9, interactive: isToggleHovered)
                     }
             }
             .frame(width: MomentoTheme.titlebarControlHitSize, height: MomentoTheme.titlebarControlHitSize)
@@ -329,9 +326,9 @@ private struct SidebarTitlebarToggleAccessoryView: View {
                     .foregroundStyle(MomentoTheme.primaryText)
                     .frame(width: MomentoTheme.toolbarIconButtonWidth, height: MomentoTheme.toolbarControlHeight)
                     .background {
-                        MomentoGlassBackground(
-                            style: .regular.interactive(isHovered),
-                            cornerRadius: MomentoTheme.toolbarControlRadius
+                        MomentoToolbarControlBackground(
+                            cornerRadius: MomentoTheme.toolbarControlRadius,
+                            interactive: isHovered
                         )
                     }
                     .overlay {
