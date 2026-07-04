@@ -870,11 +870,12 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
 
     private func migrateLegacyTagsIfNeeded() throws {
         // 中文注释：旧版把标签以 JSON 存在 AssetRecord.tagsData 上，新版改为 TagRecord + AssetTagRecord 关系表。
-        // 迁移是一次性的：完成后按库打一个本机标记，避免每次打开/切换库都重新做一次全表 fetch + 全量 tag link 载入
-        // + 逐条 JSON 解码（这在 10 万级库上是叠加在 loadAssets 之上的主线程数百毫秒到数秒重复卡顿）。
+        // 迁移是一次性的：完成后在库包内 metadata/ 下写一个标记文件（随库复制/还原一起走），避免每次打开/切换库都
+        // 重新做一次全表 fetch + 全量 tag link 载入 + 逐条 JSON 解码（10 万级库上是叠加在 loadAssets 之上的数百毫秒到数秒卡顿）。
+        // 用库内文件而非 per-user UserDefaults 记录，可避免「同机把库还原成迁移前的备份、标记却仍在」导致漏迁移。
         // 迁移本身幂等（linkKey 去重、tag 复用），即使标记丢失重跑也不会产生重复数据。
-        let migrationDefaultsKey = "MomentoLegacyTagMigration.v1.\(library.id)"
-        guard !UserDefaults.standard.bool(forKey: migrationDefaultsKey) else {
+        let migrationMarkerURL = storage.legacyTagMigrationMarkerURL(for: library)
+        guard !FileManager.default.fileExists(atPath: migrationMarkerURL.path) else {
             return
         }
 
@@ -970,8 +971,12 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
             }
         }
 
-        // 中文注释：迁移事务成功提交后再置位标记；若上面任一步抛错则标记不置位，下次打开库会重试（迁移幂等，不会重复插入）。
-        UserDefaults.standard.set(true, forKey: migrationDefaultsKey)
+        // 中文注释：迁移事务成功提交后再写标记文件；若上面任一步抛错则标记不写，下次打开库会重试（迁移幂等，不会重复插入）。
+        try? FileManager.default.createDirectory(
+            at: migrationMarkerURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        FileManager.default.createFile(atPath: migrationMarkerURL.path, contents: nil)
     }
 
     private func asset(

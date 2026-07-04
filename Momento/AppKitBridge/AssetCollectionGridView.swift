@@ -218,6 +218,13 @@ nonisolated enum AssetCollectionGridUpdateDecision {
     static func shouldApplyAssetChanges(previousRevision: UInt64, nextRevision: UInt64) -> Bool {
         previousRevision != nextRevision
     }
+
+    // 中文注释：store 的精确变更集（changedAssetIDs）只覆盖「相邻两次 visibleAssets 重算之间」这一步。
+    // 仅当本次 apply 恰好只跨一个 revision 时才可信任它跳过深比较；跨多个 revision（拖拽 defer 后一次性追平等）
+    // 时精确集合只反映最后一步、会漏掉中间变更，必须退回全量深比较。
+    static func canTrustPreciseChanges(previousRevision: UInt64, nextRevision: UInt64) -> Bool {
+        nextRevision == previousRevision &+ 1
+    }
 }
 
 nonisolated struct AssetCollectionGridChangeSet: Equatable {
@@ -429,8 +436,18 @@ struct AssetCollectionGridView: NSViewRepresentable {
             if context.coordinator.shouldDeferAssetChangesForActiveDrag {
                 context.coordinator.deferAssetChangesUntilDragEnds()
             } else {
+                // 中文注释：精确变更集只覆盖「相邻两次 visibleAssets 重算之间」这一步。仅当本次恰好只跨一个 revision
+                // 时才信任它跳过深比较；跨多个 revision（如拖拽 defer 后一次性追平）时传 nil，退回全量深比较避免漏刷新。
+                let isContiguousRevision = AssetCollectionGridUpdateDecision.canTrustPreciseChanges(
+                    previousRevision: context.coordinator.currentVisibleAssetsRevision,
+                    nextRevision: visibleAssetsRevision
+                )
                 context.coordinator.currentVisibleAssetsRevision = visibleAssetsRevision
-                applyAssetChanges(to: collectionView, coordinator: context.coordinator)
+                applyAssetChanges(
+                    to: collectionView,
+                    coordinator: context.coordinator,
+                    changedAssetIDs: isContiguousRevision ? changedAssetIDs : nil
+                )
             }
         }
 
@@ -509,10 +526,14 @@ struct AssetCollectionGridView: NSViewRepresentable {
         }
     }
 
-    private func applyAssetChanges(to collectionView: NSCollectionView, coordinator: Coordinator) {
+    private func applyAssetChanges(
+        to collectionView: NSCollectionView,
+        coordinator: Coordinator,
+        changedAssetIDs: Set<AssetItem.ID>?
+    ) {
         // 中文注释：收藏、标题、标签、文件夹等轻量字段变化可以原地刷新 cell，
         // 避免 reloadData 造成整个瀑布流闪烁和滚动位置抖动。
-        if let itemUpdateIndexPaths = itemUpdateIndexPaths(from: coordinator.currentAssets, to: assets) {
+        if let itemUpdateIndexPaths = itemUpdateIndexPaths(from: coordinator.currentAssets, to: assets, changedAssetIDs: changedAssetIDs) {
             coordinator.currentAssets = assets
             coordinator.rebuildAssetIndex(for: assets)
 
@@ -584,7 +605,11 @@ struct AssetCollectionGridView: NSViewRepresentable {
         layout.prepareForAnimatedReflow(disappearingFramesByIndexPath: disappearingFrames)
     }
 
-    private func itemUpdateIndexPaths(from oldAssets: [AssetItem], to newAssets: [AssetItem]) -> Set<IndexPath>? {
+    private func itemUpdateIndexPaths(
+        from oldAssets: [AssetItem],
+        to newAssets: [AssetItem],
+        changedAssetIDs: Set<AssetItem.ID>?
+    ) -> Set<IndexPath>? {
         guard oldAssets.count == newAssets.count else {
             return nil
         }
@@ -598,9 +623,10 @@ struct AssetCollectionGridView: NSViewRepresentable {
                 return nil
             }
 
-            // 中文注释：store 给出精确变更集时，不在集合里的资产一定未变（含 thumbnailURL 等所有字段），
-            // 直接跳过昂贵的整结构体深比较——这是 100k 库单条编辑时把 O(n) 次深比较降到 O(变更数) 的关键。
-            // changedAssetIDs 为 nil（全量/无法追踪）时保持逐项深比较，绝不漏刷新。
+            // 中文注释：调用方仅在「本次 apply 恰好只跨一个 visibleAssets revision」时才传入精确变更集，
+            // 此时不在集合里的资产一定未变（含 thumbnailURL 等所有字段），可跳过昂贵的整结构体深比较——
+            // 这是 100k 库单条编辑时把 O(n) 次深比较降到 O(变更数) 的关键。
+            // 一旦本次 apply 跨多个 revision（拖拽 defer 后一次性追平等），调用方会传 nil，退回逐项深比较，绝不漏刷新。
             if let changedAssetIDs, !changedAssetIDs.contains(oldAsset.id) {
                 continue
             }
@@ -879,8 +905,18 @@ extension AssetCollectionGridView {
                 return
             }
 
+            // 中文注释：拖拽期间被 defer 的变更可能累积跨多个 revision，而 parent.changedAssetIDs 只反映最后一个 revision，
+            // 故这里几乎总是非连续——传 nil 退回全量深比较，确保拖拽期间所有变更（含缩略图回填）都被正确刷新。
+            let isContiguousRevision = AssetCollectionGridUpdateDecision.canTrustPreciseChanges(
+                previousRevision: currentVisibleAssetsRevision,
+                nextRevision: parent.visibleAssetsRevision
+            )
             currentVisibleAssetsRevision = parent.visibleAssetsRevision
-            parent.applyAssetChanges(to: collectionView, coordinator: self)
+            parent.applyAssetChanges(
+                to: collectionView,
+                coordinator: self,
+                changedAssetIDs: isContiguousRevision ? parent.changedAssetIDs : nil
+            )
             syncSelection()
             syncHoveredPreviewAsset()
         }

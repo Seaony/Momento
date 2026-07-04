@@ -63,16 +63,25 @@ nonisolated struct LibraryStorage: Sendable {
     // 中文注释：一次性枚举 thumbnails 目录，返回所有已存在缩略图对应的 contentHash 集合（缩略图平铺命名为 <contentHash>.png）。
     // 用于全库加载时批量判断缩略图是否存在，替代对每个资产各做一次 FileManager.fileExists 同步磁盘 stat
     // （10 万级库上就是 10 万次 stat，且发生在阻塞主线程的物化循环里）。
-    nonisolated func existingThumbnailContentHashes(in library: AssetLibrary) -> Set<String> {
+    // 返回 nil 表示目录枚举失败（区别于「空目录」的空集）——调用方据此退回逐资产 fileExists，不用空集冒充「未知」。
+    nonisolated func existingThumbnailContentHashes(in library: AssetLibrary) -> Set<String>? {
         let thumbnailsURL = rootURL(for: library).appendingPathComponent("thumbnails", isDirectory: true)
         guard let entries = try? FileManager.default.contentsOfDirectory(
             at: thumbnailsURL,
             includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles]
         ) else {
-            return []
+            return nil
         }
         return Set(entries.map { $0.deletingPathExtension().lastPathComponent })
+    }
+
+    // 中文注释：旧标签迁移完成标记，放在库包内 metadata/ 下，随库一起复制/还原，
+    // 避免用 per-user UserDefaults 记录导致「同机把库还原成迁移前的备份、标记却仍在」而漏迁移。
+    nonisolated func legacyTagMigrationMarkerURL(for library: AssetLibrary) -> URL {
+        rootURL(for: library)
+            .appendingPathComponent("metadata", isDirectory: true)
+            .appendingPathComponent(".legacy-tag-migration-v1")
     }
 
     nonisolated func prepareLibraryDirectories(for library: AssetLibrary) throws {

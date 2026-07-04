@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import XCTest
 @testable import Momento
@@ -106,6 +107,46 @@ final class LibraryStoreAssetsVersionTests: XCTestCase {
         XCTAssertNil(store.changedAssetIDsForVisibleRevision)
     }
 
+    // 中文注释：用两张内容不同的图片（不去重）验证变更集的「多 id 累积」与「revision 之间清空」，
+    // 这是单资产测试（{id}∪{id}={id}）无法覆盖的：能捕获 pending 未清空、跨 id 残留等回归。
+    func testChangedAssetIDsAccumulatesDistinctIDsAndResetsBetweenRevisions() async throws {
+        let environment = try AssetsVersionTestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+
+        let sourceA = environment.inputURL.appendingPathComponent("a.png")
+        let sourceB = environment.inputURL.appendingPathComponent("b.png")
+        try Self.distinctPNGData(red: 40).write(to: sourceA)
+        try Self.distinctPNGData(red: 200).write(to: sourceB)
+        try await store.importItems(from: [sourceA, sourceB])
+        XCTAssertEqual(store.assets.count, 2)
+
+        let idA = try XCTUnwrap(store.assets.first).id
+        let idB = try XCTUnwrap(store.assets.last).id
+        XCTAssertNotEqual(idA, idB)
+        _ = store.visibleAssets
+
+        // 连续编辑不同资产：第二次变更集恰为 {idB}，证明第一次的 {idA} 已在 revision 之间清空、不残留
+        try store.toggleFavorite(for: idA)
+        _ = store.visibleAssets
+        XCTAssertEqual(store.changedAssetIDsForVisibleRevision, [idA])
+
+        try store.toggleFavorite(for: idB)
+        _ = store.visibleAssets
+        XCTAssertEqual(store.changedAssetIDsForVisibleRevision, [idB])
+
+        // 一次操作改多个资产：变更集应为两者并集
+        try store.moveAssetsToTrash(ids: [idA, idB])
+        _ = store.visibleAssets
+        XCTAssertEqual(store.changedAssetIDsForVisibleRevision, [idA, idB])
+    }
+
     func testAssetsVersionAdvancesForInMemoryTagMutations() throws {
         let library = AssetLibrary(
             id: "library",
@@ -154,6 +195,34 @@ final class LibraryStoreAssetsVersionTests: XCTestCase {
         let beforeClose = store.assetsVersion
         store.closeCurrentLibrary()
         XCTAssertEqual(store.assetsVersion, beforeClose + 1)
+    }
+
+    // 中文注释：生成 2x2、指定红色分量的有效 PNG；不同 red 值 → 不同像素 → 不同 contentHash，导入时不会被去重。
+    private static func distinctPNGData(red: Int) throws -> Data {
+        guard let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: 2,
+            pixelsHigh: 2,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        let color = NSColor(deviceRed: CGFloat(red) / 255.0, green: 0, blue: 0, alpha: 1)
+        for x in 0..<2 {
+            for y in 0..<2 {
+                rep.setColor(color, atX: x, y: y)
+            }
+        }
+        guard let data = rep.representation(using: .png, properties: [:]) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        return data
     }
 
     private static func makeAsset(

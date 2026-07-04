@@ -1357,16 +1357,19 @@ final class LibraryStore {
         pendingChangedAssetIDs = []
     }
 
+    // 中文注释：单次更新的资产数不超过此阈值时，直接用 firstIndex 原地替换，避免为整库重建 id→index 字典。
+    // 取小常数：更新量为个位数时，几次在数组上的 firstIndex 扫描通常比对全库每个 id 做哈希+插入建字典更省。
+    private static let inPlaceMergeThreshold = 8
+
     private func mergeAssets(_ updatedAssets: [AssetItem]) {
         guard !updatedAssets.isEmpty else {
             return
         }
 
-        // 中文注释：绝大多数编辑（收藏/重命名/加标签/重分析颜色等）只更新极少数资产。此时逐个用
-        // firstIndex 原地替换即可，避免为整库（可达 10 万条）构建一个仅用来定位几项的 id→index 字典
-        // ——构建字典要对全库每个 id 计算哈希并插入，成本远高于少量 firstIndex 扫描。
+        // 中文注释：绝大多数编辑（收藏/重命名/加标签/重分析颜色等）只更新极少数资产。此时逐个用 firstIndex
+        // 原地替换即可，避免为整库（可达 10 万条）构建一个仅用来定位几项的 id→index 字典。
         // 只有批量更新（如整批导入回填）才值得先建字典把后续查找摊薄成 O(1)。
-        if updatedAssets.count <= 8 {
+        if updatedAssets.count <= Self.inPlaceMergeThreshold {
             for asset in updatedAssets {
                 if let index = assets.firstIndex(where: { $0.id == asset.id }) {
                     assets[index] = asset

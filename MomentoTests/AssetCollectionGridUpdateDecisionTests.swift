@@ -25,6 +25,22 @@ final class AssetCollectionGridUpdateDecisionTests: XCTestCase {
         )
     }
 
+    // 中文注释：精确变更集只在「恰好前进一个 revision」时可信；跨多个 revision（拖拽 defer 后一次性追平）、相等或回退都必须退回全量深比较。
+    func testPreciseChangesTrustedOnlyForSingleRevisionStep() {
+        XCTAssertTrue(
+            AssetCollectionGridUpdateDecision.canTrustPreciseChanges(previousRevision: 4, nextRevision: 5)
+        )
+        XCTAssertFalse(
+            AssetCollectionGridUpdateDecision.canTrustPreciseChanges(previousRevision: 4, nextRevision: 6)
+        )
+        XCTAssertFalse(
+            AssetCollectionGridUpdateDecision.canTrustPreciseChanges(previousRevision: 4, nextRevision: 4)
+        )
+        XCTAssertFalse(
+            AssetCollectionGridUpdateDecision.canTrustPreciseChanges(previousRevision: 5, nextRevision: 4)
+        )
+    }
+
     func testChangeSetAnimatesDeletionWithoutRedundantMoves() throws {
         let changeSet = try XCTUnwrap(AssetCollectionGridChangeSet.make(
             from: ["a", "b", "c", "d"].map { Self.makeAsset(id: $0) },

@@ -86,7 +86,9 @@ nonisolated final class AssetFilePromiseProvider: NSFilePromiseProvider, NSFileP
     private static let promiseCopyQueue: OperationQueue = {
         let queue = OperationQueue()
         queue.name = "com.momento.file-promise-copy"
-        queue.maxConcurrentOperationCount = 2
+        // 中文注释：串行执行文件复制（仍在后台线程、不阻塞主线程），既达到「不卡 UI」的目的，
+        // 又避免并发时 availableDestinationURL 的 check-then-copy 去重出现 TOCTOU 竞态（两个同名导出撞同一候选名）。
+        queue.maxConcurrentOperationCount = 1
         queue.qualityOfService = .userInitiated
         return queue
     }()
