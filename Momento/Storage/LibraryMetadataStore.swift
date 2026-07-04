@@ -24,7 +24,9 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
     }
 
     func loadAssets() throws -> [AssetItem] {
-        try context.performAndWait {
+        // 中文注释：全库加载前一次性枚举缩略图目录，避免下面的物化循环对每个资产各做一次磁盘 stat（10 万级库即 10 万次 stat）。
+        let existingThumbnailContentHashes = storage.existingThumbnailContentHashes(in: library)
+        return try context.performAndWait {
             let request = NSFetchRequest<NSManagedObject>(entityName: "AssetRecord")
             request.predicate = NSPredicate(format: "libraryID == %@", library.id)
             request.sortDescriptors = [NSSortDescriptor(key: "importedAt", ascending: true)]
@@ -44,7 +46,8 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
                     from: record,
                     folderIDs: folderIDsByAssetID[id, default: []],
                     paletteColors: colorsByAssetID[id, default: []],
-                    tags: tagsByAssetID[id, default: []]
+                    tags: tagsByAssetID[id, default: []],
+                    existingThumbnailContentHashes: existingThumbnailContentHashes
                 )
             }
         }
@@ -866,6 +869,15 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
     }
 
     private func migrateLegacyTagsIfNeeded() throws {
+        // 中文注释：旧版把标签以 JSON 存在 AssetRecord.tagsData 上，新版改为 TagRecord + AssetTagRecord 关系表。
+        // 迁移是一次性的：完成后按库打一个本机标记，避免每次打开/切换库都重新做一次全表 fetch + 全量 tag link 载入
+        // + 逐条 JSON 解码（这在 10 万级库上是叠加在 loadAssets 之上的主线程数百毫秒到数秒重复卡顿）。
+        // 迁移本身幂等（linkKey 去重、tag 复用），即使标记丢失重跑也不会产生重复数据。
+        let migrationDefaultsKey = "MomentoLegacyTagMigration.v1.\(library.id)"
+        guard !UserDefaults.standard.bool(forKey: migrationDefaultsKey) else {
+            return
+        }
+
         try context.performAndWait {
             let request = NSFetchRequest<NSManagedObject>(entityName: "AssetRecord")
             request.predicate = NSPredicate(format: "libraryID == %@", library.id)
@@ -957,13 +969,17 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
                 try context.save()
             }
         }
+
+        // 中文注释：迁移事务成功提交后再置位标记；若上面任一步抛错则标记不置位，下次打开库会重试（迁移幂等，不会重复插入）。
+        UserDefaults.standard.set(true, forKey: migrationDefaultsKey)
     }
 
     private func asset(
         from record: NSManagedObject,
         folderIDs: [String],
         paletteColors: [AssetColor],
-        tags: [TagItem]
+        tags: [TagItem],
+        existingThumbnailContentHashes: Set<String>? = nil
     ) -> AssetItem? {
         guard let id = record.value(forKey: "id") as? String,
               let libraryID = record.value(forKey: "libraryID") as? String,
@@ -989,7 +1005,10 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         let storageURL = storage.resolveAssetURL(relativePath: storageRelativePath, in: library)
         let exifMetadata = exifMetadata(from: record.value(forKey: "exifMetadataData"))
         let thumbnailURL = storage.thumbnailURL(forContentHash: contentHash, in: library)
-        let resolvedThumbnailURL = FileManager.default.fileExists(atPath: thumbnailURL.path) ? thumbnailURL : nil
+        // 中文注释：全库加载时用预先枚举好的缩略图集合做 O(1) 判断；单条物化（未传集合）回退到即时 stat。
+        let thumbnailExists = existingThumbnailContentHashes?.contains(contentHash)
+            ?? FileManager.default.fileExists(atPath: thumbnailURL.path)
+        let resolvedThumbnailURL = thumbnailExists ? thumbnailURL : nil
         let originalFileName = storedOriginalFileName(
             record.value(forKey: "originalFileName"),
             displayName: displayName,

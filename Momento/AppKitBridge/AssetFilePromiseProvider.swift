@@ -77,6 +77,20 @@ nonisolated final class AssetFilePromiseProvider: NSFilePromiseProvider, NSFileP
         fileName
     }
 
+    // 中文注释：不实现此方法时 AppKit 会在主队列回调 writePromiseTo，导致大图/多选批量导出的 copyItem 在主线程同步执行、阻塞 UI。
+    // 返回一个进程级共享的后台队列，让实际文件复制在后台线程完成，completionHandler 也由系统在该队列回调。
+    func operationQueue(for filePromiseProvider: NSFilePromiseProvider) -> OperationQueue {
+        Self.promiseCopyQueue
+    }
+
+    private static let promiseCopyQueue: OperationQueue = {
+        let queue = OperationQueue()
+        queue.name = "com.momento.file-promise-copy"
+        queue.maxConcurrentOperationCount = 2
+        queue.qualityOfService = .userInitiated
+        return queue
+    }()
+
     func filePromiseProvider(
         _ filePromiseProvider: NSFilePromiseProvider,
         writePromiseTo url: URL,

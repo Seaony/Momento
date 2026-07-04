@@ -420,21 +420,26 @@ struct MomentoSidebarView: View {
     }
 
     private var visibleFolderRows: [MomentoSidebarFolderRow] {
+        // 中文注释：一次性按 parentID 分组并各自排序，避免递归里对每层都做 folders.filter + contains 造成 O(n²)。
+        // 文件夹达数百/上千且层级深时，能把每次 body 重算（hover 等）的树构建从 O(n²) 降到 O(n log n)。
+        let childrenByParent = Dictionary(grouping: folders, by: { $0.parentID })
+            .mapValues { $0.sorted(by: folderSort) }
         var rows: [MomentoSidebarFolderRow] = []
-        appendVisibleFolders(parentID: nil, depth: 0, to: &rows)
+        appendVisibleFolders(parentID: nil, depth: 0, childrenByParent: childrenByParent, to: &rows)
         return rows
     }
 
     private func appendVisibleFolders(
         parentID: AssetFolder.ID?,
         depth: Int,
+        childrenByParent: [AssetFolder.ID?: [AssetFolder]],
         to rows: inout [MomentoSidebarFolderRow]
     ) {
-        for folder in folders.filter({ $0.parentID == parentID }).sorted(by: folderSort) {
-            let hasChildren = folders.contains { $0.parentID == folder.id }
+        for folder in childrenByParent[parentID] ?? [] {
+            let hasChildren = childrenByParent[folder.id] != nil
             rows.append(MomentoSidebarFolderRow(folder: folder, depth: depth, hasChildren: hasChildren))
             if hasChildren, expandedFolderIDs.contains(folder.id) {
-                appendVisibleFolders(parentID: folder.id, depth: depth + 1, to: &rows)
+                appendVisibleFolders(parentID: folder.id, depth: depth + 1, childrenByParent: childrenByParent, to: &rows)
             }
         }
     }

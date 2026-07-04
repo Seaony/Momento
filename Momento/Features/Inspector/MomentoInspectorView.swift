@@ -1134,8 +1134,8 @@ struct MomentoInspectorView: View {
     }
 
     private var selectedFolders: [AssetFolder] {
-        let foldersByID = Dictionary(uniqueKeysWithValues: folders.map { ($0.id, $0) })
-        return folderIDs.compactMap { foldersByID[$0] }
+        // 中文注释：已选文件夹通常只有寥寥几个，直接按 id 查找即可，不必为此重建整表字典。
+        folderIDs.compactMap { id in folders.first { $0.id == id } }
     }
 
     private var availableTagChoices: [String] {
@@ -1170,8 +1170,11 @@ struct MomentoInspectorView: View {
     }
 
     private var visibleFolderRows: [MomentoInspectorFolderRow] {
+        // 中文注释：一次性按 parentID 分组并各自排序，避免递归里反复 folders.filter + sort 造成 O(n²)。
+        let childrenByParent = Dictionary(grouping: folders, by: { $0.parentID })
+            .mapValues { $0.sorted(by: folderSort) }
         var rows: [MomentoInspectorFolderRow] = []
-        appendVisibleFolderRows(parentID: nil, depth: 0, to: &rows)
+        appendVisibleFolderRows(parentID: nil, depth: 0, childrenByParent: childrenByParent, to: &rows)
         return rows
     }
 
@@ -1260,13 +1263,14 @@ struct MomentoInspectorView: View {
     private func appendVisibleFolderRows(
         parentID: AssetFolder.ID?,
         depth: Int,
+        childrenByParent: [AssetFolder.ID?: [AssetFolder]],
         to rows: inout [MomentoInspectorFolderRow]
     ) {
         let query = trimmedFolderSearchQuery
 
-        for folder in childFolders(parentID: parentID) {
-            let hasChildren = !childFolders(parentID: folder.id).isEmpty
-            let matchesSearch = query.isEmpty || folderMatchesSearch(folder, query: query)
+        for folder in childrenByParent[parentID] ?? [] {
+            let hasChildren = !(childrenByParent[folder.id] ?? []).isEmpty
+            let matchesSearch = query.isEmpty || folderMatchesSearch(folder, query: query, childrenByParent: childrenByParent)
 
             guard matchesSearch else {
                 continue
@@ -1275,15 +1279,9 @@ struct MomentoInspectorView: View {
             rows.append(MomentoInspectorFolderRow(folder: folder, depth: depth, hasChildren: hasChildren))
 
             if hasChildren, query.isEmpty ? expandedFolderIDs.contains(folder.id) : true {
-                appendVisibleFolderRows(parentID: folder.id, depth: depth + 1, to: &rows)
+                appendVisibleFolderRows(parentID: folder.id, depth: depth + 1, childrenByParent: childrenByParent, to: &rows)
             }
         }
-    }
-
-    private func childFolders(parentID: AssetFolder.ID?) -> [AssetFolder] {
-        folders
-            .filter { $0.parentID == parentID }
-            .sorted(by: folderSort)
     }
 
     private func folderSort(_ lhs: AssetFolder, _ rhs: AssetFolder) -> Bool {
@@ -1296,13 +1294,17 @@ struct MomentoInspectorView: View {
         return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
     }
 
-    private func folderMatchesSearch(_ folder: AssetFolder, query: String) -> Bool {
+    private func folderMatchesSearch(
+        _ folder: AssetFolder,
+        query: String,
+        childrenByParent: [AssetFolder.ID?: [AssetFolder]]
+    ) -> Bool {
         if folder.name.localizedCaseInsensitiveContains(query) {
             return true
         }
 
-        return childFolders(parentID: folder.id).contains {
-            folderMatchesSearch($0, query: query)
+        return (childrenByParent[folder.id] ?? []).contains {
+            folderMatchesSearch($0, query: query, childrenByParent: childrenByParent)
         }
     }
 

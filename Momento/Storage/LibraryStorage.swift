@@ -60,6 +60,21 @@ nonisolated struct LibraryStorage: Sendable {
             .appendingPathExtension("png")
     }
 
+    // 中文注释：一次性枚举 thumbnails 目录，返回所有已存在缩略图对应的 contentHash 集合（缩略图平铺命名为 <contentHash>.png）。
+    // 用于全库加载时批量判断缩略图是否存在，替代对每个资产各做一次 FileManager.fileExists 同步磁盘 stat
+    // （10 万级库上就是 10 万次 stat，且发生在阻塞主线程的物化循环里）。
+    nonisolated func existingThumbnailContentHashes(in library: AssetLibrary) -> Set<String> {
+        let thumbnailsURL = rootURL(for: library).appendingPathComponent("thumbnails", isDirectory: true)
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: thumbnailsURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+        return Set(entries.map { $0.deletingPathExtension().lastPathComponent })
+    }
+
     nonisolated func prepareLibraryDirectories(for library: AssetLibrary) throws {
         let root = rootURL(for: library)
         for folder in [

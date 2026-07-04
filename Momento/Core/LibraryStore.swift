@@ -1227,9 +1227,10 @@ final class LibraryStore {
     }
 
     private func assetMatchesFilters(_ asset: AssetItem) -> Bool {
-        let colorCategories = Self.colorCategories(for: asset)
+        // 中文注释：颜色分类需要对调色板排序并做 HSV 换算，成本不为零。借助 || 短路，
+        // 仅在启用了颜色筛选时才计算 colorCategories，避免只按标签/文件类型筛选时对每个资产白算一次调色板分类。
         let matchesColors = filterState.colorCategories.isEmpty
-            || colorCategories.contains { filterState.colorCategories.contains($0) }
+            || Self.colorCategories(for: asset).contains { filterState.colorCategories.contains($0) }
         let matchesTags = filterState.tagIDs.isEmpty || asset.tags.contains { tag in
             filterState.tagIDs.contains(tag.id)
         }
@@ -1343,6 +1344,22 @@ final class LibraryStore {
 
     private func mergeAssets(_ updatedAssets: [AssetItem]) {
         guard !updatedAssets.isEmpty else {
+            return
+        }
+
+        // 中文注释：绝大多数编辑（收藏/重命名/加标签/重分析颜色等）只更新极少数资产。此时逐个用
+        // firstIndex 原地替换即可，避免为整库（可达 10 万条）构建一个仅用来定位几项的 id→index 字典
+        // ——构建字典要对全库每个 id 计算哈希并插入，成本远高于少量 firstIndex 扫描。
+        // 只有批量更新（如整批导入回填）才值得先建字典把后续查找摊薄成 O(1)。
+        if updatedAssets.count <= 8 {
+            for asset in updatedAssets {
+                if let index = assets.firstIndex(where: { $0.id == asset.id }) {
+                    assets[index] = asset
+                } else {
+                    assets.append(asset)
+                }
+            }
+            bumpAssetsVersion()
             return
         }
 

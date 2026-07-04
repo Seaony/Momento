@@ -6,7 +6,7 @@ nonisolated final class MomentoCoreDataStack {
     let container: NSPersistentContainer
 
     init(library: AssetLibrary, storage: LibraryStorage = LibraryStorage()) throws {
-        container = NSPersistentContainer(name: "MomentoModel", managedObjectModel: try Self.managedObjectModel())
+        container = NSPersistentContainer(name: "MomentoModel", managedObjectModel: try Self.sharedManagedObjectModel())
 
         let storeDescription = NSPersistentStoreDescription(url: storage.databaseURL(for: library))
         storeDescription.type = NSSQLiteStoreType
@@ -27,6 +27,20 @@ nonisolated final class MomentoCoreDataStack {
         }
 
         container.viewContext.mergePolicy = NSMergePolicy(merge: .mergeByPropertyStoreTrumpMergePolicyType)
+    }
+
+    // 中文注释：默认模型在整个进程内共享同一个 NSManagedObjectModel 实例。
+    // 否则每次打开/校验/导入导出库都会重新扫描全部 bundle/framework 并反序列化整个 .momd，
+    // 且同一进程内多个模型实例并存会触发 Core Data "Multiple NSEntityDescriptions claim the NSManagedObject subclass" 警告。
+    // NSManagedObjectModel 加载后按只读方式使用，跨库共享是 Core Data 官方推荐做法。
+    nonisolated(unsafe) private static let cachedDefaultModel = try? managedObjectModel()
+
+    private static func sharedManagedObjectModel() throws -> NSManagedObjectModel {
+        if let cachedDefaultModel {
+            return cachedDefaultModel
+        }
+        // 缓存构建失败时回退到实时构建，以便把真实错误抛给调用方，而不是静默使用空模型。
+        return try managedObjectModel()
     }
 
     static func managedObjectModel(versionName: String? = nil) throws -> NSManagedObjectModel {
