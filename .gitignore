@@ -2,6 +2,7 @@
 /dist/
 /.worktrees/
 /docs/
+/Docs/product-guide-assets/
 
 # Local machine and agent state
 .DS_Store
