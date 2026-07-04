@@ -95,9 +95,12 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
     func saveImportedBatch(_ batch: AssetImportBatch) throws -> [AssetItem] {
         try context.performAndWait {
             var affectedAssetIDs = Set<AssetItem.ID>()
+            let contentHashes = Set(batch.newAssets.map(\.contentHash))
+                .union(batch.folderAssignmentsByContentHash.keys)
+            var recordsByContentHash = try assetRecordsByContentHash(contentHashes)
 
             for importedAsset in batch.newAssets {
-                if let existingRecord = try assetRecord(contentHash: importedAsset.contentHash) {
+                if let existingRecord = recordsByContentHash[importedAsset.contentHash] {
                     var didUpdateExistingRecord = false
                     let now = Date()
 
@@ -150,12 +153,14 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
                 record.setValue(importedAsset.updatedAt, forKey: "updatedAt")
                 record.setValue(nil, forKey: "tagsData")
                 saveColors(importedAsset.paletteColors, forAssetID: importedAsset.id)
+                recordsByContentHash[importedAsset.contentHash] = record
 
                 affectedAssetIDs.insert(importedAsset.id)
             }
 
             try saveFolderAssignments(
                 batch.folderAssignmentsByContentHash,
+                recordsByContentHash: recordsByContentHash,
                 affectedAssetIDs: &affectedAssetIDs
             )
 
@@ -829,6 +834,30 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         return try context.fetch(request).first
     }
 
+    private func assetRecordsByContentHash(_ contentHashes: Set<String>) throws -> [String: NSManagedObject] {
+        guard !contentHashes.isEmpty else {
+            return [:]
+        }
+
+        let request = NSFetchRequest<NSManagedObject>(entityName: "AssetRecord")
+        request.predicate = NSPredicate(
+            format: "libraryID == %@ AND contentHash IN %@",
+            library.id,
+            Array(contentHashes)
+        )
+
+        var recordsByContentHash: [String: NSManagedObject] = [:]
+        for record in try context.fetch(request) {
+            guard let contentHash = record.value(forKey: "contentHash") as? String,
+                  recordsByContentHash[contentHash] == nil else {
+                continue
+            }
+
+            recordsByContentHash[contentHash] = record
+        }
+        return recordsByContentHash
+    }
+
     private func assetRecord(id: AssetItem.ID) throws -> NSManagedObject? {
         let request = NSFetchRequest<NSManagedObject>(entityName: "AssetRecord")
         request.fetchLimit = 1
@@ -1399,6 +1428,7 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
 
     private func saveFolderAssignments(
         _ assignmentsByContentHash: [String: [[String]]],
+        recordsByContentHash: [String: NSManagedObject],
         affectedAssetIDs: inout Set<AssetItem.ID>
     ) throws {
         guard !assignmentsByContentHash.isEmpty else {
@@ -1408,7 +1438,7 @@ nonisolated final class LibraryMetadataStore: @unchecked Sendable {
         var folderPathCache: [String: AssetFolder.ID] = [:]
 
         for (contentHash, assignments) in assignmentsByContentHash {
-            guard let assetRecord = try assetRecord(contentHash: contentHash),
+            guard let assetRecord = recordsByContentHash[contentHash],
                   let assetID = assetRecord.value(forKey: "id") as? String else {
                 continue
             }

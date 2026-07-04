@@ -221,6 +221,9 @@ nonisolated enum AssetCollectionGridUpdateDecision {
 }
 
 nonisolated struct AssetCollectionGridChangeSet: Equatable {
+    // ponytail: cap per-item AppKit animations; tune with Instruments if huge reflows must stay animated.
+    private static let maximumAnimatedOperationCount = 512
+
     struct Move: Equatable {
         var from: IndexPath
         var to: IndexPath
@@ -232,6 +235,10 @@ nonisolated struct AssetCollectionGridChangeSet: Equatable {
 
     var hasChanges: Bool {
         !deletedIndexPaths.isEmpty || !insertedIndexPaths.isEmpty || !movedIndexPaths.isEmpty
+    }
+
+    var isAnimationPractical: Bool {
+        deletedIndexPaths.count + insertedIndexPaths.count + movedIndexPaths.count <= Self.maximumAnimatedOperationCount
     }
 
     static func make(from oldAssets: [AssetItem], to newAssets: [AssetItem]) -> AssetCollectionGridChangeSet? {
@@ -522,6 +529,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
 
         guard let changeSet = AssetCollectionGridChangeSet.make(from: coordinator.currentAssets, to: assets),
               changeSet.hasChanges,
+              changeSet.isAnimationPractical,
               !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
             coordinator.currentAssets = assets
             coordinator.rebuildAssetIndex(for: assets)

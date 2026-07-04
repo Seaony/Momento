@@ -65,6 +65,7 @@ final class AssetCollectionGridUpdateDecisionTests: XCTestCase {
                 to: IndexPath(item: 2, section: 0)
             )
         ])
+        XCTAssertTrue(changeSet.isAnimationPractical)
     }
 
     func testChangeSetRejectsDuplicateIDs() {
@@ -77,6 +78,17 @@ final class AssetCollectionGridUpdateDecisionTests: XCTestCase {
             from: ["a"].map { Self.makeAsset(id: $0) },
             to: ["a", "a"].map { Self.makeAsset(id: $0) }
         ))
+    }
+
+    func testChangeSetSkipsPerItemAnimationForLargeReorders() throws {
+        let oldIDs = (0..<514).map { "asset-\($0)" }
+        let newIDs = oldIDs.reversed()
+        let changeSet = try XCTUnwrap(AssetCollectionGridChangeSet.make(
+            from: oldIDs.map { Self.makeAsset(id: $0) },
+            to: newIDs.map { Self.makeAsset(id: $0) }
+        ))
+
+        XCTAssertFalse(changeSet.isAnimationPractical)
     }
 
     private static func makeAsset(id: AssetItem.ID) -> AssetItem {
