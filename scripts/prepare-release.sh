@@ -26,6 +26,8 @@ Environment:
   MOMENTO_RELEASE_REPOSITORY  GitHub repository used in appcast URLs. Default: Seaony/Momento
   MOMENTO_RELEASE_TAG         Release tag used in appcast URLs. Default: <marketing-version>
   MOMENTO_PRE_RELEASE_COMMIT  Commit message for pending local changes. Default: chore: save pending changes before release
+  MOMENTO_CODE_SIGN_IDENTITY  Release code signing identity. Default: Developer ID Application
+  MOMENTO_NOTARY_PROFILE      notarytool keychain profile used for notarization
 EOF
 }
 
@@ -57,8 +59,11 @@ BUILD_NUMBER="$2"
 RELEASE_TAG="${MOMENTO_RELEASE_TAG:-$MARKETING_VERSION}"
 DMG_NAME="$PROJECT_NAME-$MARKETING_VERSION.dmg"
 DMG_PATH="$DIST_DIR/$DMG_NAME"
+NOTARY_ZIP="$DIST_DIR/$PROJECT_NAME-$MARKETING_VERSION-notary.zip"
 DOWNLOAD_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG/$DMG_NAME"
 RELEASE_URL="https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
+CODE_SIGN_IDENTITY="${MOMENTO_CODE_SIGN_IDENTITY:-Developer ID Application}"
+NOTARY_PROFILE="${MOMENTO_NOTARY_PROFILE:-}"
 
 [[ "$MARKETING_VERSION" =~ ^[0-9]+(\.[0-9]+){1,2}$ ]] || fail "marketing version must look like 1.0.1"
 [[ "$BUILD_NUMBER" =~ ^[0-9]+$ ]] || fail "build number must be a positive integer"
@@ -73,6 +78,15 @@ require_command xmllint
 require_command perl
 require_command gh
 require_command curl
+require_command xcrun
+require_command security
+require_command codesign
+require_command ditto
+require_command spctl
+
+[[ "$CODE_SIGN_IDENTITY" == Developer\ ID\ Application* ]] || fail "release signing identity must be Developer ID Application, got: $CODE_SIGN_IDENTITY"
+security find-identity -p codesigning -v | grep -F "\"$CODE_SIGN_IDENTITY" >/dev/null || fail "missing code signing identity: $CODE_SIGN_IDENTITY"
+[[ -n "$NOTARY_PROFILE" ]] || fail "MOMENTO_NOTARY_PROFILE is required for release notarization"
 
 step "Checking working tree"
 CURRENT_BRANCH="$(git branch --show-current)"
@@ -95,7 +109,7 @@ step "Updating Xcode version settings"
 perl -0pi -e "s/CURRENT_PROJECT_VERSION = [^;]+;/CURRENT_PROJECT_VERSION = $BUILD_NUMBER;/g; s/MARKETING_VERSION = [^;]+;/MARKETING_VERSION = $MARKETING_VERSION;/g" "$PBXPROJ_FILE"
 
 rm -rf "$DERIVED_DATA" "$DMG_ROOT"
-rm -f "$DMG_PATH"
+rm -f "$DMG_PATH" "$NOTARY_ZIP"
 mkdir -p "$DMG_ROOT"
 
 step "Building Release app"
@@ -105,7 +119,9 @@ xcodebuild \
   -configuration Release \
   -destination 'platform=macOS' \
   -derivedDataPath "$DERIVED_DATA" \
-  build
+  build \
+  CODE_SIGN_STYLE=Manual \
+  CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY"
 
 APP_PATH="$DERIVED_DATA/Build/Products/Release/$PROJECT_NAME.app"
 INFO_PLIST="$APP_PATH/Contents/Info.plist"
@@ -121,14 +137,31 @@ MINIMUM_SYSTEM_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVers
 [[ "$APP_MARKETING_VERSION" == "$MARKETING_VERSION" ]] || fail "built app version is $APP_MARKETING_VERSION, expected $MARKETING_VERSION"
 [[ "$APP_BUILD_NUMBER" == "$BUILD_NUMBER" ]] || fail "built app build is $APP_BUILD_NUMBER, expected $BUILD_NUMBER"
 
+step "Verifying app signature"
+codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+codesign -dvvv "$APP_PATH" 2>&1 | grep -F "Authority=Developer ID Application:" >/dev/null || fail "release app was not signed with Developer ID Application"
+
+step "Notarizing app"
+ditto -c -k --keepParent "$APP_PATH" "$NOTARY_ZIP"
+xcrun notarytool submit "$NOTARY_ZIP" --keychain-profile "$NOTARY_PROFILE" --wait
+xcrun stapler staple "$APP_PATH"
+xcrun stapler validate "$APP_PATH"
+rm -f "$NOTARY_ZIP"
+
 step "Creating DMG"
 cp -R "$APP_PATH" "$DMG_ROOT/"
 ln -s /Applications "$DMG_ROOT/Applications"
 hdiutil create -volname "$PROJECT_NAME" -srcfolder "$DMG_ROOT" -ov -format UDZO "$DMG_PATH"
 
-step "Verifying DMG and code signature"
+step "Notarizing DMG"
+xcrun notarytool submit "$DMG_PATH" --keychain-profile "$NOTARY_PROFILE" --wait
+xcrun stapler staple "$DMG_PATH"
+xcrun stapler validate "$DMG_PATH"
+
+step "Verifying DMG and Gatekeeper acceptance"
 hdiutil verify "$DMG_PATH"
-codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+spctl -a -vvv -t exec "$APP_PATH"
+spctl -a -vvv -t open --context context:primary-signature "$DMG_PATH"
 
 step "Signing update archive for Sparkle"
 SIGN_OUTPUT="$("$SPARKLE_BIN/sign_update" "$DMG_PATH")"
