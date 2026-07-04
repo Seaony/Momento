@@ -281,6 +281,8 @@ struct ContentView: View {
 
     private var libraryBody: some View {
         let visibleAssets = store.visibleAssets
+        // 中文注释：紧跟 visibleAssets 读取变更集快照，确保二者来自同一次 visibleAssets 重算（同一 revision），传给网格做精确刷新。
+        let changedAssetIDs = store.changedAssetIDsForVisibleRevision
         let selectedInspectorAssets = selectedInspectorAssets(from: visibleAssets)
         let sourceReadValidator = store.currentLibrarySourceReadValidator()
 
@@ -334,6 +336,7 @@ struct ContentView: View {
                 assetGridContent(
                     visibleAssets,
                     visibleAssetsRevision: store.visibleAssetsRevision,
+                    changedAssetIDs: changedAssetIDs,
                     sourceReadValidator: sourceReadValidator
                 )
             }
@@ -422,12 +425,14 @@ struct ContentView: View {
     private func assetGridContent(
         _ visibleAssets: [AssetItem],
         visibleAssetsRevision: UInt64,
+        changedAssetIDs: Set<AssetItem.ID>?,
         sourceReadValidator: (@Sendable () throws -> Void)?
     ) -> some View {
         ZStack {
             AssetCollectionGridView(
                 assets: visibleAssets,
                 visibleAssetsRevision: visibleAssetsRevision,
+                changedAssetIDs: changedAssetIDs,
                 selectedAssetIDs: selectedAssetIDs,
                 viewMode: store.viewMode,
                 localization: localization,

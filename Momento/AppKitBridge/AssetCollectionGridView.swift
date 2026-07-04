@@ -293,6 +293,8 @@ nonisolated struct AssetCollectionGridChangeSet: Equatable {
 struct AssetCollectionGridView: NSViewRepresentable {
     var assets: [AssetItem]
     var visibleAssetsRevision: UInt64
+    // 中文注释：store 给出的「本次可见列表变更涉及哪些 asset id」的权威集合；nil 表示无法精确追踪，回退全量深比较。
+    var changedAssetIDs: Set<AssetItem.ID>?
     var selectedAssetIDs: Set<AssetItem.ID>
     var viewMode: AssetViewMode
     var localization: AppLocalization
@@ -314,6 +316,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
     init(
         assets: [AssetItem],
         visibleAssetsRevision: UInt64,
+        changedAssetIDs: Set<AssetItem.ID>? = nil,
         selectedAssetIDs: Set<AssetItem.ID> = [],
         viewMode: AssetViewMode = .grid,
         localization: AppLocalization = AppLocalization(language: .system),
@@ -330,6 +333,7 @@ struct AssetCollectionGridView: NSViewRepresentable {
     ) {
         self.assets = assets
         self.visibleAssetsRevision = visibleAssetsRevision
+        self.changedAssetIDs = changedAssetIDs
         self.selectedAssetIDs = selectedAssetIDs
         self.viewMode = viewMode
         self.localization = localization
@@ -592,6 +596,13 @@ struct AssetCollectionGridView: NSViewRepresentable {
             let newAsset = newAssets[index]
             guard oldAsset.id == newAsset.id else {
                 return nil
+            }
+
+            // 中文注释：store 给出精确变更集时，不在集合里的资产一定未变（含 thumbnailURL 等所有字段），
+            // 直接跳过昂贵的整结构体深比较——这是 100k 库单条编辑时把 O(n) 次深比较降到 O(变更数) 的关键。
+            // changedAssetIDs 为 nil（全量/无法追踪）时保持逐项深比较，绝不漏刷新。
+            if let changedAssetIDs, !changedAssetIDs.contains(oldAsset.id) {
+                continue
             }
 
             if oldAsset == newAsset {

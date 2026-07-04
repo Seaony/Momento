@@ -66,6 +66,46 @@ final class LibraryStoreAssetsVersionTests: XCTestCase {
         XCTAssertEqual(store.assetsVersion, afterSecondMoveToTrash + 1)
     }
 
+    // 中文注释：验证「本次 visibleAssets 重算对应哪些 asset id 变更」的权威集合契约——
+    // 单条编辑/缩略图刷新精确记录被改 id；结构性删除回退为 nil（下游据此全量深比较，绝不漏刷新）。
+    func testChangedAssetIDsSnapshotTracksSingleEditsAndFallsBackForBulk() async throws {
+        let environment = try AssetsVersionTestEnvironment()
+        defer { environment.cleanup() }
+
+        let store = LibraryStore(
+            defaultViewMode: .grid,
+            recentStore: RecentLibraryStore(defaults: environment.defaults),
+            loadRecentLibrary: false
+        )
+        try store.createLibrary(at: environment.packageURL)
+        let source = try environment.writeOnePixelPNG(named: "tracked.png")
+        try await store.importItems(from: [source])
+        let asset = try XCTUnwrap(store.assets.first)
+
+        // 先消费导入产生的变更，重置累积
+        _ = store.visibleAssets
+
+        // 单条收藏切换：应精确记录被改 id
+        try store.toggleFavorite(for: asset.id)
+        _ = store.visibleAssets
+        XCTAssertEqual(store.changedAssetIDsForVisibleRevision, [asset.id])
+
+        // 缩略图刷新（只改 thumbnailURL、不改 updatedAt）：仍需精确记录，供网格 reload 刷新缩略图
+        _ = try store.refreshThumbnail(for: asset.id)
+        _ = store.visibleAssets
+        XCTAssertEqual(store.changedAssetIDsForVisibleRevision, [asset.id])
+
+        // 移到废纸篓是软删除（只改 isTrashed 字段，仍走 mergeAssets），属单条精确变更
+        try store.moveAssetToTrash(id: asset.id)
+        _ = store.visibleAssets
+        XCTAssertEqual(store.changedAssetIDsForVisibleRevision, [asset.id])
+
+        // 永久删除直接从 assets 数组移除（bumpAssetsVersion 不带 changedIDs），无法精确追踪，应回退为 nil
+        try store.deleteAssetPermanently(id: asset.id)
+        _ = store.visibleAssets
+        XCTAssertNil(store.changedAssetIDsForVisibleRevision)
+    }
+
     func testAssetsVersionAdvancesForInMemoryTagMutations() throws {
         let library = AssetLibrary(
             id: "library",

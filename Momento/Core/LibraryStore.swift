@@ -10,6 +10,11 @@ final class LibraryStore {
     var assets: [AssetItem]
     @ObservationIgnored private(set) var assetsVersion: UInt64 = 0
     @ObservationIgnored private(set) var visibleAssetsRevision: UInt64 = 0
+    // 中文注释：changedAssetIDsForVisibleRevision 是「当前 visibleAssetsRevision 对应哪些 asset id 发生了内容变更」的权威集合，
+    // 供网格视图精确定位需要原地刷新的 cell，避免对整库做 O(n) 结构体深比较；nil 表示本轮存在全量/无法精确追踪的变更，
+    // 下游据此安全回退到全量深比较。pendingChangedAssetIDs 在两次 visibleAssets 重算之间累积变更 id，重算时快照并清空。
+    @ObservationIgnored private(set) var changedAssetIDsForVisibleRevision: Set<AssetItem.ID>?
+    @ObservationIgnored private var pendingChangedAssetIDs: Set<AssetItem.ID>? = []
     @ObservationIgnored private var visibleAssetsCache: [AssetItem]?
     @ObservationIgnored private var visibleAssetsCacheKey: VisibleAssetsCacheKey?
     @ObservationIgnored private var sidebarAssetCountsCache: MomentoSidebarAssetCounts?
@@ -878,7 +883,7 @@ final class LibraryStore {
         )
         asset.thumbnailURL = thumbnailURL
         assets[index] = asset
-        bumpAssetsVersion()
+        bumpAssetsVersion(changedIDs: [assetID])
         return asset
     }
 
@@ -1334,12 +1339,22 @@ final class LibraryStore {
         recentLibraries = recentStore.load()
     }
 
-    private func bumpAssetsVersion() {
+    private func bumpAssetsVersion(changedIDs: Set<AssetItem.ID>? = nil) {
         assetsVersion &+= 1
+        // 中文注释：累积本轮（两次 visibleAssets 重算之间）所有变更的 asset id。任一处传 nil（全量/结构性/无法精确追踪）
+        // 都会把累积集合置为 nil，让下游安全回退到全量深比较——宁可多比较也绝不漏刷新缩略图等字段。
+        if let changedIDs, pendingChangedAssetIDs != nil {
+            pendingChangedAssetIDs?.formUnion(changedIDs)
+        } else {
+            pendingChangedAssetIDs = nil
+        }
     }
 
     private func bumpVisibleAssetsRevision() {
         visibleAssetsRevision &+= 1
+        // 中文注释：一次 visibleAssets 重算即一个新 revision。把累积的变更集快照给本 revision，并重置累积以追踪下一批变更。
+        changedAssetIDsForVisibleRevision = pendingChangedAssetIDs
+        pendingChangedAssetIDs = []
     }
 
     private func mergeAssets(_ updatedAssets: [AssetItem]) {
@@ -1359,7 +1374,7 @@ final class LibraryStore {
                     assets.append(asset)
                 }
             }
-            bumpAssetsVersion()
+            bumpAssetsVersion(changedIDs: Set(updatedAssets.map(\.id)))
             return
         }
 
@@ -1376,7 +1391,7 @@ final class LibraryStore {
                 assets.append(asset)
             }
         }
-        bumpAssetsVersion()
+        bumpAssetsVersion(changedIDs: Set(updatedAssets.map(\.id)))
     }
 
     private func updateAssetsWithTag(
