@@ -4,7 +4,7 @@
 
 # Momento
 
-### 想留下的图，都收进一个安静的素材库。
+### 灵感图片，安静收好。
 
 **参考图、截图、Moodboard 和照片，收进一个原生 Mac 素材库。**<br>
 按颜色、标签和文件夹整理，保存在你自己的磁盘上，<br>
@@ -17,7 +17,10 @@
 
 <br>
 
-<img src="assets/screenshots/01-main-library.jpg" width="900" alt="Momento 主窗口：左侧是资源库和文件夹，右侧是风景照片的瀑布流">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/product-dark-zh.jpg">
+  <img src="assets/product-light-zh.jpg" width="900" alt="Momento 主窗口：侧边栏是文件夹，中间是风景照片的瀑布流，右侧检查器显示选中图片的色板和详细信息">
+</picture>
 
 </div>
 

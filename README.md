@@ -4,7 +4,7 @@
 
 # Momento
 
-### Every image you keep. One quiet library.
+### Every image. Quietly kept.
 
 **References, screenshots, moodboards and photos, gathered into a native Mac library.**<br>
 Sorted by color, tag and folder, stored on your own disk,<br>
@@ -17,7 +17,10 @@ and fast enough for a hundred thousand images.
 
 <br>
 
-<img src="assets/screenshots/01-main-library.jpg" width="900" alt="Momento's main window: a library sidebar with folders, and a masonry grid of landscape photos">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/product-dark-en.jpg">
+  <img src="assets/product-light-en.jpg" width="900" alt="Momento's main window with folders in the sidebar, a masonry grid of landscape photos and the inspector showing the selected image's palette and details">
+</picture>
 
 </div>
 
