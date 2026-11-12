@@ -2,13 +2,13 @@
 
 `.momento` 图库包的三款候选均保留应用已有的彩虹刺猬。文件夹表示整个可移动的图库包，不改应用图标。
 
-- `01-coral-folder.png`：正面珊瑚色文件夹，刺猬浮在前片上。暂用这款；文件夹轮廓明确，浅深背景都清楚。
+- `01-coral-folder.png`：用户已选定。正面珊瑚色文件夹，刺猬浮在前片上；文件夹轮廓明确，浅深背景都清楚。
 - `02-peeking-folder.png`：刺猬从米白色文件夹里探出，脸部较大，轮廓更活泼。
 - `03-blue-folder.png`：略带侧角的蓝色文件夹，刺猬头部作为浮雕，后片露出一张图片。
 - `comparison.png`：三款在浅深背景下的 180、60、32、16 像素比较。
 - `prompts/`：每款候选的完整制作说明，以及单色托盘图标说明。
 
-当前接入资源为 `app/resources/library-icon.png`（1024 像素）、`app/resources/library.ico`（16、32、48、64、128、256 像素）和 `app/resources/darwin/library.icns`。最终款式由用户选择。
+已选定的 01 珊瑚红图标接入资源为 `app/resources/library-icon.png`（1024 像素）、`app/resources/library.ico`（16、32、48、64、128、256 像素）和 `app/resources/darwin/library.icns`。
 
 macOS：mygo 会把 `resources/darwin/` 的内容放进应用包的 Resources；文档类型声明用 `CFBundleTypeIconFile = library.icns`，导出类型同时声明 `UTTypeIconFile = library.icns`，避免系统退回通用文档图标。现有类型标识、文件关联和目录包声明保持一致。
 

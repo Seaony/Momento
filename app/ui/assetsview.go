@@ -46,6 +46,7 @@ func (a *App) assetArea(c *ui.Context) {
 		if list.Submitted() && a.selectedIndex >= 0 && a.selectedIndex < len(a.Visible) {
 			a.ActivateAsset(a.Visible[a.selectedIndex].ID, false)
 		}
+		a.assetPreviewShortcut(c, list)
 	default:
 		scroll := ui.Scroll(c.Key("masonry")).Grow(1).FillWidth().TrackScroll(&a.scroll).Padding(16)
 		box := scroll.Bounds()
@@ -84,6 +85,7 @@ func (a *App) assetArea(c *ui.Context) {
 				}
 			})
 		})
+		a.assetPreviewShortcut(c, scroll)
 	}
 }
 

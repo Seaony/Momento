@@ -768,12 +768,7 @@ func (a *App) shortcuts(c *ui.Context) {
 		}
 	}
 	if a.ActionShortcut(c, "preview") && !a.Preview.Open {
-		held := a.Shortcut("preview") == "Space"
-		if id := a.hovered; id != "" {
-			a.ActivateAsset(id, held)
-		} else if selected := a.SelectedAssets(); len(selected) > 0 {
-			a.ActivateAsset(selected[0].ID, held)
-		}
+		a.activatePreviewShortcut()
 	}
 }
 

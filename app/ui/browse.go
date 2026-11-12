@@ -10,6 +10,7 @@ import (
 	"github.com/Seaony/Momento/app/internal/catalog"
 	"github.com/Seaony/Momento/app/internal/model"
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
 )
 
 type browseLocation struct {
@@ -152,6 +153,28 @@ func (a *App) ChangeThumbnailSize(delta float32) {
 	}
 }
 
+var previewSystemItem = mygo.Shell.PreviewItem
+
+func (a *App) assetPreviewShortcut(c *ui.Context, area ui.Element) {
+	if a.Preview.Open || c.FocusTakesText() || a.Settings.RecordingShortcut != "" {
+		return
+	}
+	mods, key, ok := parseShortcut(a.Shortcut("preview"))
+	// 在卡片的祖先上认领按键，避免空格先变成点击或翻页。
+	if ok && area.Shortcut(mods, key) {
+		a.activatePreviewShortcut()
+	}
+}
+
+func (a *App) activatePreviewShortcut() {
+	held := a.Shortcut("preview") == "Space"
+	if id := a.hovered; id != "" {
+		a.ActivateAsset(id, held)
+	} else if selected := a.SelectedAssets(); len(selected) > 0 {
+		a.ActivateAsset(selected[0].ID, held)
+	}
+}
+
 func (a *App) ActivateAsset(id string, space bool) {
 	var asset model.Asset
 	found := false
@@ -167,7 +190,7 @@ func (a *App) ActivateAsset(id string, space bool) {
 	if a.Library != nil {
 		path := filepath.Join(a.Library.Root, filepath.FromSlash(asset.RelativePath))
 		if space && a.Preferences.SpaceKey == "system" && runtime.GOOS == "darwin" {
-			if err := mygo.Shell.PreviewItem(path); err != nil {
+			if err := previewSystemItem(path); err != nil {
 				a.ShowError(err)
 			} else {
 				a.MarkAssetsUsed([]string{id})
