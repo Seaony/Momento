@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Seaony/Momento/app/internal/assets"
+	"github.com/Seaony/Momento/app/internal/browser"
 	"github.com/Seaony/Momento/app/internal/catalog"
 	"github.com/Seaony/Momento/app/internal/i18n"
 	"github.com/Seaony/Momento/app/internal/library"
@@ -23,12 +24,25 @@ import (
 )
 
 type Preferences struct {
-	Language   string `json:"language"`
-	Appearance string `json:"appearance"`
+	Language                string  `json:"language"`
+	Appearance              string  `json:"appearance"`
+	LaunchAtLogin           bool    `json:"launchAtLogin"`
+	AutoCheckUpdates        bool    `json:"autoCheckUpdates"`
+	BrowserExtensionEnabled bool    `json:"browserExtensionEnabled"`
+	ViewMode                int     `json:"viewMode"`
+	Sort                    string  `json:"sort"`
+	SortDescending          bool    `json:"sortDescending"`
+	SidebarVisible          bool    `json:"sidebarVisible"`
+	InspectorVisible        bool    `json:"inspectorVisible"`
+	SidebarWidth            float32 `json:"sidebarWidth"`
 }
 
 type App struct {
 	Window                                   *mygo.Window
+	SettingsWindow                           *mygo.Window
+	SettingsRequested                        func()
+	Extension                                *browser.Service
+	ExtensionStatus                          browser.Status
 	Texts                                    i18n.Catalog
 	Library                                  *library.Library
 	Assets                                   *assets.Service
@@ -88,7 +102,7 @@ type App struct {
 
 func New() *App {
 	ctx, cancel := context.WithCancel(context.Background())
-	a := &App{ctx: ctx, cancel: cancel, SidebarVisible: true, InspectorVisible: true, SidebarWidth: 236, selectedIndex: -1, anchor: -1, Preferences: Preferences{Language: "system", Appearance: "system"}, Query: catalog.Query{Sort: "added", Descending: true}}
+	a := &App{ctx: ctx, cancel: cancel, SidebarVisible: true, InspectorVisible: true, SidebarWidth: 236, selectedIndex: -1, anchor: -1, Preferences: DefaultPreferences(), Query: catalog.Query{Sort: "added", Descending: true}}
 	dir, err := library.ConfigDir()
 	if err != nil {
 		a.Error = a.Texts.Error(err)
@@ -119,6 +133,13 @@ func New() *App {
 
 func (a *App) T(key string, args ...any) string { return a.Texts.T(key, args...) }
 
+func (a *App) ShowSettings() {
+	a.SettingsOpen = true
+	if a.SettingsRequested != nil {
+		a.SettingsRequested()
+	}
+}
+
 func (a *App) OpenWindow() {
 	a.Window = mygo.NewWindow(mygo.WindowOptions{
 		Title: "Momento", Width: 1100, Height: 800, MinWidth: 1100, MinHeight: 640, StateKey: "main",
@@ -134,13 +155,16 @@ func (a *App) OpenWindow() {
 			a.Notify(a.T("busy"))
 			return
 		}
+		if a.SettingsWindow != nil {
+			a.SettingsWindow.Close()
+		}
 		a.cancel()
 	})
 
 	go a.watchLibrary()
 }
 
-func (a *App) View(c *ui.Context) {
+func (a *App) applyTheme(c *ui.Context) {
 	theme := *c.Theme()
 	if a.Preferences.Appearance == "light" {
 		theme = *ui.LightTheme()
@@ -164,6 +188,10 @@ func (a *App) View(c *ui.Context) {
 	if a.Preferences.Language != "system" && a.Preferences.Language != "" {
 		a.Texts.Language = a.Preferences.Language
 	}
+}
+
+func (a *App) View(c *ui.Context) {
+	a.applyTheme(c)
 	if a.Library == nil {
 		a.welcome(c)
 	} else {
@@ -197,7 +225,6 @@ func (a *App) View(c *ui.Context) {
 	}
 	a.shortcuts(c)
 	a.preview(c)
-	a.settings(c)
 	a.dialogs(c)
 	if a.Notice != "" {
 		c.Toast(a.Notice)
@@ -603,37 +630,6 @@ func (a *App) Reveal(asset model.Asset) {
 	}
 }
 
-func (a *App) SavePreferences() {
-	a.Texts.Language = a.Preferences.Language
-	a.applyLocale()
-	a.applyAppearance()
-	if a.MenuChanged != nil {
-		a.MenuChanged()
-	}
-	version := a.prefVersion.Add(1)
-	go func(p Preferences) {
-		a.prefMu.Lock()
-		if version != a.prefVersion.Load() {
-			a.prefMu.Unlock()
-			return
-		}
-		data, err := json.MarshalIndent(p, "", "  ")
-		if err == nil {
-			err = os.MkdirAll(a.configDir, 0700)
-		}
-		if err == nil {
-			path := filepath.Join(a.configDir, "preferences.json")
-			err = os.WriteFile(path+".tmp", data, 0600)
-			if err == nil {
-				err = os.Rename(path+".tmp", path)
-			}
-		}
-		a.prefMu.Unlock()
-		if err != nil {
-			a.Window.Update(func() { a.ShowError(err) })
-		}
-	}(a.Preferences)
-}
 func (a *App) watchLibrary() {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
@@ -835,7 +831,21 @@ func (a *App) drainPending() {
 }
 
 func (a *App) applyLocale() {
+	if a.Preferences.Language == "" || a.Preferences.Language == "system" {
+		mygo.App.SetLocale("")
+		a.Texts.SystemLanguage = mygo.App.Locale()
+		return
+	}
 	mygo.App.SetLocale(a.Texts.Locale())
+}
+
+func (a *App) InvalidateWindows() {
+	if a.Window != nil {
+		a.Window.Invalidate()
+	}
+	if a.SettingsWindow != nil {
+		a.SettingsWindow.Invalidate()
+	}
 }
 
 func (a *App) applyAppearance() {

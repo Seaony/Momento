@@ -23,6 +23,12 @@
   },
   "macos": {
     "infoPlist": {
+      "CFBundleDevelopmentRegion": "en",
+      "CFBundleLocalizations": [
+        "en",
+        "zh-Hans",
+        "ja"
+      ],
       "CFBundleDocumentTypes": [
         {
           "CFBundleTypeName": "Momento Library",

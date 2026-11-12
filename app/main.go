@@ -70,9 +70,17 @@ func main() {
 	mygo.App.WhenReady(func() {
 		app = appui.New()
 		app.OpenWindow()
-		appui.OnUpdateChange(func() { app.Window.Invalidate() })
+		app.SettingsRequested = func() { showSettingsWindow(app) }
+		appui.OnUpdateChange(app.InvalidateWindows)
 		app.MenuChanged = func() { installMenu(app) }
 		installMenu(app)
+		mygo.App.OnLocaleChanged(func(locale string) {
+			if app.Preferences.Language == "" || app.Preferences.Language == "system" {
+				app.Texts.SystemLanguage = locale
+				installMenu(app)
+				app.InvalidateWindows()
+			}
+		})
 		if pendingFile != "" {
 			app.OpenLibrary(pendingFile)
 		} else if len(app.Recent) > 0 {
@@ -81,11 +89,15 @@ func main() {
 		if pendingURL != "" {
 			openURL(pendingURL)
 		}
-		go func() {
-			if err := browser.Listen(ctx, browser.New(app.ImportRemote)); err != nil {
-				app.Window.Update(func() { app.ShowError(err) })
-			}
-		}()
+		app.Extension = browser.NewService(ctx, browser.New(app.ImportRemote), func(browser.Status) {
+			app.Window.Update(func() {
+				app.ExtensionStatus = app.Extension.Status()
+				app.InvalidateWindows()
+			})
+		})
+		app.ExtensionStatus = app.Extension.Status()
+		app.SetExtensionEnabled(app.Preferences.BrowserExtensionEnabled)
+		appui.StartAutomaticUpdateCheck(app.Preferences.AutoCheckUpdates)
 	})
 	if err := mygo.App.Run(); err != nil {
 		slog.Error("应用退出失败", "error", err)
@@ -95,26 +107,49 @@ func main() {
 }
 
 func installMenu(a *appui.App) {
-	item := func(key, shortcut string, fn func()) *mygo.MenuItem {
-		return &mygo.MenuItem{Label: a.T(key), Accelerator: shortcut, Click: func(_ *mygo.MenuItem, _ *mygo.Window) { fn(); a.Window.Invalidate() }}
+	menu := mygo.NewMenu(menuItems(a, runtime.GOOS))
+	if runtime.GOOS == "darwin" {
+		mygo.App.SetMenu(menu)
+	} else {
+		a.Window.SetMenu(menu)
+		if a.SettingsWindow != nil {
+			a.SettingsWindow.SetMenu(mygo.NewMenu(menuItems(a, runtime.GOOS)))
+		}
 	}
-	menu := mygo.NewMenu([]*mygo.MenuItem{
-		{Role: mygo.RoleAppMenu},
-		{Label: a.T("menu_file"), Submenu: []*mygo.MenuItem{
-			item("new_library", "CmdOrCtrl+N", a.ShowNewLibrary), item("open_library", "CmdOrCtrl+O", a.ChooseOpenLibrary), mygo.Separator(),
-			item("import", "CmdOrCtrl+I", func() { a.ChooseImport(false) }), item("import_folder", "CmdOrCtrl+Shift+I", func() { a.ChooseImport(true) }), item("export", "CmdOrCtrl+E", a.ExportSelected), mygo.Separator(), {Role: mygo.RoleClose},
-		}},
+	if a.SettingsWindow != nil {
+		a.SettingsWindow.SetTitle(a.T("settings"))
+	}
+}
+
+func menuItems(a *appui.App, platform string) []*mygo.MenuItem {
+	item := func(key, shortcut string, fn func()) *mygo.MenuItem {
+		return &mygo.MenuItem{Label: a.T(key), Accelerator: shortcut, Click: func(_ *mygo.MenuItem, _ *mygo.Window) { fn(); a.InvalidateWindows() }}
+	}
+	settings := item("settings", "CmdOrCtrl+,", a.ShowSettings)
+	fileItems := []*mygo.MenuItem{
+		item("new_library", "CmdOrCtrl+N", a.ShowNewLibrary), item("open_library", "CmdOrCtrl+O", a.ChooseOpenLibrary), mygo.Separator(),
+		item("import", "CmdOrCtrl+I", func() { a.ChooseImport(false) }), item("import_folder", "CmdOrCtrl+Shift+I", func() { a.ChooseImport(true) }), item("export", "CmdOrCtrl+E", a.ExportSelected),
+	}
+	appMenu := &mygo.MenuItem{Role: mygo.RoleAppMenu}
+	if platform == "darwin" {
+		appMenu.Submenu = []*mygo.MenuItem{
+			{Role: mygo.RoleAbout}, mygo.Separator(), settings,
+			item("check_updates", "", func() { a.Settings.Tab = 0; a.ShowSettings(); appui.CheckForUpdates() }),
+			mygo.Separator(), {Role: mygo.RoleServices}, mygo.Separator(),
+			{Role: mygo.RoleHide}, {Role: mygo.RoleHideOthers}, {Role: mygo.RoleUnhide}, mygo.Separator(), {Role: mygo.RoleQuit},
+		}
+	} else {
+		fileItems = append(fileItems, mygo.Separator(), settings)
+	}
+	fileItems = append(fileItems, mygo.Separator(), &mygo.MenuItem{Role: mygo.RoleClose})
+	return []*mygo.MenuItem{
+		appMenu,
+		{Label: a.T("menu_file"), Submenu: fileItems},
 		{Role: mygo.RoleEditMenu},
 		{Label: a.T("menu_view"), Submenu: []*mygo.MenuItem{
 			item("view_masonry", "CmdOrCtrl+1", func() { a.ViewMode = 0 }), item("view_grid", "CmdOrCtrl+2", func() { a.ViewMode = 1 }), item("view_list", "CmdOrCtrl+3", func() { a.ViewMode = 2 }), mygo.Separator(),
 			item("search", "CmdOrCtrl+F", func() { a.Search.Focus() }), item("filter", "CmdOrCtrl+Alt+F", a.ToggleFilter), item("sort", "CmdOrCtrl+Alt+S", a.ToggleSort), item("inspector", "CmdOrCtrl+Alt+I", func() { a.InspectorVisible = !a.InspectorVisible }), item("sidebar", "", func() { a.SidebarVisible = !a.SidebarVisible }), mygo.Separator(), {Role: mygo.RoleToggleFullScreen},
 		}},
-		{Label: a.T("settings"), Submenu: []*mygo.MenuItem{item("settings", "CmdOrCtrl+,", func() { a.SettingsOpen = true })}},
 		{Role: mygo.RoleWindowMenu},
-	})
-	if runtime.GOOS == "darwin" {
-		mygo.App.SetMenu(menu)
-	} else {
-		a.Window.SetMenu(menu)
 	}
 }

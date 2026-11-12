@@ -72,7 +72,7 @@ func (a *App) toolbar(c *ui.Context) {
 		})
 		if version := AvailableUpdateVersion(); version != "" {
 			if ui.PrimaryButton(c.Key("available-update"), a.T("update")).Height(34).Shrink(0).Tooltip(a.T("update_to_version", version)).Clicked() {
-				CheckForUpdates()
+				ShowAvailableUpdate()
 			}
 		}
 		if toolbarIconButton(c.Key("toggle-inspector"), a.T("toggle_inspector"), "inspector").Clicked() {

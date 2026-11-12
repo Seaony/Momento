@@ -9,6 +9,7 @@ require (
 	github.com/gen2brain/heic v0.7.2
 	github.com/google/uuid v1.6.0
 	golang.org/x/image v0.46.0
+	golang.org/x/sys v0.49.0
 	golang.org/x/text v0.43.0
 	modernc.org/sqlite v1.62.0
 )
@@ -31,7 +32,6 @@ require (
 	go.digitalxero.dev/rpm v0.3.4 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/net v0.59.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
 	modernc.org/libc v1.80.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect

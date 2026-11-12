@@ -21,13 +21,29 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
+const finalScreenshotDirectory = "/tmp/momento-titlebar-settings-preview"
+
+type screenshotRecord struct {
+	File             string      `json:"file"`
+	State            string      `json:"state"`
+	Language         string      `json:"language"`
+	Appearance       string      `json:"appearance"`
+	Width            int         `json:"width"`
+	Height           int         `json:"height"`
+	Assets           int         `json:"assets"`
+	Visible          int         `json:"visible"`
+	Platform         string      `json:"platform"`
+	TitleBar         ui.TitleBar `json:"simulatedNativeControls"`
+	MenuPresentation string      `json:"menuPresentation,omitempty"`
+}
+
 // 显式运行时才生成截图，样例库只写入测试临时目录。
 func TestStateScreenshots(t *testing.T) {
 	if os.Getenv("MOMENTO_SCREENSHOTS") != "1" {
 		t.Skip("设置 MOMENTO_SCREENSHOTS=1 生成离线界面截图")
 	}
 	fixture := newScreenshotFixture(t)
-	dir := "/tmp/momento-ui-preview"
+	dir := finalScreenshotDirectory
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -41,25 +57,32 @@ func TestStateScreenshots(t *testing.T) {
 	for _, key := range []string{"toggle_sidebar", "filter", "sort", "view_masonry", "view_grid", "view_list", "import", "toggle_inspector"} {
 		states = append(states, "toolbar-hover-"+key)
 	}
-	type record struct {
-		File       string `json:"file"`
-		State      string `json:"state"`
-		Language   string `json:"language"`
-		Appearance string `json:"appearance"`
-		Width      int    `json:"width"`
-		Height     int    `json:"height"`
-		Assets     int    `json:"assets"`
-		Visible    int    `json:"visible"`
-	}
-	var records []record
-	for _, language := range []string{"zh-CN", "en"} {
+	var records []screenshotRecord
+	for _, language := range []string{"zh-CN", "en", "ja"} {
 		for _, state := range states {
 			for _, appearance := range []string{"light", "dark"} {
 				for _, height := range []int{800, 640} {
-					name := fmt.Sprintf("%s-%s-%s-1100x%d", state, language, appearance, height)
+					width := 1100
+					if state == "settings" {
+						if height == 640 {
+							continue
+						}
+						width, height = 560, settingsTestApp(language, appearance).settingsHeight(UpdateCheckStatus{State: UpdateIdle})
+					}
+					name := fmt.Sprintf("%s-%s-%s-%dx%d", state, language, appearance, width, height)
 					t.Run(name, func(t *testing.T) {
 						a := fixture.app(t, state, language, appearance)
-						tt := ui.NewTester(a.View, 1100, height)
+						view := a.View
+						bar := ui.TitleBar{Height: MainToolbarHeight, Left: 80, Bottom: 37}
+						if state == "settings" {
+							a = settingsTestApp(language, appearance)
+							view = func(c *ui.Context) { a.settingsView(c, UpdateCheckStatus{State: UpdateIdle}) }
+							bar = ui.TitleBar{Height: 36, Left: 80, Bottom: 25}
+						}
+						tt := ui.NewTester(view, width, height)
+						tt.SetLocale(a.Texts.Locale())
+						tt.SetTitleBar(bar)
+						tt.SetWindowActive(true)
 						if strings.HasSuffix(state, "-bottom") {
 							tt.Scroll(960, float32(height-100), 0, 2000)
 						}
@@ -67,15 +90,17 @@ func TestStateScreenshots(t *testing.T) {
 						checkScreenshotState(t, a, tt, state)
 						file := name + ".png"
 						writeScreenshot(t, filepath.Join(dir, file), tt)
-						if len(a.Thumbnails.pending) != 0 {
+						if a.Thumbnails != nil && len(a.Thumbnails.pending) != 0 {
 							t.Fatal("截图仍在异步加载缩略图")
 						}
-						records = append(records, record{file, state, language, appearance, 1100, height, len(a.Snapshot.Assets), len(a.Visible)})
+						records = append(records, screenshotRecord{File: file, State: state, Language: language, Appearance: appearance, Width: width, Height: height, Assets: len(a.Snapshot.Assets), Visible: len(a.Visible), Platform: "macos", TitleBar: bar})
 					})
 				}
 			}
 		}
 	}
+	records = append(records, renderFinalSettingsScreenshots(t, dir)...)
+	records = append(records, renderFinalTitlebarScreenshots(t, fixture, dir)...)
 	data, err := json.MarshalIndent(records, "", "  ")
 	if err != nil {
 		t.Fatal(err)
@@ -285,9 +310,6 @@ func (fixture screenshotFixture) app(t *testing.T, state, language, appearance s
 		a.Preview.target(fixture.root, asset.ID)
 		a.Preview.Bitmap = ui.NewBitmap(img)
 	}
-	if state == "settings" {
-		a.SettingsOpen = true
-	}
 	if state == "export" {
 		a.Selected.Add(a.Visible[0].ID)
 		a.ExportOpen = true
@@ -421,7 +443,7 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 			}
 		}
 	case "settings":
-		for _, key := range []string{"settings", "language", "appearance", "version", "check_updates"} {
+		for _, key := range []string{"settings_general", "settings_extension", "settings_about", "launch_at_login", "appearance", "language", "automatic_updates", "check_updates"} {
 			expect(a.T(key))
 		}
 	case "export":

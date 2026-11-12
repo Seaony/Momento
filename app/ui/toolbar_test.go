@@ -194,15 +194,17 @@ func TestToolbarActualTypesAndToggle(t *testing.T) {
 }
 
 func TestToolbarUpdateAppearsOnlyForKnownVersion(t *testing.T) {
-	previous := availableUpdateVersion
-	t.Cleanup(func() { availableUpdateVersion = previous })
-	availableUpdateVersion = ""
+	previous := updates
+	updates = newUpdateChecker(nil, nil, func(fn func()) { fn() })
+	t.Cleanup(func() { updates = previous })
 	a := toolbarTestApp()
 	tt := toolbarTester(a)
 	if _, exists := tt.AccessByRole(ui.RoleButton, a.T("update")); exists {
 		t.Fatal("没有已知更新时不应显示更新按钮")
 	}
-	availableUpdateVersion = "2.1.0"
+	updates.mu.Lock()
+	updates.status = UpdateCheckStatus{State: UpdateAvailable, Version: "2.1.0"}
+	updates.mu.Unlock()
 	tt.Frame()
 	if _, exists := tt.AccessByRole(ui.RoleButton, a.T("update")); !exists {
 		t.Fatal("发现新版本后应显示更新按钮")

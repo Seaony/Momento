@@ -76,7 +76,7 @@ func (a *App) sidebar(c *ui.Context) {
 			}
 		})
 		if a.sidebarRow(c.Key("settings"), a.T("settings"), "设置", -1, false).Clicked() {
-			a.SettingsOpen = true
+			a.ShowSettings()
 		}
 	})
 }
