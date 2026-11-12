@@ -1,0 +1,11 @@
+{
+  "name": "Momento",
+  "slug": "momento",
+  "identifier": "com.seaony.Momento",
+  "version": "2.0.0",
+  "icon": "resources/icon.png",
+  "out": "build",
+  "urlSchemes": ["momento"],
+  "fileAssociations": [{"ext": ["momento"], "name": "Momento Library", "mimeType": "application/x-momento-library", "role": "Editor"}],
+  "linux": {"webview": false}
+}

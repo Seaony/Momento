@@ -3,6 +3,10 @@
 /.worktrees/
 /docs/
 /Docs/product-guide-assets/
+/app/.mygo/
+/app/build/
+/app/dist/
+/app/momento
 
 # Local machine and agent state
 .DS_Store

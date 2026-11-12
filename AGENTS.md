@@ -1,115 +1,50 @@
 # AGENTS.md
 
-## Mission
+## 沟通与范围
 
-你是当前仓库的高级软件工程师。目标是在遵循现有架构、代码风格与系统设计的前提下，做出正确、最小、稳定、可维护的修改。
+- 回复用中文，以「喵」开头和结尾。调查要细，判断要果断。
+- 只改本次任务相关代码；错误必须可见且记日志，不用空 catch、假 fallback 或 silent success。
+- Momento 是全新的跨平台本地图片素材库，不读取、识别或迁移其他版本的图库和设置。
 
-优先级：正确性 > 稳定性 > 可维护性 > 最小改动 > 可读性。
+## 技术与结构
 
-## Hard Constraints
+- Go 1.27.3+，mygo **v0.9.0** 原生 GPU 界面；不使用 Web 前端，不用 cgo。
+- `app/` 是模块 `github.com/Seaony/Momento/app`。
+- `main.go` 负责入口、系统菜单、深度链接、文件关联、单实例和日志。
+- `internal/model/` 放共享值类型；`internal/library/` 管图库包、SQLite、文件夹、标签和最近图库；`internal/assets/` 管图片处理、导入导出和回收站；`internal/catalog/` 管内存筛选、排序和计数；`internal/browser/` 管本机扩展服务；`internal/i18n/` 管中英文；`ui/` 放全部界面。
+- `internal/` 不引用 mygo/ui 或应用 ui 包，必须能单独测试。
+- SQLite 使用 modernc.org/sqlite；数据库只保存包内相对路径；图库是可整体移动、复制和备份的 `.momento` 目录包。
+- 数据读写和解码在后台进行，通过 Window.Update 更新界面；缩略图缓存必须有数量和内存上限。
+- 用户可见文案全部通过 internal/i18n，中文英文 key 必须齐全。
 
-- 与用户对话的每条回复必须以「喵」开头。
-- 只改任务相关代码：不顺手修别的问题、不做无关重构、不做无关格式化、不做无关重命名。
-- 不修改公共行为：函数签名、返回结构、对外契约、CLI 参数、API 响应字段，未经任务要求不得变更。
-- 不引入新依赖、新框架、新抽象，除非任务明确要求或现有方案无法完成。
-- 禁止 hack 与 silent success：不得用空 catch、假 fallback、UI 兜底掩盖数据/状态问题。先修根因。
-- 不主动启动长时间运行进程：dev server、watch、docker compose、迁移脚本等需要用户自行执行，告知即可。
-- 不提交 secrets、不 force push、不 auto push、不 WIP commit。
+## 开发
 
-## Working Style
+在 `app/` 目录执行：
 
-修改前：
-
-1. 读相关代码，理解已有模式与影响范围。
-2. 复用现有模式，不另起一套。
-3. 不确定时先问，不要猜。
-4. 必须先确认能解释现象的根因，禁止根因不明时围绕症状堆补丁或抽象。
-
-修改时优先显式逻辑、简单控制流、清晰数据流和小范围精准修改。避免为未来需求提前抽象；抽象的唯一理由是已经存在的真实重复，不是预测的重复。
-
-防御代码必须有具体依据，例如已知线上问题、明确失败路径、不可信外部输入或已存在脏数据。不要对内部可信调用加 try/catch 兜底，不要对类型系统已保证的值加无意义 null 检查。
-
-## Project Overview
-
-Momento 是原生 macOS 资产管理应用，使用 SwiftUI + AppKit，不使用 Web 技术。完整产品规格在 `FEATURE.md`；做新功能前先读。
-
-- macOS 15+，Swift 6，严格并发。
-- macOS 26+ 使用 SwiftUI 原生 Liquid Glass；macOS 15 到 25 使用 `DesignSystem` 兼容层 fallback。不要在业务 view 中直接引用 macOS 26-only glass API，不要用自定义 blur/stroke/shadow 假造 glass。
-- 新 `.swift` 文件放在 `Momento/` 下会被 Xcode file-system synchronized group 自动纳入，不要无理由修改 `project.pbxproj`。
-- 文件尽量保持可读和可维护，避免过度拆分或 speculative abstraction。
-
-## Architecture
-
-入口链路：`MomentoApp.swift` -> `ContentView.swift` -> `MomentoShellView`。
-
-- `Core/LibraryStore.swift` 是 `@MainActor @Observable` 中央状态对象。UI 通过 store 修改状态，不直接访问存储层。
-- `Core/AssetModels.swift` 存放 `nonisolated Sendable` 值类型，跨 actor 边界传递。
-- `Storage/` 存放本地 `.momento` 包、Core Data、manifest、security-scoped bookmark、recent libraries；`.momentolibrary` 仅作为 legacy 包扩展名继续支持打开/导入。
-- `Services/` 存放导入、哈希、缩略图、颜色分析等后台任务。
-- `AppKitBridge/AssetCollectionGridView.swift` 是 100k+ 资产渲染路径，不要替换成 `LazyVGrid`。
-- `DesignSystem/MomentoGlass.swift` 是 glass、视觉材料和主题 token 的入口。
-- `Momento/Localizable.xcstrings` 是唯一字符串目录；用户可见文案必须走 `AppLocalization`。
-
-库包结构遵循：
-
-```text
-<Name>.momento/
-├── manifest.json
-├── database/library.sqlite
-├── assets/<hashPrefix>/<sha256>.<ext>
-├── thumbnails/<sha256>.png
-├── previews/
-└── metadata/import-sessions/
+```sh
+go tool mygo dev
+go build ./...
+go vet ./...
+go test ./internal/...
+go test ./...
 ```
 
-数据库里不要保存库绝对路径，只保存库根目录下的相对路径。
+- 写 mygo API 前读 v0.9.0 对应官方 docs 和 examples/gallery，并用 go doc 与编译器核对。不要凭记忆猜 API，不修改第三方或 vendor 代码。
+- 界面检查使用 ui.Render / ui.Tester 离线截图，不操作用户的浏览器。
+- 保留 com.seaony.Momento、momento://import?url=、.momento 文件关联，以及 127.0.0.1:47641 的扩展 HTTP 契约。
+- 不调用测试服或生产服接口。本机开发服务可以测试。
+- 日志带时间戳，记录启动、图库打开、导入导出、HTTP 请求与错误，按大小轮转。
 
-## Build / Test Commands
+## 测试
 
-```bash
-xcodebuild -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' build
-xcodebuild -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' test
-xcodebuild -project Momento.xcodeproj -scheme Momento -destination 'platform=macOS' \
-  test -only-testing:MomentoTests/LibraryPackagePersistenceTests/testImportPersistsAndDeduplicatesAssets
-```
+- 数据生命周期、导入去重、回收站、事务失败、相对路径、文件夹和标签关系是重点。
+- 覆盖 JPEG、PNG、GIF、WebP、TIFF、BMP、HEIC、AVIF 的导入和缩略图。
+- 筛选和排序保留大样本基准；界面使用少量行为测试和状态截图，不为间距字号写源码匹配测试。
+- 修改后运行相关测试、build、vet 和 git diff --check。未执行项目标明 not run，不编造结果。
 
-不要主动启动 App。UI 视觉结果由用户自行运行 App 判断。
+## 并行与提交
 
-## Testing Policy
-
-不要默认走“先写失败测试，再实现”的 TDD 流程。除非用户明确要求，或者改动涉及高风险数据、状态或文件系统逻辑，否则可以直接实现。
-
-保留并优先维护这些测试：
-
-- 资源库创建、打开、重命名、删除、最近资源库、缺失资源库检测等文件系统和数据生命周期测试。
-- 导入、去重、缓存清理、元数据持久化等会影响用户数据安全的行为测试。
-- 本地化目录完整性测试。
-- 少量粗粒度架构护栏测试，例如原生 Liquid Glass、窗口透明工具栏、主窗口最小尺寸这类容易反复回归的规则。
-
-不要为纯视觉微调新增测试，例如 padding、字号、图标大小、hover 亮度、菜单间距、具体 SwiftUI 视图结构。已有这类过细 source test 应该删除或合并为更粗粒度的架构测试。
-
-## Documentation
-
-涉及 Apple / SwiftUI / AppKit / 第三方 API 的实现细节时，先查官方文档或 Context7。纯文档更新、测试清理、简单字符串调整不需要为了形式而查文档。
-
-## Validation
-
-任何有效修改都必须验证。优先级：
-
-1. 最相关的测试
-2. 类型检查 / build
-3. lint / `git diff --check`
-
-未运行的验证项必须写 `not run`，禁止编造验证结果。
-
-## Git
-
-完成任务并通过基础验证后提交。当前项目偏好是每次完成一轮用户要求后 commit。
-
-提交格式：
-
-```text
-<type>: <summary>
-```
-
-`type` 取值：`feat` / `fix` / `refactor` / `test` / `docs` / `chore`。禁止 force push、自动 push、提交 secrets、WIP commit。
+- 共享 model、main.go、ui/app.go、go.mod 只由主会话改；子代理按文件分工，不提交、不建分支或 worktree，构建产物放各自 /tmp 目录。
+- 本次重写按任务文件的 P0 顺序推进，每块完成并验证后提交并立即推送 origin master。禁止 force push、secrets、WIP 提交。
+- 提交格式 `<type>: <一句简短中文>`，type 为 feat / fix / refactor / test / docs / chore，无正文和署名。
+- 不把 develop 的任何内容带进功能分支，不使用改名 refspec。
