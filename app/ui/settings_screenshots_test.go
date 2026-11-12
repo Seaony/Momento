@@ -17,7 +17,7 @@ func renderFinalSettingsScreenshots(t *testing.T, dir string) []screenshotRecord
 		"extension", "about", "login-on", "login-error", "theme-system", "language-system", "automatic-off",
 		"checking", "latest", "available", "update-failed", "unconfigured",
 		"extension-off", "extension-occupied", "extension-failed",
-		"about-checking", "about-available", "about-failed", "about-unconfigured",
+		"about-checking", "about-latest", "about-available", "about-failed", "about-unconfigured",
 		"appearance-system-hover", "appearance-light-hover", "appearance-dark-hover", "language-menu-open",
 	}
 	var records []screenshotRecord
@@ -39,7 +39,9 @@ func renderFinalSettingsScreenshots(t *testing.T, dir string) []screenshotRecord
 					tt.SetLocale(a.Texts.Locale())
 					tt.SetTitleBar(bar)
 					tt.SetWindowActive(true)
+					height = settleFinalSettingsScreenshot(t, a, tt, status)
 					checkFinalSettingsScreenshot(t, a, tt, status)
+					tabs := finalSettingsTabBounds(t, a, tt)
 					menuPresentation := ""
 					if state == "language-menu-open" {
 						button, ok := tt.AccessByRole(ui.RoleMenuButton, a.T("language"))
@@ -72,7 +74,7 @@ func renderFinalSettingsScreenshots(t *testing.T, dir string) []screenshotRecord
 					}
 					file := name + ".png"
 					writeScreenshot(t, filepath.Join(dir, file), tt)
-					records = append(records, screenshotRecord{File: file, State: "settings-" + state, Language: language, Appearance: appearance, Width: 560, Height: height, Platform: "macos", TitleBar: bar, MenuPresentation: menuPresentation})
+					records = append(records, screenshotRecord{File: file, State: "settings-" + state, Language: language, Appearance: appearance, Width: 560, Height: height, Platform: "macos", TitleBar: bar, MenuPresentation: menuPresentation, SettingsTabs: tabs})
 				})
 			}
 		}
@@ -115,6 +117,7 @@ func finalSettingsScreenshotState(language, appearance, state string) (*App, Upd
 		a.ExtensionStatus.State = browser.Disabled
 	case "extension-occupied":
 		a.Settings.Tab, a.ExtensionStatus.State = 1, browser.PortOccupied
+		a.ExtensionStatus.Err = errors.New("listen tcp4 127.0.0.1:47641: bind: address already in use")
 	case "extension-failed":
 		a.Settings.Tab, a.ExtensionStatus.State = 1, browser.Failed
 		a.ExtensionStatus.Err = errors.New("listen tcp4 127.0.0.1:47641: permission denied")
@@ -168,7 +171,9 @@ func checkFinalSettingsScreenshot(t *testing.T, a *App, tt *ui.Tester, status Up
 			expect(a.T("extension_disabled"))
 		case browser.PortOccupied:
 			expect(a.T("extension_port_in_use"))
+			expect(a.T("error_extension_listen", a.Texts.Error(a.ExtensionStatus.Err)))
 		case browser.Failed:
+			expect(a.T("extension_failed"))
 			expect(a.T("error_extension_listen", a.Texts.Error(a.ExtensionStatus.Err)))
 		}
 	case 2:
@@ -182,7 +187,7 @@ func checkFinalSettingsScreenshot(t *testing.T, a *App, tt *ui.Tester, status Up
 			if !ok || !button.Disabled {
 				t.Fatal("更新检查中的按钮应禁用")
 			}
-		} else {
+		} else if a.Settings.Tab != 2 || status.State != UpdateAvailable {
 			expect(a.T("check_updates"))
 		}
 		switch status.State {
@@ -190,7 +195,18 @@ func checkFinalSettingsScreenshot(t *testing.T, a *App, tt *ui.Tester, status Up
 			expect(a.T("updates_latest"))
 		case UpdateAvailable:
 			expect(a.T("updates_available", status.Version))
-			expect(a.T("update"))
+			if a.Settings.Tab == 2 {
+				if _, ok := tt.AccessByRole(ui.RoleButton, a.T("update_to_version", status.Version)); !ok {
+					t.Fatal("关于页缺少带目标版本的更新按钮")
+				}
+				for _, item := range tt.AccessAll() {
+					if item.Role == ui.RoleButton && (item.Name == a.T("check_updates") || item.Name == a.T("update")) {
+						t.Fatal("关于页有新版本时仍显示多余的检查或通用更新按钮")
+					}
+				}
+			} else {
+				expect(a.T("update"))
+			}
 		case UpdateFailed:
 			expect(a.T("updates_failed", a.Texts.Error(status.Err)))
 		case UpdateUnconfigured:
@@ -202,6 +218,34 @@ func checkFinalSettingsScreenshot(t *testing.T, a *App, tt *ui.Tester, status Up
 			t.Fatalf("设置截图出现未翻译文案或参数错误：%s", text)
 		}
 	}
+}
+
+func settleFinalSettingsScreenshot(t *testing.T, a *App, tt *ui.Tester, status UpdateCheckStatus) int {
+	t.Helper()
+	tt.Frame()
+	for range 4 {
+		height := a.settingsHeight(status)
+		tt.SetSize(560, height)
+		tt.Frame()
+		if a.settingsHeight(status) == height && tt.Image().Bounds().Dy() == height {
+			return height
+		}
+	}
+	t.Fatal("设置窗口实际内容高度没有稳定")
+	return 0
+}
+
+func finalSettingsTabBounds(t *testing.T, a *App, tt *ui.Tester) []ui.Rect {
+	t.Helper()
+	var bounds []ui.Rect
+	for i, tab := range settingsTabs {
+		item, ok := tt.AccessByRole(ui.RoleTab, a.T(tab.key))
+		if !ok || item.Selected != (i == a.Settings.Tab) {
+			t.Fatalf("设置页签的选中状态不一致：%s", tab.key)
+		}
+		bounds = append(bounds, item.Bounds)
+	}
+	return bounds
 }
 
 func renderFinalTitlebarScreenshots(t *testing.T, fixture screenshotFixture, dir string) []screenshotRecord {
@@ -242,10 +286,12 @@ func renderFinalTitlebarScreenshots(t *testing.T, fixture screenshotFixture, dir
 					tt.SetTitleBar(bar)
 					tt.SetLocale("en")
 					tt.SetWindowActive(true)
+					height = settleFinalSettingsScreenshot(t, a, tt, status)
 					checkFinalSettingsScreenshot(t, a, tt, status)
+					tabs := finalSettingsTabBounds(t, a, tt)
 					file := name + ".png"
 					writeScreenshot(t, filepath.Join(dir, file), tt)
-					records = append(records, screenshotRecord{File: file, State: "settings-" + state, Language: "en", Appearance: appearance, Width: 560, Height: height, Platform: platform.name, TitleBar: bar})
+					records = append(records, screenshotRecord{File: file, State: "settings-" + state, Language: "en", Appearance: appearance, Width: 560, Height: height, Platform: platform.name, TitleBar: bar, SettingsTabs: tabs})
 				})
 			}
 		}

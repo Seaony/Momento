@@ -35,6 +35,7 @@ type screenshotRecord struct {
 	Platform         string      `json:"platform"`
 	TitleBar         ui.TitleBar `json:"simulatedNativeControls"`
 	MenuPresentation string      `json:"menuPresentation,omitempty"`
+	SettingsTabs     []ui.Rect   `json:"settingsTabs,omitempty"`
 }
 
 // 显式运行时才生成截图，样例库只写入测试临时目录。
@@ -83,17 +84,22 @@ func TestStateScreenshots(t *testing.T) {
 						tt.SetLocale(a.Texts.Locale())
 						tt.SetTitleBar(bar)
 						tt.SetWindowActive(true)
+						var tabs []ui.Rect
+						if state == "settings" {
+							height = settleFinalSettingsScreenshot(t, a, tt, UpdateCheckStatus{State: UpdateIdle})
+							tabs = finalSettingsTabBounds(t, a, tt)
+						}
 						if strings.HasSuffix(state, "-bottom") {
 							tt.Scroll(960, float32(height-100), 0, 2000)
 						}
 						prepareScreenshotState(t, a, tt, state)
 						checkScreenshotState(t, a, tt, state)
-						file := name + ".png"
+						file := fmt.Sprintf("%s-%s-%s-%dx%d.png", state, language, appearance, width, height)
 						writeScreenshot(t, filepath.Join(dir, file), tt)
 						if a.Thumbnails != nil && len(a.Thumbnails.pending) != 0 {
 							t.Fatal("截图仍在异步加载缩略图")
 						}
-						records = append(records, screenshotRecord{File: file, State: state, Language: language, Appearance: appearance, Width: width, Height: height, Assets: len(a.Snapshot.Assets), Visible: len(a.Visible), Platform: "macos", TitleBar: bar})
+						records = append(records, screenshotRecord{File: file, State: state, Language: language, Appearance: appearance, Width: width, Height: height, Assets: len(a.Snapshot.Assets), Visible: len(a.Visible), Platform: "macos", TitleBar: bar, SettingsTabs: tabs})
 					})
 				}
 			}

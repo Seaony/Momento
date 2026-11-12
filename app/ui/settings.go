@@ -3,6 +3,7 @@ package ui
 import (
 	"github.com/Seaony/Momento/app/internal/browser"
 	"github.com/egoist/mygo/ui"
+	"math"
 )
 
 type settingsState struct {
@@ -10,6 +11,28 @@ type settingsState struct {
 	LoginEnabled  bool
 	LoginError    string
 	ExtensionBusy bool
+	LayoutKey     settingsLayoutKey
+	Height        int
+}
+
+type settingsLayoutKey struct {
+	Tab                        int
+	Locale, LoginError         string
+	ExtensionState             browser.State
+	ExtensionError             string
+	UpdateState                UpdateCheckState
+	UpdateVersion, UpdateError string
+}
+
+func (a *App) settingsLayout(update UpdateCheckStatus) settingsLayoutKey {
+	key := settingsLayoutKey{Tab: a.Settings.Tab, Locale: a.Texts.Locale(), LoginError: a.Settings.LoginError, ExtensionState: a.ExtensionStatus.State, UpdateState: update.State, UpdateVersion: update.Version}
+	if a.ExtensionStatus.Err != nil {
+		key.ExtensionError = a.ExtensionStatus.Err.Error()
+	}
+	if update.Err != nil {
+		key.UpdateError = update.Err.Error()
+	}
+	return key
 }
 
 var settingsTabs = []struct{ key, icon string }{
@@ -23,6 +46,10 @@ func (a *App) SettingsHeight() int {
 }
 
 func (a *App) settingsHeight(update UpdateCheckStatus) int {
+	if a.Settings.Height > 0 && a.Settings.LayoutKey == a.settingsLayout(update) {
+		return a.Settings.Height
+	}
+	// 首帧先留出内容空间；布局完成后改用实际内容高度。
 	switch a.Settings.Tab {
 	case 1:
 		if a.ExtensionStatus.State == browser.Failed {
@@ -54,6 +81,8 @@ func (a *App) settingsView(c *ui.Context, update UpdateCheckStatus) {
 	a.applyTheme(c)
 	a.Settings.Tab = max(0, min(a.Settings.Tab, len(settingsTabs)-1))
 	background := settingsBackground(c)
+	layoutKey := a.settingsLayout(update)
+	var scroll, content ui.Element
 	c.Root().Background(background)
 	ui.Column(c).Fill().Background(background).Children(func() {
 		bar := c.TitleBar()
@@ -64,24 +93,24 @@ func (a *App) settingsView(c *ui.Context, update UpdateCheckStatus) {
 		tabs := ui.TabsBase(c.Key("settings-tabs"), &a.Settings.Tab, len(settingsTabs))
 		tabs.List.Height(72).Shrink(0).FillWidth().Padding(2, 20, 10, 20).Gap(6).Justify(ui.Center).DragWindow().Children(func() {
 			for i, tab := range settingsTabs {
-				button := tabs.Tab(i).MinWidth(88).Height(58).Padding(7, 12).Radius(9).
+				button := tabs.Tab(i).MinWidth(88).Height(58).Padding(7, 12).Radius(9).Center().TextColor(c.Theme().TextMuted).
 					Label(a.T(tab.key)).AccessSelected(a.Settings.Tab == i)
 				if a.Settings.Tab == i {
-					button.Background(c.Theme().SurfacePressed.Mix(background, 0.5)).Border(1, c.Theme().Border)
+					button.Background(c.Theme().SurfacePressed.Mix(background, 0.5)).Border(1, c.Theme().Border).TextColor(c.Theme().Text)
 				} else if button.Hovered() {
 					button.Background(c.Theme().SurfaceHover)
 				}
 				button.Children(func() {
 					ui.Column(c).Center().Gap(4).Children(func() {
-						ui.Image(c, settingsIcons[tab.icon]).Size(25, 25)
+						ui.Icon(c, settingsIcons[tab.icon]).Size(25, 25)
 						ui.Text(c, a.T(tab.key)).FontSize(12).SingleLine()
 					})
 				})
 			}
 		})
 		ui.Divider(c)
-		ui.Scroll(c.Key("settings-content")).Grow(1).Padding(20).Children(func() {
-			ui.Column(c).FillWidth().Gap(20).Children(func() {
+		scroll = ui.Scroll(c.Key("settings-content")).Grow(1).Padding(20).Children(func() {
+			content = ui.Column(c.Key(layoutKey)).FillWidth().Gap(20).Children(func() {
 				switch a.Settings.Tab {
 				case 1:
 					a.extensionSettings(c)
@@ -93,7 +122,13 @@ func (a *App) settingsView(c *ui.Context, update UpdateCheckStatus) {
 			})
 		})
 	})
-	if a.SettingsWindow != nil {
+	if bounds := content.LayoutBounds(); bounds.H > 0 {
+		a.Settings.LayoutKey = layoutKey
+		a.Settings.Height = int(math.Ceil(float64(scroll.LayoutBounds().Y + 40 + bounds.H)))
+	} else {
+		c.After(0)
+	}
+	if a.SettingsWindow != nil && a.Settings.Height > 0 && a.Settings.LayoutKey == layoutKey {
 		width, height := a.SettingsWindow.ContentSize()
 		if wanted := a.settingsHeight(update); width != 560 || height != wanted {
 			a.SettingsWindow.SetContentSize(560, wanted)
@@ -170,7 +205,7 @@ func (a *App) generalSettings(c *ui.Context, update UpdateCheckStatus) {
 			a.updateButton(c, update)
 		})
 	})
-	a.updateMessage(c, update)
+	a.updateMessage(c, update, false)
 }
 
 func (a *App) appearanceChoices(c *ui.Context) {
@@ -241,7 +276,7 @@ func (a *App) extensionSettings(c *ui.Context) {
 			case browser.PortOccupied:
 				message, color = a.T("extension_port_in_use"), c.Theme().Danger
 			case browser.Failed:
-				message, color = a.T("error"), c.Theme().Danger
+				message, color = a.T("extension_failed"), c.Theme().Danger
 			}
 			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 				ui.Box(c).Size(6, 6).Radius(3).Background(color).Shrink(0)
@@ -249,24 +284,30 @@ func (a *App) extensionSettings(c *ui.Context) {
 			})
 		})
 	})
-	if a.ExtensionStatus.State == browser.Failed && a.ExtensionStatus.Err != nil {
+	if (a.ExtensionStatus.State == browser.Failed || a.ExtensionStatus.State == browser.PortOccupied) && a.ExtensionStatus.Err != nil {
 		ui.Text(c, a.T("error_extension_listen", a.Texts.Error(a.ExtensionStatus.Err))).FontSize(12).TextColor(c.Theme().Danger).Padding(0, 4).Role(ui.RoleAlert)
 	}
 }
 
 func (a *App) aboutSettings(c *ui.Context, update UpdateCheckStatus) {
-	ui.Column(c).FillWidth().Center().Gap(8).Padding(8, 0).Children(func() {
+	ui.Column(c).FillWidth().Center().Gap(8).Padding(8, 0, 0, 0).Children(func() {
 		ui.Image(c, appLogo).Size(64, 64)
 		ui.Text(c, "Momento").FontSize(20).Bold()
 		ui.Text(c, a.T("current_version", "2.0.0")).TextColor(c.Theme().TextMuted)
+		a.updateMessage(c, update, true)
 		ui.Row(c).Gap(8).Margin(12, 0, 0, 0).Children(func() {
-			a.updateButton(c, update)
+			if update.State == UpdateAvailable {
+				if ui.PrimaryButton(c, a.T("update_to_version", update.Version)).Height(28).FontSize(12).Clicked() {
+					ShowAvailableUpdate()
+				}
+			} else {
+				a.updateButton(c, update)
+			}
 			if ui.Button(c, a.T("open_logs")).Height(28).Clicked() {
 				a.OpenLogDirectory()
 			}
 		})
 	})
-	a.updateMessage(c, update)
 }
 
 func (a *App) updateButton(c *ui.Context, update UpdateCheckStatus) {
@@ -284,7 +325,7 @@ func (a *App) updateButton(c *ui.Context, update UpdateCheckStatus) {
 	}
 }
 
-func (a *App) updateMessage(c *ui.Context, update UpdateCheckStatus) {
+func (a *App) updateMessage(c *ui.Context, update UpdateCheckStatus, centered bool) {
 	text := ""
 	color := c.Theme().TextMuted
 	switch update.State {
@@ -301,7 +342,10 @@ func (a *App) updateMessage(c *ui.Context, update UpdateCheckStatus) {
 		color = c.Theme().Danger
 	}
 	if text != "" {
-		ui.Text(c, text).FontSize(12).TextColor(color).Padding(0, 4).Role(ui.RoleStatus)
+		message := ui.Text(c, text).FontSize(12).TextColor(color).Padding(0, 4).Role(ui.RoleStatus)
+		if centered {
+			message.FillWidth().TextAlign(ui.Center)
+		}
 	}
 }
 

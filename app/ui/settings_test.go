@@ -134,6 +134,7 @@ func TestSettingsWindowScreenshots(t *testing.T) {
 				height := a.settingsHeight(status)
 				tt := ui.NewTester(func(c *ui.Context) { a.settingsView(c, status) }, 560, height)
 				tt.SetTitleBar(ui.TitleBar{Height: 36, Left: 80, Bottom: 25})
+				height = fitSettingsTester(a, tt, status)
 				name := fmt.Sprintf("%s-%s-%s.png", state, language, appearance)
 				writeScreenshot(t, filepath.Join(dir, name), tt)
 				records = append(records, map[string]any{"file": name, "state": state, "language": language, "appearance": appearance, "width": 560, "height": height})
@@ -255,6 +256,7 @@ func TestSettingsFix3Screenshots(t *testing.T) {
 			a.settingsView(c, status)
 		}, 560, a.settingsHeight(status))
 		tt.SetTitleBar(ui.TitleBar{Height: 36, Left: 80, Bottom: 25})
+		fitSettingsTester(a, tt, status)
 		name := fmt.Sprintf("general-%s-%s", item.language, item.appearance)
 		if item.dropdown {
 			openSettingsLanguageMenu(t, a, tt)
@@ -262,6 +264,186 @@ func TestSettingsFix3Screenshots(t *testing.T) {
 		}
 		writeScreenshot(t, filepath.Join(dir, name+".png"), tt)
 		records = append(records, map[string]any{"file": name + ".png", "language": item.language, "appearance": item.appearance, "dropdown": item.dropdown, "popoverPresentation": item.dropdown, "menu": tt.Menu()})
+	}
+	data, err := json.MarshalIndent(records, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "manifest.json"), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func fitSettingsTester(a *App, tt *ui.Tester, status UpdateCheckStatus) int {
+	tt.Frame()
+	height := a.settingsHeight(status)
+	tt.SetSize(560, height)
+	tt.Frame()
+	return a.settingsHeight(status)
+}
+
+func TestSettingsExtensionFailureFeedback(t *testing.T) {
+	for _, language := range []string{"zh-CN", "en", "ja"} {
+		for _, state := range []browser.State{browser.Failed, browser.PortOccupied} {
+			t.Run(language+"/"+string(state), func(t *testing.T) {
+				a := settingsTestApp(language, "light")
+				a.Settings.Tab = 1
+				a.ExtensionStatus.State = state
+				a.ExtensionStatus.Err = errors.New("listen tcp4 127.0.0.1:47641: permission denied")
+				status := UpdateCheckStatus{State: UpdateIdle}
+				tt := ui.NewTester(func(c *ui.Context) { a.settingsView(c, status) }, 560, a.settingsHeight(status))
+				fitSettingsTester(a, tt, status)
+				key := "extension_failed"
+				if state == browser.PortOccupied {
+					key = "extension_port_in_use"
+				}
+				if !tt.HasText(a.T(key)) || tt.HasText(a.T("error")) || !tt.HasText(a.T("error_extension_listen", a.Texts.Error(a.ExtensionStatus.Err))) {
+					t.Fatal("扩展失败没有显示具体状态和错误原因")
+				}
+			})
+		}
+	}
+}
+
+func TestSettingsAboutUpdateActions(t *testing.T) {
+	for _, language := range []string{"zh-CN", "en", "ja"} {
+		for _, state := range []UpdateCheckState{UpdateIdle, UpdateChecking, UpdateLatest, UpdateAvailable, UpdateFailed, UpdateUnconfigured} {
+			t.Run(language+"/"+string(state), func(t *testing.T) {
+				a := settingsTestApp(language, "light")
+				a.Settings.Tab = 2
+				status := UpdateCheckStatus{State: state, Version: "2.1.0", Err: errors.New("connection refused")}
+				tt := ui.NewTester(func(c *ui.Context) { a.settingsView(c, status) }, 560, a.settingsHeight(status))
+				fitSettingsTester(a, tt, status)
+				if state == UpdateAvailable {
+					if _, ok := tt.AccessByRole(ui.RoleButton, a.T("update_to_version", status.Version)); !ok {
+						t.Fatal("关于页没有带目标版本的更新按钮")
+					}
+					for _, item := range tt.AccessAll() {
+						if item.Role == ui.RoleButton && (item.Name == a.T("check_updates") || item.Name == a.T("update")) {
+							t.Fatal("关于页同时显示了多余的检查或更新按钮")
+						}
+					}
+				}
+				buttons := 0
+				for _, item := range tt.AccessAll() {
+					if item.Role == ui.RoleButton {
+						buttons++
+					}
+					if item.Role == ui.RoleStatus {
+						version, ok := tt.Find(a.T("current_version", "2.0.0"))
+						if !ok || item.Bounds.Y < version.Y+version.H {
+							t.Fatal("关于页更新结果没有放在版本下方")
+						}
+					}
+				}
+				if buttons != 2 {
+					t.Fatalf("关于页应只有更新操作和日志两个按钮，实际%d", buttons)
+				}
+			})
+		}
+	}
+}
+
+func TestSettingsContentHeightFollowsPageAndFeedback(t *testing.T) {
+	a := settingsTestApp("en", "light")
+	status := UpdateCheckStatus{State: UpdateIdle}
+	tt := ui.NewTester(func(c *ui.Context) { a.settingsView(c, status) }, 560, a.settingsHeight(status))
+	general := fitSettingsTester(a, tt, status)
+	if err := tt.Click(a.T("settings_extension")); err != nil {
+		t.Fatal(err)
+	}
+	extension := fitSettingsTester(a, tt, status)
+	if err := tt.Click(a.T("settings_about")); err != nil {
+		t.Fatal(err)
+	}
+	about := fitSettingsTester(a, tt, status)
+	if general <= extension || general <= about || extension == about {
+		t.Fatalf("窗口没有跟随三个页面的实际内容高度：%d/%d/%d", general, extension, about)
+	}
+	status.State, status.Err = UpdateFailed, errors.New("connection refused")
+	withFeedback := fitSettingsTester(a, tt, status)
+	if withFeedback <= about {
+		t.Fatal("出现更新反馈后窗口没有给内容增加空间")
+	}
+	if stable := fitSettingsTester(a, tt, status); stable != withFeedback {
+		t.Fatalf("连续布局导致高度循环变化：%d/%d", withFeedback, stable)
+	}
+}
+
+func TestSettingsFollowSystemJapanese(t *testing.T) {
+	a := settingsTestApp("ja", "light")
+	if got := a.T("follow_system"); got != "システムに合わせる" {
+		t.Fatalf("跟随系统的日语表达错误：%s", got)
+	}
+}
+
+func TestSettingsFix4Screenshots(t *testing.T) {
+	if os.Getenv("MOMENTO_SETTINGS_FIX4_SCREENSHOTS") != "1" {
+		t.Skip("设置 MOMENTO_SETTINGS_FIX4_SCREENSHOTS=1 生成设置修改单4截图")
+	}
+	dir := "/tmp/momento-settings-fix-4"
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	var records []map[string]any
+	for _, language := range []string{"zh-CN", "en", "ja"} {
+		for _, appearance := range []string{"light", "dark"} {
+			for _, state := range []string{"general", "general-login-error", "general-update-failed", "extension", "extension-failed", "extension-occupied", "about", "about-checking", "about-latest", "about-available", "about-failed", "about-unconfigured", "language-system-menu", "appearance-system-tooltip"} {
+				a := settingsTestApp(language, appearance)
+				status := UpdateCheckStatus{State: UpdateIdle}
+				switch state {
+				case "general-login-error":
+					a.Settings.LoginError = "permission denied"
+				case "general-update-failed":
+					status.State, status.Err = UpdateFailed, errors.New("connection refused")
+				case "extension", "extension-failed", "extension-occupied":
+					a.Settings.Tab = 1
+					if state == "extension-failed" {
+						a.ExtensionStatus.State, a.ExtensionStatus.Err = browser.Failed, errors.New("listen tcp4 127.0.0.1:47641: permission denied")
+					} else if state == "extension-occupied" {
+						a.ExtensionStatus.State, a.ExtensionStatus.Err = browser.PortOccupied, errors.New("listen tcp4 127.0.0.1:47641: bind: address already in use")
+					}
+				case "about", "about-checking", "about-latest", "about-available", "about-failed", "about-unconfigured":
+					a.Settings.Tab = 2
+					switch state {
+					case "about-checking":
+						status.State = UpdateChecking
+					case "about-latest":
+						status.State = UpdateLatest
+					case "about-available":
+						status.State, status.Version = UpdateAvailable, "2.1.0"
+					case "about-failed":
+						status.State, status.Err = UpdateFailed, errors.New("connection refused")
+					case "about-unconfigured":
+						status.State = UpdateUnconfigured
+					}
+				case "language-system-menu":
+					a.Preferences.Language, a.Texts.Language, a.Texts.SystemLanguage = "system", "system", language
+				}
+				tt := ui.NewTester(func(c *ui.Context) {
+					if state == "language-system-menu" {
+						c.SetMenuPresentation(ui.PopoverMenus)
+					}
+					a.settingsView(c, status)
+				}, 560, a.settingsHeight(status))
+				tt.SetTitleBar(ui.TitleBar{Height: 36, Left: 80, Bottom: 25})
+				height := fitSettingsTester(a, tt, status)
+				if state == "language-system-menu" {
+					openSettingsLanguageMenu(t, a, tt)
+				}
+				if state == "appearance-system-tooltip" {
+					option, ok := tt.AccessByRole(ui.RoleRadio, a.T("follow_system"))
+					if !ok {
+						t.Fatal("没有跟随系统外观选项")
+					}
+					tt.Move(option.Bounds.X+option.Bounds.W/2, option.Bounds.Y+option.Bounds.H/2)
+					tt.Advance(700 * time.Millisecond)
+				}
+				name := fmt.Sprintf("%s-%s-%s.png", state, language, appearance)
+				writeScreenshot(t, filepath.Join(dir, name), tt)
+				records = append(records, map[string]any{"file": name, "state": state, "language": language, "appearance": appearance, "width": 560, "height": height, "popoverPresentation": state == "language-system-menu"})
+			}
+		}
 	}
 	data, err := json.MarshalIndent(records, "", "  ")
 	if err != nil {

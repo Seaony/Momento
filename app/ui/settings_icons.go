@@ -3,38 +3,9 @@ package ui
 import "github.com/egoist/mygo/ui"
 
 var settingsIcons = map[string]*ui.SVG{
-	"general": sidebarIcon("设置"),
-	"browser": ui.MustParseSVG([]byte(`<svg height="32" width="32" xmlns="http://www.w3.org/2000/svg" viewBox="0 -3 31 31" fill="none"><defs><linearGradient id="loS-i1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ADBBD5" /><stop offset="1" stop-color="#9EAECD" /></linearGradient><linearGradient id="upS-i1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D8DFEB" /><stop offset="1" stop-color="#C1CBDF" /></linearGradient>
-  <filter id="sh-i1" x="-40%" y="-40%" width="180%" height="190%" color-interpolation-filters="sRGB">
-    <fegaussianblur in="SourceAlpha" stdDeviation="2" /><feoffset dy="2" result="o" />
-    <fecolormatrix in="o" type="matrix" values="0 0 0 0 0.655 0 0 0 0 0.714 0 0 0 0 0.82 0 0 0 0.21 0" />
-    <femerge><femergenode /><femergenode in="SourceGraphic" /></femerge>
-  </filter>
-  <filter id="hi-i1" x="-10%" y="-10%" width="120%" height="130%" color-interpolation-filters="sRGB">
-    <fecolormatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="a" />
-    <feoffset in="a" dy="0.7" /><fegaussianblur stdDeviation="0.35" />
-    <fecomposite in2="a" operator="arithmetic" k2="-1" k3="1" />
-    <fecolormatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.5 0" />
-    <feblend in2="SourceGraphic" mode="overlay" />
-  </filter><mask height="109" width="111" y="-40" x="-40" maskUnits="userSpaceOnUse" id="ol-i1-0"><rect x="-40" y="-40" width="111" height="109" fill="#fff"></rect><path d="M4 12.5A11.5 11.5 0 1 0 27 12.5A11.5 11.5 0 1 0 4 12.5Z" fill-rule="nonzero" fill="#000" /></mask></defs><clipPath id="gl-i1"><path d="M4 12.5A11.5 11.5 0 1 0 27 12.5A11.5 11.5 0 1 0 4 12.5Z" /></clipPath>
-        <g filter="url(#sh-i1)"><g filter="url(#hi-i1)"><path d="M4 12.5A11.5 11.5 0 1 0 27 12.5A11.5 11.5 0 1 0 4 12.5Z" fill="url(#loS-i1)" /></g></g>
-        <g clip-path="url(#gl-i1)" fill="none" stroke-width="1.6" stroke="#4A4B78">
-          <path d="M3 12.5H28" /><path d="M10.9 12.5A4.6 11.5 0 1 0 20.1 12.5A4.6 11.5 0 1 0 10.9 12.5Z" />
-        </g>
-        <path stroke-width="2" fill="none" stroke="#5D7198" mask="url(#ol-i1-0)" d="M4 12.5A11.5 11.5 0 1 0 27 12.5A11.5 11.5 0 1 0 4 12.5Z" /></svg>`)),
-	"about": ui.MustParseSVG([]byte(`<svg height="32" width="32" xmlns="http://www.w3.org/2000/svg" viewBox="0 -3 31 31" fill="none"><defs><linearGradient id="loS-i2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ADBBD5" /><stop offset="1" stop-color="#9EAECD" /></linearGradient><linearGradient id="upS-i2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D8DFEB" /><stop offset="1" stop-color="#C1CBDF" /></linearGradient>
-  <filter id="sh-i2" x="-40%" y="-40%" width="180%" height="190%" color-interpolation-filters="sRGB">
-    <fegaussianblur in="SourceAlpha" stdDeviation="2" /><feoffset dy="2" result="o" />
-    <fecolormatrix in="o" type="matrix" values="0 0 0 0 0.655 0 0 0 0 0.714 0 0 0 0 0.82 0 0 0 0.21 0" />
-    <femerge><femergenode /><femergenode in="SourceGraphic" /></femerge>
-  </filter>
-  <filter id="hi-i2" x="-10%" y="-10%" width="120%" height="130%" color-interpolation-filters="sRGB">
-    <fecolormatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="a" />
-    <feoffset in="a" dy="0.7" /><fegaussianblur stdDeviation="0.35" />
-    <fecomposite in2="a" operator="arithmetic" k2="-1" k3="1" />
-    <fecolormatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.5 0" />
-    <feblend in2="SourceGraphic" mode="overlay" />
-  </filter><mask height="109" width="111" y="-40" x="-40" maskUnits="userSpaceOnUse" id="ol-i2-0"><rect x="-40" y="-40" width="111" height="109" fill="#fff"></rect><path d="M4 12.5A11.5 11.5 0 1 0 27 12.5A11.5 11.5 0 1 0 4 12.5Z" fill-rule="nonzero" fill="#000" /></mask></defs><g filter="url(#sh-i2)"><g filter="url(#hi-i2)"><path d="M4 12.5A11.5 11.5 0 1 0 27 12.5A11.5 11.5 0 1 0 4 12.5Z" fill="url(#loS-i2)" /></g></g><path stroke-width="2" fill="none" stroke="#5D7198" mask="url(#ol-i2-0)" d="M4 12.5A11.5 11.5 0 1 0 27 12.5A11.5 11.5 0 1 0 4 12.5Z" /><path fill="#4A4B78" d="M14.2 7A1.3 1.3 0 1 0 16.8 7A1.3 1.3 0 1 0 14.2 7Z" /><path stroke="#4A4B78" d="M15.5 11V19" fill="none" stroke-width="2.2" stroke-linecap="round" /></svg>`)),
+	"general": ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -3 31 31" fill="none" stroke="#000" stroke-width="2" stroke-linejoin="round"><path d="M12.026 4.34Q12.719 3.94 12.939 3.171L13.261 2.049Q13.481 1.28 14.281 1.28L16.719 1.28Q17.519 1.28 17.739 2.049L18.061 3.171Q18.281 3.94 18.974 4.34L20.829 5.412Q21.522 5.812 22.298 5.618L23.431 5.335Q24.207 5.142 24.607 5.835L25.826 7.946Q26.226 8.638 25.67 9.214L24.859 10.053Q24.303 10.629 24.303 11.429L24.303 13.571Q24.303 14.371 24.859 14.947L25.67 15.786Q26.226 16.362 25.826 17.054L24.607 19.165Q24.207 19.858 23.431 19.665L22.298 19.382Q21.522 19.188 20.829 19.588L18.974 20.66Q18.281 21.06 18.061 21.829L17.739 22.951Q17.519 23.72 16.719 23.72L14.281 23.72Q13.481 23.72 13.261 22.951L12.939 21.829Q12.719 21.06 12.026 20.66L10.171 19.588Q9.478 19.188 8.702 19.382L7.569 19.665Q6.793 19.858 6.393 19.165L5.174 17.054Q4.774 16.362 5.33 15.786L6.141 14.947Q6.697 14.371 6.697 13.571L6.697 11.429Q6.697 10.629 6.141 10.053L5.33 9.214Q4.774 8.638 5.174 7.946L6.393 5.835Q6.793 5.142 7.569 5.335L8.702 5.618Q9.478 5.812 10.171 5.412Z"/><circle cx="15.5" cy="12.5" r="4"/></svg>`)),
+	"browser": ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg>`)),
+	"about":   ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="#000" stroke-width="1.6"/><circle cx="12" cy="7.5" r="1" fill="#000"/><path d="M12 11v6" fill="none" stroke="#000" stroke-width="1.6" stroke-linecap="round"/></svg>`)),
 }
 
 var settingsSymbols = map[string]*ui.SVG{
