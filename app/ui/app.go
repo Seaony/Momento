@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -93,6 +92,7 @@ type App struct {
 	Preferences                              Preferences
 	Lock                                     lockState
 	Import                                   importState
+	Quitting                                 bool
 	TextInputFocused                         bool
 	menuPreviewOpen                          bool
 	PreferencesChanged                       func()
@@ -192,14 +192,7 @@ func (a *App) OpenWindow() {
 	a.Thumbnails = newThumbnailCache(func(fn func()) { a.Window.Update(fn) })
 	a.Window.OnFileDrop(func(e *mygo.FileDropEvent) { a.ImportPaths(e.Paths) })
 	a.ApplyWindowZoom()
-	a.Window.OnClose(func(e *mygo.CloseEvent) {
-		e.PreventDefault()
-		if a.Preferences.CloseAction == "background" {
-			a.HideMainWindow()
-			return
-		}
-		mygo.App.Quit()
-	})
+	a.Window.OnClose(a.closeMainWindow)
 
 	go a.watchLibrary()
 }
@@ -673,53 +666,76 @@ func (a *App) watchLibrary() {
 }
 
 func (a *App) shortcuts(c *ui.Context) {
-	if a.ActionShortcut(c, "import") {
-		a.ChooseImport(false)
+	if a.IsLocked() || a.Settings.RecordingShortcut != "" {
+		return
 	}
-	if a.ActionShortcut(c, "search") {
-		a.Search.Focus()
+	if a.ActionShortcut(c, "lock") {
+		a.LockNow()
+		return
 	}
-	if a.ActionShortcut(c, "inspector") {
-		a.InspectorVisible = !a.InspectorVisible
+	if a.Preview.Open {
+		return
 	}
-	if a.ActionShortcut(c, "filter") {
-		a.Toolbar.FilterOpen = !a.Toolbar.FilterOpen
-	}
-	if a.ActionShortcut(c, "sort") {
-		a.Toolbar.SortOpen = !a.Toolbar.SortOpen
-	}
-	for i, key := range []ui.Key{ui.Key1, ui.Key2, ui.Key3} {
-		if c.Shortcut(ui.Cmd, key) {
-			a.ViewMode = i
+	for _, action := range []string{"new_library", "open_library", "import", "import_folder", "export", "settings", "search", "filter", "sort", "inspector", "sidebar", "view_masonry", "view_grid", "view_list"} {
+		if !a.ActionShortcut(c, action) {
+			continue
+		}
+		switch action {
+		case "new_library":
+			a.ShowNewLibrary()
+		case "open_library":
+			a.ChooseOpenLibrary()
+		case "import":
+			a.ChooseImport(false)
+		case "import_folder":
+			a.ChooseImport(true)
+		case "export":
+			a.ExportSelected()
+		case "settings":
+			a.ShowSettings()
+		case "search":
+			a.Search.Focus()
+		case "filter":
+			a.ToggleFilter()
+		case "sort":
+			a.ToggleSort()
+		case "inspector":
+			a.InspectorVisible = !a.InspectorVisible
+		case "sidebar":
+			a.SidebarVisible = !a.SidebarVisible
+		case "view_masonry":
+			a.ViewMode = 0
+		case "view_grid":
+			a.ViewMode = 1
+		case "view_list":
+			a.ViewMode = 2
 		}
 	}
-	if !c.FocusTakesText() {
-		if c.Shortcut(0, ui.KeyF) && a.hovered != "" {
-			for _, v := range a.Visible {
-				if v.ID == a.hovered {
-					a.SetFavorite([]string{v.ID}, !v.Favorite)
-					break
-				}
-			}
+	if c.FocusTakesText() {
+		return
+	}
+	if a.ActionShortcut(c, "paste") {
+		a.PasteImport()
+	}
+	if a.ActionShortcut(c, "delete") {
+		a.RequestDelete(a.selectedIDs())
+	}
+	if a.ActionShortcut(c, "select_all") {
+		for _, v := range a.Visible {
+			a.Selected.Add(v.ID)
 		}
-		deleted := c.Shortcut(ui.Cmd, ui.KeyBackspace)
-		if runtime.GOOS != "darwin" {
-			deleted = deleted || c.Shortcut(0, ui.KeyDelete)
+	}
+	if c.Shortcut(0, ui.KeyF) && a.hovered != "" {
+		if asset, ok := a.assetByID[a.hovered]; ok {
+			a.SetFavorite([]string{asset.ID}, !asset.Favorite)
 		}
-		if deleted {
-			a.RequestDelete(a.selectedIDs())
-		}
-		if a.ActionShortcut(c, "select_all") {
-			for _, v := range a.Visible {
-				a.Selected.Add(v.ID)
-			}
-		}
-		if c.KeyDown(ui.KeySpace) && !a.Preview.Open {
-			if id := a.hovered; id != "" {
-				a.ShowPreview(id, true)
-			} else if selected := a.SelectedAssets(); len(selected) > 0 {
-				a.ShowPreview(selected[0].ID, true)
-			}
+	}
+	if a.ActionShortcut(c, "preview") && !a.Preview.Open {
+		held := a.Shortcut("preview") == "Space"
+		if id := a.hovered; id != "" {
+			a.ShowPreview(id, held)
+		} else if selected := a.SelectedAssets(); len(selected) > 0 {
+			a.ShowPreview(selected[0].ID, held)
 		}
 	}
 }

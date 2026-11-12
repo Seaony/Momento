@@ -62,17 +62,29 @@ func main() {
 	})
 	mygo.App.OnSecondInstance(func(args []string, workingDir string) {
 		if app != nil {
-			app.Window.Restore()
-			app.Window.Focus()
+			app.ShowMainWindow()
 		}
 	})
 	mygo.App.OnQuit(func() { cancel() })
 	mygo.App.OnBeforeQuit(func(e *mygo.QuitEvent) {
 		if app != nil {
+			if app.PasswordOperationPending() && !e.SessionEnding {
+				e.PreventDefault()
+				app.Notify(app.T("busy"))
+				app.InvalidateWindows()
+				return
+			}
 			if err := app.FlushPreferences(); err != nil && !e.SessionEnding {
 				e.PreventDefault()
 				app.InvalidateWindows()
+				return
 			}
+			app.Quitting = true
+		}
+	})
+	mygo.App.OnQuitCanceled(func() {
+		if app != nil {
+			app.Quitting = false
 		}
 	})
 	mygo.App.WhenReady(func() {
@@ -80,12 +92,13 @@ func main() {
 		app.OpenWindow()
 		app.SettingsRequested = func() { showSettingsWindow(app) }
 		appui.OnUpdateChange(app.InvalidateWindows)
-		app.MenuChanged = func() { installMenu(app) }
+		desktop := installDesktop(app)
+		app.MenuChanged = func() { installMenu(app); desktop.refresh() }
 		installMenu(app)
 		mygo.App.OnLocaleChanged(func(locale string) {
 			if app.Preferences.Language == "" || app.Preferences.Language == "system" {
 				app.Texts.SystemLanguage = locale
-				installMenu(app)
+				app.MenuChanged()
 				app.InvalidateWindows()
 			}
 		})
@@ -115,13 +128,31 @@ func main() {
 }
 
 func installMenu(a *appui.App) {
-	menu := mygo.NewMenu(menuItems(a, runtime.GOOS))
+	makeMenu := func() *mygo.Menu {
+		menu := mygo.NewMenu(menuItems(a, runtime.GOOS))
+		for _, definition := range appui.ShortcutDefinitions {
+			if item := menu.ItemByID(definition.Action); item != nil {
+				accelerator := a.Shortcut(definition.Action)
+				if a.Settings.RecordingShortcut != "" {
+					accelerator = ""
+				}
+				if a.Preview.Open && definition.Group != "preview" && (definition.Action == "view_masonry" || definition.Action == "thumbnail_larger" || definition.Action == "thumbnail_smaller") {
+					accelerator = ""
+				}
+				if !a.Preview.Open && definition.Group == "preview" {
+					accelerator = ""
+				}
+				item.SetAccelerator(accelerator)
+			}
+		}
+		return menu
+	}
 	if runtime.GOOS == "darwin" {
-		mygo.App.SetMenu(menu)
+		mygo.App.SetMenu(makeMenu())
 	} else {
-		a.Window.SetMenu(menu)
+		a.Window.SetMenu(makeMenu())
 		if a.SettingsWindow != nil {
-			a.SettingsWindow.SetMenu(mygo.NewMenu(menuItems(a, runtime.GOOS)))
+			a.SettingsWindow.SetMenu(makeMenu())
 		}
 	}
 	if a.SettingsWindow != nil {
@@ -131,33 +162,59 @@ func installMenu(a *appui.App) {
 
 func menuItems(a *appui.App, platform string) []*mygo.MenuItem {
 	item := func(key, shortcut string, fn func()) *mygo.MenuItem {
-		return &mygo.MenuItem{Label: a.T(key), Accelerator: shortcut, Click: func(_ *mygo.MenuItem, _ *mygo.Window) { fn(); a.InvalidateWindows() }}
+		action := key
+		switch key {
+		case "lock_now":
+			action = "lock"
+		case "paste_import":
+			action = "paste"
+		case "navigate_back":
+			action = "back"
+		case "navigate_forward":
+			action = "forward"
+		case "preview_fit_window":
+			action = "preview_fit"
+		case "preview_actual_size":
+			action = "preview_actual"
+		}
+		accelerator := a.Shortcut(action)
+		if a.Settings.RecordingShortcut != "" {
+			accelerator = ""
+		}
+		return &mygo.MenuItem{ID: action, Label: a.T(key), Accelerator: accelerator, Click: func(*mygo.MenuItem, *mygo.Window) { fn(); a.RememberUIState(); a.InvalidateWindows() }}
+	}
+	role := func(action, key string, value mygo.MenuRole) *mygo.MenuItem {
+		return &mygo.MenuItem{ID: action, Label: a.T(key), Role: value, Accelerator: a.Shortcut(action)}
+	}
+	if a.Settings.RecordingShortcut != "" {
+		return []*mygo.MenuItem{{Label: "Momento", Submenu: []*mygo.MenuItem{{Label: a.T("settings_shortcuts"), Disabled: true}}}}
+	}
+	if a.IsLocked() {
+		return []*mygo.MenuItem{{Label: "Momento", Submenu: []*mygo.MenuItem{item("show_momento", "", a.ShowMainWindow), item("quit_momento", "", mygo.App.Quit)}}}
 	}
 	settings := item("settings", "CmdOrCtrl+,", a.ShowSettings)
+	lock := item("lock_now", "CmdOrCtrl+L", a.LockNow)
+	lock.Disabled = a.Preferences.PasswordHash == ""
 	fileItems := []*mygo.MenuItem{
 		item("new_library", "CmdOrCtrl+N", a.ShowNewLibrary), item("open_library", "CmdOrCtrl+O", a.ChooseOpenLibrary), mygo.Separator(),
 		item("import", "CmdOrCtrl+I", func() { a.ChooseImport(false) }), item("import_folder", "CmdOrCtrl+Shift+I", func() { a.ChooseImport(true) }), item("export", "CmdOrCtrl+E", a.ExportSelected),
 	}
 	appMenu := &mygo.MenuItem{Role: mygo.RoleAppMenu}
 	if platform == "darwin" {
-		appMenu.Submenu = []*mygo.MenuItem{
-			{Role: mygo.RoleAbout}, mygo.Separator(), settings,
-			item("check_updates", "", func() { a.Settings.Tab = 0; a.ShowSettings(); appui.CheckForUpdates() }),
-			mygo.Separator(), {Role: mygo.RoleServices}, mygo.Separator(),
-			{Role: mygo.RoleHide}, {Role: mygo.RoleHideOthers}, {Role: mygo.RoleUnhide}, mygo.Separator(), {Role: mygo.RoleQuit},
-		}
+		appMenu.Submenu = []*mygo.MenuItem{{Role: mygo.RoleAbout}, mygo.Separator(), settings, item("check_updates", "", func() { a.Settings.Tab = appui.SettingsGeneral; a.ShowSettings(); appui.CheckForUpdates() }), lock, mygo.Separator(), {Role: mygo.RoleServices}, mygo.Separator(), {Role: mygo.RoleHide}, {Role: mygo.RoleHideOthers}, {Role: mygo.RoleUnhide}, mygo.Separator(), role("quit", "quit_momento", mygo.RoleQuit)}
 	} else {
-		fileItems = append(fileItems, mygo.Separator(), settings)
+		fileItems = append(fileItems, mygo.Separator(), settings, lock)
 	}
-	fileItems = append(fileItems, mygo.Separator(), &mygo.MenuItem{Role: mygo.RoleClose})
-	return []*mygo.MenuItem{
-		appMenu,
-		{Label: a.T("menu_file"), Submenu: fileItems},
-		{Role: mygo.RoleEditMenu},
-		{Label: a.T("menu_view"), Submenu: []*mygo.MenuItem{
-			item("view_masonry", "CmdOrCtrl+1", func() { a.ViewMode = 0 }), item("view_grid", "CmdOrCtrl+2", func() { a.ViewMode = 1 }), item("view_list", "CmdOrCtrl+3", func() { a.ViewMode = 2 }), mygo.Separator(),
-			item("search", "CmdOrCtrl+F", func() { a.Search.Focus() }), item("filter", "CmdOrCtrl+Alt+F", a.ToggleFilter), item("sort", "CmdOrCtrl+Alt+S", a.ToggleSort), item("inspector", "CmdOrCtrl+Alt+I", func() { a.InspectorVisible = !a.InspectorVisible }), item("sidebar", "", func() { a.SidebarVisible = !a.SidebarVisible }), mygo.Separator(), {Role: mygo.RoleToggleFullScreen},
-		}},
-		{Role: mygo.RoleWindowMenu},
+	fileItems = append(fileItems, mygo.Separator(), role("close_window", "shortcut_close_window", mygo.RoleClose))
+	paste := item("paste_import", "CmdOrCtrl+V", a.PasteImport)
+	if a.TextInputFocused {
+		paste = role("paste", "shortcut_paste", mygo.RolePaste)
 	}
+	edit := []*mygo.MenuItem{role("undo", "shortcut_undo", mygo.RoleUndo), role("redo", "shortcut_redo", mygo.RoleRedo), mygo.Separator(), role("cut", "shortcut_cut", mygo.RoleCut), role("copy", "shortcut_copy", mygo.RoleCopy), paste, role("select_all", "select_all", mygo.RoleSelectAll)}
+
+	return []*mygo.MenuItem{appMenu, {Label: a.T("menu_file"), Submenu: fileItems}, {Label: a.T("menu_edit"), Submenu: edit}, {Label: a.T("menu_view"), Submenu: []*mygo.MenuItem{
+		item("view_masonry", "CmdOrCtrl+1", func() { a.ViewMode = 0 }), item("view_grid", "CmdOrCtrl+2", func() { a.ViewMode = 1 }), item("view_list", "CmdOrCtrl+3", func() { a.ViewMode = 2 }), mygo.Separator(),
+
+		item("search", "CmdOrCtrl+F", func() { a.Search.Focus() }), item("filter", "CmdOrCtrl+Alt+F", a.ToggleFilter), item("sort", "CmdOrCtrl+Alt+S", a.ToggleSort), item("inspector", "CmdOrCtrl+Alt+I", func() { a.InspectorVisible = !a.InspectorVisible }), item("sidebar", "", func() { a.SidebarVisible = !a.SidebarVisible }), mygo.Separator(), role("fullscreen", "shortcut_fullscreen", mygo.RoleToggleFullScreen),
+	}}, {Role: mygo.RoleWindowMenu}}
 }

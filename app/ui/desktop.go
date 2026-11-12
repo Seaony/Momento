@@ -89,3 +89,18 @@ func (a *App) selectImportResult(ids []string) {
 		}
 	}
 }
+
+func (a *App) closeMainWindow(e *mygo.CloseEvent) {
+	if a.Quitting {
+		if a.cancel != nil {
+			a.cancel()
+		}
+		return
+	}
+	e.PreventDefault()
+	if a.Preferences.CloseAction == "background" {
+		a.HideMainWindow()
+		return
+	}
+	mygo.App.Quit()
+}
