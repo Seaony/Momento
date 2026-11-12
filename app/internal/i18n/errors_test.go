@@ -25,6 +25,7 @@ func TestLocalizedErrorPreservesCauseAndLanguage(t *testing.T) {
 	for _, tc := range []struct{ language, prefix string }{
 		{"zh-CN", "解码图片 photo.jpg"},
 		{"en", "Decode image photo.jpg"},
+		{"ja", "画像photo.jpgをデコード"},
 	} {
 		text := (Catalog{Language: tc.language}).Error(err)
 		if !strings.HasPrefix(text, tc.prefix) || !strings.Contains(text, cause.Error()) {

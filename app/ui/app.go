@@ -835,14 +835,7 @@ func (a *App) drainPending() {
 }
 
 func (a *App) applyLocale() {
-	tag := a.Preferences.Language
-	if tag == "system" {
-		tag = ""
-	}
-	if tag == "zh-CN" {
-		tag = "zh-Hans"
-	}
-	mygo.App.SetLocale(tag)
+	mygo.App.SetLocale(a.Texts.Locale())
 }
 
 func (a *App) applyAppearance() {

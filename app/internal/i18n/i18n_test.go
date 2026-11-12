@@ -22,10 +22,15 @@ func TestCatalogLanguage(t *testing.T) {
 	}{
 		{"explicit Chinese", "zh-CN", "en-US", "新建图库"},
 		{"explicit English", "en", "zh-CN", "Create Library"},
+		{"explicit Japanese", "ja", "zh-CN", "ライブラリを作成"},
+		{"Japanese region", "JA-jp", "en-US", "ライブラリを作成"},
 		{"system Chinese", "system", "zh_CN.UTF-8", "新建图库"},
 		{"system English", "system", "en-US", "Create Library"},
+		{"system Japanese", "system", "ja_JP.UTF-8", "ライブラリを作成"},
 		{"implicit system", "", "zh-Hans", "新建图库"},
 		{"other language", "system", "fr-FR", "Create Library"},
+		{"unsupported explicit", "de-DE", "ja-JP", "Create Library"},
+		{"not a Chinese tag", "zhfake", "ja-JP", "Create Library"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := (Catalog{Language: tt.language, SystemLanguage: tt.system}).T("new_library"); got != tt.want {
@@ -47,6 +52,10 @@ func TestCatalogEnvironmentFallback(t *testing.T) {
 	if got := (Catalog{Language: "system"}).T("open_library"); got != "Open Library" {
 		t.Fatalf("LC_ALL precedence: %q", got)
 	}
+	t.Setenv("LC_ALL", "ja_JP.UTF-8")
+	if got := (Catalog{Language: "system"}).T("open_library"); got != "ライブラリを開く" {
+		t.Fatalf("Japanese environment fallback: %q", got)
+	}
 }
 
 func TestExportQuantityCopy(t *testing.T) {
@@ -59,6 +68,8 @@ func TestExportQuantityCopy(t *testing.T) {
 		{"en", 3, "Export images (3)"},
 		{"zh-CN", 1, "导出 1 个素材"},
 		{"zh-CN", 3, "导出 3 个素材"},
+		{"ja", 1, "1枚の画像を書き出す"},
+		{"ja", 3, "3枚の画像を書き出す"},
 	} {
 		if got := (Catalog{Language: tc.language}).T("export_count", tc.count); got != tc.want {
 			t.Errorf("%s, count %d: got %q, want %q", tc.language, tc.count, got, tc.want)
@@ -76,6 +87,9 @@ func TestSearchResultQuantityCopy(t *testing.T) {
 		{"zh-CN", "1", "1 个结果"},
 		{"zh-CN", "3", "3 个结果"},
 		{"zh-CN", "12,000", "12,000 个结果"},
+		{"ja", "1", "検索結果：1件"},
+		{"ja", "3", "検索結果：3件"},
+		{"ja", "12,000", "検索結果：12,000件"},
 	} {
 		if got := (Catalog{Language: tc.language}).T("result_count", tc.count); got != tc.want {
 			t.Errorf("%s, count %s: got %q, want %q", tc.language, tc.count, got, tc.want)
@@ -83,16 +97,34 @@ func TestSearchResultQuantityCopy(t *testing.T) {
 	}
 }
 
-func TestMessagesHaveBothLanguagesAndMatchingArguments(t *testing.T) {
+func TestMessagesHaveThreeLanguagesAndMatchingArguments(t *testing.T) {
 	for key, pair := range messages {
 		for i, value := range pair {
 			if strings.TrimSpace(value) == "" {
 				t.Errorf("%s has no translation for language %d", key, i)
 			}
 		}
-		zh, en := formatVerbs.FindAllString(pair[0], -1), formatVerbs.FindAllString(pair[1], -1)
-		if !slices.Equal(zh, en) {
-			t.Errorf("%s argument mismatch: %v / %v", key, zh, en)
+		want := formatVerbs.FindAllString(pair[0], -1)
+		for i, value := range pair[1:] {
+			if got := formatVerbs.FindAllString(value, -1); !slices.Equal(want, got) {
+				t.Errorf("%s language %d argument mismatch: %v / %v", key, i+1, want, got)
+			}
+		}
+	}
+}
+
+func TestCatalogLocaleMatchesNativeControls(t *testing.T) {
+	for _, tc := range []struct{ language, system, want string }{
+		{"zh-CN", "en-US", "zh-Hans"},
+		{"zh-Hans", "en-US", "zh-Hans"},
+		{"ja-JP", "en-US", "ja"},
+		{"system", "ja_JP.UTF-8", "ja"},
+		{"system", "en-US", "en"},
+		{"system", "fr-FR", "en"},
+		{"en", "ja-JP", "en"},
+	} {
+		if got := (Catalog{Language: tc.language, SystemLanguage: tc.system}).Locale(); got != tc.want {
+			t.Errorf("language %q, system %q: locale %q, want %q", tc.language, tc.system, got, tc.want)
 		}
 	}
 }
@@ -173,8 +205,8 @@ func TestMessageKeysExist(t *testing.T) {
 				return true
 			}
 			pair, ok := messages[key]
-			if !ok || pair[0] == "" || pair[1] == "" {
-				t.Errorf("%s: message %q must have Chinese and English translations", set.Position(literal.Pos()), key)
+			if !ok || pair[0] == "" || pair[1] == "" || pair[2] == "" {
+				t.Errorf("%s: message %q must have Chinese, English and Japanese translations", set.Position(literal.Pos()), key)
 				return true
 			}
 			if menuItem || forwardedKey {
@@ -258,8 +290,8 @@ func TestImportStageKeysMatchProducers(t *testing.T) {
 		t.Fatal("no import progress stages found")
 	}
 	for stage := range stages {
-		if pair, ok := messages["import_stage_"+stage]; !ok || pair[0] == "" || pair[1] == "" {
-			t.Errorf("import stage %q needs Chinese and English translations", stage)
+		if pair, ok := messages["import_stage_"+stage]; !ok || pair[0] == "" || pair[1] == "" || pair[2] == "" {
+			t.Errorf("import stage %q needs Chinese, English and Japanese translations", stage)
 		}
 	}
 }

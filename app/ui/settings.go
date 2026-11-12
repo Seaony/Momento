@@ -14,8 +14,8 @@ func (a *App) settings(c *ui.Context) {
 		})
 		ui.Divider(c)
 		ui.Text(c, a.T("language")).Bold()
-		languageLabels := []string{a.T("follow_system"), a.T("language_english"), a.T("language_chinese")}
-		languageCodes := []string{"system", "en", "zh-CN"}
+		languageLabels := []string{a.T("follow_system"), a.T("language_english"), a.T("language_chinese"), a.T("language_japanese")}
+		languageCodes := []string{"system", "en", "zh-CN", "ja"}
 		language := languageLabels[0]
 		for i, code := range languageCodes {
 			if a.Preferences.Language == code {

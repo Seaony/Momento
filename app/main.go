@@ -12,6 +12,7 @@ import (
 	"github.com/Seaony/Momento/app/internal/logging"
 	appui "github.com/Seaony/Momento/app/ui"
 	"github.com/egoist/mygo"
+	_ "github.com/egoist/mygo/locales/ja"
 	_ "github.com/egoist/mygo/locales/zh-Hans"
 )
 
@@ -24,7 +25,7 @@ func main() {
 	defer logs.Close()
 	slog.SetDefault(slog.New(slog.NewTextHandler(logs, nil)))
 	mygo.App.SetName("Momento")
-	mygo.App.SetLanguages("en", "zh-Hans")
+	mygo.App.SetLanguages("en", "zh-Hans", "ja")
 	appui.InitUpdater()
 	if !mygo.App.RequestSingleInstanceLock() {
 		return
