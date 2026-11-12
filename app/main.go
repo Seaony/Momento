@@ -224,5 +224,7 @@ func menuItems(a *appui.App, platform string) []*mygo.MenuItem {
 		item("view_masonry", "CmdOrCtrl+1", func() { a.ViewMode = 0 }), item("view_grid", "CmdOrCtrl+2", func() { a.ViewMode = 1 }), item("view_list", "CmdOrCtrl+3", func() { a.ViewMode = 2 }), mygo.Separator(), back, forward,
 		item("thumbnail_larger", "CmdOrCtrl+=", func() { a.ChangeThumbnailSize(.1) }), item("thumbnail_smaller", "CmdOrCtrl+-", func() { a.ChangeThumbnailSize(-.1) }), mygo.Separator(),
 		item("search", "CmdOrCtrl+F", func() { a.Search.Focus() }), item("filter", "CmdOrCtrl+Alt+F", a.ToggleFilter), item("sort", "CmdOrCtrl+Alt+S", a.ToggleSort), item("inspector", "CmdOrCtrl+Alt+I", func() { a.InspectorVisible = !a.InspectorVisible }), item("sidebar", "", func() { a.SidebarVisible = !a.SidebarVisible }), mygo.Separator(), role("fullscreen", "shortcut_fullscreen", mygo.RoleToggleFullScreen),
+	}}, {Label: a.T("preview"), Submenu: []*mygo.MenuItem{
+		item("preview_zoom_in", "CmdOrCtrl+=", a.PreviewZoomIn), item("preview_zoom_out", "CmdOrCtrl+-", a.PreviewZoomOut), item("preview_fit_window", "CmdOrCtrl+0", a.PreviewFitToWindow), item("preview_actual_size", "CmdOrCtrl+1", a.PreviewActualSize),
 	}}, {Role: mygo.RoleWindowMenu}}
 }
