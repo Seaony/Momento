@@ -8,15 +8,11 @@ import (
 )
 
 func (a *App) sidebarQuickAccess(c *ui.Context) {
-	if a.sidebarHidden("quick") {
+	entries := a.Snapshot.QuickAccess
+	if a.sidebarHidden("quick") || len(entries) == 0 {
 		return
 	}
 	ui.Text(c, a.T("quick_access")).FontSize(12).Bold().TextColor(c.Theme().TextMuted).Padding(12, 10, 4, 10)
-	entries := a.Snapshot.QuickAccess
-	if len(entries) == 0 {
-		ui.Text(c, a.T("quick_access_empty")).FontSize(12).TextColor(c.Theme().TextMuted).Padding(4, 10, 8, 10)
-		return
-	}
 	a.GBrowsing.QuickList.Key = func(i int) any { return entries[i].ID }
 	a.GBrowsing.QuickList.Label = func(i int) string { name, _, _, _ := a.quickAccessTarget(entries[i]); return name }
 	a.GBrowsing.QuickList.Reorder = func(rows []int, to int) {

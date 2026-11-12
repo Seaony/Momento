@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/Seaony/Momento/app/internal/catalog"
 	"github.com/Seaony/Momento/app/internal/model"
 	"github.com/egoist/mygo/ui"
 )
@@ -185,6 +186,162 @@ func TestGBrowsingCountsRefreshAfterSnapshotChange(t *testing.T) {
 		_, _, count, _ := a.quickAccessTarget(entry)
 		if count != 2 {
 			t.Fatalf("固定目标仍使用旧计数：%+v，%d", entry, count)
+		}
+	}
+}
+
+func TestSmartFileSizeInputUsesMB(t *testing.T) {
+	a := smartTestApp()
+	a.EditSmartFolder("")
+	a.GBrowsing.SmartName = "Large images"
+	a.GBrowsing.SmartRules = []model.SmartRule{{Field: "size", Operator: "gte"}}
+	tt := ui.NewTester(a.smartFolderDialog, 900, 640)
+	if err := tt.Click(a.T("smart_rule_value", 1)); err != nil {
+		t.Fatal(err)
+	}
+	tt.Type("1.5")
+	folder, err := a.smartDraft()
+	if err != nil || folder.Rules[0].Value != "1572864" {
+		t.Fatalf("1.5 MB 没有换算成字节：%+v，%v", folder, err)
+	}
+	if a.GBrowsing.SmartRules[0].Value != "1.5" {
+		t.Fatal("准备保存时改坏了仍在编辑的 MB 输入")
+	}
+	if !catalog.MatchesSmart(model.Asset{Size: 1572864}, folder) || catalog.MatchesSmart(model.Asset{Size: 1572863}, folder) {
+		t.Fatal("MB 条件没有按换算后的大小筛选")
+	}
+}
+
+func TestSmartFileSizeReopensByteRulesWithoutChangingThresholds(t *testing.T) {
+	for _, test := range []struct{ bytes, mb string }{
+		{"0", "0"}, {"2097152", "2"}, {"1", "0.00000095367431640625"},
+		{"2147483647", "2047.99999904632568359375"},
+	} {
+		t.Run(test.bytes, func(t *testing.T) {
+			a := smartTestApp()
+			a.Snapshot.SmartFolders[0].Rules = []model.SmartRule{{Field: "size", Operator: "lte", Value: test.bytes}}
+			a.EditSmartFolder("smart-a")
+			if got := a.GBrowsing.SmartRules[0].Value; got != test.mb {
+				t.Fatalf("旧字节条件没有显示为 MB：%s，想要 %s", got, test.mb)
+			}
+			folder, err := a.smartDraft()
+			if err != nil || folder.Rules[0].Value != test.bytes || a.Snapshot.SmartFolders[0].Rules[0].Value != test.bytes {
+				t.Fatalf("重新保存改变了旧条件：%+v，%v", folder, err)
+			}
+		})
+	}
+}
+
+func TestSmartFileSizeRejectsInvalidMBAndKeepsDraft(t *testing.T) {
+	for _, value := range []string{"", "-1", "NaN", "Inf", "1.2.3", "1/2", "9000000000000"} {
+		t.Run(value, func(t *testing.T) {
+			a := smartTestApp()
+			a.EditSmartFolder("")
+			a.GBrowsing.SmartName = "Size rule"
+			a.GBrowsing.SmartRules = []model.SmartRule{{Field: "size", Operator: "gte", Value: value}}
+			if _, err := a.smartDraft(); err == nil || a.GBrowsing.SmartRules[0].Value != value {
+				t.Fatalf("非法 MB 条件未被拒绝或输入丢失：%q，%v", value, err)
+			}
+		})
+	}
+}
+
+func TestQuickAccessGroupOnlyAppearsWithPinnedItems(t *testing.T) {
+	a := smartTestApp()
+	entries := a.Snapshot.QuickAccess
+	a.Snapshot.QuickAccess = nil
+	tt := ui.NewTester(a.sidebarQuickAccess, 236, 320)
+	if tt.HasText(a.T("quick_access")) || len(tt.AccessAll()) != 0 {
+		t.Fatal("没有固定项时仍渲染快速访问分组")
+	}
+	a.Snapshot.QuickAccess = entries
+	tt.Frame()
+	if !tt.HasText(a.T("quick_access")) || !tt.HasText("Landscape Rules") {
+		t.Fatal("固定项存在时没有显示快速访问")
+	}
+	a.Snapshot.QuickAccess = nil
+	tt.Frame()
+	if tt.HasText(a.T("quick_access")) {
+		t.Fatal("最后一个固定项移除后分组仍显示")
+	}
+}
+
+func TestSmartEditorLocalizedTextFits(t *testing.T) {
+	for _, language := range []string{"en", "ja"} {
+		for _, theme := range []string{"light", "dark"} {
+			for _, match := range []int{0, 1} {
+				t.Run(language+"/"+theme+"/"+string(rune('0'+match)), func(t *testing.T) {
+					a := smartTestApp()
+					a.Preferences.Language, a.Preferences.Theme = language, theme
+					a.Texts.Language = language
+					a.EditSmartFolder("")
+					a.GBrowsing.SmartMatch = match
+					a.GBrowsing.SmartRules = []model.SmartRule{{Field: "width", Operator: "gte", Value: "1920"}, {Field: "height", Operator: "gte", Value: "1080"}, {Field: "size", Operator: "lte", Value: "1.5"}, {Field: "added", Operator: "after", Value: "2026-11-01"}, {Field: "note", Operator: "contains", Value: "design"}}
+					a.GBrowsing.SmartError = a.T("error_smart_rule")
+					type textCheck struct {
+						label, text           string
+						size, weight, padding float32
+					}
+					checks := []textCheck{
+						{a.T("smart_folder_create_title"), a.T("smart_folder_create_title"), 20, 700, 0},
+						{a.T("smart_all"), a.T("smart_all"), 13, 400, 24},
+						{a.T("smart_any"), a.T("smart_any"), 13, 400, 24},
+						{a.T("add_smart_rule"), a.T("add_smart_rule"), 13, 400, 0},
+						{a.T("cancel"), a.T("cancel"), 13, 400, 0},
+						{a.T("save"), a.T("save"), 13, 400, 0},
+						{a.T("smart_pixels"), a.T("smart_pixels"), 12, 400, 0},
+						{a.T("smart_megabytes"), a.T("smart_megabytes"), 12, 400, 0},
+						{a.T("error_smart_rule"), a.T("error_smart_rule"), 13, 400, 0},
+					}
+					for i, rule := range a.GBrowsing.SmartRules {
+						checks = append(checks, textCheck{a.T("smart_rule_field", i+1), a.T("smart_field_" + rule.Field), 13, 400, 44}, textCheck{a.T("smart_rule_operator", i+1), a.T("smart_operator_" + rule.Operator), 13, 400, 44})
+					}
+					measured := make([]ui.Rect, len(checks))
+					tt := ui.NewTester(func(c *ui.Context) {
+						a.applyTheme(c)
+						a.smartFolderDialog(c)
+						for i, check := range checks {
+							w, h := c.MeasureText(0, ui.Span{Text: check.text, Font: c.Theme().Font, Size: check.size, Weight: int(check.weight), Lang: language})
+							measured[i] = ui.Rect{W: w + check.padding, H: h * check.size / max(c.Theme().FontSize, check.size)}
+						}
+					}, 1100, 640)
+					tt.SetLocale(a.Texts.Locale())
+					tt.Frame()
+					for i, check := range checks {
+						bounds, ok := tt.Find(check.label)
+						if !ok || bounds.X < 0 || bounds.Y < 0 || bounds.X+bounds.W > 1100 || bounds.Y+bounds.H > 640 || bounds.W+1 < measured[i].W || bounds.H+1 < measured[i].H {
+							t.Errorf("文案被裁切或没有完整显示：%s，可用%+v，需要%+v", check.text, bounds, measured[i])
+						}
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestQuickAccessLocalizedHeadingFits(t *testing.T) {
+	for _, language := range []string{"en", "ja"} {
+		for _, theme := range []string{"light", "dark"} {
+			t.Run(language+"/"+theme, func(t *testing.T) {
+				a := smartTestApp()
+				a.Preferences.Language, a.Preferences.Theme = language, theme
+				a.Texts.Language = language
+				var textWidth float32
+				tt := ui.NewTester(func(c *ui.Context) {
+					a.applyTheme(c)
+					a.sidebar(c)
+					textWidth, _ = c.MeasureText(0, ui.Span{Text: a.T("quick_access"), Size: 12, Weight: 700, Lang: language})
+				}, 236, 640)
+				bounds, ok := tt.Find(a.T("quick_access"))
+				if !ok || bounds.W+1 < textWidth || bounds.X+bounds.W > 236 || bounds.Y+bounds.H > 640 {
+					t.Fatalf("快速访问标题被裁切：%+v，文字宽度%f", bounds, textWidth)
+				}
+				a.Snapshot.QuickAccess = nil
+				tt.Frame()
+				if tt.HasText(a.T("quick_access")) {
+					t.Fatal("没有固定项时仍显示本地化分组标题")
+				}
+			})
 		}
 	}
 }

@@ -3,7 +3,9 @@ package ui
 import (
 	"context"
 	"log/slog"
+	"math/big"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/Seaony/Momento/app/internal/catalog"
@@ -93,6 +95,19 @@ func (a *App) EditSmartFolder(id string) {
 				found = true
 				state.SmartName = folder.Name
 				state.SmartRules = slices.Clone(folder.Rules)
+				for i := range state.SmartRules {
+					rule := &state.SmartRules[i]
+					if rule.Field != "size" {
+						continue
+					}
+					bytes, err := strconv.ParseInt(rule.Value, 10, 64)
+					if err != nil {
+						a.ShowError(i18n.NewError("error_smart_rule"))
+						return
+					}
+					mb := big.NewRat(bytes, 1<<20)
+					rule.Value = strings.TrimRight(strings.TrimRight(mb.FloatString(20), "0"), ".")
+				}
 				if folder.Match == "any" {
 					state.SmartMatch = 1
 				}
@@ -120,7 +135,7 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 		}
 		ui.Text(c, title).FontSize(20).Bold()
 		ui.TextInput(c.Key("smart-name"), &state.SmartName).FillWidth().Label(a.T("smart_folder_name")).Placeholder(a.T("smart_folder_name")).AutoFocus().Disabled(state.Saving)
-		ui.Segmented(c.Key("smart-match"), &state.SmartMatch, a.T("smart_all"), a.T("smart_any")).Label(a.T("smart_match")).Disabled(state.Saving)
+		settingsSegments(c.Key("smart-match"), a.T("smart_match"), &state.SmartMatch, a.T("smart_all"), a.T("smart_any")).Disabled(state.Saving)
 		_, height := c.Size()
 		ui.Scroll(c.Key("smart-rules")).TrackScroll(&state.RulesScroll).MaxHeight(max(120, min(280, height-310))).FillWidth().Gap(8).Children(func() {
 			remove := -1
@@ -151,7 +166,6 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 		if ui.Button(c.Key("add-rule"), a.T("add_smart_rule")).Disabled(state.Saving).Clicked() {
 			state.SmartRules = append(state.SmartRules, model.SmartRule{Field: "name", Operator: "contains"})
 		}
-		ui.Text(c, a.T("smart_units_hint")).FontSize(12).TextColor(c.Theme().TextMuted)
 		if state.SmartError != "" {
 			ui.Text(c, state.SmartError).TextColor(c.Theme().Danger).Role(ui.RoleStatus)
 		}
@@ -232,15 +246,19 @@ func (a *App) smartRuleValue(c *ui.Context, rule *model.SmartRule, index int) {
 		return
 	}
 	placeholder := ""
+	unit := ""
 	switch rule.Field {
 	case "added":
 		placeholder = "YYYY-MM-DD"
 	case "width", "height":
-		placeholder = a.T("smart_pixels")
+		unit = a.T("smart_pixels")
 	case "size":
-		placeholder = a.T("smart_bytes")
+		unit = a.T("smart_megabytes")
 	}
 	ui.TextInput(c, &rule.Value).Grow(1).MinWidth(0).Label(label).Placeholder(placeholder).Disabled(a.GBrowsing.Saving)
+	if unit != "" {
+		ui.Text(c, unit).FontSize(12).TextColor(c.Theme().TextMuted).Shrink(0)
+	}
 }
 func (a *App) smartDraft() (model.SmartFolder, error) {
 	state := &a.GBrowsing
@@ -250,6 +268,23 @@ func (a *App) smartDraft() (model.SmartFolder, error) {
 	}
 	if folder.Name == "" {
 		return folder, i18n.NewError("smart_name_required")
+	}
+	for i := range folder.Rules {
+		rule := &folder.Rules[i]
+		if rule.Field != "size" {
+			continue
+		}
+		mb, ok := new(big.Rat).SetString(strings.TrimSpace(rule.Value))
+		if !ok || mb.Sign() < 0 || strings.Contains(rule.Value, "/") {
+			return folder, i18n.NewError("error_smart_rule")
+		}
+		// 编辑用 MB，保存到最接近的字节；旧条件往返不丢精度。
+		mb.Mul(mb, big.NewRat(1<<20, 1))
+		bytes, err := strconv.ParseInt(mb.FloatString(0), 10, 64)
+		if err != nil {
+			return folder, i18n.NewError("error_smart_rule")
+		}
+		rule.Value = strconv.FormatInt(bytes, 10)
 	}
 	return folder, catalog.ValidateSmartFolder(folder)
 }

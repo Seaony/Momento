@@ -25,9 +25,9 @@ func renderGBrowsingScreenshots(t *testing.T, dir string) {
 	}
 	type record struct{ File, State, Language, Theme string }
 	records := []record{}
-	for _, language := range []string{"zh-CN", "en", "ja"} {
+	for _, language := range []string{"zh-CN"} {
 		for _, theme := range []string{"light", "dark"} {
-			for _, state := range []string{"sidebar", "empty", "editor-new", "editor-tags-color", "editor-dimensions-date-note", "editor-error", "editor-saving"} {
+			for _, state := range []string{"sidebar", "empty", "editor-tags-color", "editor-dimensions-date-note"} {
 				t.Run(language+"/"+theme+"/"+state, func(t *testing.T) {
 					a := smartTestApp()
 					a.Preferences.Language = language
@@ -39,7 +39,6 @@ func renderGBrowsingScreenshots(t *testing.T, dir string) {
 						a.BrowseSmartFolder("smart-a")
 					case "empty":
 						a.Snapshot.QuickAccess = nil
-						a.Snapshot.SmartFolders = nil
 						a.applySnapshot(a.Snapshot)
 					default:
 						a.EditSmartFolder("")
@@ -50,16 +49,19 @@ func renderGBrowsingScreenshots(t *testing.T, dir string) {
 							a.GBrowsing.SmartMatch = 1
 							a.GBrowsing.SmartRules = []model.SmartRule{{Field: "extension", Operator: "equals", Value: "png"}, {Field: "tag", Operator: "equals", Value: "tag-a"}, {Field: "color", Operator: "equals", Value: "blue"}}
 						case "editor-dimensions-date-note":
-							a.GBrowsing.SmartRules = []model.SmartRule{{Field: "width", Operator: "gte", Value: "1920"}, {Field: "height", Operator: "gte", Value: "1080"}, {Field: "size", Operator: "lte", Value: "20971520"}, {Field: "added", Operator: "after", Value: "2026-11-01"}, {Field: "note", Operator: "contains", Value: "design reference"}}
-						case "editor-error":
-							a.GBrowsing.SmartError = a.T("error_smart_rule")
-						case "editor-saving":
-							a.GBrowsing.Saving = true
-							a.Busy = true
+							a.GBrowsing.SmartRules = []model.SmartRule{{Field: "width", Operator: "gte", Value: "1920"}, {Field: "height", Operator: "gte", Value: "1080"}, {Field: "size", Operator: "lte", Value: "20.5"}, {Field: "added", Operator: "after", Value: "2026-11-01"}, {Field: "note", Operator: "contains", Value: "design reference"}}
 						}
+					}
+					width := 1100
+					if state == "sidebar" || state == "empty" {
+						width = 236
 					}
 					tt := ui.NewTester(func(c *ui.Context) {
 						a.applyTheme(c)
+						if state == "sidebar" || state == "empty" {
+							a.sidebar(c)
+							return
+						}
 						ui.Row(c).Fill().Children(func() {
 							ui.Column(c).Width(236).FillHeight().Padding(8).Gap(4).Background(c.Theme().Surface).Children(func() {
 								ui.Box(c).Height(48).FillWidth().DragWindow()
@@ -70,7 +72,7 @@ func renderGBrowsingScreenshots(t *testing.T, dir string) {
 							ui.Column(c).Grow(1).FillHeight().Children(func() { a.toolbar(c); a.assetArea(c) })
 						})
 						a.smartFolderDialog(c)
-					}, 1100, 640)
+					}, width, 640)
 					tt.SetDark(theme == "dark")
 					tt.SetLocale(a.Texts.Locale())
 					tt.SetWindowActive(true)
@@ -80,8 +82,12 @@ func renderGBrowsingScreenshots(t *testing.T, dir string) {
 							t.Fatalf("截图存在缺失或错误文案：%s", text)
 						}
 					}
-					if state != "empty" && !tt.HasText(a.T("quick_access")) {
+					emptyQuick := state == "empty"
+					if !emptyQuick && !tt.HasText(a.T("quick_access")) {
 						t.Fatal("截图缺少快速访问分组")
+					}
+					if emptyQuick && tt.HasText(a.T("quick_access")) {
+						t.Fatal("无固定项时截图仍显示快速访问分组")
 					}
 					if strings.HasPrefix(state, "editor") && !tt.HasText(a.T("smart_all")) {
 						t.Fatal("截图缺少智能条件编辑器")
