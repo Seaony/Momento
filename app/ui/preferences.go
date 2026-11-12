@@ -143,6 +143,10 @@ func (a *App) SavePreferences() {
 		a.MenuChanged()
 	}
 	a.ApplyWindowZoom()
+	a.ConfigureAutoImport()
+	if a.PreferencesChanged != nil {
+		a.PreferencesChanged()
+	}
 	a.InvalidateWindows()
 	a.queuePreferences()
 }
@@ -169,6 +173,9 @@ func (a *App) captureUIState() bool {
 }
 
 func (a *App) queuePreferences() {
+	if a.PasswordSavePending() {
+		return
+	}
 	if a.configDir == "" {
 		return
 	}

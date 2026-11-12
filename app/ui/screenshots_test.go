@@ -68,7 +68,7 @@ func TestStateScreenshots(t *testing.T) {
 						if height == 640 {
 							continue
 						}
-						width, height = 560, settingsTestApp(language, appearance).settingsHeight(UpdateCheckStatus{State: UpdateIdle})
+						width, height = 760, settingsTestApp(language, appearance).settingsHeight(UpdateCheckStatus{State: UpdateIdle})
 					}
 					name := fmt.Sprintf("%s-%s-%s-%dx%d", state, language, appearance, width, height)
 					t.Run(name, func(t *testing.T) {
@@ -78,7 +78,7 @@ func TestStateScreenshots(t *testing.T) {
 						if state == "settings" {
 							a = settingsTestApp(language, appearance)
 							view = func(c *ui.Context) { a.settingsView(c, UpdateCheckStatus{State: UpdateIdle}) }
-							bar = ui.TitleBar{Height: 36, Left: 80, Bottom: 25}
+							bar = ui.TitleBar{Height: 44, Left: 80, Bottom: 30}
 						}
 						tt := ui.NewTester(view, width, height)
 						tt.SetLocale(a.Texts.Locale())
@@ -230,9 +230,15 @@ func (fixture screenshotFixture) app(t *testing.T, state, language, appearance s
 		}
 	}
 	a := &App{
-		Library:        &library.Library{Root: fixture.root, Manifest: fixture.manifest},
-		Texts:          i18n.Catalog{Language: language, SystemLanguage: language},
-		Preferences:    Preferences{Language: language, Theme: appearance},
+		Library: &library.Library{Root: fixture.root, Manifest: fixture.manifest},
+		Texts:   i18n.Catalog{Language: language, SystemLanguage: language},
+		Preferences: func() Preferences {
+			p := DefaultPreferences()
+			p.Language = language
+			p.Theme = appearance
+			p.Onboarded = true
+			return p
+		}(),
 		SidebarVisible: true, InspectorVisible: true, SidebarWidth: 236,
 		Query: catalog.Query{Sort: "added", Descending: true}, selectedIndex: -1, anchor: -1,
 		ctx: context.Background(), cancel: func() {},

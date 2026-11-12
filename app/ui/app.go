@@ -91,6 +91,12 @@ type App struct {
 	Error, Notice                            string
 	SettingsOpen, NewLibraryOpen, ExportOpen bool
 	Preferences                              Preferences
+	Lock                                     lockState
+	Import                                   importState
+	TextInputFocused                         bool
+	menuPreviewOpen                          bool
+	PreferencesChanged                       func()
+	WindowShown                              func()
 	Recent                                   []library.Recent
 	Sidebar                                  sidebarState
 	Toolbar                                  toolbarState
@@ -159,12 +165,17 @@ func New() *App {
 	}
 	a.applyLocale()
 	a.applyAppearance()
+	a.InitPasswordLock()
 	return a
 }
 
 func (a *App) T(key string, args ...any) string { return a.Texts.T(key, args...) }
 
 func (a *App) ShowSettings() {
+	if a.IsLocked() {
+		a.ShowMainWindow()
+		return
+	}
 	a.SettingsOpen = true
 	if a.SettingsRequested != nil {
 		a.SettingsRequested()
@@ -178,23 +189,16 @@ func (a *App) OpenWindow() {
 		TrafficLightPosition: &mygo.Point{X: 14, Y: 23},
 		BackgroundColor:      "light-dark(#ffffff, #18181b)", Content: ui.View(a.View),
 	})
-	a.ApplyWindowZoom()
 	a.Thumbnails = newThumbnailCache(func(fn func()) { a.Window.Update(fn) })
 	a.Window.OnFileDrop(func(e *mygo.FileDropEvent) { a.ImportPaths(e.Paths) })
+	a.ApplyWindowZoom()
 	a.Window.OnClose(func(e *mygo.CloseEvent) {
-		if a.Busy {
-			e.PreventDefault()
-			a.Notify(a.T("busy"))
+		e.PreventDefault()
+		if a.Preferences.CloseAction == "background" {
+			a.HideMainWindow()
 			return
 		}
-		if err := a.FlushPreferences(); err != nil {
-			e.PreventDefault()
-			return
-		}
-		if a.SettingsWindow != nil {
-			a.SettingsWindow.Close()
-		}
-		a.cancel()
+		mygo.App.Quit()
 	})
 
 	go a.watchLibrary()
@@ -202,6 +206,11 @@ func (a *App) OpenWindow() {
 
 func (a *App) View(c *ui.Context) {
 	a.applyTheme(c)
+	a.SyncMenuFocus(c)
+	if a.IsLocked() {
+		a.lockScreen(c)
+		return
+	}
 	defer a.RememberUIState()
 	if a.Library == nil {
 		a.welcome(c)
@@ -237,6 +246,8 @@ func (a *App) View(c *ui.Context) {
 	a.shortcuts(c)
 	a.preview(c)
 	a.dialogs(c)
+	a.extensionImportPicker(c)
+	a.passwordSettingsDialog(c)
 	if a.Notice != "" {
 		c.Toast(a.Notice)
 		a.Notice = ""
@@ -436,6 +447,7 @@ func (a *App) OpenLibrary(path string) {
 			a.applySnapshot(snapshot)
 			a.Window.SetTitle(lib.Manifest.DisplayName + " – Momento")
 			a.remember()
+			a.ConfigureAutoImport()
 			a.drainPending()
 			slog.Info("打开图库", "path", lib.Root, "assets", len(snapshot.Assets))
 		})
@@ -564,24 +576,9 @@ func (a *App) ChooseImport(folder bool) {
 	}()
 }
 func (a *App) ImportPaths(paths []string) {
-	if a.Library == nil || a.Busy {
-		a.Notify(a.T("busy"))
-		return
-	}
-	service := a.Assets
-	folderID := a.Query.FolderID
-	a.Progress = &model.ImportProgress{Stage: "scanning"}
-	a.Run("import", func(ctx context.Context) error {
-		result, err := service.Import(ctx, model.ImportRequest{Paths: paths, FolderID: folderID}, func(p model.ImportProgress) { a.Window.Update(func() { a.Progress = &p }) })
-		a.Window.Update(func() {
-			a.Progress = nil
-			if err == nil {
-				a.Notify(a.T("import_complete", result.Imported, result.Skipped))
-			}
-		})
-		return err
-	})
+	a.startPathImport(paths, a.Query.FolderID, "", nil)
 }
+
 func (a *App) SetFavorite(ids []string, value bool) {
 	lib := a.Library
 	a.Run("favorite", func(ctx context.Context) error { return lib.SetFavorite(ctx, ids, value) })
@@ -676,19 +673,19 @@ func (a *App) watchLibrary() {
 }
 
 func (a *App) shortcuts(c *ui.Context) {
-	if c.Shortcut(ui.Cmd, ui.KeyI) {
+	if a.ActionShortcut(c, "import") {
 		a.ChooseImport(false)
 	}
-	if c.Shortcut(ui.Cmd, ui.KeyF) {
+	if a.ActionShortcut(c, "search") {
 		a.Search.Focus()
 	}
-	if c.Shortcut(ui.Cmd|ui.Alt, ui.KeyI) {
+	if a.ActionShortcut(c, "inspector") {
 		a.InspectorVisible = !a.InspectorVisible
 	}
-	if c.Shortcut(ui.Cmd|ui.Alt, ui.KeyF) {
+	if a.ActionShortcut(c, "filter") {
 		a.Toolbar.FilterOpen = !a.Toolbar.FilterOpen
 	}
-	if c.Shortcut(ui.Cmd|ui.Alt, ui.KeyS) {
+	if a.ActionShortcut(c, "sort") {
 		a.Toolbar.SortOpen = !a.Toolbar.SortOpen
 	}
 	for i, key := range []ui.Key{ui.Key1, ui.Key2, ui.Key3} {
@@ -712,7 +709,7 @@ func (a *App) shortcuts(c *ui.Context) {
 		if deleted {
 			a.RequestDelete(a.selectedIDs())
 		}
-		if c.Shortcut(ui.Cmd, ui.KeyA) {
+		if a.ActionShortcut(c, "select_all") {
 			for _, v := range a.Visible {
 				a.Selected.Add(v.ID)
 			}
@@ -723,6 +720,17 @@ func (a *App) shortcuts(c *ui.Context) {
 			} else if selected := a.SelectedAssets(); len(selected) > 0 {
 				a.ShowPreview(selected[0].ID, true)
 			}
+		}
+	}
+}
+
+func (a *App) SyncMenuFocus(c *ui.Context) {
+	focused := c.FocusTakesText()
+	if focused != a.TextInputFocused || a.menuPreviewOpen != a.Preview.Open {
+		a.TextInputFocused = focused
+		a.menuPreviewOpen = a.Preview.Open
+		if a.MenuChanged != nil {
+			a.MenuChanged()
 		}
 	}
 }
@@ -742,10 +750,21 @@ func (a *App) ToggleSort()   { a.Toolbar.SortOpen = !a.Toolbar.SortOpen }
 
 // 扩展请求等待真实导入结果，不能在排队后就返回成功。
 func (a *App) ImportRemote(ctx context.Context, imageURL, pageURL string) error {
+	choice := importChoice{}
+	picker := false
+	mygo.RunOnMain(func() { picker = a.Preferences.ExtensionPicker })
+	if picker {
+		var err error
+		choice, err = a.remoteImportChoice(ctx)
+		if err != nil {
+			return err
+		}
+	}
 	var service *assets.Service
 	var lib *library.Library
 	var gen uint64
-	var readyErr error = context.Canceled
+	var request model.ImportRequest
+	readyErr := error(context.Canceled)
 	mygo.RunOnMain(func() {
 		if a.Library == nil {
 			readyErr = i18n.NewError("library_required")
@@ -760,16 +779,17 @@ func (a *App) ImportRemote(ctx context.Context, imageURL, pageURL string) error 
 		service = a.Assets
 		lib = a.Library
 		gen = a.generation
+		request = model.ImportRequest{FolderID: choice.FolderID, TagIDs: choice.TagIDs, ImportKeywords: a.Preferences.ImportKeywords}
 	})
 	if readyErr != nil {
 		return readyErr
 	}
-	return a.performRemote(ctx, service, lib, gen, imageURL, pageURL)
+	return a.performRemote(ctx, service, lib, gen, imageURL, pageURL, request)
 }
-func (a *App) performRemote(ctx context.Context, service *assets.Service, lib *library.Library, gen uint64, imageURL, pageURL string) error {
+func (a *App) performRemote(ctx context.Context, service *assets.Service, lib *library.Library, gen uint64, imageURL, pageURL string, request model.ImportRequest) error {
 	a.workMu.Lock()
 	defer a.workMu.Unlock()
-	result, err := service.ImportURL(ctx, imageURL, pageURL)
+	result, err := service.ImportURLWithRequest(ctx, imageURL, pageURL, request)
 	var snapshot model.Snapshot
 	if err == nil {
 		snapshot, err = lib.Snapshot(ctx)
@@ -783,7 +803,7 @@ func (a *App) performRemote(ctx context.Context, service *assets.Service, lib *l
 			a.ShowError(err)
 		} else {
 			a.applySnapshot(snapshot)
-			a.Notify(a.T("import_complete", result.Imported, result.Skipped))
+			a.importFeedback("extension", result)
 		}
 		a.drainPending()
 	})
@@ -833,10 +853,8 @@ func (a *App) drainPending() {
 	}
 	next := a.pendingImports[0]
 	a.pendingImports = a.pendingImports[1:]
-	a.Busy = true
-	service, lib, gen := a.Assets, a.Library, a.generation
 	go func() {
-		if err := a.performRemote(a.ctx, service, lib, gen, next[0], next[1]); err != nil {
+		if err := a.ImportRemote(a.ctx, next[0], next[1]); err != nil {
 			slog.Error("深度链接导入失败", "error", err)
 		}
 	}()

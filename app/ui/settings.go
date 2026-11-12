@@ -4,137 +4,125 @@ import (
 	"github.com/Seaony/Momento/app/internal/browser"
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"math"
+)
+
+const (
+	SettingsGeneral = iota
+	SettingsAppearance
+	SettingsSidebar
+	SettingsControls
+	SettingsPreview
+	SettingsImport
+	SettingsShortcuts
+	SettingsNotifications
+	SettingsPassword
+	SettingsExtension
+	SettingsAbout
 )
 
 type settingsState struct {
-	Tab           int
-	LoginEnabled  bool
-	LoginError    string
-	ExtensionBusy bool
-	LayoutKey     settingsLayoutKey
-	Height        int
-}
-
-type settingsLayoutKey struct {
-	Tab                        int
-	Locale, LoginError         string
-	ExtensionState             browser.State
-	ExtensionError             string
-	UpdateState                UpdateCheckState
-	UpdateVersion, UpdateError string
-}
-
-func (a *App) settingsLayout(update UpdateCheckStatus) settingsLayoutKey {
-	key := settingsLayoutKey{Tab: a.Settings.Tab, Locale: a.Texts.Locale(), LoginError: a.Settings.LoginError, ExtensionState: a.ExtensionStatus.State, UpdateState: update.State, UpdateVersion: update.Version}
-	if a.ExtensionStatus.Err != nil {
-		key.ExtensionError = a.ExtensionStatus.Err.Error()
-	}
-	if update.Err != nil {
-		key.UpdateError = update.Err.Error()
-	}
-	return key
+	Tab                int
+	LoginEnabled       bool
+	LoginError         string
+	ExtensionBusy      bool
+	NotificationDenied bool
+	AutoImportErrors   map[string]string
+	AutoImportAddError string
+	ShortcutErrors     map[string]string
+	ShortcutSearch     string
+	RecordingShortcut  string
+	Scroll             ui.ScrollState
 }
 
 var settingsTabs = []struct{ key, icon string }{
 	{"settings_general", "general"},
+	{"settings_appearance", "appearance"},
+	{"settings_sidebar", "sidebar"},
+	{"settings_controls", "controls"},
+	{"settings_preview", "preview"},
+	{"settings_import", "import"},
+	{"settings_shortcuts", "shortcuts"},
+	{"settings_notifications", "notifications"},
+	{"settings_password", "password"},
 	{"settings_extension", "browser"},
 	{"settings_about", "about"},
 }
 
-func (a *App) SettingsHeight() int {
-	return a.settingsHeight(UpdateStatus())
-}
-
-func (a *App) settingsHeight(update UpdateCheckStatus) int {
-	if a.Settings.Height > 0 && a.Settings.LayoutKey == a.settingsLayout(update) {
-		return a.Settings.Height
-	}
-	// 首帧先留出内容空间；布局完成后改用实际内容高度。
-	switch a.Settings.Tab {
-	case 1:
-		if a.ExtensionStatus.State == browser.Failed {
-			return 336
-		}
-		return 292
-	case 2:
-		if update.State != UpdateIdle && update.State != "" {
-			return 396
-		}
-		return 344
-	default:
-		height := 512
-		if a.Settings.LoginError != "" {
-			height += 44
-		}
-		if update.State != UpdateIdle && update.State != "" {
-			height += 52
-		}
-		return height
-	}
-}
-
-func (a *App) SettingsView(c *ui.Context) {
-	a.settingsView(c, UpdateStatus())
-}
+func (a *App) SettingsHeight() int                  { return 560 }
+func (a *App) settingsHeight(UpdateCheckStatus) int { return 560 }
+func (a *App) SettingsView(c *ui.Context)           { a.settingsView(c, UpdateStatus()) }
 
 func (a *App) settingsView(c *ui.Context, update UpdateCheckStatus) {
 	a.applyTheme(c)
+	a.SyncMenuFocus(c)
 	a.Settings.Tab = max(0, min(a.Settings.Tab, len(settingsTabs)-1))
 	background := settingsBackground(c)
-	layoutKey := a.settingsLayout(update)
-	var scroll, content ui.Element
 	c.Root().Background(background)
-	ui.Column(c).Fill().Background(background).Children(func() {
-		bar := c.TitleBar()
-		ui.Row(c.Key("settings-titlebar")).Height(36).Shrink(0).
-			Padding(0, max(bar.Left, bar.Right)+12).Center().DragWindow().Children(func() {
-			ui.Text(c, a.T(settingsTabs[a.Settings.Tab].key)).FontSize(13).Bold().SingleLine()
-		})
-		tabs := ui.TabsBase(c.Key("settings-tabs"), &a.Settings.Tab, len(settingsTabs))
-		tabs.List.Height(72).Shrink(0).FillWidth().Padding(2, 20, 10, 20).Gap(6).Justify(ui.Center).DragWindow().Children(func() {
-			for i, tab := range settingsTabs {
-				button := tabs.Tab(i).MinWidth(88).Height(58).Padding(7, 12).Radius(9).Center().TextColor(c.Theme().TextMuted).
-					Label(a.T(tab.key)).AccessSelected(a.Settings.Tab == i)
-				if a.Settings.Tab == i {
-					button.Background(c.Theme().SurfacePressed.Mix(background, 0.5)).Border(1, c.Theme().Border).TextColor(c.Theme().Text)
-				} else if button.Hovered() {
-					button.Background(c.Theme().SurfaceHover)
-				}
-				button.Children(func() {
-					ui.Column(c).Center().Gap(4).Children(func() {
-						ui.Icon(c, settingsIcons[tab.icon]).Size(25, 25)
-						ui.Text(c, a.T(tab.key)).FontSize(12).SingleLine()
-					})
-				})
+	ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
+		ui.Column(c.Key("settings-sidebar")).Width(200).Shrink(0).Background(c.Theme().Surface).BorderWidth(0, 1, 0, 0).BorderColor(c.Theme().Border).Children(func() {
+			bar := c.TitleBar()
+			if bar.Left > 0 {
+				ui.Box(c.Key("settings-sidebar-titlebar")).Height(max(44, bar.Bottom+8)).FillWidth().Shrink(0).DragWindow()
+			} else {
+				ui.Row(c.Key("settings-sidebar-titlebar")).Height(44).FillWidth().Padding(0, 18).DragWindow().Children(func() { ui.Text(c, a.T("settings")).Bold() })
 			}
-		})
-		ui.Divider(c)
-		scroll = ui.Scroll(c.Key("settings-content")).Grow(1).Padding(20).Children(func() {
-			content = ui.Column(c.Key(layoutKey)).FillWidth().Gap(20).Children(func() {
-				switch a.Settings.Tab {
-				case 1:
-					a.extensionSettings(c)
-				case 2:
-					a.aboutSettings(c, update)
-				default:
-					a.generalSettings(c, update)
+			ui.Scroll(c.Key("settings-navigation")).Grow(1).Padding(8).Gap(3).Children(func() {
+				for i, tab := range settingsTabs {
+					if i == 3 || i == 7 || i == 9 {
+						ui.Divider(c).Margin(7, 6)
+					}
+					row := ui.ButtonBase(c.Key(tab.key)).FillWidth().Height(34).Padding(6, 10).Gap(8).Radius(6).Label(a.T(tab.key)).Role(ui.RoleTab).AccessSelected(a.Settings.Tab == i).Justify(ui.Start)
+					if i == a.Settings.Tab {
+						row.Background(c.Theme().SurfacePressed).TextColor(c.Theme().Text)
+					} else if row.Hovered() {
+						row.Background(c.Theme().SurfaceHover)
+					}
+					row.Children(func() {
+						ui.Icon(c, settingsIcons[tab.icon]).Size(19, 19).Shrink(0)
+						ui.Text(c, a.T(tab.key)).SingleLine().Grow(1).MinWidth(0)
+					})
+					if row.Clicked() {
+						a.Settings.Tab = i
+						a.Settings.Scroll = ui.ScrollState{}
+						a.CancelShortcutRecording()
+					}
 				}
 			})
 		})
+		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
+			bar := c.TitleBar()
+			ui.Row(c.Key("settings-titlebar")).Height(44).Shrink(0).FillWidth().Padding(0, bar.Right+20, 0, 20).Center().DragWindow().Children(func() { ui.Text(c, a.T(settingsTabs[a.Settings.Tab].key)).FontSize(13).Bold().SingleLine() })
+			ui.Scroll(c.Key("settings-content")).TrackScroll(&a.Settings.Scroll).Grow(1).Padding(16, 20, 24, 20).Children(func() {
+				ui.Column(c.Key(a.Settings.Tab)).FillWidth().Gap(20).Children(func() {
+					switch a.Settings.Tab {
+					case SettingsAppearance:
+						a.appearanceSettings(c)
+					case SettingsSidebar:
+						a.sidebarSettings(c)
+					case SettingsControls:
+						a.controlsSettings(c)
+					case SettingsPreview:
+						a.previewSettings(c)
+					case SettingsImport:
+						a.importSettings(c)
+					case SettingsShortcuts:
+						a.shortcutsSettings(c)
+					case SettingsNotifications:
+						a.notificationsSettings(c)
+					case SettingsPassword:
+						a.passwordSettings(c)
+					case SettingsExtension:
+						a.extensionSettings(c)
+					case SettingsAbout:
+						a.aboutSettings(c, update)
+					default:
+						a.generalSettings(c, update)
+					}
+				})
+			})
+		})
 	})
-	if bounds := content.LayoutBounds(); bounds.H > 0 {
-		a.Settings.LayoutKey = layoutKey
-		a.Settings.Height = int(math.Ceil(float64(scroll.LayoutBounds().Y + 40 + bounds.H)))
-	} else {
-		c.After(0)
-	}
-	if a.SettingsWindow != nil && a.Settings.Height > 0 && a.Settings.LayoutKey == layoutKey {
-		width, height := a.SettingsWindow.ContentSize()
-		if wanted := a.settingsHeight(update); width != 560 || height != wanted {
-			a.SettingsWindow.SetContentSize(560, wanted)
-		}
-	}
+	a.passwordSettingsDialog(c)
 }
 
 func settingsBackground(c *ui.Context) ui.Color {
@@ -151,7 +139,7 @@ func settingsSection(c *ui.Context, title, footer string, content func()) {
 		}
 		card := c.Theme().Surface
 		if !c.Theme().Dark {
-			card = card.Mix(c.Theme().SurfacePressed, 0.25)
+			card = card.Mix(c.Theme().SurfacePressed, .25)
 		}
 		ui.Column(c).FillWidth().Radius(12).Background(card).Border(1, c.Theme().Border).Children(content)
 		if footer != "" {
@@ -159,83 +147,53 @@ func settingsSection(c *ui.Context, title, footer string, content func()) {
 		}
 	})
 }
-
 func settingsRow(c *ui.Context, content func()) {
-	ui.Row(c).Height(44).FillWidth().Padding(0, 14).Gap(12).AlignItems(ui.Center).Children(content)
+	ui.Row(c).MinHeight(44).FillWidth().Padding(8, 14).Gap(12).AlignItems(ui.Center).Children(content)
 }
-
-func settingsSeparator(c *ui.Context) {
-	ui.Divider(c).Margin(0, 14)
-}
+func settingsSeparator(c *ui.Context) { ui.Divider(c).Margin(0, 14) }
 
 func (a *App) generalSettings(c *ui.Context, update UpdateCheckStatus) {
-	settingsSection(c, "", a.T("launch_at_login_hint"), func() {
+	settingsSection(c, "", "", func() {
 		settingsRow(c, func() {
-			ui.Text(c, a.T("launch_at_login")).SingleLine().Grow(1)
+			ui.Text(c, a.T("launch_at_login")).Grow(1)
 			enabled := a.Settings.LoginEnabled
 			if ui.Switch(c.Key("launch-at-login"), &enabled).Label(a.T("launch_at_login")).Changed() {
 				a.SetLaunchAtLogin(enabled)
 			}
 		})
+		if a.Settings.LoginError != "" {
+			settingsError(c, a.T("error_launch_at_login", a.Settings.LoginError))
+		}
 	})
-	if a.Settings.LoginError != "" {
-		ui.Text(c, a.T("error_launch_at_login", a.Settings.LoginError)).FontSize(12).TextColor(c.Theme().Danger).Padding(0, 4).Role(ui.RoleAlert)
-	}
-	settingsSection(c, a.T("appearance_language"), "", func() {
-		settingsRow(c, func() {
-			ui.Text(c, a.T("appearance")).Grow(1).SingleLine()
-			a.appearanceChoices(c.Key("appearance"))
-		})
+	settingsSection(c, "", a.T("background_hint"), func() {
+		a.stringSetting(c, "close_action", &a.Preferences.CloseAction, []string{"background", "quit"}, []string{"close_background", "close_quit"})
 		settingsSeparator(c)
-		settingsRow(c, func() {
-			ui.Text(c, a.T("language")).Grow(1).SingleLine()
-			a.languageMenu(c.Key("language"))
-		})
+		key := "tray_icon"
+		if settingsPlatform() != "darwin" {
+			key = "system_tray_icon"
+		}
+		a.switchSetting(c, key, &a.Preferences.TrayIcon, false)
+		if settingsPlatform() == "darwin" {
+			settingsSeparator(c)
+			if !a.Preferences.TrayIcon {
+				a.Preferences.DockWhenHidden = true
+			}
+			a.switchSetting(c, "dock_when_hidden", &a.Preferences.DockWhenHidden, !a.Preferences.TrayIcon)
+		}
 	})
 	settingsSection(c, a.T("update"), "", func() {
 		settingsRow(c, func() {
-			ui.Text(c, a.T("automatic_updates")).Grow(1).SingleLine()
+			ui.Text(c, a.T("automatic_updates")).Grow(1)
 			if ui.Switch(c.Key("automatic-updates"), &a.Preferences.AutoCheckUpdates).Label(a.T("automatic_updates")).Changed() {
 				a.SavePreferences()
 				StartAutomaticUpdateCheck(a.Preferences.AutoCheckUpdates)
 			}
 		})
 		settingsSeparator(c)
-		settingsRow(c, func() {
-			ui.Text(c, a.T("current_version", mygo.App.Version())).Grow(1).SingleLine()
-			a.updateButton(c, update)
-		})
+		settingsRow(c, func() { ui.Text(c, a.T("current_version", mygo.App.Version())).Grow(1); a.updateButton(c, update) })
 	})
 	a.updateMessage(c, update, false)
 }
-
-func (a *App) appearanceChoices(c *ui.Context) {
-	codes := []string{"system", "light", "dark"}
-	labels := []string{a.T("follow_system"), a.T("appearance_light"), a.T("appearance_dark")}
-	selected := 0
-	for i, code := range codes {
-		if code == a.Preferences.Theme {
-			selected = i
-		}
-	}
-	segments := ui.SegmentedBase(c, &selected, len(codes))
-	segments.Track.Shrink(0).Height(34).Padding(3).Gap(2).Radius(10).Background(c.Theme().SurfacePressed).Label(a.T("appearance")).Children(func() {
-		for i, title := range labels {
-			segment := segments.Segment(i).Height(28).Padding(0, 14).Radius(7).Label(title).Tooltip(title).Center()
-			if selected == i {
-				segment.Background(ui.Hex("#2563EB")).TextColor(ui.RGB(255, 255, 255))
-			} else if segment.Hovered() {
-				segment.Background(c.Theme().SurfacePressed.Mix(c.Theme().Text, 0.06))
-			}
-			segment.Children(func() { ui.Icon(c, settingsSymbols[codes[i]]).Size(16, 16) })
-		}
-	})
-	if segments.Track.Changed() {
-		a.Preferences.Theme = codes[selected]
-		a.SavePreferences()
-	}
-}
-
 func (a *App) languageMenu(c *ui.Context) {
 	codes := []string{"system", "en", "zh-CN", "ja"}
 	labels := []string{a.T("follow_system"), "English", "简体中文", "日本語"}

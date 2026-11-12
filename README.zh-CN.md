@@ -99,6 +99,8 @@ go run ./cmd/sample-library -path /tmp/momento-sample.momento -count 14
 
 已有配置文件缺少新字段时使用默认值。初始主题和语言跟随系统；初始视图为瀑布流，按添加时间从新到旧排序，侧栏与检查器均显示。最近图库路径单独保存在同目录的 `recent-libraries.json` 中。
 
+忘记密码锁的密码时，先退出 Momento，再删除上述配置目录中 `preferences.json` 的 `passwordHash` 字段，即可解除。密码锁只锁界面，不加密图库文件。
+
 日志达到 5 MB 时轮转，保留三份历史文件：
 
 - macOS：`~/Library/Logs/Momento/`

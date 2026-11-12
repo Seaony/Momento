@@ -23,6 +23,14 @@ import (
 	"github.com/Seaony/Momento/app/internal/model"
 )
 
+func hashReader(ctx context.Context, r io.Reader) (string, error) {
+	h := sha256.New()
+	if _, err := io.Copy(h, contextReader{ctx: ctx, r: r}); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
 type candidate struct {
 	path      string
 	folders   []string
@@ -37,7 +45,7 @@ type prepared struct {
 	original, thumbnail string
 }
 
-func supported(path string) bool {
+func Supported(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".tif", ".tiff", ".bmp", ".heic", ".heif", ".avif":
 		return true
@@ -50,7 +58,7 @@ func scan(ctx context.Context, paths []string) ([]candidate, error) {
 	var out []candidate
 	seen := map[string]bool{}
 	add := func(path string, folders []string) error {
-		if !supported(path) || strings.HasPrefix(filepath.Base(path), ".") {
+		if !Supported(path) || strings.HasPrefix(filepath.Base(path), ".") {
 			return nil
 		}
 		absolute, err := filepath.Abs(path)
@@ -280,6 +288,19 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 		}
 		groups[c.hash] = append(groups[c.hash], i)
 	}
+	keywordsByHash := map[string][]string{}
+	if request.ImportKeywords {
+		for hash, indices := range groups {
+			if err = ctx.Err(); err != nil {
+				return result, err
+			}
+			c := candidates[indices[0]]
+			keywordsByHash[hash], err = ReadKeywords(c.staged)
+			if err != nil {
+				return result, i18n.WrapError(err, "error_import_read", filepath.Base(c.path))
+			}
+		}
+	}
 	processed, skipped := 0, 0
 	for hash, indices := range groups {
 		if trashed, exists := existing[hash]; exists {
@@ -347,10 +368,12 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 		}
 	}()
 	folderCache := map[string]string{}
+	verified := map[string]bool{}
+	resultIDs := map[string]bool{}
 	for _, c := range candidates {
 		var trashed bool
-		var source string
-		lookupErr := tx.QueryRowContext(ctx, "SELECT trashed,source_url FROM assets WHERE id=?", c.hash).Scan(&trashed, &source)
+		var source, relative string
+		lookupErr := tx.QueryRowContext(ctx, "SELECT trashed,source_url,relative_path FROM assets WHERE id=?", c.hash).Scan(&trashed, &source, &relative)
 		switch {
 		case errors.Is(lookupErr, sql.ErrNoRows):
 			p, ok := byHash[c.hash]
@@ -376,9 +399,16 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 				installed = append(installed, dst)
 			}
 			result.Imported++
+			verified[c.hash] = true
 		case lookupErr != nil:
 			return result, lookupErr
 		default:
+			if !verified[c.hash] {
+				if err = s.verifyDuplicate(ctx, relative, c.hash); err != nil {
+					return result, i18n.WrapError(err, "error_import_read", filepath.Base(c.path))
+				}
+				verified[c.hash] = true
+			}
 			if trashed {
 				result.Imported++
 				result.Restored++
@@ -390,6 +420,18 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 					return result, err
 				}
 			}
+		}
+		if !resultIDs[c.hash] {
+			result.AssetIDs = append(result.AssetIDs, c.hash)
+			resultIDs[c.hash] = true
+		}
+		for _, tagID := range request.TagIDs {
+			if _, err = tx.ExecContext(ctx, "INSERT OR IGNORE INTO asset_tags(asset_id,tag_id) VALUES(?,?)", c.hash, tagID); err != nil {
+				return result, err
+			}
+		}
+		if err = attachKeywords(ctx, tx, c.hash, keywordsByHash[c.hash]); err != nil {
+			return result, err
 		}
 		parent := request.FolderID
 		for _, name := range c.folders {

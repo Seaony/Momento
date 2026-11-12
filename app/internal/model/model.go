@@ -72,6 +72,7 @@ type ImportProgress struct {
 }
 
 type ImportResult struct {
+	AssetIDs []string
 	Imported int
 	Skipped  int
 	Restored int
@@ -79,9 +80,11 @@ type ImportResult struct {
 }
 
 type ImportRequest struct {
-	Paths     []string
-	SourceURL string
-	FolderID  string
+	ImportKeywords bool
+	TagIDs         []string
+	Paths          []string
+	SourceURL      string
+	FolderID       string
 }
 
 type ExportFormat string

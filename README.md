@@ -99,6 +99,8 @@ Settings and remembered UI state are saved in `preferences.json` in the applicat
 
 New fields use their defaults when absent from a saved file. The initial appearance and language follow the system; the initial view is masonry, sorted by newest added first, with both the sidebar and inspector visible. Recent library paths are stored separately in `recent-libraries.json` in the same directory.
 
+If you forget the password lock password, quit Momento and remove the `passwordHash` field from `preferences.json` in the configuration directory above. The lock protects only the interface; it does not encrypt library files.
+
 Application logs rotate at 5 MB, keeping three previous files:
 
 - macOS: `~/Library/Logs/Momento/`
