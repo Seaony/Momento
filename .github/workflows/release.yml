@@ -1,0 +1,193 @@
+name: 构建桌面安装包
+
+on:
+  push:
+    tags: ["v[0-9]*"]
+  workflow_dispatch:
+    inputs:
+      create_draft:
+        description: 密钥齐全时上传到草稿发布，不公开
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+    working-directory: app
+
+jobs:
+  prepare:
+    name: 核对版本和签名条件
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      draft: ${{ steps.release.outputs.draft }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: 核对版本并按需建立草稿
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUEST_DRAFT: ${{ github.event_name == 'push' || inputs.create_draft }}
+          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          version="$(jq -er '.version | select(type == "string" and length > 0)' mygo.json)"
+          tag="v$version"
+          if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" != "$tag" ]]; then
+            echo "::error::标签与 app/mygo.json 的版本不一致"
+            exit 1
+          fi
+          ready=true
+          for name in MYGO_UPDATER_PRIVATE_KEY MACOS_CERTIFICATE MACOS_CERTIFICATE_PASSWORD APPLE_ID APPLE_TEAM_ID APPLE_APP_PASSWORD WINDOWS_CERTIFICATE WINDOWS_CERTIFICATE_PASSWORD; do
+            if [[ -z "${!name}" ]]; then ready=false; fi
+          done
+          if ! jq -e --arg repo "$GITHUB_REPOSITORY" '.updates.github == $repo and (.updates.publicKey | type == "string" and length > 0)' mygo.json >/dev/null; then
+            ready=false
+          fi
+          draft=false
+          if [[ "$REQUEST_DRAFT" == true && "$ready" == true ]]; then
+            if [[ "$(git rev-parse "$tag^{commit}")" != "$GITHUB_SHA" ]]; then
+              echo "::error::发布标签必须指向本次构建的提交"
+              exit 1
+            fi
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft > "$RUNNER_TEMP/release.json" 2>/dev/null; then
+              if ! jq -e '.isDraft == true' "$RUNNER_TEMP/release.json" >/dev/null; then
+                echo "::error::该版本已公开，不能覆盖"
+                exit 1
+              fi
+            else
+              gh release create "$tag" --repo "$GITHUB_REPOSITORY" --draft --verify-tag --title "$tag" --generate-notes
+            fi
+            draft=true
+            echo '将生成签名安装包并上传到草稿，不自动公开。' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '::notice::本次只生成未签名构建产物，不上传发布；签名密钥和 updates 公钥须全部配置齐全。'
+            echo '本次仅生成未签名安装包，不含已签名更新归档，不可作为正式发布。' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "draft=$draft" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: ${{ matrix.name }}
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS
+            os: macos-latest
+            platform: darwin/universal
+          - name: Windows
+            os: ubuntu-latest
+            platform: windows/amd64,windows/arm64
+          - name: Linux
+            os: ubuntu-latest
+            platform: linux/amd64,linux/arm64
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: app/go.mod
+          cache-dependency-path: app/go.sum
+      - name: 安装 Windows 打包工具
+        if: matrix.name == 'Windows'
+        run: sudo apt-get update && sudo apt-get install -y nsis osslsigncode
+      - name: 检查代码
+        run: |
+          set -euo pipefail
+          go test ./...
+          go vet ./...
+      - name: 导入 macOS 证书与公证配置
+        if: matrix.name == 'macOS' && needs.prepare.outputs.draft == 'true'
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/momento-signing.keychain-db"
+          password="$(openssl rand -base64 24)"
+          security create-keychain -p "$password" "$keychain"
+          echo "NOTARY_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/momento-certificate.p12"
+          chmod 600 "$RUNNER_TEMP/momento-certificate.p12"
+          security import "$RUNNER_TEMP/momento-certificate.p12" -k "$keychain" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/momento-certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain
+          xcrun notarytool store-credentials momento-notary --keychain "$keychain" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD"
+          identity="$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application:.*\)"/\1/p' | head -n 1)"
+          test -n "$identity"
+          jq --arg identity "$identity" --arg keychain "$keychain" '.macos.signingIdentity = $identity | .macos.notarize = {keychainProfile:"momento-notary",keychain:$keychain}' mygo.json > "$RUNNER_TEMP/mygo.json"
+          mv "$RUNNER_TEMP/mygo.json" mygo.json
+      - name: 导入 Windows 签名配置
+        if: matrix.name == 'Windows' && needs.prepare.outputs.draft == 'true'
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+        run: |
+          set -euo pipefail
+          certificate="$RUNNER_TEMP/momento-code-signing.pfx"
+          echo "$WINDOWS_CERTIFICATE" | base64 --decode > "$certificate"
+          chmod 600 "$certificate"
+          jq --arg certificate "$certificate" '.windows.certificate = $certificate' mygo.json > "$RUNNER_TEMP/mygo.json"
+          mv "$RUNNER_TEMP/mygo.json" mygo.json
+      - name: 构建安装包并按需上传草稿
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRAFT: ${{ needs.prepare.outputs.draft }}
+          PLATFORM: ${{ matrix.platform }}
+          MYGO_UPDATER_PRIVATE_KEY: ${{ needs.prepare.outputs.draft == 'true' && secrets.MYGO_UPDATER_PRIVATE_KEY || '' }}
+          MYGO_WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ "$DRAFT" == true ]]; then
+            go tool mygo build -platform "$PLATFORM" -upload
+          else
+            go tool mygo build -platform "$PLATFORM" -sign - -skip-notarize
+          fi
+      - name: 保存构建产物
+        uses: actions/upload-artifact@v7
+        with:
+          name: momento-${{ matrix.name }}-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            app/build/*/*.dmg
+            app/build/*/*-setup-*.exe
+            app/build/*/*.deb
+            app/build/*/*.rpm
+            app/build/*/*.tar.gz
+            app/build/*/update-*.json
+            app/build/*/*.delta
+            app/build/*/install.sh
+            app/build/*/install.ps1
+            app/build/*/SHA256SUMS
+      - name: 清理临时证书
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/momento-certificate.p12" "$RUNNER_TEMP/momento-code-signing.pfx"
+          if [[ -n "${NOTARY_KEYCHAIN:-}" ]]; then security delete-keychain "$NOTARY_KEYCHAIN"; fi
