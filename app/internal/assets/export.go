@@ -89,6 +89,16 @@ func (s *Service) Export(ctx context.Context, items []model.Asset, destination s
 			slog.Info("导出完成", "count", len(paths))
 		}
 	}()
+	for _, asset := range items {
+		if _, e := normalizedRotation(asset.Rotation); e != nil {
+			return nil, e
+		}
+		if format == model.ExportOriginal {
+			if e := originalRotationSupported(asset); e != nil {
+				return nil, e
+			}
+		}
+	}
 	for _, a := range items {
 		if err = ctx.Err(); err != nil {
 			return paths, err
@@ -108,7 +118,11 @@ func (s *Service) Export(ctx context.Context, items []model.Asset, destination s
 		staged := temp.Name()
 		e = func() (err error) {
 			defer func() { err = errors.Join(err, temp.Close()) }()
-			if format == model.ExportOriginal {
+			if format == model.ExportOriginal && a.Rotation%360 != 0 {
+				if err = writeRotatedOriginal(ctx, temp, source, a, quality); err != nil {
+					return err
+				}
+			} else if format == model.ExportOriginal {
 				f, err := os.Open(source)
 				if err != nil {
 					return err
@@ -120,6 +134,10 @@ func (s *Service) Export(ctx context.Context, items []model.Asset, destination s
 				}
 			} else {
 				img, _, _, _, err := PrepareImage(source)
+				if err != nil {
+					return err
+				}
+				img, err = RotateImage(img, a.Rotation)
 				if err != nil {
 					return err
 				}

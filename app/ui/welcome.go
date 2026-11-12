@@ -40,19 +40,17 @@ func (a *App) welcome(c *ui.Context) {
 
 func (a *App) welcomeContent(c *ui.Context, onboarding bool) {
 	ui.Image(c, appLogo).Size(96, 96).Fit(ui.Contain)
-	ui.Text(c, a.T("welcome")).FontSize(24).Bold()
+	title := "welcome"
+	if onboarding {
+		title = "onboarding_library"
+	}
+	ui.Text(c, a.T(title)).FontSize(24).Bold()
 	ui.Text(c, a.T("welcome_hint")).TextColor(c.Theme().TextMuted)
 	ui.Row(c).Gap(12).Margin(12, 0).Children(func() {
 		if ui.PrimaryButton(c, a.T("new_library")).Clicked() {
-			if onboarding {
-				a.finishOnboarding()
-			}
 			a.ShowNewLibrary()
 		}
 		if ui.Button(c, a.T("open_library")).Clicked() {
-			if onboarding {
-				a.finishOnboarding()
-			}
 			a.ChooseOpenLibrary()
 		}
 	})
@@ -73,7 +71,7 @@ func (a *App) onboarding(c *ui.Context) {
 				ui.Image(c, appLogo).Size(96, 96).Fit(ui.Contain)
 				ui.Text(c, a.T("onboarding_theme")).FontSize(24).Bold()
 				ui.Text(c, a.T("onboarding_theme_hint")).TextColor(c.Theme().TextMuted).Margin(0, 0, 12, 0)
-				a.ThemeSwatches(c)
+				a.ThemeSwatchesCentered(c)
 			case 1:
 				ui.Image(c, appLogo).Size(96, 96).Fit(ui.Contain)
 				ui.Text(c, a.T("onboarding_extension")).FontSize(24).Bold()
@@ -86,7 +84,7 @@ func (a *App) onboarding(c *ui.Context) {
 			}
 		})
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(12).Children(func() {
-			if ui.Button(c, a.T("onboarding_skip")).Clicked() {
+			if step < 2 && ui.Button(c, a.T("onboarding_skip")).Clicked() {
 				a.finishOnboarding()
 			}
 			ui.Box(c).Grow(1)
@@ -95,16 +93,8 @@ func (a *App) onboarding(c *ui.Context) {
 			if ui.Button(c, a.T("onboarding_previous")).Disabled(step == 0).Clicked() {
 				a.Welcome.Step--
 			}
-			key := "onboarding_next"
-			if step == 2 {
-				key = "onboarding_finish"
-			}
-			if ui.PrimaryButton(c, a.T(key)).Clicked() {
-				if step == 2 {
-					a.finishOnboarding()
-				} else {
-					a.Welcome.Step++
-				}
+			if step < 2 && ui.PrimaryButton(c, a.T("onboarding_next")).Clicked() {
+				a.Welcome.Step++
 			}
 		})
 	})

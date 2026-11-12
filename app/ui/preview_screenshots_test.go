@@ -32,12 +32,31 @@ func TestPreviewScreenshots(t *testing.T) {
 	var records []record
 	for _, language := range []string{"zh-Hans", "en", "ja"} {
 		for _, theme := range []string{"light", "dark"} {
-			for _, state := range []string{"small-smart", "small-fit", "large", "transparent-checker", "transparent-solid", "gif-first", "gif-second", "zoom400-smooth", "zoom400-pixelated"} {
+			for _, state := range []string{"small-smart", "small-fit", "large", "transparent-checker", "transparent-solid", "gif-first", "gif-second", "zoom400-smooth", "zoom400-pixelated", "rotation-90", "rotation-270", "gif-rotation-90"} {
 				a := previewFixture(288, 192)
 				a.Texts.Language = language
 				a.Preferences.Theme = theme
 				a.Visible[0].Name = state + ".png"
 				switch state {
+				case "rotation-90", "rotation-270", "gif-rotation-90":
+					rotation := 90
+					if state == "rotation-270" {
+						rotation = 270
+					}
+					picture, err := readPreviewPicture(writeDirectionalPreview(t, state == "gif-rotation-90"), rotation)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if state == "gif-rotation-90" {
+						picture, err = picture.animation.next()
+						if err != nil {
+							t.Fatal(err)
+						}
+					}
+					a.Preview.Bitmap, a.Preview.pixelBitmap = picture.bitmap, picture.pixelBitmap
+					a.Visible[0].Rotation = rotation
+					a.Preview.targetRotation = rotation
+					a.Preferences.PreviewFit = "fit"
 				case "small-fit":
 					a.Preferences.PreviewFit = "fit"
 				case "large":
@@ -57,7 +76,7 @@ func TestPreviewScreenshots(t *testing.T) {
 					a.Preview.Bitmap, a.Preview.pixelBitmap = previewBitmaps(picture)
 					a.Preferences.PreviewChecker = state == "transparent-checker"
 				case "gif-first", "gif-second":
-					picture, err := readPreviewPicture(writePreviewGIF(t))
+					picture, err := readPreviewPicture(writePreviewGIF(t), 0)
 					if err != nil {
 						t.Fatal(err)
 					}

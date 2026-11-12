@@ -44,7 +44,7 @@ func (a *App) SetExtensionEnabled(enabled bool) {
 func (a *App) OpenLogDirectory() {
 	if err := mygo.Shell.OpenPath(logging.Directory()); err != nil {
 		a.ShowError(err)
-		a.Window.Focus()
+		a.ShowMainWindow()
 		a.Window.Invalidate()
 	}
 }

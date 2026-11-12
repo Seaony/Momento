@@ -41,6 +41,7 @@ func (a *App) sidebar(c *ui.Context) {
 		}
 		ui.Divider(c).Margin(8, 0)
 		ui.Scroll(c.Key("sidebar_scopes")).Grow(1).Gap(3).Children(func() {
+			a.sidebarQuickAccess(c)
 			a.sidebarScope(c, "all", "all", "照片", counts.All)
 			if !a.sidebarHidden("favorites") {
 				a.sidebarScope(c, "favorites", "favorites", "喜欢", counts.Favorites)
@@ -51,8 +52,11 @@ func (a *App) sidebar(c *ui.Context) {
 			if !a.sidebarHidden("untagged") {
 				a.sidebarScope(c, "untagged", "untagged", "标签", counts.Untagged)
 			}
+			if !a.sidebarHidden("recent") && a.Index != nil {
+				a.sidebarScope(c, "recent", "recent", "照片", len(a.Index.Query(catalog.Query{Scope: "recent"})))
+			}
 			if !a.sidebarHidden("random") {
-				a.sidebarScope(c, "random", "random_browse", "随机浏览", counts.All)
+				a.sidebarScope(c, "random", "random_browse", "随机浏览", -1)
 			}
 			tags := a.sidebarRow(c.Key("tags_page"), a.T("tag_management"), "标签组", -1, a.TagPage)
 			if tags.Clicked() {
@@ -75,6 +79,7 @@ func (a *App) sidebar(c *ui.Context) {
 					a.sidebarMoveFolder(drag, "", folderInside)
 				}
 			}
+			a.sidebarSmartFolders(c)
 		})
 		ui.Divider(c)
 		trash := a.sidebarScope(c, "trash", "trash", "回收站", counts.Trash)
@@ -247,6 +252,8 @@ func (a *App) sidebarFolders(c *ui.Context, counts catalog.Counts) {
 			}
 			a.sidebarFolderDrop(c, row, folder)
 			row.PopoverMenu(func(m *ui.Menu) {
+				a.QuickAccessMenu(m, "folder", folder.ID)
+				m.Separator()
 				if m.Item(a.T("new_subfolder")).Disabled(a.Busy).Chosen() {
 					*open = true
 					a.sidebarCreateFolder(folder.ID)

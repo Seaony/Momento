@@ -219,7 +219,7 @@ func TestAttachFileDragPreparesAtGestureAndCleansOnEscape(t *testing.T) {
 	selections := 0
 	tt := ui.NewTester(func(c *ui.Context) {
 		element := ui.Box(c).Size(100, 60).Label("source").Drag("internal-asset")
-		AttachFileDrag(element, root, func() []model.Asset { selections++; return []model.Asset{item} }, func(err error) { reported = err })
+		AttachFileDrag(element, root, func() []model.Asset { selections++; return []model.Asset{item} }, func(err error) { reported = err }, nil)
 	}, 200, 100)
 	if selections != 0 {
 		t.Fatal("渲染界面时就准备了文件")

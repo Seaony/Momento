@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 type Manifest struct {
 	SchemaVersion int       `json:"schemaVersion"`
@@ -19,6 +19,8 @@ type Color struct {
 }
 
 type Asset struct {
+	LastUsedAt       time.Time         `json:"lastUsedAt"`
+	Rotation         int               `json:"rotation"`
 	ID               string            `json:"id"`
 	Name             string            `json:"name"`
 	OriginalFileName string            `json:"originalFileName"`
@@ -56,10 +58,30 @@ type Tag struct {
 	ColorHex       string `json:"colorHex"`
 }
 
+type SmartRule struct {
+	Field    string `json:"field"`
+	Operator string `json:"operator"`
+	Value    string `json:"value"`
+}
+type SmartFolder struct {
+	ID        string      `json:"id"`
+	Name      string      `json:"name"`
+	Match     string      `json:"match"`
+	Rules     []SmartRule `json:"rules"`
+	SortIndex int         `json:"sortIndex"`
+}
+type QuickAccess struct {
+	ID        string `json:"id"`
+	Kind      string `json:"kind"`
+	TargetID  string `json:"targetID"`
+	SortIndex int    `json:"sortIndex"`
+}
 type Snapshot struct {
-	Assets  []Asset
-	Folders []Folder
-	Tags    []Tag
+	SmartFolders []SmartFolder
+	QuickAccess  []QuickAccess
+	Assets       []Asset
+	Folders      []Folder
+	Tags         []Tag
 }
 
 type ImportProgress struct {
@@ -80,8 +102,8 @@ type ImportResult struct {
 }
 
 type ImportRequest struct {
-	ImportKeywords bool
 	TagIDs         []string
+	ImportKeywords bool
 	Paths          []string
 	SourceURL      string
 	FolderID       string

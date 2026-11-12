@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"log/slog"
+	"maps"
 	"runtime"
 	"strings"
 
@@ -65,7 +66,11 @@ func shortcutDefinition(action string) (ShortcutDefinition, bool) {
 }
 
 func (a *App) Shortcut(action string) string {
-	if value, ok := a.Preferences.Shortcuts[action]; ok {
+	return shortcutValue(a.Preferences.Shortcuts, action)
+}
+
+func shortcutValue(overrides map[string]string, action string) string {
+	if value, ok := overrides[action]; ok {
 		return value
 	}
 	definition, _ := shortcutDefinition(action)
@@ -98,15 +103,9 @@ func (a *App) SetShortcut(action, accelerator string) bool {
 			a.Settings.ShortcutErrors[action] = a.T("shortcut_invalid")
 			return false
 		}
-		for _, other := range ShortcutDefinitions {
-			if other.Action == action || !definition.Global && !other.Global && (definition.Group == "preview") != (other.Group == "preview") {
-				continue
-			}
-			otherMods, otherKey, valid := parseShortcut(a.Shortcut(other.Action))
-			if valid && mods == otherMods && key == otherKey {
-				a.Settings.ShortcutErrors[action] = a.T("shortcut_conflict", a.T(other.Key))
-				return false
-			}
+		if other, conflict := conflictingShortcut(definition, mods, key, a.Preferences.Shortcuts); conflict {
+			a.Settings.ShortcutErrors[action] = a.T("shortcut_conflict", a.T(other.Key))
+			return false
 		}
 	}
 	if a.Preferences.Shortcuts == nil {
@@ -131,13 +130,52 @@ func (a *App) SetShortcut(action, accelerator string) bool {
 	return true
 }
 
+func conflictingShortcut(definition ShortcutDefinition, mods ui.Modifiers, key ui.Key, overrides map[string]string) (ShortcutDefinition, bool) {
+	for _, other := range ShortcutDefinitions {
+		if other.Action == definition.Action || !definition.Global && !other.Global && (definition.Group == "preview") != (other.Group == "preview") {
+			continue
+		}
+		otherMods, otherKey, valid := parseShortcut(shortcutValue(overrides, other.Action))
+		if valid && mods == otherMods && key == otherKey {
+			return other, true
+		}
+	}
+	return ShortcutDefinition{}, false
+}
+
 func (a *App) ResetShortcuts(group string) {
+	candidate := maps.Clone(a.Preferences.Shortcuts)
+	for _, definition := range ShortcutDefinitions {
+		if definition.Group == group {
+			delete(candidate, definition.Action)
+		}
+	}
+	conflicts := make(map[string]string)
+	for _, definition := range ShortcutDefinitions {
+		mods, key, valid := parseShortcut(shortcutValue(candidate, definition.Action))
+		if !valid {
+			continue
+		}
+		if other, conflict := conflictingShortcut(definition, mods, key, candidate); conflict {
+			conflicts[definition.Action] = a.T("shortcut_conflict", a.T(other.Key))
+		}
+	}
+	if len(conflicts) > 0 {
+		if a.Settings.ShortcutErrors == nil {
+			a.Settings.ShortcutErrors = make(map[string]string)
+		}
+		for action, message := range conflicts {
+			a.Settings.ShortcutErrors[action] = message
+		}
+		a.InvalidateWindows()
+		return
+	}
+	a.Preferences.Shortcuts = candidate
 	for _, definition := range ShortcutDefinitions {
 		if definition.Group == group {
 			if a.Settings.RecordingShortcut == definition.Action {
 				a.Settings.RecordingShortcut = ""
 			}
-			delete(a.Preferences.Shortcuts, definition.Action)
 			delete(a.Settings.ShortcutErrors, definition.Action)
 		}
 	}

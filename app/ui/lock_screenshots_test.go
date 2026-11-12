@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -24,7 +25,7 @@ func TestPasswordLockScreenshots(t *testing.T) {
 	records := []record{}
 	for _, language := range []string{"zh-CN", "en", "ja"} {
 		for _, theme := range []string{"light", "dark"} {
-			for _, state := range []string{"locked", "wrong", "cooldown", "enable", "change", "save-error"} {
+			for _, state := range []string{"locked", "wrong", "cooldown", "enable", "change", "save-error", "save-permission-error"} {
 				t.Run(language+"/"+theme+"/"+state, func(t *testing.T) {
 					a := settingsTestApp(language, theme)
 					a.Preferences.PasswordHash = "screenshot-only"
@@ -37,18 +38,20 @@ func TestPasswordLockScreenshots(t *testing.T) {
 					case "cooldown":
 						a.Lock.ErrorKey = "password_cooldown"
 						a.Lock.CooldownUntil = time.Now().Add(30 * time.Second)
-					case "enable", "change", "save-error":
+					case "enable", "change", "save-error", "save-permission-error":
 						a.Lock.Locked = false
 						a.Settings.Tab = SettingsPassword
 						mode := state
 						if state == "enable" {
 							a.Preferences.PasswordHash = ""
-						} else if state == "save-error" {
+						} else if state == "save-error" || state == "save-permission-error" {
 							mode = "change"
 						}
 						a.ShowPasswordSettings(mode)
 						if state == "save-error" {
-							a.Lock.ErrorKey, a.Lock.Detail = "password_save_failed", "No space left on device"
+							a.Lock.ErrorKey, a.Lock.Detail = "password_save_failed", a.passwordErrorDetail(&os.PathError{Op: "write", Path: "preferences.json", Err: syscall.ENOSPC})
+						} else if state == "save-permission-error" {
+							a.Lock.ErrorKey, a.Lock.Detail = "password_save_failed", a.passwordErrorDetail(&os.PathError{Op: "write", Path: "preferences.json", Err: os.ErrPermission})
 						}
 						width, height, view = 760, 560, a.SettingsView
 					}

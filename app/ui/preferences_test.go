@@ -215,3 +215,15 @@ func TestPreferenceSnapshotDoesNotShareMutableFields(t *testing.T) {
 		t.Fatal("后台保存共享了可变偏好")
 	}
 }
+
+func TestChinesePreferenceSurvivesFlushAndLocale(t *testing.T) {
+	a := preferenceTestApp(t)
+	a.Preferences.Language = "zh-CN"
+	if err := a.FlushPreferences(); err != nil {
+		t.Fatal(err)
+	}
+	p := readTestPreferences(t, a.configDir)
+	if p.Language != "zh-CN" || (i18n.Catalog{Language: p.Language}).Locale() != "zh-Hans" {
+		t.Fatalf("中文选择在保存读回后丢失: %s", p.Language)
+	}
+}

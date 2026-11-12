@@ -21,13 +21,14 @@ import (
 )
 
 type importState struct {
-	WatchCancel  context.CancelFunc
-	WatchLibrary string
-	WatchRules   []AutoImportRule
-	PickerOpen   bool
-	PickerFolder string
-	PickerTags   map[string]bool
-	PickerReply  chan importChoice
+	WatchCancel     context.CancelFunc
+	WatchLibrary    string
+	WatchGeneration uint64
+	WatchRules      []AutoImportRule
+	PickerOpen      bool
+	PickerFolder    string
+	PickerTags      map[string]bool
+	PickerReply     chan importChoice
 }
 type importChoice struct {
 	FolderID string
@@ -152,7 +153,7 @@ func (a *App) importFiles(ctx context.Context, service *assets.Service, lib *lib
 func (a *App) ConfigureAutoImport() {
 	libraryID := a.libraryID()
 	rules := a.Preferences.AutoImport[libraryID]
-	if a.Import.WatchCancel != nil && a.Import.WatchLibrary == libraryID && reflect.DeepEqual(a.Import.WatchRules, rules) {
+	if a.Import.watching(libraryID, a.generation, rules) {
 		return
 	}
 	if a.Import.WatchCancel != nil {
@@ -163,6 +164,7 @@ func (a *App) ConfigureAutoImport() {
 		return
 	}
 	a.Import.WatchLibrary = libraryID
+	a.Import.WatchGeneration = a.generation
 	a.Import.WatchRules = slices.Clone(rules)
 	if len(rules) == 0 {
 		return
@@ -213,6 +215,10 @@ func (a *App) remoteImportChoice(ctx context.Context) (importChoice, error) {
 	reply := make(chan importChoice, 1)
 	var readyErr error
 	mygo.RunOnMain(func() {
+		if a.IsLocked() {
+			reply <- importChoice{}
+			return
+		}
 		if a.Import.PickerOpen {
 			readyErr = i18n.NewError("busy")
 			return
@@ -251,14 +257,21 @@ func (a *App) extensionImportPicker(c *ui.Context) {
 	ui.DialogBase(c.Key("extension-import-picker"), &open, func(backdrop, panel ui.Element) {
 		panel.Width(420).Padding(24).Gap(16).Background(c.Theme().Surface).Radius(12).Label(a.T("extension_picker_title"))
 		ui.Text(c, a.T("extension_picker_title")).Bold()
-		names := []string{a.T("all_assets")}
-		if a.Import.PickerFolder == "" {
-			a.Import.PickerFolder = names[0]
+		choices := a.importFolderChoices()
+		label := choices[0].Label
+		for _, choice := range choices {
+			if choice.ID == a.Import.PickerFolder {
+				label = choice.Label
+				break
+			}
 		}
-		for _, folder := range a.Snapshot.Folders {
-			names = append(names, folder.Name)
-		}
-		ui.Select(c.Key("picker-folder"), &a.Import.PickerFolder, names).FillWidth().Label(a.T("folders"))
+		ui.Button(c.Key("picker-folder"), label).FillWidth().Label(a.T("folders")).Menu(func(m *ui.Menu) {
+			for _, choice := range choices {
+				if m.Item(choice.Label).Radio(choice.ID == a.Import.PickerFolder).Chosen() {
+					a.Import.PickerFolder = choice.ID
+				}
+			}
+		})
 		ui.Scroll(c).MaxHeight(240).FillWidth().Children(func() {
 			for _, tag := range a.Snapshot.Tags {
 				selected := a.Import.PickerTags[tag.ID]
@@ -272,13 +285,7 @@ func (a *App) extensionImportPicker(c *ui.Context) {
 				open = false
 			}
 			if ui.PrimaryButton(c, a.T("import")).Clicked() {
-				choice := importChoice{}
-				for index, name := range names {
-					if index > 0 && name == a.Import.PickerFolder {
-						choice.FolderID = a.Snapshot.Folders[index-1].ID
-						break
-					}
-				}
+				choice := importChoice{FolderID: a.Import.PickerFolder}
 				for id, selected := range a.Import.PickerTags {
 					if selected {
 						choice.TagIDs = append(choice.TagIDs, id)
@@ -311,4 +318,40 @@ func (a *App) watchRulePath(path string) string {
 		}
 	}
 	return path
+}
+
+func (state *importState) watching(libraryID string, generation uint64, rules []AutoImportRule) bool {
+	return state.WatchCancel != nil && state.WatchLibrary == libraryID && state.WatchGeneration == generation && reflect.DeepEqual(state.WatchRules, rules)
+}
+
+type importFolderChoice struct{ ID, Label string }
+
+func (a *App) importFolderChoices() []importFolderChoice {
+	choices := []importFolderChoice{{Label: a.T("auto_import_library_root")}}
+	folders := make(map[string]model.Folder, len(a.Snapshot.Folders))
+	for _, folder := range a.Snapshot.Folders {
+		folders[folder.ID] = folder
+	}
+	for _, folder := range a.Snapshot.Folders {
+		parts := []string{folder.Name}
+		for parent := folder.ParentID; parent != ""; {
+			ancestor, ok := folders[parent]
+			if !ok {
+				break
+			}
+			parts = append(parts, ancestor.Name)
+			parent = ancestor.ParentID
+		}
+		slices.Reverse(parts)
+		choices = append(choices, importFolderChoice{ID: folder.ID, Label: strings.Join(parts, " / ")})
+	}
+	return choices
+}
+
+func (a *App) cancelExtensionPicker() {
+	a.Import.PickerOpen = false
+	if reply := a.Import.PickerReply; reply != nil {
+		reply <- importChoice{Canceled: true}
+		a.Import.PickerReply = nil
+	}
 }

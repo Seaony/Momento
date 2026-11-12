@@ -101,3 +101,23 @@ func TestThemeScreenshots(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestThemeSwatchScreenshots(t *testing.T) {
+	if os.Getenv("MOMENTO_THEME_SWATCH_SCREENSHOTS") != "1" {
+		t.Skip("设置 MOMENTO_THEME_SWATCH_SCREENSHOTS=1 生成主题色块特写")
+	}
+	dir := "/tmp/momento-eagle/theme/swatch-review"
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, background := range []string{"light", "purple"} {
+		a := settingsTestApp("zh-CN", background)
+		tt := ui.NewTester(func(c *ui.Context) {
+			a.applyTheme(c)
+			ui.Column(c).Fill().Padding(20).Children(func() { a.ThemeSwatches(c) })
+		}, 320, 96)
+		tt.SetScale(3)
+		tt.SetWindowActive(true)
+		writeScreenshot(t, filepath.Join(dir, "swatches-"+background+".png"), tt)
+	}
+}

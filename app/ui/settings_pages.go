@@ -27,6 +27,31 @@ func (a *App) switchSetting(c *ui.Context, key string, value *bool, disabled boo
 	})
 }
 
+func settingsSegments(c *ui.Context, label string, selected *int, labels ...string) ui.Element {
+	theme := c.Theme()
+	parts := ui.SegmentedBase(c, selected, len(labels))
+	parts.Track.AlignItems(ui.Stretch).Padding(theme.Space(.5)).Gap(theme.Space(.5)).Radius(theme.Radius).Background(theme.Surface).Border(1, theme.Border).Label(label).Children(func() {
+		for i, text := range labels {
+			segment := parts.Segment(i).Padding(theme.Space(1), theme.Space(3)).Radius(max(theme.Radius-theme.Space(.5), 0)).Label(text).TextColor(theme.Text)
+			if i == *selected {
+				color := theme.Accent
+				if segment.Pressed() {
+					color = theme.AccentPressed
+				} else if segment.Hovered() {
+					color = theme.AccentHover
+				}
+				segment.Background(color).TextColor(theme.AccentText).Shadow(0, 1, 2, 0, ui.RGBA(0, 0, 0, .12))
+			} else if segment.Pressed() {
+				segment.Background(theme.SurfacePressed)
+			} else if segment.Hovered() {
+				segment.Background(theme.SurfaceHover)
+			}
+			segment.Children(func() { ui.Text(c, text).SingleLine() })
+		}
+	})
+	return parts.Track.FillEqually()
+}
+
 func (a *App) stringSetting(c *ui.Context, key string, value *string, codes, labels []string) {
 	ui.Column(c.Key(key)).FillWidth().Padding(12, 14).Gap(8).Children(func() {
 		ui.Text(c, a.T(key))
@@ -35,22 +60,25 @@ func (a *App) stringSetting(c *ui.Context, key string, value *string, codes, lab
 		for i, label := range labels {
 			translated[i] = a.T(label)
 		}
-		if ui.Segmented(c, &selected, translated...).Label(a.T(key)).FillEqually().Changed() {
+		if settingsSegments(c, a.T(key), &selected, translated...).Changed() {
 			*value = codes[selected]
 			a.SavePreferences()
 		}
 	})
 }
 
-func (a *App) boolSetting(c *ui.Context, key string, value *bool, falseKey, trueKey string) {
+func (a *App) boolSetting(c *ui.Context, key string, value *bool, firstValue bool, firstKey, secondKey string) {
 	ui.Column(c.Key(key)).FillWidth().Padding(12, 14).Gap(8).Children(func() {
 		ui.Text(c, a.T(key))
 		selected := 0
-		if *value {
+		if *value != firstValue {
 			selected = 1
 		}
-		if ui.Segmented(c, &selected, a.T(falseKey), a.T(trueKey)).Label(a.T(key)).FillEqually().Changed() {
-			*value = selected == 1
+		if settingsSegments(c, a.T(key), &selected, a.T(firstKey), a.T(secondKey)).Changed() {
+			*value = firstValue
+			if selected == 1 {
+				*value = !firstValue
+			}
 			a.SavePreferences()
 		}
 	})
@@ -70,10 +98,17 @@ func (a *App) appearanceSettings(c *ui.Context) {
 					label = labels[i]
 				}
 			}
-			if ui.Select(c.Key("ui-zoom"), &label, labels).Width(100).Label(a.T("ui_zoom")).Changed() {
-				a.Preferences.UIZoom = codes[slices.Index(labels, label)]
-				a.SavePreferences()
-			}
+			ui.ButtonBase(c.Key("ui-zoom")).Height(28).Padding(0).Gap(5).Shrink(0).TextColor(c.Theme().Text).AlignItems(ui.Center).Label(a.T("ui_zoom")).Children(func() {
+				ui.Text(c, label).SingleLine()
+				ui.Icon(c, settingsSymbols["chevrons"]).Size(10, 14)
+			}).Menu(func(menu *ui.Menu) {
+				for i, choice := range labels {
+					if menu.Item(choice).Radio(a.Preferences.UIZoom == codes[i]).Chosen() {
+						a.Preferences.UIZoom = codes[i]
+						a.SavePreferences()
+					}
+				}
+			})
 		})
 		settingsSeparator(c)
 		settingsRow(c, func() { ui.Text(c, a.T("language")).Grow(1); a.languageMenu(c.Key("language")) })
@@ -90,7 +125,7 @@ func (a *App) sidebarSettings(c *ui.Context) {
 		items := []struct {
 			key, label string
 			fixed      bool
-		}{{"all", "all", true}, {"tags", "tag_management", true}, {"trash", "trash", true}, {"favorites", "favorites", false}, {"unfiled", "uncategorized", false}, {"untagged", "untagged", false}, {"random", "random_browse", false}}
+		}{{"all", "all", true}, {"tags", "tag_management", true}, {"trash", "trash", true}, {"favorites", "favorites", false}, {"unfiled", "uncategorized", false}, {"untagged", "untagged", false}, {"recent", "recent", false}, {"random", "random_browse", false}}
 		ui.Column(c).FillWidth().Padding(14).Gap(12).Children(func() {
 			for start := 0; start < len(items); start += 3 {
 				ui.Row(c).FillWidth().Gap(8).Children(func() {
@@ -101,14 +136,19 @@ func (a *App) sidebarSettings(c *ui.Context) {
 							a.setSidebarShown(item.key, shown)
 						}
 					}
+					for i := min(start+3, len(items)); i < start+3; i++ {
+						ui.Box(c).Grow(1).MinWidth(0)
+					}
 				})
 			}
 		})
 		settingsSeparator(c)
-		settingsRow(c, func() {
-			shown := !slices.Contains(a.Preferences.SidebarHidden, "folders")
-			if ui.Checkbox(c.Key("folders"), &shown, a.T("folders")).Changed() {
-				a.setSidebarShown("folders", shown)
+		ui.Row(c).FillWidth().Padding(14).Gap(8).Children(func() {
+			for _, item := range []struct{ key, label string }{{"quick", "quick_access"}, {"smart", "smart_folders"}, {"folders", "folders"}} {
+				shown := !slices.Contains(a.Preferences.SidebarHidden, item.key)
+				if ui.Checkbox(c.Key(item.key), &shown, a.T(item.label)).Grow(1).MinWidth(0).Changed() {
+					a.setSidebarShown(item.key, shown)
+				}
 			}
 		})
 	})
@@ -139,9 +179,9 @@ func (a *App) previewSettings(c *ui.Context) {
 		a.stringSetting(c, "preview_fit", &a.Preferences.PreviewFit, []string{"smart", "fit"}, []string{"preview_smart", "preview_fit_window"})
 	})
 	settingsSection(c, "", "", func() {
-		a.boolSetting(c, "preview_details", &a.Preferences.PreviewPixelated, "preview_smooth", "preview_pixelated")
+		a.boolSetting(c, "preview_details", &a.Preferences.PreviewPixelated, false, "preview_smooth", "preview_pixelated")
 		settingsSeparator(c)
-		a.boolSetting(c, "preview_transparency", &a.Preferences.PreviewChecker, "preview_solid", "preview_checker")
+		a.boolSetting(c, "preview_transparency", &a.Preferences.PreviewChecker, true, "preview_checker", "preview_solid")
 	})
 }
 

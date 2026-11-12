@@ -121,7 +121,7 @@ func Open(ctx context.Context, path string) (_ *Library, err error) {
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		return nil, i18n.WrapError(err, "error_manifest_invalid")
 	}
-	if manifest.SchemaVersion != model.SchemaVersion || manifest.LibraryID == "" || strings.TrimSpace(manifest.DisplayName) == "" || manifest.CreatedAt.IsZero() || manifest.UpdatedAt.IsZero() {
+	if (manifest.SchemaVersion < 1 || manifest.SchemaVersion > model.SchemaVersion) || manifest.LibraryID == "" || strings.TrimSpace(manifest.DisplayName) == "" || manifest.CreatedAt.IsZero() || manifest.UpdatedAt.IsZero() {
 		return nil, i18n.NewError("error_manifest_invalid")
 	}
 	dbPath := filepath.Join(root, "database", "library.sqlite")
@@ -137,30 +137,10 @@ func Open(ctx context.Context, path string) (_ *Library, err error) {
 			err = errors.Join(err, db.Close())
 		}
 	}()
-	var version int
-	if err = db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+	if err = upgrade(ctx, db, root, &manifest); err != nil {
 		return nil, err
 	}
-	if version != model.SchemaVersion {
-		return nil, i18n.NewError("error_database_invalid")
-	}
-	// 打开只验证现有表，绝不补建表把损坏的库变成空库。
-	for _, query := range []string{
-		"SELECT id,name,original_file_name,extension,media_type,size,width,height,orientation,color_profile,exif_json,note,source_url,relative_path,favorite,trashed,created_at,updated_at FROM assets LIMIT 0",
-		"SELECT asset_id,hex,proportion,family,sort_index FROM asset_colors LIMIT 0",
-		"SELECT id,name,parent_id,sort_index FROM folders LIMIT 0",
-		"SELECT asset_id,folder_id FROM asset_folders LIMIT 0",
-		"SELECT id,name,normalized_name,color_hex FROM tags LIMIT 0",
-		"SELECT asset_id,tag_id FROM asset_tags LIMIT 0",
-	} {
-		rows, queryErr := db.QueryContext(ctx, query)
-		if queryErr != nil {
-			return nil, i18n.WrapError(queryErr, "error_database_invalid")
-		}
-		if err = rows.Close(); err != nil {
-			return nil, err
-		}
-	}
+
 	slog.Info("打开图库", "path", root, "libraryID", manifest.LibraryID)
 	return &Library{Root: root, DB: db, Manifest: manifest}, nil
 }

@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -24,6 +25,8 @@ type previewState struct {
 	Zoom                            float32
 	Pan                             ui.Point
 	targetRoot, targetID, errorText string
+	targetRotation                  int
+	navigation                      []string
 	pixelBitmap                     *ui.Bitmap
 	viewport                        ui.Rect
 	fitZoom                         float32
@@ -34,20 +37,24 @@ type previewState struct {
 }
 
 type previewAnimation struct {
-	decoder ui.VideoDecoder
-	delay   time.Duration
+	decoder  ui.VideoDecoder
+	delay    time.Duration
+	rotation int
 }
 type previewPicture struct {
 	bitmap, pixelBitmap *ui.Bitmap
 	animation           *previewAnimation
 }
 
-func (p *previewState) target(root, id string) {
-	if p.targetRoot == root && p.targetID == id {
+func (p *previewState) target(root, id string, rotation int) {
+	if root == "" {
+		p.navigation = nil
+	}
+	if p.targetRoot == root && p.targetID == id && p.targetRotation == rotation {
 		return
 	}
 	p.Generation++
-	p.targetRoot, p.targetID = root, id
+	p.targetRoot, p.targetID, p.targetRotation = root, id, rotation
 	p.Bitmap, p.pixelBitmap, p.animation, p.errorText = nil, nil, nil, ""
 	p.Loading, p.animationLoading, p.initialized = false, false, false
 	p.Zoom, p.Pan, p.fitZoom = 1, ui.Point{}, 1
@@ -78,7 +85,7 @@ func previewBitmaps(img image.Image) (*ui.Bitmap, *ui.Bitmap) {
 }
 
 // GIF 只保留当前帧的两种采样位图，切到别的素材后不再解码。
-func readPreviewPicture(path string) (previewPicture, error) {
+func readPreviewPicture(path string, rotation int) (previewPicture, error) {
 	if strings.EqualFold(filepath.Ext(path), ".gif") {
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -92,10 +99,18 @@ func readPreviewPicture(path string) (previewPicture, error) {
 		if err != nil {
 			return previewPicture{}, err
 		}
-		smooth, pixelated := previewBitmaps(frame.Image)
-		return previewPicture{smooth, pixelated, &previewAnimation{decoder, frame.Duration}}, nil
+		img, err := assets.RotateImage(frame.Image, rotation)
+		if err != nil {
+			return previewPicture{}, err
+		}
+		smooth, pixelated := previewBitmaps(img)
+		return previewPicture{smooth, pixelated, &previewAnimation{decoder, frame.Duration, rotation}}, nil
 	}
 	img, _, _, _, err := assets.PrepareImage(path)
+	if err != nil {
+		return previewPicture{}, err
+	}
+	img, err = assets.RotateImage(img, rotation)
 	if err != nil {
 		return previewPicture{}, err
 	}
@@ -112,29 +127,36 @@ func (animation *previewAnimation) next() (previewPicture, error) {
 	if err != nil {
 		return previewPicture{}, err
 	}
-	smooth, pixelated := previewBitmaps(frame.Image)
-	return previewPicture{smooth, pixelated, &previewAnimation{animation.decoder, frame.Duration}}, nil
+	img, err := assets.RotateImage(frame.Image, animation.rotation)
+	if err != nil {
+		return previewPicture{}, err
+	}
+	smooth, pixelated := previewBitmaps(img)
+	return previewPicture{smooth, pixelated, &previewAnimation{animation.decoder, frame.Duration, animation.rotation}}, nil
 }
 
 func (a *App) preview(c *ui.Context) {
 	p := &a.Preview
 	if !p.Open {
-		p.target("", "")
+		p.target("", "", 0)
 		return
 	}
 	if a.Library == nil || p.Held && !c.KeyDown(ui.KeySpace) {
 		a.ClosePreview()
-		p.target("", "")
+		p.target("", "", 0)
 		return
 	}
-	index := previewIndex(a.Visible, p.ID)
-	if index < 0 {
+	if p.navigation == nil {
+		a.InitPreviewNavigation()
+	}
+	index := slices.Index(p.navigation, p.ID)
+	asset, found := a.previewAsset(p.ID)
+	if index < 0 || !found {
 		a.ClosePreview()
-		p.target("", "")
+		p.target("", "", 0)
 		return
 	}
-	asset := a.Visible[index]
-	p.target(a.Library.Root, asset.ID)
+	p.target(a.Library.Root, asset.ID, asset.Rotation)
 	if p.Bitmap == nil && p.errorText == "" && !p.Loading {
 		a.loadPreview(asset, a.Library.Root)
 	}
@@ -146,8 +168,14 @@ func (a *App) preview(c *ui.Context) {
 			Label(a.T("preview_original")).TabStop(false).AutoFocus()
 		ui.Row(c).FillWidth().Gap(12).Children(func() {
 			ui.Text(c, asset.Name).Bold().Grow(1).SingleLine()
+			if ui.Button(c.Key("preview-rotate-left"), a.T("preview_rotate_left")).Disabled(a.Busy).Clicked() {
+				a.RotatePreview(-90)
+			}
+			if ui.Button(c.Key("preview-rotate-right"), a.T("preview_rotate_right")).Disabled(a.Busy).Clicked() {
+				a.RotatePreview(90)
+			}
 			ui.Textf(c, "%.0f%%", p.Zoom*100).FontSize(12)
-			ui.Text(c, a.T("preview_position", index+1, len(a.Visible))).FontSize(12).TextColor(c.Theme().TextMuted)
+			ui.Text(c, a.T("preview_position", index+1, len(p.navigation))).FontSize(12).TextColor(c.Theme().TextMuted)
 			if ui.Button(c.Key("close-preview"), "×").Label(a.T("close_preview")).Size(40, 40).Clicked() {
 				a.ClosePreview()
 			}
@@ -157,7 +185,7 @@ func (a *App) preview(c *ui.Context) {
 				a.movePreview(-1)
 			}
 			a.previewViewport(c, asset)
-			if ui.Button(c.Key("next-preview"), "›").Label(a.T("next_asset")).Width(40).Height(48).Disabled(index == len(a.Visible)-1).Clicked() {
+			if ui.Button(c.Key("next-preview"), "›").Label(a.T("next_asset")).Width(40).Height(48).Disabled(index == len(p.navigation)-1).Clicked() {
 				a.movePreview(1)
 			}
 		})
@@ -181,7 +209,7 @@ func (a *App) preview(c *ui.Context) {
 		}
 	})
 	if !p.Open {
-		p.target("", "")
+		p.target("", "", 0)
 	}
 }
 
@@ -354,20 +382,38 @@ func drawPreviewChecker(p *ui.Painter, viewport, image ui.Rect, theme *ui.Theme)
 		}
 	}
 }
-func previewIndex(visible []model.Asset, id string) int {
-	for i := range visible {
-		if visible[i].ID == id {
-			return i
+
+// 一次预览沿用打开时的顺序，最近使用重排只影响下次打开。
+func (a *App) InitPreviewNavigation() {
+	a.Preview.navigation = make([]string, len(a.Visible))
+	for i, asset := range a.Visible {
+		a.Preview.navigation[i] = asset.ID
+	}
+}
+
+func (a *App) previewAsset(id string) (model.Asset, bool) {
+	if asset, ok := a.assetByID[id]; ok {
+		return asset, true
+	}
+	for _, asset := range a.Visible {
+		if asset.ID == id {
+			return asset, true
 		}
 	}
-	return -1
+	return model.Asset{}, false
 }
+
 func (a *App) movePreview(delta int) {
-	index := previewIndex(a.Visible, a.Preview.ID)
-	if index < 0 || index+delta < 0 || index+delta >= len(a.Visible) {
+	p := &a.Preview
+	if p.navigation == nil {
+		a.InitPreviewNavigation()
+	}
+	index := slices.Index(p.navigation, p.ID)
+	if index < 0 || index+delta < 0 || index+delta >= len(p.navigation) {
 		return
 	}
-	a.Preview.ID = a.Visible[index+delta].ID
+	p.ID = p.navigation[index+delta]
+	a.MarkAssetsUsed([]string{p.ID})
 }
 func (a *App) loadPreview(asset model.Asset, root string) {
 	p := &a.Preview
@@ -376,7 +422,7 @@ func (a *App) loadPreview(asset model.Asset, root string) {
 	win := a.Window
 	path := filepath.Join(root, filepath.FromSlash(asset.RelativePath))
 	go func() {
-		picture, err := readPreviewPicture(path)
+		picture, err := readPreviewPicture(path, asset.Rotation)
 		if err != nil {
 			slog.Error("原图预览加载失败", "asset", asset.ID, "error", err)
 		}

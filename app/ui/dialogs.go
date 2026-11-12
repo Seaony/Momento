@@ -110,6 +110,12 @@ func (a *App) exportDialog(c *ui.Context) {
 	settingsPanel(c.Key("export"), &a.ExportOpen, 420, func() {
 		ui.Text(c, a.T("export")).FontSize(20).Bold()
 		ui.Text(c, a.T("export_count", a.Selected.Len())).TextColor(c.Theme().TextMuted)
+		for _, asset := range a.SelectedAssets() {
+			if asset.Rotation != 0 {
+				ui.Text(c, a.T("export_rotation_metadata_hint")).FontSize(12).TextColor(c.Theme().TextMuted)
+				break
+			}
+		}
 		ui.Text(c, a.T("export_format")).Bold().Margin(4, 0, 0, 0)
 		ui.RadioGroup(c, func() {
 			ui.Radio(c, &a.Dialog.Format, model.ExportOriginal, a.T("export_original"))

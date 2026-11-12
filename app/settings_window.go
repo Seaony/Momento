@@ -10,6 +10,7 @@ import (
 
 func showSettingsWindow(a *appui.App) {
 	if a.SettingsWindow != nil {
+		a.SettingsWindow.Show()
 		a.SettingsWindow.Restore()
 		a.SettingsWindow.Focus()
 		return

@@ -92,6 +92,7 @@ type App struct {
 	SettingsOpen, NewLibraryOpen, ExportOpen bool
 	Preferences                              Preferences
 	Browse                                   browseState
+	GBrowsing                                gBrowsingState
 	Welcome                                  welcomeState
 	Lock                                     lockState
 	Import                                   importState
@@ -247,6 +248,7 @@ func (a *App) View(c *ui.Context) {
 	a.preview(c)
 	a.dialogs(c)
 	a.extensionImportPicker(c)
+	a.smartFolderDialog(c)
 	a.passwordSettingsDialog(c)
 	if a.Notice != "" {
 		c.Toast(a.Notice)
@@ -449,6 +451,7 @@ func (a *App) OpenLibrary(path string) {
 			a.Assets.AppVersion = mygo.App.Version()
 			a.generation++
 			a.Browse = browseState{}
+			a.GBrowsing = gBrowsingState{}
 			a.Inspector = inspectorState{}
 			a.Query = catalog.Query{Sort: a.Preferences.Sort, Descending: a.Preferences.SortDescending}
 			a.Selected.Clear()
@@ -457,6 +460,9 @@ func (a *App) OpenLibrary(path string) {
 			a.Thumbnails.Clear()
 			a.applySnapshot(snapshot)
 			a.Window.SetTitle(lib.Manifest.DisplayName + " – Momento")
+			if !a.Preferences.Onboarded {
+				a.finishOnboarding()
+			}
 			a.remember()
 			a.ConfigureAutoImport()
 			a.drainPending()
@@ -633,7 +639,9 @@ func (a *App) ExportTo(destination string, format model.ExportFormat, quality fl
 	})
 }
 func (a *App) ShowPreview(id string, held bool) {
+	a.InitPreviewNavigation()
 	a.Preview.ID = id
+	a.MarkAssetsUsed([]string{id})
 	a.Preview.Open = true
 	a.Preview.Held = held
 }
@@ -740,6 +748,9 @@ func (a *App) shortcuts(c *ui.Context) {
 	if c.FocusTakesText() {
 		return
 	}
+	if a.ActionShortcut(c, "copy") {
+		a.CopySelected()
+	}
 	if a.ActionShortcut(c, "paste") {
 		a.PasteImport()
 	}
@@ -767,6 +778,9 @@ func (a *App) shortcuts(c *ui.Context) {
 }
 
 func (a *App) SyncMenuFocus(c *ui.Context) {
+	if !c.WindowActive() {
+		return
+	}
 	focused := c.FocusTakesText()
 	if focused != a.TextInputFocused || a.menuPreviewOpen != a.Preview.Open {
 		a.TextInputFocused = focused
@@ -794,7 +808,7 @@ func (a *App) ToggleSort()   { a.Toolbar.SortOpen = !a.Toolbar.SortOpen }
 func (a *App) ImportRemote(ctx context.Context, imageURL, pageURL string) error {
 	choice := importChoice{}
 	picker := false
-	mygo.RunOnMain(func() { picker = a.Preferences.ExtensionPicker })
+	mygo.RunOnMain(func() { picker = a.Preferences.ExtensionPicker && !a.IsLocked() })
 	if picker {
 		var err error
 		choice, err = a.remoteImportChoice(ctx)

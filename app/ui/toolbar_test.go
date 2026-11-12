@@ -70,8 +70,8 @@ func TestToolbarResultCountOnlyDuringSearch(t *testing.T) {
 			}
 			toolbarClick(t, tt, a.T("search_assets"))
 			tt.Type("alpine")
-			if !tt.HasText(a.T("result_count", "1")) {
-				t.Fatal("搜索时没有显示完整本地化结果数")
+			if _, exists := tt.AccessByRole(ui.RoleStatus, a.T("result_count", "1")); !exists {
+				t.Fatal("搜索时没有保留完整本地化结果数")
 			}
 			a.Query.Search = ""
 			a.Refine()
@@ -208,5 +208,70 @@ func TestToolbarUpdateAppearsOnlyForKnownVersion(t *testing.T) {
 	tt.Frame()
 	if _, exists := tt.AccessByRole(ui.RoleButton, a.T("update")); !exists {
 		t.Fatal("发现新版本后应显示更新按钮")
+	}
+}
+
+func TestNarrowToolbarKeepsThumbnailPopover(t *testing.T) {
+	a := toolbarTestApp()
+	a.SidebarWidth = 236
+	tt := ui.NewTester(func(c *ui.Context) {
+		ui.Row(c).Fill().Children(func() {
+			ui.Box(c).Width(236)
+			ui.Column(c).Grow(1).MinWidth(0).Children(func() { a.toolbar(c); ui.Spacer(c) })
+			ui.Box(c).Width(280)
+		})
+	}, 1100, 640)
+	button, ok := tt.AccessByRole(ui.RoleButton, a.T("thumbnail_size"))
+	if !ok || button.Disabled {
+		t.Fatal("默认1100窗口没有缩略图入口")
+	}
+	filter, ok := tt.AccessByRole(ui.RoleButton, a.T("filter"))
+	if !ok {
+		t.Fatal("缺筛选入口")
+	}
+	if button.Bounds.W != filter.Bounds.W || button.Bounds.H != filter.Bounds.H {
+		t.Fatal("缩略图入口与同排按钮尺寸不一致")
+	}
+	search, ok := tt.AccessByRole(ui.RoleTextField, a.T("search_assets"))
+	if !ok || search.Bounds.W < 96 {
+		t.Fatal("缩略图入口挤压了搜索框")
+	}
+	if _, ok := tt.AccessByRole(ui.RoleSlider, a.T("thumbnail_size")); ok {
+		t.Fatal("窄窗口仍显示完整滑块")
+	}
+	toolbarClick(t, tt, a.T("thumbnail_size"))
+	slider, ok := tt.AccessByRole(ui.RoleSlider, a.T("thumbnail_size"))
+	if !a.Toolbar.ThumbnailOpen || !ok || slider.Disabled {
+		t.Fatal("缩略图浮层未打开")
+	}
+	before := a.thumbnailScale()
+	toolbarClick(t, tt, a.T("thumbnail_larger"))
+	if a.thumbnailScale() <= before {
+		t.Fatal("浮层中的缩略图按钮没有生效")
+	}
+	tt.Key(0, ui.KeyEscape)
+	if a.Toolbar.ThumbnailOpen {
+		t.Fatal("Esc没有关闭缩略图浮层")
+	}
+	a.Query.Search = "no-result"
+	a.Refine()
+	tt.Frame()
+	search, _ = tt.AccessByRole(ui.RoleTextField, a.T("search_assets"))
+	if search.Bounds.W < 96 {
+		t.Fatalf("结果提示挤压了窄窗口搜索框：%+v", search.Bounds)
+	}
+	a.ViewMode = 2
+	tt.Frame()
+	button, ok = tt.AccessByRole(ui.RoleButton, a.T("thumbnail_size"))
+	if !ok || !button.Disabled {
+		t.Fatal("列表视图缩略图入口没有禁用")
+	}
+	a.ViewMode = 0
+	tt.SetSize(1500, 640)
+	if _, ok := tt.AccessByRole(ui.RoleButton, a.T("thumbnail_size")); ok {
+		t.Fatal("宽窗口仍只显示缩略图入口")
+	}
+	if slider, ok = tt.AccessByRole(ui.RoleSlider, a.T("thumbnail_size")); !ok || slider.Disabled {
+		t.Fatal("宽窗口没有完整滑块")
 	}
 }

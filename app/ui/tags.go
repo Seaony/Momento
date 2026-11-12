@@ -79,6 +79,7 @@ func (a *App) tags(c *ui.Context) {
 					})
 				}
 			})
+			row.PopoverMenu(func(m *ui.Menu) { a.QuickAccessMenu(m, "tag", tag.ID) })
 			if row.DoubleClicked() || row.Submitted() {
 				a.BrowseTag(tag.ID)
 			}

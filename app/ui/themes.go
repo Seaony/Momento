@@ -159,17 +159,40 @@ func themeNameKey(key string) string {
 	}
 }
 
+func themeSwatchColor(key string, systemDark bool) ui.Color {
+	switch key {
+	case "navy":
+		return ui.Hex("#2E4B91")
+	case "purple":
+		return ui.Hex("#70449B")
+	default:
+		return momentoTheme(key, systemDark).Background
+	}
+}
+
 // 设置和引导共用色块，名称也用于读屏标签和悬停提示。
 func (a *App) ThemeSwatches(c *ui.Context) {
+	a.themeSwatches(c, false)
+}
+
+func (a *App) ThemeSwatchesCentered(c *ui.Context) {
+	a.themeSwatches(c, true)
+}
+
+func (a *App) themeSwatches(c *ui.Context, centered bool) {
 	theme := c.Theme()
-	ui.Column(c).Gap(8).Children(func() {
+	column := ui.Column(c).Gap(8)
+	if centered {
+		column.AlignItems(ui.Center)
+	}
+	column.Children(func() {
 		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
 			for _, key := range themeKeys {
 				selected := a.Preferences.Theme == key || (a.Preferences.Theme == "" && key == "system")
 				name := a.T(themeNameKey(key))
 				button := ui.ButtonBase(c.Key(key)).Size(28, 28).Padding(0).Radius(14).Label(name).Tooltip(name).AccessSelected(selected)
 				hovered := button.Hovered()
-				color := momentoTheme(key, c.Theme().Dark).Background
+				color := themeSwatchColor(key, theme.Dark)
 				button.Draw(func(p *ui.Painter, r ui.Rect) {
 					p.Clip(r, 14, func() {
 						p.Fill(r, color, 14)
@@ -178,13 +201,12 @@ func (a *App) ThemeSwatches(c *ui.Context) {
 							p.Fill(ui.Rect{X: r.X + r.W/2, Y: r.Y, W: r.W / 2, H: r.H}, momentoTheme("dark", true).Background, 0)
 						}
 					})
-					border, width := theme.Border, float32(1)
+					p.Stroke(r, theme.Border, 14, 1)
 					if selected {
-						border, width = theme.Accent, 2
+						p.Stroke(ui.Rect{X: r.X - 3, Y: r.Y - 3, W: r.W + 6, H: r.H + 6}, theme.Accent, 17, 2)
 					} else if hovered {
-						border = theme.AccentHover
+						p.Stroke(ui.Rect{X: r.X - 2, Y: r.Y - 2, W: r.W + 4, H: r.H + 4}, theme.AccentHover, 16, 1)
 					}
-					p.Stroke(r, border, 14, width)
 				})
 				if button.Clicked() {
 					a.Preferences.Theme = key

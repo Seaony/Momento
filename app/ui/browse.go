@@ -14,6 +14,7 @@ import (
 
 type browseLocation struct {
 	Scope, FolderID, TagID string
+	SmartFolderID          string
 	TagPage                bool
 }
 
@@ -29,7 +30,7 @@ func (a *App) browseLocation() browseLocation {
 	if scope == "" {
 		scope = "all"
 	}
-	return browseLocation{Scope: scope, FolderID: a.Query.FolderID, TagID: a.Browse.TagID, TagPage: a.TagPage}
+	return browseLocation{Scope: scope, FolderID: a.Query.FolderID, TagID: a.Browse.TagID, SmartFolderID: a.Query.SmartFolderID, TagPage: a.TagPage}
 }
 
 func (a *App) navigateScope(scope, folderID string, tags bool) {
@@ -54,6 +55,7 @@ func (a *App) navigateScope(scope, folderID string, tags bool) {
 func (a *App) applyBrowseLocation(location browseLocation) {
 	a.Query.Scope, a.Query.FolderID, a.TagPage = location.Scope, location.FolderID, location.TagPage
 	a.Browse.TagID = location.TagID
+	a.Query.SmartFolderID = location.SmartFolderID
 	if a.MenuChanged != nil {
 		a.MenuChanged()
 	}
@@ -165,11 +167,19 @@ func (a *App) ActivateAsset(id string, space bool) {
 	if a.Library != nil {
 		path := filepath.Join(a.Library.Root, filepath.FromSlash(asset.RelativePath))
 		if space && a.Preferences.SpaceKey == "system" && runtime.GOOS == "darwin" {
-			a.ShowError(mygo.Shell.PreviewItem(path))
+			if err := mygo.Shell.PreviewItem(path); err != nil {
+				a.ShowError(err)
+			} else {
+				a.MarkAssetsUsed([]string{id})
+			}
 			return
 		}
 		if !space && a.Preferences.DoubleClick == "external" {
-			a.ShowError(mygo.Shell.OpenPath(path))
+			if err := mygo.Shell.OpenPath(path); err != nil {
+				a.ShowError(err)
+			} else {
+				a.MarkAssetsUsed([]string{id})
+			}
 			return
 		}
 	}
@@ -178,7 +188,7 @@ func (a *App) ActivateAsset(id string, space bool) {
 
 func (a *App) scopeSummary() (string, int, int64) {
 	name := a.T("all")
-	query := catalog.Query{Scope: a.Query.Scope, FolderID: a.Query.FolderID}
+	query := catalog.Query{Scope: a.Query.Scope, FolderID: a.Query.FolderID, SmartFolderID: a.Query.SmartFolderID}
 	if query.Scope == "random" {
 		query.Scope = "all"
 		name = a.T("random_browse")
@@ -191,6 +201,13 @@ func (a *App) scopeSummary() (string, int, int64) {
 		for _, tag := range a.Snapshot.Tags {
 			if tag.ID == a.Browse.TagID {
 				name = tag.Name
+				break
+			}
+		}
+	} else if query.Scope == "smart" {
+		for _, folder := range a.Snapshot.SmartFolders {
+			if folder.ID == query.SmartFolderID {
+				name = folder.Name
 				break
 			}
 		}

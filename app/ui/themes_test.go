@@ -139,3 +139,48 @@ func TestZoomUsesLogicalMinimumAndScreenWorkArea(t *testing.T) {
 		t.Fatal("缩放修改没有即时生效")
 	}
 }
+
+func TestThemeSwatchesShowHueBorderAndSelection(t *testing.T) {
+	for _, background := range []string{"light", "purple"} {
+		a := &App{Preferences: DefaultPreferences(), Texts: i18n.Catalog{Language: "en"}}
+		a.Preferences.Language, a.Preferences.Theme = "en", background
+		tt := ui.NewTester(func(c *ui.Context) {
+			a.applyTheme(c)
+			ui.Column(c).Fill().Padding(20).Children(func() { a.ThemeSwatches(c) })
+		}, 320, 96)
+		tt.SetScale(4)
+		tt.SetWindowActive(true)
+		theme := momentoTheme(background, false)
+		pixel := func(x, y float32, want ui.Color, what string) {
+			t.Helper()
+			got := tt.Image().RGBAAt(int(x*4), int(y*4))
+			if got.R != want.R || got.G != want.G || got.B != want.B {
+				t.Fatalf("%s/%s 颜色不符：得到%v，预期%v", background, what, got, want)
+			}
+		}
+		for _, key := range themeKeys {
+			node, ok := tt.AccessByRole(ui.RoleButton, a.T(themeNameKey(key)))
+			if !ok {
+				t.Fatalf("缺少 %s 色块", key)
+			}
+			r := node.Bounds
+			pixel(r.X+r.W-.5, r.Y+r.H/2, theme.Border, key+"边框")
+			if key == background {
+				pixel(r.X+r.W/2, r.Y-2, theme.Accent, key+"选中外圈")
+			}
+			if key == "navy" || key == "purple" {
+				fill := themeSwatchColor(key, false)
+				pixel(r.X+r.W/2, r.Y+r.H/2, fill, key+"代表色")
+				if fill == momentoTheme(key, false).Background {
+					t.Fatalf("%s 色块仍与深色背景难以区分", key)
+				}
+				if key == "navy" && (int(fill.B) < int(fill.R)+60 || fill.B < fill.G) {
+					t.Fatal("深蓝色块没有足够蓝色辨识度")
+				}
+				if key == "purple" && (int(fill.R) < int(fill.G)+35 || int(fill.B) < int(fill.G)+60) {
+					t.Fatal("深紫色块没有足够紫色辨识度")
+				}
+			}
+		}
+	}
+}

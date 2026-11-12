@@ -1,0 +1,307 @@
+package ui
+
+import (
+	"context"
+	"log/slog"
+	"slices"
+	"strings"
+
+	"github.com/Seaony/Momento/app/internal/catalog"
+	"github.com/Seaony/Momento/app/internal/i18n"
+	"github.com/Seaony/Momento/app/internal/model"
+	"github.com/egoist/mygo/ui"
+)
+
+func (a *App) sidebarSmartFolders(c *ui.Context) {
+	if a.sidebarHidden("smart") {
+		return
+	}
+	ui.Row(c).Height(40).Padding(8, 8, 0, 10).Children(func() {
+		ui.Text(c, a.T("smart_folders")).FontSize(12).Bold().TextColor(c.Theme().TextMuted).Grow(1)
+		if sidebarSymbolButton(c, a.T("new_smart_folder")).Disabled(a.Busy).Clicked() {
+			a.EditSmartFolder("")
+		}
+	})
+	for _, folder := range a.Snapshot.SmartFolders {
+		count := 0
+		if a.Index != nil {
+			count = a.smartFolderCount(folder.ID)
+		}
+		row := a.smartSidebarRow(c.Key(folder.ID), folder.Name, count, !a.TagPage && a.Query.Scope == "smart" && a.Query.SmartFolderID == folder.ID)
+		if row.Clicked() {
+			a.BrowseSmartFolder(folder.ID)
+		}
+		row.PopoverMenu(func(m *ui.Menu) {
+			if m.Item(a.T("edit_smart_folder")).Disabled(a.Busy).Chosen() {
+				a.EditSmartFolder(folder.ID)
+			}
+			if m.Item(a.T("rename_smart_folder")).Disabled(a.Busy).Chosen() {
+				lib := a.Library
+				a.Ask(a.T("rename_smart_folder"), folder.Name, func(name string) {
+					a.Run("rename_smart_folder", func(ctx context.Context) error { return lib.RenameSmartFolder(ctx, folder.ID, name) })
+				})
+			}
+			a.QuickAccessMenu(m, "smart", folder.ID)
+			m.Separator()
+			if m.Item(a.T("delete_smart_folder")).Disabled(a.Busy).Chosen() {
+				a.Confirm(a.T("delete_smart_folder"), a.T("delete_smart_folder_detail", folder.Name), func() {
+					if a.Query.Scope == "smart" && a.Query.SmartFolderID == folder.ID {
+						a.SetScope("all", "")
+					}
+					lib := a.Library
+					a.Run("delete_smart_folder", func(ctx context.Context) error { return lib.DeleteSmartFolder(ctx, folder.ID) })
+				})
+			}
+		})
+	}
+}
+
+func (a *App) smartSidebarRow(c *ui.Context, label string, count int, selected bool) ui.Element {
+	row := ui.ButtonBase(c).FillWidth().Height(34).Padding(6, 10).Gap(8).Radius(6).Label(label).AccessSelected(selected).Justify(ui.Start)
+	if selected {
+		row.Background(c.Theme().SurfacePressed)
+	} else if row.Hovered() {
+		row.Background(c.Theme().SurfaceHover)
+	}
+	row.Children(func() {
+		ui.Icon(c, toolbarIcons["filter"]).Size(19, 19).Shrink(0)
+		ui.Text(c, label).SingleLine().Grow(1).MinWidth(0)
+		if a.Preferences.SidebarCounts {
+			color := c.Theme().TextMuted
+			if selected {
+				color = c.Theme().Text
+			}
+			ui.Text(c, sidebarCount(count)).FontSize(12).TextColor(color).Shrink(0)
+		}
+	})
+	return row
+}
+
+func (a *App) EditSmartFolder(id string) {
+	if a.Busy || a.Library == nil {
+		return
+	}
+	state := &a.GBrowsing
+	state.SmartID = id
+	state.SmartName = ""
+	state.SmartMatch = 0
+	state.SmartRules = []model.SmartRule{{Field: "name", Operator: "contains"}}
+	if id != "" {
+		found := false
+		for _, folder := range a.Snapshot.SmartFolders {
+			if folder.ID == id {
+				found = true
+				state.SmartName = folder.Name
+				state.SmartRules = slices.Clone(folder.Rules)
+				if folder.Match == "any" {
+					state.SmartMatch = 1
+				}
+				break
+			}
+		}
+		if !found {
+			return
+		}
+	}
+	state.SmartOpen = true
+	state.SmartError = ""
+	state.RulesScroll = ui.ScrollState{}
+}
+
+func (a *App) smartFolderDialog(c *ui.Context) {
+	state := &a.GBrowsing
+	if !state.SmartOpen {
+		return
+	}
+	settingsPanel(c.Key("smart-folder-editor"), &state.SmartOpen, 620, func() {
+		title := a.T("smart_folder_create_title")
+		if state.SmartID != "" {
+			title = a.T("smart_folder_edit_title")
+		}
+		ui.Text(c, title).FontSize(20).Bold()
+		ui.TextInput(c.Key("smart-name"), &state.SmartName).FillWidth().Label(a.T("smart_folder_name")).Placeholder(a.T("smart_folder_name")).AutoFocus().Disabled(state.Saving)
+		ui.Segmented(c.Key("smart-match"), &state.SmartMatch, a.T("smart_all"), a.T("smart_any")).Label(a.T("smart_match")).Disabled(state.Saving)
+		_, height := c.Size()
+		ui.Scroll(c.Key("smart-rules")).TrackScroll(&state.RulesScroll).MaxHeight(max(120, min(280, height-310))).FillWidth().Gap(8).Children(func() {
+			remove := -1
+			for i := range state.SmartRules {
+				rule := &state.SmartRules[i]
+				ui.Row(c.Key(i)).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
+					previous := rule.Field
+					smartSelect(c.Key("field"), &rule.Field, smartFields, func(key string) string { return a.T("smart_field_" + key) }).Width(132).Label(a.T("smart_rule_field", i+1)).Disabled(state.Saving)
+					if previous != rule.Field {
+						rule.Operator = smartOperators(rule.Field)[0]
+						rule.Value = ""
+					}
+					smartSelect(c.Key("operator"), &rule.Operator, smartOperators(rule.Field), func(key string) string { return a.T("smart_operator_" + key) }).Width(108).Label(a.T("smart_rule_operator", i+1)).Disabled(state.Saving)
+					a.smartRuleValue(c.Key("value"), rule, i)
+					removeButton := ui.ButtonBase(c.Key("remove")).Label(a.T("remove_smart_rule_number", i+1)).Tooltip(a.T("remove_smart_rule")).Size(28, 28).Radius(6).Disabled(state.Saving || len(state.SmartRules) == 1).Children(func() { ui.Icon(c, sidebarPlus).Size(14, 14).Rotate(45) })
+					if removeButton.Hovered() {
+						removeButton.Background(c.Theme().SurfaceHover)
+					}
+					if removeButton.Clicked() {
+						remove = i
+					}
+				})
+			}
+			if remove >= 0 {
+				state.SmartRules = slices.Delete(state.SmartRules, remove, remove+1)
+			}
+		})
+		if ui.Button(c.Key("add-rule"), a.T("add_smart_rule")).Disabled(state.Saving).Clicked() {
+			state.SmartRules = append(state.SmartRules, model.SmartRule{Field: "name", Operator: "contains"})
+		}
+		ui.Text(c, a.T("smart_units_hint")).FontSize(12).TextColor(c.Theme().TextMuted)
+		if state.SmartError != "" {
+			ui.Text(c, state.SmartError).TextColor(c.Theme().Danger).Role(ui.RoleStatus)
+		}
+		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
+			if ui.Button(c, a.T("cancel")).Disabled(state.Saving).Clicked() {
+				state.SmartOpen = false
+			}
+			label := a.T("save")
+			if state.Saving {
+				label = a.T("smart_saving")
+			}
+			if ui.PrimaryButton(c, label).Disabled(state.Saving || a.Busy).Clicked() {
+				a.saveSmartFolder()
+			}
+		})
+	})
+	if state.Saving {
+		state.SmartOpen = true
+	}
+}
+
+var smartFields = []string{"name", "extension", "tag", "color", "width", "height", "size", "added", "note"}
+
+func smartOperators(field string) []string {
+	switch field {
+	case "name", "note":
+		return []string{"contains", "equals"}
+	case "width", "height", "size":
+		return []string{"gte", "lte", "eq"}
+	case "added":
+		return []string{"after", "before"}
+	default:
+		return []string{"equals"}
+	}
+}
+func smartSelect(c *ui.Context, value *string, options []string, label func(string) string) ui.Element {
+	names := make([]string, len(options))
+	chosen := ""
+	for i, key := range options {
+		names[i] = label(key)
+		if *value == key {
+			chosen = names[i]
+		}
+	}
+	control := ui.Select(c, &chosen, names)
+	if control.Changed() {
+		for i, name := range names {
+			if name == chosen {
+				*value = options[i]
+				break
+			}
+		}
+	}
+	return control
+}
+func (a *App) smartRuleValue(c *ui.Context, rule *model.SmartRule, index int) {
+	label := a.T("smart_rule_value", index+1)
+	if rule.Field == "tag" {
+		if len(a.Snapshot.Tags) == 0 {
+			ui.Text(c, a.T("no_tags")).FontSize(12).TextColor(c.Theme().TextMuted).Grow(1).MinWidth(0)
+			return
+		}
+		ids := make([]string, 0, len(a.Snapshot.Tags))
+		names := map[string]string{}
+		for _, tag := range a.Snapshot.Tags {
+			ids = append(ids, tag.ID)
+			names[tag.ID] = tag.Name
+		}
+		smartSelect(c, &rule.Value, ids, func(id string) string { return names[id] }).Grow(1).MinWidth(0).Label(label).Disabled(a.GBrowsing.Saving || len(ids) == 0)
+		return
+	}
+	if rule.Field == "color" {
+		ids := make([]string, 0, len(toolbarFamilies))
+		for _, family := range toolbarFamilies {
+			ids = append(ids, family.ID)
+		}
+		smartSelect(c, &rule.Value, ids, func(id string) string { return a.T("color_" + id) }).Grow(1).MinWidth(0).Label(label).Disabled(a.GBrowsing.Saving)
+		return
+	}
+	placeholder := ""
+	switch rule.Field {
+	case "added":
+		placeholder = "YYYY-MM-DD"
+	case "width", "height":
+		placeholder = a.T("smart_pixels")
+	case "size":
+		placeholder = a.T("smart_bytes")
+	}
+	ui.TextInput(c, &rule.Value).Grow(1).MinWidth(0).Label(label).Placeholder(placeholder).Disabled(a.GBrowsing.Saving)
+}
+func (a *App) smartDraft() (model.SmartFolder, error) {
+	state := &a.GBrowsing
+	folder := model.SmartFolder{ID: state.SmartID, Name: strings.TrimSpace(state.SmartName), Match: "all", Rules: slices.Clone(state.SmartRules)}
+	if state.SmartMatch == 1 {
+		folder.Match = "any"
+	}
+	if folder.Name == "" {
+		return folder, i18n.NewError("smart_name_required")
+	}
+	return folder, catalog.ValidateSmartFolder(folder)
+}
+
+func (a *App) saveSmartFolder() {
+	if a.Library == nil || a.Busy || a.GBrowsing.Saving {
+		return
+	}
+	folder, err := a.smartDraft()
+	if err != nil {
+		a.GBrowsing.SmartError = a.Texts.Error(err)
+		return
+	}
+	lib, gen := a.Library, a.generation
+	a.Busy = true
+	a.GBrowsing.Saving = true
+	a.GBrowsing.SmartError = ""
+	go func() {
+		a.workMu.Lock()
+		defer a.workMu.Unlock()
+		slog.Info("保存智能文件夹", "id", folder.ID)
+		if folder.ID == "" {
+			folder, err = lib.CreateSmartFolder(a.ctx, folder.Name, folder.Match, folder.Rules)
+		} else {
+			err = lib.UpdateSmartFolder(a.ctx, folder.ID, folder.Name, folder.Match, folder.Rules)
+		}
+		var snapshot model.Snapshot
+		savedID := ""
+		if err == nil {
+			savedID = folder.ID
+			snapshot, err = lib.Snapshot(a.ctx)
+		}
+		a.Window.Update(func() { a.finishSmartFolderSave(gen, savedID, snapshot, err) })
+	}()
+}
+func (a *App) finishSmartFolderSave(generation uint64, id string, snapshot model.Snapshot, err error) {
+	if generation != a.generation {
+		return
+	}
+	a.Busy = false
+	a.GBrowsing.Saving = false
+	if err != nil {
+		if id != "" {
+			a.GBrowsing.SmartID = id
+		}
+		slog.Error("保存智能文件夹失败", "error", err)
+		a.GBrowsing.SmartError = a.Texts.Error(err)
+		return
+	}
+	a.applySnapshot(snapshot)
+	a.GBrowsing.SmartOpen = false
+	a.GBrowsing.SmartError = ""
+	a.BrowseSmartFolder(id)
+	a.drainPending()
+}

@@ -319,7 +319,7 @@ func (fixture screenshotFixture) app(t *testing.T, state, language, appearance s
 		}
 		a.Selected.Add(asset.ID)
 		a.Preview.ID, a.Preview.Open = asset.ID, true
-		a.Preview.target(fixture.root, asset.ID)
+		a.Preview.target(fixture.root, asset.ID, asset.Rotation)
 		a.Preview.Bitmap = ui.NewBitmap(img)
 	}
 	if state == "export" {
@@ -426,12 +426,16 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 		}
 	case "search-empty":
 		expect(a.T("search_empty", a.Query.Search))
-		expect(a.T("result_count", "0"))
+		if _, ok := tt.Find(a.T("result_count", "0")); !ok {
+			expect(a.T("result_count", "0"))
+		}
 	case "search-results":
 		if len(a.Visible) != 1 {
 			t.Fatalf("搜索应只匹配一张素材，实际 %d", len(a.Visible))
 		}
-		expect(a.T("result_count", "1"))
+		if _, ok := tt.Find(a.T("result_count", "1")); !ok {
+			expect(a.T("result_count", "1"))
+		}
 	case "search-cleared":
 		if a.Query.Search != "" || len(a.Visible) != 14 || tt.HasText(a.T("result_count", "14")) {
 			t.Fatal("清空搜索后应恢复14张素材并隐藏工具栏数量")
@@ -455,7 +459,7 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 			}
 		}
 	case "settings":
-		for _, key := range []string{"settings_general", "settings_extension", "settings_about", "launch_at_login", "appearance", "language", "automatic_updates", "check_updates"} {
+		for _, key := range []string{"settings_general", "settings_extension", "settings_about", "launch_at_login", "close_action", "automatic_updates", "check_updates"} {
 			expect(a.T(key))
 		}
 	case "export":
@@ -473,7 +477,10 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 			expect(a.T(key))
 		}
 	case "single-details", "single-details-bottom", "single-details-mixed-dpi", "single-details-mixed-dpi-bottom":
-		expect("example.com")
+		source, ok := tt.AccessByRole(ui.RoleTextField, a.T("source_url"))
+		if !ok || !strings.Contains(source.Value, "example.com") {
+			t.Fatalf("来源输入框未显示完整地址: %+v", source)
+		}
 		expect(a.T("exif_metadata"))
 		selected := a.SelectedAssets()
 		if len(selected) != 1 || len(selected[0].EXIF) != 19 {

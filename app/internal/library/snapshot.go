@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Seaony/Momento/app/internal/catalog"
 	"github.com/Seaony/Momento/app/internal/model"
 )
 
@@ -23,15 +24,19 @@ func (l *Library) Snapshot(ctx context.Context) (snapshot model.Snapshot, err er
 			err = errors.Join(err, tx.Rollback())
 		}
 	}()
-	rows, err := tx.QueryContext(ctx, "SELECT id,name,original_file_name,extension,media_type,size,width,height,orientation,color_profile,exif_json,note,source_url,relative_path,favorite,trashed,created_at,updated_at FROM assets ORDER BY id")
+	extra := ",last_used_at,rotation"
+	if l.Manifest.SchemaVersion < 2 {
+		extra = ",'',0"
+	}
+	rows, err := tx.QueryContext(ctx, "SELECT id,name,original_file_name,extension,media_type,size,width,height,orientation,color_profile,exif_json,note,source_url,relative_path,favorite,trashed,created_at,updated_at"+extra+" FROM assets ORDER BY id")
 	if err != nil {
 		return snapshot, err
 	}
 	byID := map[string]int{}
 	for rows.Next() {
 		var asset model.Asset
-		var exif, created, updated string
-		if err = rows.Scan(&asset.ID, &asset.Name, &asset.OriginalFileName, &asset.Extension, &asset.MediaType, &asset.Size, &asset.Width, &asset.Height, &asset.Orientation, &asset.ColorProfile, &exif, &asset.Note, &asset.SourceURL, &asset.RelativePath, &asset.Favorite, &asset.Trashed, &created, &updated); err != nil {
+		var exif, created, updated, lastUsed string
+		if err = rows.Scan(&asset.ID, &asset.Name, &asset.OriginalFileName, &asset.Extension, &asset.MediaType, &asset.Size, &asset.Width, &asset.Height, &asset.Orientation, &asset.ColorProfile, &exif, &asset.Note, &asset.SourceURL, &asset.RelativePath, &asset.Favorite, &asset.Trashed, &created, &updated, &lastUsed, &asset.Rotation); err != nil {
 			rows.Close()
 			return snapshot, err
 		}
@@ -50,6 +55,16 @@ func (l *Library) Snapshot(ctx context.Context) (snapshot model.Snapshot, err er
 		if asset.UpdatedAt, err = time.Parse(time.RFC3339Nano, updated); err != nil {
 			rows.Close()
 			return snapshot, err
+		}
+		if lastUsed != "" {
+			if asset.LastUsedAt, err = time.Parse(time.RFC3339Nano, lastUsed); err != nil {
+				rows.Close()
+				return snapshot, err
+			}
+		}
+		if asset.Rotation != 0 && asset.Rotation != 90 && asset.Rotation != 180 && asset.Rotation != 270 {
+			rows.Close()
+			return snapshot, i18n.NewError("error_rotation")
 		}
 		byID[asset.ID] = len(snapshot.Assets)
 		snapshot.Assets = append(snapshot.Assets, asset)
@@ -123,6 +138,47 @@ func (l *Library) Snapshot(ctx context.Context) (snapshot model.Snapshot, err er
 					snapshot.Assets[i].TagIDs = append(snapshot.Assets[i].TagIDs, memberID)
 				}
 			}
+		}
+		if err = errors.Join(rows.Err(), rows.Close()); err != nil {
+			return snapshot, err
+		}
+	}
+	if l.Manifest.SchemaVersion >= 2 {
+		rows, err = tx.QueryContext(ctx, "SELECT id,name,match_mode,rules_json,sort_index FROM smart_folders ORDER BY sort_index,id")
+		if err != nil {
+			return snapshot, err
+		}
+		for rows.Next() {
+			var folder model.SmartFolder
+			var rules string
+			if err = rows.Scan(&folder.ID, &folder.Name, &folder.Match, &rules, &folder.SortIndex); err != nil {
+				rows.Close()
+				return snapshot, err
+			}
+			if err = json.Unmarshal([]byte(rules), &folder.Rules); err != nil {
+				rows.Close()
+				return snapshot, err
+			}
+			if err = catalog.ValidateSmartFolder(folder); err != nil {
+				rows.Close()
+				return snapshot, err
+			}
+			snapshot.SmartFolders = append(snapshot.SmartFolders, folder)
+		}
+		if err = errors.Join(rows.Err(), rows.Close()); err != nil {
+			return snapshot, err
+		}
+		rows, err = tx.QueryContext(ctx, "SELECT id,kind,target_id,sort_index FROM quick_access ORDER BY sort_index,id")
+		if err != nil {
+			return snapshot, err
+		}
+		for rows.Next() {
+			var entry model.QuickAccess
+			if err = rows.Scan(&entry.ID, &entry.Kind, &entry.TargetID, &entry.SortIndex); err != nil {
+				rows.Close()
+				return snapshot, err
+			}
+			snapshot.QuickAccess = append(snapshot.QuickAccess, entry)
 		}
 		if err = errors.Join(rows.Err(), rows.Close()); err != nil {
 			return snapshot, err

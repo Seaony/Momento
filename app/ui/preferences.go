@@ -76,7 +76,7 @@ func NormalizePreferences(p Preferences) Preferences {
 	}
 	hidden := make([]string, 0, len(p.SidebarHidden))
 	for _, key := range p.SidebarHidden {
-		if slices.Contains([]string{"favorites", "unfiled", "untagged", "random", "folders"}, key) && !slices.Contains(hidden, key) {
+		if slices.Contains([]string{"favorites", "unfiled", "untagged", "random", "folders", "recent", "quick", "smart"}, key) && !slices.Contains(hidden, key) {
 			hidden = append(hidden, key)
 		}
 	}

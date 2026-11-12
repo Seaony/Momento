@@ -28,7 +28,7 @@ func TestBrowseScreenshots(t *testing.T) {
 	records := []record{}
 	for _, language := range []string{"zh-CN", "en", "ja"} {
 		for _, theme := range []string{"light", "dark"} {
-			for _, state := range []string{"all", "folder", "trash-empty", "search-empty", "random", "thumbnail-small", "thumbnail-large", "list", "details", "details-bottom", "wide-toolbar", "icons"} {
+			for _, state := range []string{"all", "folder", "trash-empty", "search-empty", "random", "thumbnail-small", "thumbnail-large", "list", "details", "details-bottom", "wide-toolbar", "thumbnail-popover", "icons"} {
 				a := fixture.app(t, "large", language, theme)
 				switch state {
 				case "folder":
@@ -86,7 +86,7 @@ func TestBrowseScreenshots(t *testing.T) {
 						ui.Column(c).Fill().Padding(20).Gap(20).Children(func() {
 							for _, size := range []float32{19, 24, 28, 48} {
 								ui.Row(c).Gap(24).Children(func() {
-									for _, icon := range []*ui.SVG{browseRandomIcon, browseLinkIcon, sidebarIcon("文件夹"), sidebarIcon("照片")} {
+									for _, icon := range []*ui.SVG{browseRandomIcon, browseLinkIcon, toolbarIcons["thumbnail-size"], sidebarIcon("文件夹"), sidebarIcon("照片")} {
 										ui.Image(c, icon).Size(size, size)
 									}
 								})
@@ -99,6 +99,14 @@ func TestBrowseScreenshots(t *testing.T) {
 				tt.SetTitleBar(ui.TitleBar{Height: MainToolbarHeight, Left: 80, Bottom: 37})
 				tt.SetDark(theme == "dark")
 				tt.Frame()
+				if state == "thumbnail-popover" {
+					if err := tt.Click(a.T("thumbnail_size")); err != nil {
+						t.Fatal(err)
+					}
+					if _, ok := tt.AccessByRole(ui.RoleSlider, a.T("thumbnail_size")); !ok {
+						t.Fatal("1100窗口没有打开缩略图滑块")
+					}
+				}
 				if state == "details-bottom" {
 					tt.Scroll(float32(width-100), 540, 0, 500)
 				}

@@ -143,3 +143,21 @@ func TestSidebarScreenshotFolderCounts(t *testing.T) {
 		})
 	}
 }
+
+func TestRandomSidebarDoesNotRepeatAllCount(t *testing.T) {
+	a := sidebarTestApp()
+	a.Preferences.SidebarHidden = []string{"untagged"}
+	tt := ui.NewTester(a.sidebar, 236, 800)
+	if _, ok := tt.AccessByRole(ui.RoleButton, a.T("random_browse")); !ok {
+		t.Fatal("缺少随机浏览入口")
+	}
+	count := 0
+	for _, text := range tt.Texts() {
+		if text == "2" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("全部的计数应只出现一次，实际%d次", count)
+	}
+}

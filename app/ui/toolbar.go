@@ -10,9 +10,10 @@ import (
 )
 
 type toolbarState struct {
-	FilterOpen bool
-	SortOpen   bool
-	TagSearch  string
+	FilterOpen    bool
+	ThumbnailOpen bool
+	SortOpen      bool
+	TagSearch     string
 }
 
 var toolbarFamilies = []struct{ ID, Hex string }{
@@ -50,22 +51,33 @@ func (a *App) toolbar(c *ui.Context) {
 			a.Refine()
 		}
 		if strings.TrimSpace(a.Query.Search) != "" {
-			ui.Text(c, a.T("result_count", toolbarNumber(len(a.Visible)))).SingleLine().Shrink(0).FontSize(12).TextColor(t.TextMuted).Role(ui.RoleStatus)
+			count := toolbarNumber(len(a.Visible))
+			label := a.T("result_count", count)
+			text := label
+			if a.toolbarWidth(c) < 760 {
+				text = count
+			}
+			ui.Text(c, text).Label(label).Tooltip(label).SingleLine().Shrink(0).FontSize(12).TextColor(t.TextMuted).Role(ui.RoleStatus)
 		}
 		if a.toolbarWidth(c) >= 760 {
-			ui.Row(c.Key("thumbnail-size-control")).Width(120).Shrink(0).Gap(4).AlignItems(ui.Center).Children(func() {
-				disabled := a.ViewMode == 2
-				if ui.Button(c.Key("thumbnail-smaller"), "−").Label(a.T("thumbnail_smaller")).Tooltip(a.T("thumbnail_smaller")).Size(20, 28).Padding(0).Disabled(disabled || a.thumbnailScale() <= .5).Clicked() {
-					a.ChangeThumbnailSize(-.1)
-				}
-				size := float64(a.thumbnailScale())
-				if ui.Slider(c.Key("thumbnail-size"), &size, .5, 2).Label(a.T("thumbnail_size")).Tooltip(a.T("thumbnail_size")).Grow(1).MinWidth(0).Basis(0).Disabled(disabled).Changed() {
-					a.SetThumbnailSize(float32(size))
-				}
-				if ui.Button(c.Key("thumbnail-larger"), "+").Label(a.T("thumbnail_larger")).Tooltip(a.T("thumbnail_larger")).Size(20, 28).Padding(0).Disabled(disabled || a.thumbnailScale() >= 2).Clicked() {
-					a.ChangeThumbnailSize(.1)
-				}
-			})
+			a.Toolbar.ThumbnailOpen = false
+			a.thumbnailSizeSlider(c.Key("inline-thumbnail-size"))
+		} else {
+			thumbnail := toolbarIconButton(c.Key("thumbnail-size-button"), a.T("thumbnail_size"), "thumbnail-size").Disabled(a.ViewMode == 2)
+			if thumbnail.Clicked() {
+				a.Toolbar.ThumbnailOpen = !a.Toolbar.ThumbnailOpen
+				a.Toolbar.FilterOpen = false
+				a.Toolbar.SortOpen = false
+			}
+			if a.ViewMode == 2 {
+				a.Toolbar.ThumbnailOpen = false
+			}
+			ui.Popover(c.Key("thumbnail-size-popover"), thumbnail, &a.Toolbar.ThumbnailOpen, func() {
+				ui.Column(c).Gap(10).Children(func() {
+					ui.Text(c, a.T("thumbnail_size")).FontSize(12).Bold()
+					a.thumbnailSizeSlider(c.Key("popover-thumbnail-size"))
+				})
+			}).Width(152)
 		}
 		filter := toolbarIconButton(c.Key("filter"), a.T("filter"), "filter")
 		if len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions) > 0 {
@@ -74,6 +86,7 @@ func (a *App) toolbar(c *ui.Context) {
 		if filter.Clicked() {
 			a.Toolbar.FilterOpen = !a.Toolbar.FilterOpen
 			a.Toolbar.SortOpen = false
+			a.Toolbar.ThumbnailOpen = false
 		}
 		ui.Popover(c.Key("filters"), filter, &a.Toolbar.FilterOpen, func() { a.filterPanel(c) }).Width(340).MaxHeight(560)
 		sort := toolbarIconButton(c.Key("sort"), a.T("sort"), "sort").Disabled(a.Query.Scope == "random")
@@ -84,6 +97,7 @@ func (a *App) toolbar(c *ui.Context) {
 		if sort.Clicked() {
 			a.Toolbar.SortOpen = !a.Toolbar.SortOpen
 			a.Toolbar.FilterOpen = false
+			a.Toolbar.ThumbnailOpen = false
 		}
 		ui.Popover(c.Key("sorting"), sort, &a.Toolbar.SortOpen, func() { a.sortPanel(c) }).Width(220)
 		a.viewSwitcher(c)
@@ -294,4 +308,20 @@ func (a *App) toolbarWidth(c *ui.Context) float32 {
 		}
 	}
 	return width
+}
+
+func (a *App) thumbnailSizeSlider(c *ui.Context) {
+	ui.Row(c.Key("thumbnail-size-control")).Width(120).Shrink(0).Gap(4).AlignItems(ui.Center).Children(func() {
+		disabled := a.ViewMode == 2
+		if ui.Button(c.Key("thumbnail-smaller"), "−").Label(a.T("thumbnail_smaller")).Tooltip(a.T("thumbnail_smaller")).Size(20, 28).Padding(0).Disabled(disabled || a.thumbnailScale() <= .5).Clicked() {
+			a.ChangeThumbnailSize(-.1)
+		}
+		size := float64(a.thumbnailScale())
+		if ui.Slider(c.Key("thumbnail-size"), &size, .5, 2).Label(a.T("thumbnail_size")).Tooltip(a.T("thumbnail_size")).Grow(1).MinWidth(0).Basis(0).Disabled(disabled).Changed() {
+			a.SetThumbnailSize(float32(size))
+		}
+		if ui.Button(c.Key("thumbnail-larger"), "+").Label(a.T("thumbnail_larger")).Tooltip(a.T("thumbnail_larger")).Size(20, 28).Padding(0).Disabled(disabled || a.thumbnailScale() >= 2).Clicked() {
+			a.ChangeThumbnailSize(.1)
+		}
+	})
 }

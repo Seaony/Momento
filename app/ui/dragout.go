@@ -16,7 +16,7 @@ import (
 )
 
 // 文件路径和进程内 Drag 值可以同时挂在一张卡片上。
-func AttachFileDrag(element ui.Element, root string, selected func() []model.Asset, report func(error)) {
+func AttachFileDrag(element ui.Element, root string, selected func() []model.Asset, report func(error), used func([]string)) {
 	var session *fileDragSession
 	preparationFailed := false
 	fail := func(err error) {
@@ -25,7 +25,8 @@ func AttachFileDrag(element ui.Element, root string, selected func() []model.Ass
 	}
 	element.DragDataFrom(func() transfer.Data {
 		var err error
-		session, err = prepareFileDrag(root, selected(), os.Link)
+		items := selected()
+		session, err = prepareFileDrag(root, items, os.Link)
 		preparationFailed = err != nil
 		if err != nil {
 			fail(err)
@@ -37,6 +38,13 @@ func AttachFileDrag(element ui.Element, root string, selected func() []model.Ass
 			fail(errors.Join(err, session.cleanup()))
 			session = nil
 			return transfer.Data{}
+		}
+		if used != nil {
+			ids := make([]string, 0, len(items))
+			for _, item := range items {
+				ids = append(ids, item.ID)
+			}
+			used(ids)
 		}
 		slog.Info("开始拖出素材", "count", len(session.paths))
 		return data

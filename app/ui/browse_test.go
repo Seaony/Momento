@@ -141,7 +141,7 @@ func TestSidebarPreferencesHideCountsAndItems(t *testing.T) {
 	a.Preferences.SidebarHidden = []string{"favorites", "unfiled", "untagged", "random", "folders"}
 	tt := ui.NewTester(a.sidebar, 236, 800)
 	for _, key := range []string{"favorites", "uncategorized", "untagged", "random_browse", "folders"} {
-		if tt.HasText(a.T(key)) {
+		if slices.Contains(tt.Texts(), a.T(key)) {
 			t.Fatalf("隐藏项仍可见：%s", key)
 		}
 	}

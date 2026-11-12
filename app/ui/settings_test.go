@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -318,5 +319,203 @@ func TestSettingsNotificationsDisabledKeepChoices(t *testing.T) {
 	sound, ok := tt.AccessByRole(ui.RoleSwitch, a.T("notify_sound"))
 	if !ok || !sound.Disabled || !sound.Checked {
 		t.Fatal("关闭通知应保留声音选择且禁用")
+	}
+}
+
+func TestSettingsSidebarBrowsingSectionsCanBeHidden(t *testing.T) {
+	for _, item := range []struct{ key, label string }{{"recent", "recent"}, {"quick", "quick_access"}, {"smart", "smart_folders"}} {
+		t.Run(item.key, func(t *testing.T) {
+			a := settingsTestApp("en", "light")
+			a.Settings.Tab = SettingsSidebar
+			tt := ui.NewTester(func(c *ui.Context) { a.settingsView(c, UpdateCheckStatus{}) }, 760, 560)
+			control, ok := tt.AccessByRole(ui.RoleCheckBox, a.T(item.label))
+			if !ok || control.Disabled || !control.Checked {
+				t.Fatal("新增分组应默认显示且可隐藏")
+			}
+			if err := tt.Click(a.T(item.label)); err != nil {
+				t.Fatal(err)
+			}
+			a.RestoreUIState()
+			if !slices.Contains(a.Preferences.SidebarHidden, item.key) {
+				t.Fatal("隐藏分组没有保留到偏好")
+			}
+			tt.Frame()
+			if err := tt.Click(a.T(item.label)); err != nil {
+				t.Fatal(err)
+			}
+			if slices.Contains(a.Preferences.SidebarHidden, item.key) {
+				t.Fatal("取消隐藏分组没有保存")
+			}
+		})
+	}
+}
+
+func TestSettingsSegmentsKeepKeyboardSelection(t *testing.T) {
+	a := settingsTestApp("en", "light")
+	a.Settings.Tab = SettingsSidebar
+	tt := ui.NewTester(func(c *ui.Context) { a.settingsView(c, UpdateCheckStatus{}) }, 760, 560)
+	if err := tt.Click(a.T("rename")); err != nil {
+		t.Fatal(err)
+	}
+	if a.Preferences.FolderDoubleClick != "rename" {
+		t.Fatal("分段点击没有保存")
+	}
+	tt.Key(0, ui.KeyRight)
+	if a.Preferences.FolderDoubleClick != "expand" {
+		t.Fatal("分段方向键没有保存")
+	}
+}
+
+func TestSettingsZoomUsesMenuAndChangesImmediately(t *testing.T) {
+	a := settingsTestApp("en", "light")
+	a.Settings.Tab = SettingsAppearance
+	tt := ui.NewTester(func(c *ui.Context) { c.SetMenuPresentation(ui.PopoverMenus); a.settingsView(c, UpdateCheckStatus{}) }, 760, 560)
+	openSettingsZoomMenu(t, a, tt)
+	for _, choice := range []string{"80%", "90%", "100%", "110%", "125%", "150%"} {
+		if !tt.HasText(choice) {
+			t.Fatalf("缩放菜单缺少%s", choice)
+		}
+	}
+	if err := tt.Click("80%"); err != nil {
+		t.Fatal(err)
+	}
+	if a.Preferences.UIZoom != .8 {
+		t.Fatal("缩放菜单没有即时保存")
+	}
+}
+
+func openSettingsZoomMenu(t *testing.T, a *App, tt *ui.Tester) {
+	t.Helper()
+	button, ok := tt.AccessByRole(ui.RoleMenuButton, a.T("ui_zoom"))
+	if !ok {
+		t.Fatal("缩放不是系统菜单按钮")
+	}
+	tt.ClickAt(button.Bounds.X+button.Bounds.W/2, button.Bounds.Y+button.Bounds.H/2)
+}
+
+func TestSettingsZoomMenuScreenshots(t *testing.T) {
+	if os.Getenv("MOMENTO_SETTINGS_CONTROL_SCREENSHOTS") != "1" {
+		t.Skip("设置 MOMENTO_SETTINGS_CONTROL_SCREENSHOTS=1 生成缩放菜单截图")
+	}
+	dir := "/tmp/momento-eagle/settings-polish"
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, language := range []string{"zh-CN", "en", "ja"} {
+		for _, theme := range []string{"light", "dark"} {
+			a := settingsTestApp(language, theme)
+			a.Settings.Tab = SettingsAppearance
+			tt := ui.NewTester(func(c *ui.Context) { c.SetMenuPresentation(ui.PopoverMenus); a.settingsView(c, UpdateCheckStatus{}) }, 760, 560)
+			tt.SetDark(theme == "dark")
+			tt.SetLocale(a.Texts.Locale())
+			tt.SetTitleBar(ui.TitleBar{Height: 44, Left: 80, Bottom: 30})
+			tt.SetWindowActive(true)
+			tt.Frame()
+			openSettingsZoomMenu(t, a, tt)
+			for _, choice := range []string{"80%", "90%", "100%", "110%", "125%", "150%"} {
+				if !tt.HasText(choice) {
+					t.Fatalf("缩放菜单缺少%s", choice)
+				}
+			}
+			writeScreenshot(t, filepath.Join(dir, fmt.Sprintf("settings-zoom-menu-%s-%s.png", language, theme)), tt)
+		}
+	}
+}
+
+func TestSettingsShortcutResetRejectsCrossGroupConflictsAtomically(t *testing.T) {
+	a := settingsTestApp("en", "light")
+	for _, change := range [][2]string{{"search", "Alt+G"}, {"import", "CmdOrCtrl+F"}, {"filter", "Alt+H"}} {
+		if !a.SetShortcut(change[0], change[1]) {
+			t.Fatalf("复现准备失败:%s", change[0])
+		}
+	}
+	before := maps.Clone(a.Preferences.Shortcuts)
+	saved := 0
+	a.MenuChanged = func() { saved++ }
+	a.Settings.RecordingShortcut = "search"
+	a.ResetShortcuts("view")
+	if !maps.Equal(before, a.Preferences.Shortcuts) || saved != 0 {
+		t.Fatal("冲突的整组恢复被保存或部分应用")
+	}
+	if a.Shortcut("search") != "Alt+G" || a.Shortcut("filter") != "Alt+H" || a.Shortcut("import") != "CmdOrCtrl+F" {
+		t.Fatal("冲突改坏了原来的快捷键")
+	}
+	if a.Settings.ShortcutErrors["search"] != a.T("shortcut_conflict", a.T("import")) {
+		t.Fatal("恢复默认未明确指出与导入冲突")
+	}
+	if a.Settings.RecordingShortcut != "search" {
+		t.Fatal("失败的恢复不应清除录制状态")
+	}
+}
+
+func TestSettingsShortcutResetKeepsPreviewContextOverlap(t *testing.T) {
+	a := settingsTestApp("en", "light")
+	if !a.SetShortcut("preview_actual", "Alt+J") {
+		t.Fatal("无法修改预览快捷键")
+	}
+	a.ResetShortcuts("preview")
+	if a.Shortcut("preview_actual") != "CmdOrCtrl+1" || a.Shortcut("view_masonry") != "CmdOrCtrl+1" || len(a.Preferences.Shortcuts) != 0 || len(a.Settings.ShortcutErrors) != 0 {
+		t.Fatal("恢复预览默认不应拦住不同上下文的默认按键")
+	}
+}
+
+func TestSettingsShortcutResetConflictScreenshots(t *testing.T) {
+	if os.Getenv("MOMENTO_SETTINGS_CONTROL_SCREENSHOTS") != "1" {
+		t.Skip("设置 MOMENTO_SETTINGS_CONTROL_SCREENSHOTS=1 生成恢复默认冲突截图")
+	}
+	dir := "/tmp/momento-eagle/settings-shortcut-reset"
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, language := range []string{"zh-CN", "en", "ja"} {
+		for _, theme := range []string{"light", "dark"} {
+			a := settingsTestApp(language, theme)
+			a.Settings.Tab = SettingsShortcuts
+			a.Settings.ShortcutSearch = a.T("search")
+			if !a.SetShortcut("search", "Alt+G") || !a.SetShortcut("import", "CmdOrCtrl+F") {
+				t.Fatal("无法准备恢复冲突")
+			}
+			a.ResetShortcuts("view")
+			tt := ui.NewTester(func(c *ui.Context) { a.settingsView(c, UpdateCheckStatus{}) }, 760, 560)
+			tt.SetDark(theme == "dark")
+			tt.SetLocale(a.Texts.Locale())
+			tt.SetTitleBar(ui.TitleBar{Height: 44, Left: 80, Bottom: 30})
+			tt.SetWindowActive(true)
+			tt.Frame()
+			if !tt.HasText(a.T("shortcut_conflict", a.T("import"))) || a.Shortcut("search") != "Alt+G" {
+				t.Fatal("恢复失败的错误或原快捷键不可见")
+			}
+			writeScreenshot(t, filepath.Join(dir, fmt.Sprintf("settings-shortcut-reset-%s-%s.png", language, theme)), tt)
+		}
+	}
+}
+
+func TestSettingsPreviewTransparencyOrderAndSelection(t *testing.T) {
+	for _, language := range []string{"zh-CN", "en", "ja"} {
+		a := settingsTestApp(language, "light")
+		a.Settings.Tab = SettingsPreview
+		tt := ui.NewTester(func(c *ui.Context) { a.settingsView(c, UpdateCheckStatus{}) }, 760, 560)
+		checker, checkerOK := tt.AccessByRole(ui.RoleRadio, a.T("preview_checker"))
+		solid, solidOK := tt.AccessByRole(ui.RoleRadio, a.T("preview_solid"))
+		if !checkerOK || !solidOK || checker.Bounds.X >= solid.Bounds.X || !checker.Checked || solid.Checked {
+			t.Fatal("透明背景应先显示棋盘格并默认选中")
+		}
+		smooth, smoothOK := tt.AccessByRole(ui.RoleRadio, a.T("preview_smooth"))
+		pixelated, pixelatedOK := tt.AccessByRole(ui.RoleRadio, a.T("preview_pixelated"))
+		if !smoothOK || !pixelatedOK || smooth.Bounds.X >= pixelated.Bounds.X || !smooth.Checked {
+			t.Fatal("放大细节应保持平滑在左并默认选中")
+		}
+		if err := tt.Click(a.T("preview_solid")); err != nil {
+			t.Fatal(err)
+		}
+		if a.Preferences.PreviewChecker {
+			t.Fatal("点击纯色没有保存")
+		}
+		if err := tt.Click(a.T("preview_checker")); err != nil {
+			t.Fatal(err)
+		}
+		if !a.Preferences.PreviewChecker {
+			t.Fatal("点击棋盘格没有保存")
+		}
 	}
 }

@@ -3,6 +3,25 @@ package ui
 import "github.com/egoist/mygo/ui"
 
 var toolbarIcons = map[string]*ui.SVG{
+	"thumbnail-size": ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -3 31 31" fill="none"><defs><linearGradient id="loS-i2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ADBBD5" /><stop offset="1" stop-color="#9EAECD" /></linearGradient><linearGradient id="upS-i2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D8DFEB" /><stop offset="1" stop-color="#C1CBDF" /></linearGradient>
+  <filter id="sh-i2" x="-40%" y="-40%" width="180%" height="190%" color-interpolation-filters="sRGB">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="2" /><feOffset dy="2" result="o" />
+    <feColorMatrix in="o" type="matrix" values="0 0 0 0 0.655 0 0 0 0 0.714 0 0 0 0 0.82 0 0 0 0.21 0" />
+    <feMerge><feMergeNode /><feMergeNode in="SourceGraphic" /></feMerge>
+  </filter>
+  <filter id="hi-i2" x="-10%" y="-10%" width="120%" height="130%" color-interpolation-filters="sRGB">
+    <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="a" />
+    <feOffset in="a" dy="0.7" /><feGaussianBlur stdDeviation="0.35" />
+    <feComposite in2="a" operator="arithmetic" k2="-1" k3="1" />
+    <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.5 0" />
+    <feBlend in2="SourceGraphic" mode="overlay" />
+  </filter><mask height="109" width="111" y="-40" x="-40" maskUnits="userSpaceOnUse" id="ol-i2-0"><rect x="-40" y="-40" width="111" height="109" fill="#fff"></rect><path d="M4 3.2Q4 1 6.2 1L20.2 1Q22.4 1 22.4 3.2L22.4 21.8Q22.4 24 20.2 24L6.2 24Q4 24 4 21.8Z" fill-rule="nonzero" fill="#000" /></mask></defs><g filter="url(#sh-i2)"><g filter="url(#hi-i2)"><path d="M4 3.2Q4 1 6.2 1L20.2 1Q22.4 1 22.4 3.2L22.4 21.8Q22.4 24 20.2 24L6.2 24Q4 24 4 21.8Z" fill="url(#loS-i2)" /></g></g><path stroke-width="2" fill="none" stroke="#5D7198" mask="url(#ol-i2-0)" d="M4 3.2Q4 1 6.2 1L20.2 1Q22.4 1 22.4 3.2L22.4 21.8Q22.4 24 20.2 24L6.2 24Q4 24 4 21.8Z" />
+      <path d="M6 4.2Q6 3 7.2 3L19.2 3Q20.4 3 20.4 4.2L20.4 20.8Q20.4 22 19.2 22L7.2 22Q6 22 6 20.8Z" fill="#fff" />
+      <path d="M7.5 17.8L11.2 12.5L14.4 16.1L17.3 13.8L19 17.8Z" fill="url(#upS-i2)" />
+      <circle fill="#4A4B78" cx="10.4" cy="7.4" r="1.6" />
+      <g filter="url(#sh-i2)"><circle cx="21" cy="17.5" r="4.8" fill="url(#upS-i2)" /><circle cx="21" cy="17.5" r="3.4" fill="#fff" />
+      <circle stroke="#4A4B78" cx="21" cy="17.5" r="4.8" fill="none" stroke-width="1.6" />
+      <path stroke="#4A4B78" d="M24.6 21.1L27.6 24.1" stroke-width="2.2" stroke-linecap="round" /></g></svg>`)),
 	"filter": ui.MustParseSVG([]byte(`<svg height="32" width="32" xmlns="http://www.w3.org/2000/svg" viewBox="0 -3 31 31" fill="none"><defs><linearGradient id="loS-i7" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ADBBD5" /><stop offset="1" stop-color="#9EAECD" /></linearGradient><linearGradient id="upS-i7" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D8DFEB" /><stop offset="1" stop-color="#C1CBDF" /></linearGradient>
   <filter id="sh-i7" x="-40%" y="-40%" width="180%" height="190%" color-interpolation-filters="sRGB">
     <fegaussianblur in="SourceAlpha" stdDeviation="2" /><feoffset dy="2" result="o" />

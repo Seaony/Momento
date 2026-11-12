@@ -195,7 +195,7 @@ func openCopySource(ctx context.Context, path string) (*Library, error) {
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		return nil, i18n.WrapError(err, "error_manifest_invalid")
 	}
-	if manifest.SchemaVersion != model.SchemaVersion || manifest.LibraryID == "" || strings.TrimSpace(manifest.DisplayName) == "" || manifest.CreatedAt.IsZero() || manifest.UpdatedAt.IsZero() {
+	if (manifest.SchemaVersion < 1 || manifest.SchemaVersion > model.SchemaVersion) || manifest.LibraryID == "" || strings.TrimSpace(manifest.DisplayName) == "" || manifest.CreatedAt.IsZero() || manifest.UpdatedAt.IsZero() {
 		return nil, i18n.NewError("error_manifest_invalid")
 	}
 	db, err := sql.Open("sqlite", databaseURI(filepath.Join(root, "database", "library.sqlite"), "ro"))
@@ -207,7 +207,7 @@ func openCopySource(ctx context.Context, path string) (*Library, error) {
 	if err := db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
 		return nil, errors.Join(err, db.Close())
 	}
-	if version != model.SchemaVersion {
+	if version != manifest.SchemaVersion {
 		return nil, errors.Join(i18n.NewError("error_database_invalid"), db.Close())
 	}
 	return &Library{Root: root, DB: db, Manifest: manifest}, nil

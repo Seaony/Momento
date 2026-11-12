@@ -43,16 +43,16 @@ func TestPreviewFollowsVisibleOrderWithoutWrapping(t *testing.T) {
 func TestPreviewDropsResultsAfterSwitchingAssetOrLibrary(t *testing.T) {
 	p := previewState{Open: true}
 	bitmap := ui.NewBitmap(image.NewRGBA(image.Rect(0, 0, 4, 8)))
-	p.target("first.momento", "one")
+	p.target("first.momento", "one", 0)
 	first := p.Generation
 	p.Loading = true
-	p.target("first.momento", "two")
+	p.target("first.momento", "two", 0)
 	p.finish(first, bitmap, nil)
 	if p.Bitmap != nil || p.Loading {
 		t.Fatal("旧素材的解码结果污染了新素材")
 	}
 	second := p.Generation
-	p.target("second.momento", "two")
+	p.target("second.momento", "two", 0)
 	p.finish(second, bitmap, nil)
 	if p.Bitmap != nil {
 		t.Fatal("另一个图库的图片污染了当前图库")
@@ -65,7 +65,7 @@ func TestPreviewDropsResultsAfterSwitchingAssetOrLibrary(t *testing.T) {
 
 func TestPreviewFailureVisibleAndCloseDropsPendingResult(t *testing.T) {
 	p := previewState{Open: true}
-	p.target("library.momento", "one")
+	p.target("library.momento", "one", 0)
 	p.Loading = true
 	p.finish(p.Generation, nil, errors.New("文件已移走"))
 	if p.errorText != "文件已移走" || p.Loading {
@@ -76,7 +76,7 @@ func TestPreviewFailureVisibleAndCloseDropsPendingResult(t *testing.T) {
 	if p.Bitmap != nil {
 		t.Fatal("关闭预览后接受了待处理图片")
 	}
-	p.target("", "")
+	p.target("", "", 0)
 	if p.errorText != "" {
 		t.Fatal("预览关闭后没有释放错误状态")
 	}
@@ -123,7 +123,7 @@ func readyPreviewApp() *App {
 		Visible: []model.Asset{{ID: "one", Name: "Preview original", RelativePath: "assets/one.png"}},
 		Preview: previewState{ID: "one", Open: true},
 	}
-	a.Preview.target(a.Library.Root, a.Preview.ID)
+	a.Preview.target(a.Library.Root, a.Preview.ID, 0)
 	a.Preview.Bitmap = ui.NewBitmap(image.NewRGBA(image.Rect(0, 0, 240, 160)))
 	return a
 }
@@ -209,6 +209,7 @@ func TestPreviewPinchPanAndDoubleClick(t *testing.T) {
 
 func TestPreviewWheelPreferencesAndBounds(t *testing.T) {
 	a := previewFixture(288, 192)
+	a.Visible = append(a.Visible, model.Asset{ID: "two"})
 	a.Preferences.PreviewWheel = "zoom"
 	tt := ui.NewTester(a.preview, 1100, 640)
 	tt.Advance(5 * time.Millisecond)
@@ -235,7 +236,6 @@ func TestPreviewWheelPreferencesAndBounds(t *testing.T) {
 		t.Fatal("小图原始大小仍有平移")
 	}
 	a.Preferences.PreviewWheel = "navigate"
-	a.Visible = append(a.Visible, model.Asset{ID: "two"})
 	now := time.Now()
 	a.previewInput(ui.InputEvent{Kind: ui.InputScroll, DY: 40, Time: now})
 	if p.ID != "two" {
@@ -253,12 +253,12 @@ func TestPreviewWheelPreferencesAndBounds(t *testing.T) {
 
 func TestPreviewTargetResetsZoomAndIgnoresStaleLoads(t *testing.T) {
 	p := previewState{Open: true}
-	p.target("a.momento", "one")
+	p.target("a.momento", "one", 0)
 	old := p.Generation
 	p.Zoom = 4
 	p.Pan = ui.Point{X: 40, Y: 20}
 	p.initialized = true
-	p.target("a.momento", "two")
+	p.target("a.momento", "two", 0)
 	p.Loading = true
 	p.finish(old, ui.NewBitmap(image.NewRGBA(image.Rect(0, 0, 4, 4))), nil)
 	if !p.Loading || p.Bitmap != nil || p.initialized || p.Zoom != 1 || p.Pan != (ui.Point{}) {
@@ -268,7 +268,7 @@ func TestPreviewTargetResetsZoomAndIgnoresStaleLoads(t *testing.T) {
 
 func TestPreviewGIFFramesLoopAndKeepSamplingVariants(t *testing.T) {
 	path := writePreviewGIF(t)
-	picture, err := readPreviewPicture(path)
+	picture, err := readPreviewPicture(path, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -292,9 +292,9 @@ func TestPreviewGIFFramesLoopAndKeepSamplingVariants(t *testing.T) {
 		t.Fatal("GIF没有循环到首帧")
 	}
 	p := previewState{Open: true}
-	p.target("library", "gif")
+	p.target("library", "gif", 0)
 	p.finishPicture(p.Generation, picture, nil)
-	p.target("library", "another")
+	p.target("library", "another", 0)
 	if p.animation != nil || p.pixelBitmap != nil {
 		t.Fatal("切换素材没有释放动图")
 	}

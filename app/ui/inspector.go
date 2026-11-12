@@ -58,6 +58,7 @@ func (a *App) inspector(c *ui.Context) {
 }
 
 func (a *App) inspectorAsset(c *ui.Context, asset model.Asset) {
+	width, height := assetDisplaySize(asset)
 	if a.Inspector.AssetID != asset.ID || a.Inspector.SourceTitle != asset.Name {
 		if a.Inspector.AssetID != asset.ID {
 			a.saveInspectorEdits()
@@ -122,7 +123,7 @@ func (a *App) inspectorAsset(c *ui.Context, asset model.Asset) {
 	})
 	ui.Column(c).Gap(10).Children(func() {
 		a.inspectorDetail(c, "file_type", strings.ToUpper(asset.Extension))
-		a.inspectorDetail(c, "dimensions", fmt.Sprintf("%d × %d", asset.Width, asset.Height))
+		a.inspectorDetail(c, "dimensions", fmt.Sprintf("%d × %d", width, height))
 		a.inspectorDetail(c, "file_size", fileSize(asset.Size))
 		a.inspectorDetail(c, "date_added", asset.CreatedAt.Local().Format("2006-01-02 15:04"))
 	})

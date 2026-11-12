@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"log/slog"
+	"os"
 	"time"
 	"unicode/utf8"
 
@@ -42,6 +43,7 @@ func (a *App) LockNow() {
 		return
 	}
 	a.FlushInspectorEdits()
+	a.cancelExtensionPicker()
 	a.Lock.Locked = true
 	a.Lock.DialogOpen = false
 	if !a.Lock.Saving {
@@ -307,7 +309,7 @@ func (a *App) persistPasswordHash(hash, mode string) {
 			a.Lock.Saving, a.Lock.Busy = false, false
 			if err != nil {
 				slog.Error("保存密码设置失败", "error", err)
-				a.Lock.ErrorKey, a.Lock.Detail = "password_save_failed", a.Texts.Error(err)
+				a.Lock.ErrorKey, a.Lock.Detail = "password_save_failed", a.passwordErrorDetail(err)
 				a.InvalidateWindows()
 				return
 			} else {
@@ -325,6 +327,17 @@ func (a *App) persistPasswordHash(hash, mode string) {
 			a.SavePreferences()
 		})
 	}()
+}
+
+func (a *App) passwordErrorDetail(err error) string {
+	switch {
+	case passwordDiskFull(err):
+		return a.T("password_disk_full")
+	case errors.Is(err, os.ErrPermission):
+		return a.T("password_permission_denied")
+	default:
+		return a.Texts.Error(err)
+	}
 }
 
 func (a *App) passwordFailure(err error, remaining time.Duration) {

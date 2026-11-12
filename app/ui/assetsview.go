@@ -64,8 +64,9 @@ func (a *App) assetArea(c *ui.Context) {
 		if a.layout == nil || a.layoutVersion != a.visibleVersion || a.layoutWidth != w {
 			ratios := make([]float32, len(a.Visible))
 			for i, v := range a.Visible {
-				if v.Height > 0 {
-					ratios[i] = float32(v.Width) / float32(v.Height)
+				vw, vh := assetDisplaySize(v)
+				if vh > 0 {
+					ratios[i] = float32(vw) / float32(vh)
 				}
 			}
 			a.layout = NewMasonryScaled(ratios, w, a.thumbnailScale())
@@ -111,6 +112,7 @@ func (a *App) selectAsset(id string, index int, mods ui.Modifiers) {
 }
 
 func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool) {
+	width, height := assetDisplaySize(asset)
 	selected := a.Selected.Has(asset.ID)
 	var card ui.Element
 	if list {
@@ -144,7 +146,7 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool) 
 			}
 			ui.Column(c).Grow(1).Gap(6).Children(func() {
 				ui.Text(c, asset.Name).Bold().SingleLine()
-				ui.Text(c, fmt.Sprintf("%d × %d · %s", asset.Width, asset.Height, fileSize(asset.Size))).FontSize(12).TextColor(c.Theme().TextMuted)
+				ui.Text(c, fmt.Sprintf("%d × %d · %s", width, height, fileSize(asset.Size))).FontSize(12).TextColor(c.Theme().TextMuted)
 			})
 			ui.Text(c, strings.ToUpper(asset.Extension)).FontSize(12).TextColor(c.Theme().TextMuted)
 		} else {
@@ -157,7 +159,7 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool) 
 				ui.Box(c).Absolute().Left(0).Top(0).Right(0).Bottom(0).Radius(6).
 					Background(ui.RGBA(255, 255, 255, 0.07)).PassThrough()
 			}
-			ui.Text(c, fmt.Sprintf("%d × %d", asset.Width, asset.Height)).Absolute().Bottom(6).Right(6).Padding(3, 5).Radius(4).FontSize(11).Background(ui.RGBA(0, 0, 0, 0.65)).TextColor(ui.RGB(255, 255, 255)).PassThrough()
+			ui.Text(c, fmt.Sprintf("%d × %d", width, height)).Absolute().Bottom(6).Right(6).Padding(3, 5).Radius(4).FontSize(11).Background(ui.RGBA(0, 0, 0, 0.65)).TextColor(ui.RGB(255, 255, 255)).PassThrough()
 			if selected || card.FocusVisible() {
 				// 外圈不占图片空间，描边与图片之间留 2px。
 				ui.Box(c).Absolute().Left(-4).Top(-4).Right(-4).Bottom(-4).Radius(10).
@@ -165,7 +167,7 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool) 
 			}
 		}
 		if hovered || asset.Favorite {
-			button := ui.Button(c.Key("favorite"), "").Label(a.T("favorite")).Absolute().Top(6).Right(6).Size(28, 28).Children(func() { appIcon(c, "heart").Size(18, 18) })
+			button := ui.Button(c.Key("favorite"), "").Label(a.T("favorite")).Absolute().Top(6).Right(6).Size(28, 28).Padding(0).Children(func() { appIcon(c, "heart").Size(18, 18) })
 			if asset.Favorite {
 				button.Background(c.Theme().Accent)
 			}
@@ -195,7 +197,7 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool) 
 				return a.SelectedAssets()
 			}
 			return []model.Asset{asset}
-		}, a.ShowError)
+		}, a.ShowError, a.MarkAssetsUsed)
 	}
 	card.ContextMenu(func(m *ui.Menu) {
 		ids := a.selectedIDs()
@@ -203,7 +205,7 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool) 
 			ids = []string{asset.ID}
 		}
 		if m.Item(a.T("preview")).Chosen() {
-			a.ActivateAsset(asset.ID, false)
+			a.ShowPreview(asset.ID, false)
 		}
 		if m.Item(a.T("export")).Chosen() {
 			if !a.Selected.Has(asset.ID) {

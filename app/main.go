@@ -218,7 +218,13 @@ func menuItems(a *appui.App, platform string) []*mygo.MenuItem {
 	if a.TextInputFocused {
 		paste = role("paste", "shortcut_paste", mygo.RolePaste)
 	}
-	edit := []*mygo.MenuItem{role("undo", "shortcut_undo", mygo.RoleUndo), role("redo", "shortcut_redo", mygo.RoleRedo), mygo.Separator(), role("cut", "shortcut_cut", mygo.RoleCut), role("copy", "shortcut_copy", mygo.RoleCopy), paste, role("select_all", "select_all", mygo.RoleSelectAll)}
+	copyItem := role("copy", "shortcut_copy", mygo.RoleCopy)
+	if !a.TextInputFocused {
+		copyItem = item("shortcut_copy", "CmdOrCtrl+C", a.CopySelected)
+		copyItem.ID = "copy"
+		copyItem.Accelerator = a.Shortcut("copy")
+	}
+	edit := []*mygo.MenuItem{role("undo", "shortcut_undo", mygo.RoleUndo), role("redo", "shortcut_redo", mygo.RoleRedo), mygo.Separator(), role("cut", "shortcut_cut", mygo.RoleCut), copyItem, paste, role("select_all", "select_all", mygo.RoleSelectAll)}
 	back := item("navigate_back", "CmdOrCtrl+[", a.NavigateBack)
 	back.Disabled = !a.CanNavigateBack()
 	forward := item("navigate_forward", "CmdOrCtrl+]", a.NavigateForward)

@@ -5,11 +5,14 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/Seaony/Momento/app/internal/model"
 )
 
 type Query struct {
+	SmartFolderID string
+	Now           time.Time
 	Scope         string
 	FolderID      string
 	ColorFamilies []string
@@ -41,6 +44,7 @@ func New(snapshot model.Snapshot) *Index {
 	idx := &Index{
 		snapshot: model.Snapshot{
 			Assets: slices.Clone(snapshot.Assets), Folders: slices.Clone(snapshot.Folders), Tags: slices.Clone(snapshot.Tags),
+			SmartFolders: cloneSmartFolders(snapshot.SmartFolders), QuickAccess: slices.Clone(snapshot.QuickAccess),
 		},
 		entries: make([]entry, len(snapshot.Assets)),
 		counts:  Counts{Folders: make(map[string]int), Tags: make(map[string]int)},
@@ -86,13 +90,28 @@ func New(snapshot model.Snapshot) *Index {
 // Query 按范围、筛选、搜索、排序处理；空排序采用添加时间倒序。
 func (idx *Index) Query(q Query) []model.Asset {
 	search := strings.ToLower(strings.TrimSpace(q.Search))
+	if q.Now.IsZero() {
+		q.Now = time.Now()
+	}
+	var smart *model.SmartFolder
+	if q.Scope == "smart" {
+		for i := range idx.snapshot.SmartFolders {
+			if idx.snapshot.SmartFolders[i].ID == q.SmartFolderID {
+				smart = &idx.snapshot.SmartFolders[i]
+				break
+			}
+		}
+		if smart == nil || ValidateSmartFolder(*smart) != nil {
+			return []model.Asset{}
+		}
+	}
 	extensions := make([]string, len(q.Extensions))
 	for i, extension := range q.Extensions {
 		extensions[i] = normalizedExtension(extension)
 	}
 	selected := make([]int, 0, len(idx.snapshot.Assets))
 	for i, asset := range idx.snapshot.Assets {
-		if !inScope(asset, q) || !matchesColors(asset.Colors, q.ColorFamilies) || !matchesAny(asset.TagIDs, q.TagIDs) {
+		if !inScope(asset, q) || (smart != nil && !matchesValidatedSmart(asset, *smart)) || !matchesColors(asset.Colors, q.ColorFamilies) || !matchesAny(asset.TagIDs, q.TagIDs) {
 			continue
 		}
 		e := idx.entries[i]
@@ -110,6 +129,12 @@ func (idx *Index) Query(q Query) []model.Asset {
 	slices.SortFunc(selected, func(left, right int) int {
 		a, b := idx.snapshot.Assets[left], idx.snapshot.Assets[right]
 		var order int
+		if q.Scope == "recent" {
+			order = b.LastUsedAt.Compare(a.LastUsedAt)
+			if order != 0 {
+				return order
+			}
+		}
 		switch q.Sort {
 		case "name":
 			order = strings.Compare(idx.entries[left].name, idx.entries[right].name)
@@ -146,6 +171,7 @@ func (idx *Index) Counts() Counts {
 func (idx *Index) Snapshot() model.Snapshot {
 	return model.Snapshot{
 		Assets: slices.Clone(idx.snapshot.Assets), Folders: slices.Clone(idx.snapshot.Folders), Tags: slices.Clone(idx.snapshot.Tags),
+		SmartFolders: cloneSmartFolders(idx.snapshot.SmartFolders), QuickAccess: slices.Clone(idx.snapshot.QuickAccess),
 	}
 }
 
@@ -157,6 +183,10 @@ func inScope(asset model.Asset, q Query) bool {
 		return false
 	}
 	switch q.Scope {
+	case "recent":
+		return !asset.LastUsedAt.IsZero() && !asset.LastUsedAt.Before(q.Now.AddDate(0, 0, -30)) && !asset.LastUsedAt.After(q.Now)
+	case "smart", "tag":
+		return true
 	case "", "all":
 		return true
 	case "favorites":
@@ -182,4 +212,12 @@ func matchesColors(colors []model.Color, selected []string) bool {
 
 func normalizedExtension(extension string) string {
 	return strings.TrimPrefix(strings.ToLower(strings.TrimSpace(extension)), ".")
+}
+
+func cloneSmartFolders(folders []model.SmartFolder) []model.SmartFolder {
+	copy := slices.Clone(folders)
+	for i := range copy {
+		copy[i].Rules = slices.Clone(copy[i].Rules)
+	}
+	return copy
 }

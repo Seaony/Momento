@@ -200,6 +200,10 @@ func (s *Service) RefreshThumbnails(ctx context.Context, items []model.Asset) er
 		if err != nil {
 			return err
 		}
+		img, err = RotateImage(img, a.Rotation)
+		if err != nil {
+			return err
+		}
 		if err = WriteThumbnail(destination, img); err != nil {
 			return err
 		}
