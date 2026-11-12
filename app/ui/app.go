@@ -122,6 +122,7 @@ func New() *App {
 			a.Error = a.Texts.Error(err)
 		}
 	}
+	a.RestoreUIState()
 	a.Texts.Language = a.Preferences.Language
 	if preferred := mygo.App.PreferredLanguages(); len(preferred) > 0 {
 		a.Texts.SystemLanguage = preferred[0]
@@ -153,6 +154,10 @@ func (a *App) OpenWindow() {
 		if a.Busy {
 			e.PreventDefault()
 			a.Notify(a.T("busy"))
+			return
+		}
+		if err := a.FlushPreferences(); err != nil {
+			e.PreventDefault()
 			return
 		}
 		if a.SettingsWindow != nil {
@@ -192,6 +197,7 @@ func (a *App) applyTheme(c *ui.Context) {
 
 func (a *App) View(c *ui.Context) {
 	a.applyTheme(c)
+	defer a.RememberUIState()
 	if a.Library == nil {
 		a.welcome(c)
 	} else {
@@ -416,7 +422,7 @@ func (a *App) OpenLibrary(path string) {
 			a.manifest = lib.Manifest
 			a.Assets = assets.New(lib.Root, lib.DB)
 			a.generation++
-			a.Query = catalog.Query{Sort: "added", Descending: true}
+			a.Query = catalog.Query{Sort: a.Preferences.Sort, Descending: a.Preferences.SortDescending}
 			a.Selected.Clear()
 			a.TagPage = false
 			a.Preview.Open = false

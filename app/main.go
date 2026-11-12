@@ -67,6 +67,14 @@ func main() {
 		}
 	})
 	mygo.App.OnQuit(func() { cancel() })
+	mygo.App.OnBeforeQuit(func(e *mygo.QuitEvent) {
+		if app != nil {
+			if err := app.FlushPreferences(); err != nil && !e.SessionEnding {
+				e.PreventDefault()
+				app.InvalidateWindows()
+			}
+		}
+	})
 	mygo.App.WhenReady(func() {
 		app = appui.New()
 		app.OpenWindow()
