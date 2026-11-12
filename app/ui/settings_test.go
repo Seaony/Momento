@@ -12,8 +12,28 @@ import (
 
 	"github.com/Seaony/Momento/app/internal/browser"
 	"github.com/Seaony/Momento/app/internal/i18n"
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
+
+func TestMain(m *testing.M) {
+	data, err := os.ReadFile("../mygo.json")
+	var config struct {
+		Version string `json:"version"`
+	}
+	if err == nil {
+		err = json.Unmarshal(data, &config)
+	}
+	if err == nil && config.Version == "" {
+		err = errors.New("应用配置缺少版本号")
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	mygo.App.SetVersion(config.Version)
+	os.Exit(m.Run())
+}
 
 func settingsTestApp(language, appearance string) *App {
 	preferences := DefaultPreferences()
@@ -330,7 +350,7 @@ func TestSettingsAboutUpdateActions(t *testing.T) {
 						buttons++
 					}
 					if item.Role == ui.RoleStatus {
-						version, ok := tt.Find(a.T("current_version", "2.0.0"))
+						version, ok := tt.Find(a.T("current_version", mygo.App.Version()))
 						if !ok || item.Bounds.Y < version.Y+version.H {
 							t.Fatal("关于页更新结果没有放在版本下方")
 						}

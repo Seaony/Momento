@@ -4,12 +4,13 @@
 
 - 回复用中文，以「喵」开头和结尾。调查要细，判断要果断。
 - 只改本次任务相关代码；错误必须可见且记日志，不用空 catch、假 fallback 或 silent success。
-- Momento 是全新的跨平台本地图片素材库，不读取、识别或迁移其他版本的图库和设置。
+- Momento 是跨平台本地图片素材库。
 
 ## 技术与结构
 
 - Go 1.27.3+，mygo **v0.9.0** 原生 GPU 界面；不使用 Web 前端，不用 cgo。
 - `app/` 是模块 `github.com/Seaony/Momento/app`。
+- 应用版本只在 `app/mygo.json` 中定义，运行时和测试共用同一个版本读取入口。
 - `main.go` 负责入口、系统菜单、深度链接、文件关联、单实例和日志；`settings_window.go` 管独立设置窗口，重复打开只聚焦已有窗口。
 - `internal/model/` 放共享值类型；`internal/library/` 管图库包、SQLite、文件夹、标签和最近图库；`internal/assets/` 管图片处理、导入导出和回收站；`internal/catalog/` 管内存筛选、排序和计数；`internal/browser/` 管本机扩展服务；`internal/i18n/` 管中英日文；`ui/` 放全部界面。
 - `internal/` 不引用 mygo/ui 或应用 ui 包，必须能单独测试。
@@ -51,7 +52,7 @@ go test ./...
 ## 并行与提交
 
 - 主会话负责总控、集成和提交；共享 model、main.go、ui/app.go、go.mod 只由主会话集成修改。子代理按文件独占分工，不碰他人文件，不提交、不建分支或 worktree，构建产物放各自独立目录。
-- 本次重写按任务文件的 P0 顺序推进，每块完成并验证后提交并立即推送 origin master。禁止 force push、secrets、WIP 提交。
+- 按当前任务文件的步骤推进，每块完成并验证后提交并立即推送 origin master。禁止 force push、secrets、WIP 提交。
 - 提交格式 `<type>: <一句简短中文>`，type 为 feat / fix / refactor / test / docs / chore，无正文和署名。
 - 不把 develop 的任何内容带进功能分支，不使用改名 refspec。
 - 发布流程只建立草稿，不自动公开；更新私钥和签名证书不进仓库。交叉编译、打包、正式签名、公证、签名更新和真机运行分别记录验证结果。

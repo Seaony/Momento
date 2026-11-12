@@ -16,10 +16,10 @@ func TestPreferencesMissingFieldsKeepDefaults(t *testing.T) {
 	}
 	p = NormalizePreferences(p)
 	if p.Language != "ja" || p.Appearance != "dark" || !p.AutoCheckUpdates || !p.BrowserExtensionEnabled || p.LaunchAtLogin {
-		t.Fatalf("旧偏好没有保留新增开关默认值：%+v", p)
+		t.Fatalf("缺字段的偏好没有保留开关默认值：%+v", p)
 	}
 	if p.ViewMode != 0 || p.Sort != "added" || !p.SortDescending || !p.SidebarVisible || !p.InspectorVisible || p.SidebarWidth != 236 {
-		t.Fatalf("旧偏好没有保留界面默认状态：%+v", p)
+		t.Fatalf("缺字段的偏好没有保留界面默认状态：%+v", p)
 	}
 }
 

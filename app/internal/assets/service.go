@@ -19,6 +19,7 @@ import (
 var ErrImportBusy = i18n.NewError("error_import_busy")
 
 type Service struct {
+	AppVersion   string
 	root         string
 	db           *sql.DB
 	importing    sync.Mutex

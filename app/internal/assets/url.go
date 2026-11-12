@@ -27,7 +27,11 @@ func (s *Service) ImportURL(ctx context.Context, imageURL, pageURL string) (resu
 	if err != nil {
 		return result, err
 	}
-	req.Header.Set("User-Agent", "Momento/2.0")
+	userAgent := "Momento"
+	if s.AppVersion != "" {
+		userAgent += "/" + s.AppVersion
+	}
+	req.Header.Set("User-Agent", userAgent)
 	if pageURL != "" {
 		req.Header.Set("Referer", pageURL)
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Seaony/Momento/app/internal/browser"
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -181,7 +182,7 @@ func checkFinalSettingsScreenshot(t *testing.T, a *App, tt *ui.Tester, status Up
 		expect(a.T("open_logs"))
 	}
 	if a.Settings.Tab != 1 {
-		expect(a.T("current_version", "2.0.0"))
+		expect(a.T("current_version", mygo.App.Version()))
 		if status.State == UpdateChecking {
 			button, ok := tt.AccessByRole(ui.RoleButton, a.T("updates_checking"))
 			if !ok || !button.Disabled {

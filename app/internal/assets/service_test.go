@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"hash/crc32"
 	"image"
@@ -429,13 +430,43 @@ func TestRefreshThumbnailAndColors(t *testing.T) {
 	}
 }
 
+func TestImportURLUnversionedRequestUsesProductName(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("User-Agent"); got != "Momento" {
+			t.Errorf("未打包请求的产品名错误：%q", got)
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+	if _, err := (&Service{}).ImportURL(context.Background(), server.URL+"/image.png", ""); err == nil {
+		t.Fatal("服务不可用时下载没有报告错误")
+	}
+}
+
 func TestImportURLDownloadsLocallyAndKeepsSource(t *testing.T) {
 	ctx, lib, s := testLibrary(t)
+	configData, err := os.ReadFile("../../mygo.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(configData, &config); err != nil {
+		t.Fatal(err)
+	}
+	if config.Version == "" {
+		t.Fatal("应用配置缺少版本号")
+	}
+	s.AppVersion = config.Version
 	data, err := os.ReadFile(filepath.Join("testdata", "sample.png"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.Header.Get("User-Agent"), "Momento/"+config.Version; got != want {
+			t.Errorf("下载请求版本不一致：%q，应为%q", got, want)
+		}
 		switch r.URL.Path {
 		case "/image":
 			w.Header().Set("Content-Type", "image/png")

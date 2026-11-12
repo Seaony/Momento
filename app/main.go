@@ -30,7 +30,7 @@ func main() {
 	if !mygo.App.RequestSingleInstanceLock() {
 		return
 	}
-	slog.Info("启动", "version", "2.0.0", "logDirectory", logging.Directory())
+	slog.Info("启动", "version", mygo.App.Version(), "logDirectory", logging.Directory())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var app *appui.App

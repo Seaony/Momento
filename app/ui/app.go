@@ -421,6 +421,7 @@ func (a *App) OpenLibrary(path string) {
 			a.Library = lib
 			a.manifest = lib.Manifest
 			a.Assets = assets.New(lib.Root, lib.DB)
+			a.Assets.AppVersion = mygo.App.Version()
 			a.generation++
 			a.Query = catalog.Query{Sort: a.Preferences.Sort, Descending: a.Preferences.SortDescending}
 			a.Selected.Clear()

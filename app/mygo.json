@@ -2,7 +2,7 @@
   "name": "Momento",
   "slug": "momento",
   "identifier": "com.seaony.Momento",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "icon": "resources/icon.png",
   "out": "build",
   "urlSchemes": [

@@ -2,15 +2,10 @@
 
 现在用的是 `第5批/H06-hedgehog-cute.png`（彩虹色刺的刺猬，绒面 3D）。
 
-- `正式资源/app-icon-1024-fullbleed.png`：原图，满画幅不切圆角，以后做 iOS 图标或导进 Icon Composer 用这张。
-- `正式资源/app-icon-1024-macos.png`：按 Apple macOS 图标模板烘焙（1024 画布、824 连续圆角主体、轻投影），`AppIcon.appiconset` 的 10 个尺寸都从这张缩出来。
-- 旧图标（彩色卡片花瓣）在 git 历史里。
+- `正式资源/app-icon-1024-fullbleed.png`：满画幅原图，与应用打包使用的 `app/resources/icon.png` 内容相同。
+- `正式资源/app-icon-1024-macos.png`：1024 画布、824 连续圆角主体、轻投影，与欢迎页和关于页使用的 `app/resources/welcome-icon.png` 内容相同。
 
-每批一个文件夹，`prompts/` 里是每张图的提示词。抽卡出来的 PNG 和 `对比图.png` 只留在本地、不进仓库（太大），选中的原图在 `正式资源/`。本地有抽卡图时，对比图这样重新拼：
-
-```sh
-swift ~/.claude/skills/icon-logo/scripts/contact-sheet.swift design/app-icon/第N批
-```
+每批一个文件夹，`prompts/` 里是每张图的提示词。抽卡出来的 PNG 和 `对比图.png` 只留在本地、不进仓库（太大），选中的原图在 `正式资源/`。
 
 ## 每批结论
 

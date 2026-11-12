@@ -1,8 +1,5 @@
-/build/
-/dist/
 /.worktrees/
 /docs/
-/Docs/product-guide-assets/
 /app/.mygo/
 /app/build/
 /app/dist/
@@ -10,6 +7,4 @@
 
 # Local machine and agent state
 .DS_Store
-*.xcuserstate
-xcuserdata/
 .claude/settings.local.json

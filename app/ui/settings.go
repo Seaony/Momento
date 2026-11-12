@@ -2,6 +2,7 @@ package ui
 
 import (
 	"github.com/Seaony/Momento/app/internal/browser"
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"math"
 )
@@ -201,7 +202,7 @@ func (a *App) generalSettings(c *ui.Context, update UpdateCheckStatus) {
 		})
 		settingsSeparator(c)
 		settingsRow(c, func() {
-			ui.Text(c, a.T("current_version", "2.0.0")).Grow(1).SingleLine()
+			ui.Text(c, a.T("current_version", mygo.App.Version())).Grow(1).SingleLine()
 			a.updateButton(c, update)
 		})
 	})
@@ -293,7 +294,7 @@ func (a *App) aboutSettings(c *ui.Context, update UpdateCheckStatus) {
 	ui.Column(c).FillWidth().Center().Gap(8).Padding(8, 0, 0, 0).Children(func() {
 		ui.Image(c, appLogo).Size(64, 64)
 		ui.Text(c, "Momento").FontSize(20).Bold()
-		ui.Text(c, a.T("current_version", "2.0.0")).TextColor(c.Theme().TextMuted)
+		ui.Text(c, a.T("current_version", mygo.App.Version())).TextColor(c.Theme().TextMuted)
 		a.updateMessage(c, update, true)
 		ui.Row(c).Gap(8).Margin(12, 0, 0, 0).Children(func() {
 			if update.State == UpdateAvailable {
