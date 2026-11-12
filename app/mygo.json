@@ -5,7 +5,49 @@
   "version": "2.0.0",
   "icon": "resources/icon.png",
   "out": "build",
-  "urlSchemes": ["momento"],
-  "fileAssociations": [{"ext": ["momento"], "name": "Momento Library", "mimeType": "application/x-momento-library", "role": "Editor"}],
-  "linux": {"webview": false}
+  "urlSchemes": [
+    "momento"
+  ],
+  "fileAssociations": [
+    {
+      "ext": [
+        "momento"
+      ],
+      "name": "Momento Library",
+      "mimeType": "application/x-momento-library",
+      "role": "Editor"
+    }
+  ],
+  "linux": {
+    "webview": false
+  },
+  "macos": {
+    "infoPlist": {
+      "CFBundleDocumentTypes": [
+        {
+          "CFBundleTypeName": "Momento Library",
+          "CFBundleTypeRole": "Editor",
+          "LSHandlerRank": "Owner",
+          "LSItemContentTypes": [
+            "com.seaony.momento.library"
+          ],
+          "LSTypeIsPackage": true
+        }
+      ],
+      "UTExportedTypeDeclarations": [
+        {
+          "UTTypeIdentifier": "com.seaony.momento.library",
+          "UTTypeDescription": "Momento Library",
+          "UTTypeConformsTo": [
+            "com.apple.package"
+          ],
+          "UTTypeTagSpecification": {
+            "public.filename-extension": [
+              "momento"
+            ]
+          }
+        }
+      ]
+    }
+  }
 }

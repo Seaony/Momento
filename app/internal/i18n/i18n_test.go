@@ -49,6 +49,23 @@ func TestCatalogEnvironmentFallback(t *testing.T) {
 	}
 }
 
+func TestExportQuantityCopy(t *testing.T) {
+	for _, tc := range []struct {
+		language string
+		count    int
+		want     string
+	}{
+		{"en", 1, "Export images (1)"},
+		{"en", 3, "Export images (3)"},
+		{"zh-CN", 1, "导出 1 个素材"},
+		{"zh-CN", 3, "导出 3 个素材"},
+	} {
+		if got := (Catalog{Language: tc.language}).T("export_count", tc.count); got != tc.want {
+			t.Errorf("%s, count %d: got %q, want %q", tc.language, tc.count, got, tc.want)
+		}
+	}
+}
+
 func TestMessagesHaveBothLanguagesAndMatchingArguments(t *testing.T) {
 	for key, pair := range messages {
 		for i, value := range pair {
@@ -106,12 +123,17 @@ func TestMessageKeysExist(t *testing.T) {
 				return true
 			}
 			keyAt := 0
+			forwardedKey := false
 			selector, translated := call.Fun.(*ast.SelectorExpr)
 			if translated {
 				switch selector.Sel.Name {
 				case "T", "NewError":
 				case "WrapError":
 					keyAt = 1
+				case "sidebarLibraryAction", "inspectorDetail":
+					keyAt, forwardedKey = 1, true
+				case "sidebarScope":
+					keyAt, forwardedKey = 2, true
 				default:
 					translated = false
 				}
@@ -138,7 +160,7 @@ func TestMessageKeysExist(t *testing.T) {
 				t.Errorf("%s: message %q must have Chinese and English translations", set.Position(literal.Pos()), key)
 				return true
 			}
-			if menuItem {
+			if menuItem || forwardedKey {
 				return true
 			}
 			verbs := formatVerbs.FindAllString(pair[0], -1)

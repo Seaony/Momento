@@ -28,6 +28,9 @@ type Library struct {
 }
 
 func Create(ctx context.Context, path, displayName string) (_ *Library, err error) {
+	if err := ValidateWorkingPath(path); err != nil {
+		return nil, err
+	}
 	displayName, err = cleanName(displayName)
 	if err != nil {
 		return nil, err
@@ -89,6 +92,9 @@ func Create(ctx context.Context, path, displayName string) (_ *Library, err erro
 }
 
 func Open(ctx context.Context, path string) (_ *Library, err error) {
+	if err := ValidateWorkingPath(path); err != nil {
+		return nil, err
+	}
 	root, err := filepath.Abs(path)
 	if err != nil {
 		return nil, err

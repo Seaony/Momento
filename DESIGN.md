@@ -6,7 +6,7 @@
 
 ## 色彩
 
-沿用 mygo 浅深色主题的 Background、Surface、Text、TextMuted、Accent 和 Border。主体与侧栏有清晰的亮度层级；危险操作使用危险色。
+沿用 mygo 浅深色主题的 Background、Surface、Text 和 Border。浅色强调色 #1D4ED8，悬停 #1E40AF，白字；深色强调色 #93C5FD，悬停 #BFDBFE，按钮文字 #111827。次要文字浅色 #62626C，深色 #B4B4BF，选中侧栏正文和数量用 Text。主体与侧栏有清晰的亮度层级；危险操作使用危险色。
 
 ## 字体
 
