@@ -2,28 +2,33 @@ package i18n
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 )
 
-type Catalog struct{ Language string }
-
-var messages = map[string][2]string{
-	"welcome":      {"没有打开的图库", "No library open"},
-	"welcome_hint": {"把灵感收进自己的素材库", "A home for your visual references"},
-	"new_library":  {"新建图库", "Create Library"},
-	"open_library": {"打开图库", "Open Library"},
+type Catalog struct {
+	Language       string
+	SystemLanguage string
 }
 
 func (c Catalog) T(key string, args ...any) string {
 	pair, ok := messages[key]
 	if !ok {
-		return key
+		slog.Error("缺少界面文案", "key", key)
+		return "⟦" + key + "⟧"
 	}
 	i := 0
 	lang := c.Language
 	if lang == "" || lang == "system" {
-		lang = os.Getenv("LANG")
+		lang = c.SystemLanguage
+		if lang == "" {
+			for _, variable := range []string{"LC_ALL", "LC_MESSAGES", "LANGUAGE", "LANG"} {
+				if lang = os.Getenv(variable); lang != "" {
+					break
+				}
+			}
+		}
 	}
 	if !strings.HasPrefix(strings.ToLower(lang), "zh") {
 		i = 1
