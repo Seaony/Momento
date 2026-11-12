@@ -53,7 +53,7 @@ func newAssetsViewPerformanceFixture(tb testing.TB, height, selected int) assets
 		Library:        &library.Library{Root: filepath.Clean("/tmp/momento-performance.momento")},
 		manifest:       model.Manifest{LibraryID: "performance", DisplayName: "100,000 references"},
 		Texts:          i18n.Catalog{Language: "en", SystemLanguage: "en"},
-		Preferences:    Preferences{Language: "en", Appearance: "light"},
+		Preferences:    Preferences{Language: "en", Theme: "light"},
 		SidebarVisible: true, InspectorVisible: true, SidebarWidth: 236,
 		Query: catalog.Query{Sort: "added", Descending: true}, selectedIndex: -1, anchor: -1,
 		ctx: context.Background(), cancel: func() {},

@@ -232,7 +232,7 @@ func (fixture screenshotFixture) app(t *testing.T, state, language, appearance s
 	a := &App{
 		Library:        &library.Library{Root: fixture.root, Manifest: fixture.manifest},
 		Texts:          i18n.Catalog{Language: language, SystemLanguage: language},
-		Preferences:    Preferences{Language: language, Appearance: appearance},
+		Preferences:    Preferences{Language: language, Theme: appearance},
 		SidebarVisible: true, InspectorVisible: true, SidebarWidth: 236,
 		Query: catalog.Query{Sort: "added", Descending: true}, selectedIndex: -1, anchor: -1,
 		ctx: context.Background(), cancel: func() {},

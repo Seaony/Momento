@@ -76,13 +76,13 @@ func TestSnapshotRefreshKeepsScrollPosition(t *testing.T) {
 }
 
 func TestAppearanceReturnsToSystem(t *testing.T) {
-	a := &App{Texts: i18n.Catalog{Language: "en"}, Preferences: Preferences{Appearance: "dark"}}
+	a := &App{Texts: i18n.Catalog{Language: "en"}, Preferences: Preferences{Theme: "dark"}}
 	dark := false
 	tt := ui.NewTester(func(c *ui.Context) { a.View(c); dark = c.Theme().Dark }, 1100, 640)
 	if !dark {
 		t.Fatal("没有使用深色设置")
 	}
-	a.Preferences.Appearance = "system"
+	a.Preferences.Theme = "system"
 	tt.SetDark(false)
 	tt.Frame()
 	if dark {

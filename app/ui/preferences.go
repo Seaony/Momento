@@ -3,26 +3,101 @@ package ui
 import (
 	"encoding/json"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 )
 
 func DefaultPreferences() Preferences {
 	return Preferences{
-		Language: "system", Appearance: "system", AutoCheckUpdates: true, BrowserExtensionEnabled: true,
+		Language: "system", Theme: "system", UIZoom: 1, AutoCheckUpdates: true, BrowserExtensionEnabled: true,
+		CloseAction: "background", TrayIcon: true, DockWhenHidden: true, SidebarCounts: true,
+		FolderDoubleClick: "expand", DoubleClick: "preview", SpaceKey: "preview", PreviewWheel: "navigate",
+		PreviewFit: "smart", PreviewChecker: true, SelectImported: true,
+		AutoImport: map[string][]AutoImportRule{}, Shortcuts: map[string]string{},
+		Notify: true, NotifyEvents: []string{"extension", "auto-import", "duplicate"}, NotifySound: true, ThumbnailSize: 1,
 		Sort: "added", SortDescending: true, SidebarVisible: true, InspectorVisible: true, SidebarWidth: 236,
 	}
 }
 
+// 缺字段沿用默认值，旧主题只在读取时迁移。
+func (p *Preferences) UnmarshalJSON(data []byte) error {
+	type plain Preferences
+	value := plain(DefaultPreferences())
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	var legacy struct {
+		Appearance string  `json:"appearance"`
+		Theme      *string `json:"theme"`
+	}
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return err
+	}
+	if legacy.Theme == nil && slices.Contains([]string{"system", "light", "dark"}, legacy.Appearance) {
+		value.Theme = legacy.Appearance
+	}
+	*p = NormalizePreferences(Preferences(value))
+	return nil
+}
+
 func NormalizePreferences(p Preferences) Preferences {
-	if p.Language == "" {
+	if !slices.Contains([]string{"system", "zh-Hans", "zh", "en", "ja"}, p.Language) {
 		p.Language = "system"
 	}
-	switch p.Appearance {
-	case "system", "light", "dark":
-	default:
-		p.Appearance = "system"
+	if !slices.Contains([]string{"system", "light", "light-gray", "dark-gray", "dark", "navy", "purple"}, p.Theme) {
+		p.Theme = "system"
 	}
+	if !slices.Contains([]float32{.8, .9, 1, 1.1, 1.25, 1.5}, p.UIZoom) {
+		p.UIZoom = 1
+	}
+	if p.CloseAction != "quit" {
+		p.CloseAction = "background"
+	}
+	if !p.TrayIcon {
+		p.DockWhenHidden = true
+	}
+	if p.FolderDoubleClick != "rename" {
+		p.FolderDoubleClick = "expand"
+	}
+	if p.DoubleClick != "external" {
+		p.DoubleClick = "preview"
+	}
+	if p.SpaceKey != "system" {
+		p.SpaceKey = "preview"
+	}
+	if p.PreviewWheel != "zoom" {
+		p.PreviewWheel = "navigate"
+	}
+	if p.PreviewFit != "fit" {
+		p.PreviewFit = "smart"
+	}
+	hidden := make([]string, 0, len(p.SidebarHidden))
+	for _, key := range p.SidebarHidden {
+		if slices.Contains([]string{"favorites", "unfiled", "untagged", "random", "folders"}, key) && !slices.Contains(hidden, key) {
+			hidden = append(hidden, key)
+		}
+	}
+	p.SidebarHidden = hidden
+	events := make([]string, 0, len(p.NotifyEvents))
+	for _, key := range p.NotifyEvents {
+		if slices.Contains([]string{"extension", "auto-import", "duplicate"}, key) && !slices.Contains(events, key) {
+			events = append(events, key)
+		}
+	}
+	p.NotifyEvents = events
+	if p.AutoImport == nil {
+		p.AutoImport = map[string][]AutoImportRule{}
+	}
+	if p.Shortcuts == nil {
+		p.Shortcuts = map[string]string{}
+	}
+	if math.IsNaN(float64(p.ThumbnailSize)) || math.IsInf(float64(p.ThumbnailSize), 0) || p.ThumbnailSize == 0 {
+		p.ThumbnailSize = 1
+	}
+	p.ThumbnailSize = max(.5, min(2, p.ThumbnailSize))
 	if p.ViewMode < 0 || p.ViewMode > 2 {
 		p.ViewMode = 0
 	}
@@ -32,6 +107,22 @@ func NormalizePreferences(p Preferences) Preferences {
 		p.Sort, p.SortDescending = "added", true
 	}
 	p.SidebarWidth = max(196, min(340, p.SidebarWidth))
+	return p
+}
+
+func clonePreferences(p Preferences) Preferences {
+	p.SidebarHidden = slices.Clone(p.SidebarHidden)
+	p.NotifyEvents = slices.Clone(p.NotifyEvents)
+	shortcuts := make(map[string]string, len(p.Shortcuts))
+	for key, value := range p.Shortcuts {
+		shortcuts[key] = value
+	}
+	p.Shortcuts = shortcuts
+	imports := make(map[string][]AutoImportRule, len(p.AutoImport))
+	for key, value := range p.AutoImport {
+		imports[key] = slices.Clone(value)
+	}
+	p.AutoImport = imports
 	return p
 }
 
@@ -69,7 +160,7 @@ func (a *App) captureUIState() bool {
 	}
 	p.SidebarVisible, p.InspectorVisible, p.SidebarWidth = a.SidebarVisible, a.InspectorVisible, a.SidebarWidth
 	p = NormalizePreferences(p)
-	if p == a.Preferences {
+	if reflect.DeepEqual(p, a.Preferences) {
 		return false
 	}
 	a.Preferences = p
@@ -80,7 +171,7 @@ func (a *App) queuePreferences() {
 	if a.configDir == "" {
 		return
 	}
-	p, version := a.Preferences, a.prefVersion.Add(1)
+	p, version := clonePreferences(a.Preferences), a.prefVersion.Add(1)
 	go func() {
 		if err := a.writePreferences(p, version); err != nil {
 			a.preferenceError(err)

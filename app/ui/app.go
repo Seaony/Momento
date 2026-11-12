@@ -23,18 +23,48 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
+type AutoImportRule struct {
+	Path     string `json:"path"`
+	FolderID string `json:"folderID"`
+	Enabled  bool   `json:"enabled"`
+}
+
 type Preferences struct {
-	Language                string  `json:"language"`
-	Appearance              string  `json:"appearance"`
-	LaunchAtLogin           bool    `json:"launchAtLogin"`
-	AutoCheckUpdates        bool    `json:"autoCheckUpdates"`
-	BrowserExtensionEnabled bool    `json:"browserExtensionEnabled"`
-	ViewMode                int     `json:"viewMode"`
-	Sort                    string  `json:"sort"`
-	SortDescending          bool    `json:"sortDescending"`
-	SidebarVisible          bool    `json:"sidebarVisible"`
-	InspectorVisible        bool    `json:"inspectorVisible"`
-	SidebarWidth            float32 `json:"sidebarWidth"`
+	Language                string                      `json:"language"`
+	Theme                   string                      `json:"theme"`
+	UIZoom                  float32                     `json:"uiZoom"`
+	LaunchAtLogin           bool                        `json:"launchAtLogin"`
+	AutoCheckUpdates        bool                        `json:"autoCheckUpdates"`
+	BrowserExtensionEnabled bool                        `json:"browserExtensionEnabled"`
+	CloseAction             string                      `json:"closeAction"`
+	TrayIcon                bool                        `json:"trayIcon"`
+	DockWhenHidden          bool                        `json:"dockWhenHidden"`
+	SidebarCounts           bool                        `json:"sidebarCounts"`
+	FolderDoubleClick       string                      `json:"folderDoubleClick"`
+	SidebarHidden           []string                    `json:"sidebarHidden"`
+	DoubleClick             string                      `json:"doubleClick"`
+	SpaceKey                string                      `json:"spaceKey"`
+	PreviewWheel            string                      `json:"previewWheel"`
+	PreviewFit              string                      `json:"previewFit"`
+	PreviewPixelated        bool                        `json:"previewPixelated"`
+	PreviewChecker          bool                        `json:"previewChecker"`
+	SelectImported          bool                        `json:"selectImported"`
+	ImportKeywords          bool                        `json:"importKeywords"`
+	ExtensionPicker         bool                        `json:"extensionPicker"`
+	AutoImport              map[string][]AutoImportRule `json:"autoImport"`
+	Shortcuts               map[string]string           `json:"shortcuts"`
+	Notify                  bool                        `json:"notify"`
+	NotifyEvents            []string                    `json:"notifyEvents"`
+	NotifySound             bool                        `json:"notifySound"`
+	PasswordHash            string                      `json:"passwordHash,omitempty"`
+	ThumbnailSize           float32                     `json:"thumbnailSize"`
+	Onboarded               bool                        `json:"onboarded"`
+	ViewMode                int                         `json:"viewMode"`
+	Sort                    string                      `json:"sort"`
+	SortDescending          bool                        `json:"sortDescending"`
+	SidebarVisible          bool                        `json:"sidebarVisible"`
+	InspectorVisible        bool                        `json:"inspectorVisible"`
+	SidebarWidth            float32                     `json:"sidebarWidth"`
 }
 
 type App struct {
@@ -171,9 +201,9 @@ func (a *App) OpenWindow() {
 
 func (a *App) applyTheme(c *ui.Context) {
 	theme := *c.Theme()
-	if a.Preferences.Appearance == "light" {
+	if a.Preferences.Theme == "light" {
 		theme = *ui.LightTheme()
-	} else if a.Preferences.Appearance == "dark" {
+	} else if a.Preferences.Theme == "dark" {
 		theme = *ui.DarkTheme()
 	}
 	if theme.Dark {
@@ -857,7 +887,7 @@ func (a *App) InvalidateWindows() {
 
 func (a *App) applyAppearance() {
 	source := mygo.ThemeSystem
-	switch a.Preferences.Appearance {
+	switch a.Preferences.Theme {
 	case "light":
 		source = mygo.ThemeLight
 	case "dark":

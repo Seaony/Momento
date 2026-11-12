@@ -214,7 +214,7 @@ func (a *App) appearanceChoices(c *ui.Context) {
 	labels := []string{a.T("follow_system"), a.T("appearance_light"), a.T("appearance_dark")}
 	selected := 0
 	for i, code := range codes {
-		if code == a.Preferences.Appearance {
+		if code == a.Preferences.Theme {
 			selected = i
 		}
 	}
@@ -231,7 +231,7 @@ func (a *App) appearanceChoices(c *ui.Context) {
 		}
 	})
 	if segments.Track.Changed() {
-		a.Preferences.Appearance = codes[selected]
+		a.Preferences.Theme = codes[selected]
 		a.SavePreferences()
 	}
 }

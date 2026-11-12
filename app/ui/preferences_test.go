@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Seaony/Momento/app/internal/i18n"
@@ -15,7 +16,7 @@ func TestPreferencesMissingFieldsKeepDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 	p = NormalizePreferences(p)
-	if p.Language != "ja" || p.Appearance != "dark" || !p.AutoCheckUpdates || !p.BrowserExtensionEnabled || p.LaunchAtLogin {
+	if p.Language != "ja" || p.Theme != "dark" || !p.AutoCheckUpdates || !p.BrowserExtensionEnabled || p.LaunchAtLogin {
 		t.Fatalf("缺字段的偏好没有保留开关默认值：%+v", p)
 	}
 	if p.ViewMode != 0 || p.Sort != "added" || !p.SortDescending || !p.SidebarVisible || !p.InspectorVisible || p.SidebarWidth != 236 {
@@ -36,10 +37,10 @@ func TestPreferencesExplicitFalseSurvivesLoading(t *testing.T) {
 
 func TestNormalizePreferencesRestoresSupportedState(t *testing.T) {
 	p := DefaultPreferences()
-	p.ViewMode, p.Sort, p.Appearance, p.SidebarWidth = 9, "unknown", "unknown", 900
+	p.ViewMode, p.Sort, p.Theme, p.SidebarWidth = 9, "unknown", "unknown", 900
 	p.SortDescending = false
 	p = NormalizePreferences(p)
-	if p.ViewMode != 0 || p.Sort != "added" || !p.SortDescending || p.Appearance != "system" || p.SidebarWidth != 340 {
+	if p.ViewMode != 0 || p.Sort != "added" || !p.SortDescending || p.Theme != "system" || p.SidebarWidth != 340 {
 		t.Fatalf("非法界面状态没有规范化：%+v", p)
 	}
 	p.SidebarWidth = 50
@@ -54,7 +55,7 @@ func TestPreferencesRestoreUIStateAfterFlush(t *testing.T) {
 	a := preferenceTestApp(t)
 	a.ViewMode, a.Query.Sort, a.Query.Descending = 2, "size", false
 	a.SidebarVisible, a.InspectorVisible, a.SidebarWidth = false, false, 307.5
-	a.Preferences.Language, a.Preferences.Appearance = "ja", "dark"
+	a.Preferences.Language, a.Preferences.Theme = "ja", "dark"
 	a.Preferences.AutoCheckUpdates, a.Preferences.BrowserExtensionEnabled = false, false
 	a.RememberUIState()
 	if err := a.FlushPreferences(); err != nil {
@@ -65,7 +66,7 @@ func TestPreferencesRestoreUIStateAfterFlush(t *testing.T) {
 	if reopened.ViewMode != 2 || reopened.Query.Sort != "size" || reopened.Query.Descending || reopened.SidebarVisible || reopened.InspectorVisible || reopened.SidebarWidth != 307.5 {
 		t.Fatalf("重启后没有恢复界面状态：%+v，%+v", reopened.Preferences, reopened.Query)
 	}
-	if reopened.Preferences.Language != "ja" || reopened.Preferences.Appearance != "dark" || reopened.Preferences.AutoCheckUpdates || reopened.Preferences.BrowserExtensionEnabled {
+	if reopened.Preferences.Language != "ja" || reopened.Preferences.Theme != "dark" || reopened.Preferences.AutoCheckUpdates || reopened.Preferences.BrowserExtensionEnabled {
 		t.Fatalf("保存界面状态覆盖了设置项：%+v", reopened.Preferences)
 	}
 }
@@ -174,4 +175,43 @@ func readTestPreferences(t *testing.T, dir string) Preferences {
 		t.Fatal(err)
 	}
 	return p
+}
+
+func TestPreferencesMigrateThemeAndPreserveNewChoices(t *testing.T) {
+	for _, old := range []string{"system", "light", "dark"} {
+		var p Preferences
+		if err := json.Unmarshal([]byte(`{"appearance":"`+old+`"}`), &p); err != nil {
+			t.Fatal(err)
+		}
+		if p.Theme != old || p.UIZoom != 1 || !p.TrayIcon || !p.PreviewChecker || !p.SelectImported || !p.Notify || !p.NotifySound {
+			t.Fatalf("迁移丢失默认值: %+v", p)
+		}
+		data, err := json.Marshal(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(data), "appearance") {
+			t.Fatal("仍在写旧主题字段")
+		}
+	}
+	var p Preferences
+	if err := json.Unmarshal([]byte(`{"appearance":"light","theme":"purple","trayIcon":false,"dockWhenHidden":false,"previewChecker":false,"selectImported":false,"notify":false,"notifySound":false,"uiZoom":1.5,"shortcuts":{"search":"Alt+F"}}`), &p); err != nil {
+		t.Fatal(err)
+	}
+	if p.Theme != "purple" || p.TrayIcon || !p.DockWhenHidden || p.PreviewChecker || p.SelectImported || p.Notify || p.NotifySound || p.UIZoom != 1.5 || p.Shortcuts["search"] != "Alt+F" {
+		t.Fatalf("明确设置未保留: %+v", p)
+	}
+}
+
+func TestPreferenceSnapshotDoesNotShareMutableFields(t *testing.T) {
+	p := DefaultPreferences()
+	p.AutoImport["library"] = []AutoImportRule{{Path: "before", Enabled: true}}
+	p.Shortcuts["search"] = "Alt+F"
+	copy := clonePreferences(p)
+	p.AutoImport["library"][0].Path = "after"
+	p.Shortcuts["search"] = "Alt+G"
+	p.NotifyEvents[0] = "duplicate"
+	if copy.AutoImport["library"][0].Path != "before" || copy.Shortcuts["search"] != "Alt+F" || copy.NotifyEvents[0] != "extension" {
+		t.Fatal("后台保存共享了可变偏好")
+	}
 }

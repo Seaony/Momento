@@ -37,7 +37,7 @@ func TestMain(m *testing.M) {
 
 func settingsTestApp(language, appearance string) *App {
 	preferences := DefaultPreferences()
-	preferences.Language, preferences.Appearance = language, appearance
+	preferences.Language, preferences.Theme = language, appearance
 	return &App{Texts: i18n.Catalog{Language: language, SystemLanguage: language}, Preferences: preferences, ExtensionStatus: browser.Status{State: browser.Running, Address: browser.Address}}
 }
 
@@ -193,7 +193,7 @@ func TestSettingsAppearanceAndLanguageChangesImmediately(t *testing.T) {
 				t.Fatal(err)
 			}
 			dark := tt.Image().RGBAAt(0, 120)
-			if a.Preferences.Appearance != "dark" || dark.R >= light.R {
+			if a.Preferences.Theme != "dark" || dark.R >= light.R {
 				t.Fatal("选择深色后偏好和界面没有立即变深")
 			}
 			if option, ok := tt.AccessByRole(ui.RoleRadio, a.T("appearance_dark")); !ok || !option.Checked {
@@ -202,14 +202,14 @@ func TestSettingsAppearanceAndLanguageChangesImmediately(t *testing.T) {
 			if err := tt.Click(a.T("appearance_light")); err != nil {
 				t.Fatal(err)
 			}
-			if a.Preferences.Appearance != "light" || tt.Image().RGBAAt(0, 120).R <= dark.R {
+			if a.Preferences.Theme != "light" || tt.Image().RGBAAt(0, 120).R <= dark.R {
 				t.Fatal("选择浅色后界面没有立即变浅")
 			}
 			tt.SetDark(true)
 			if err := tt.Click(a.T("follow_system")); err != nil {
 				t.Fatal(err)
 			}
-			if a.Preferences.Appearance != "system" || tt.Image().RGBAAt(0, 120).R != dark.R {
+			if a.Preferences.Theme != "system" || tt.Image().RGBAAt(0, 120).R != dark.R {
 				t.Fatal("跟随系统没有使用系统深色")
 			}
 			for _, item := range []struct{ label, code, locale, appearance string }{

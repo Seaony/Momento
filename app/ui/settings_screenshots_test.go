@@ -98,7 +98,7 @@ func finalSettingsScreenshotState(language, appearance, state string) (*App, Upd
 	case "login-error":
 		a.Settings.LoginError = "permission denied"
 	case "theme-system":
-		a.Preferences.Appearance = "system"
+		a.Preferences.Theme = "system"
 	case "language-system":
 		a.Preferences.Language, a.Texts.Language = "system", "system"
 	case "automatic-off":
