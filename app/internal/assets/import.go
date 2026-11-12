@@ -291,8 +291,8 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 		}
 	}
 	ready := make([]prepared, len(fresh))
-	// 处理数包含已核对的重复文件；导入数只在整批提交成功后公布。
-	progress.send(model.ImportProgress{Stage: "importing", Total: total, Processed: processed, Skipped: skipped}, true)
+	// 进度里的导入数统计已准备好的非重复素材，最终结果仍以整批提交为准。
+	progress.send(model.ImportProgress{Stage: "importing", Total: total, Processed: processed, Imported: processed - skipped, Skipped: skipped}, true)
 	if err = parallel(ctx, len(fresh), func(ctx context.Context, j int) error {
 		c := candidates[fresh[j]]
 		img, metadata, orientation, profile, err := s.prepareImage(c.staged)
@@ -321,12 +321,12 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 		count := len(groups[c.hash])
 		processed += count
 		skipped += count - 1
-		progress.send(model.ImportProgress{Stage: "importing", Total: total, Processed: processed, Skipped: skipped, CurrentFile: filepath.Base(c.path)}, false)
+		progress.send(model.ImportProgress{Stage: "importing", Total: total, Processed: processed, Imported: processed - skipped, Skipped: skipped, CurrentFile: filepath.Base(c.path)}, false)
 	}); err != nil {
 		return result, err
 	}
-	progress.send(model.ImportProgress{Stage: "importing", Total: total, Processed: processed, Skipped: skipped}, true)
-	progress.send(model.ImportProgress{Stage: "finishing", Total: total, Processed: processed, Skipped: skipped}, true)
+	progress.send(model.ImportProgress{Stage: "importing", Total: total, Processed: processed, Imported: processed - skipped, Skipped: skipped}, true)
+	progress.send(model.ImportProgress{Stage: "finishing", Total: total, Processed: processed, Imported: processed - skipped, Skipped: skipped}, true)
 	byHash := make(map[string]prepared, len(ready))
 	for _, p := range ready {
 		byHash[p.asset.ID] = p
@@ -409,7 +409,7 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 				return result, err
 			}
 		}
-		progress.send(model.ImportProgress{Stage: "finishing", Total: total, Processed: processed, Skipped: skipped, CurrentFile: filepath.Base(c.path)}, false)
+		progress.send(model.ImportProgress{Stage: "finishing", Total: total, Processed: processed, Imported: processed - skipped, Skipped: skipped, CurrentFile: filepath.Base(c.path)}, false)
 	}
 	if err = tx.Commit(); err != nil {
 		return result, err

@@ -2,7 +2,11 @@ package assets
 
 import (
 	"context"
+	"fmt"
 	"image"
+	"image/color"
+	"image/png"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -15,26 +19,48 @@ func TestImportReportsActualProcessingBeforeCommit(t *testing.T) {
 	ctx, lib, s := testLibrary(t)
 	importFixture(t, ctx, s, "gif")
 	input := t.TempDir()
-	fixtureCopy(t, "gif", filepath.Join(input, "existing-1.gif"))
-	fixtureCopy(t, "gif", filepath.Join(input, "existing-2.gif"))
-	fixtureCopy(t, "png", filepath.Join(input, "fresh-1.png"))
-	fixtureCopy(t, "png", filepath.Join(input, "fresh-2.png"))
-	fixtureCopy(t, "jpg", filepath.Join(input, "fresh-3.jpg"))
-	releasePNG, releaseJPEG := make(chan struct{}), make(chan struct{})
+	for i := range 5 {
+		fixtureCopy(t, "gif", filepath.Join(input, fmt.Sprintf("existing-%03d.gif", i)))
+	}
+	for i := range 32 {
+		img := image.NewNRGBA(image.Rect(0, 0, 1, 1))
+		img.SetNRGBA(0, 0, color.NRGBA{R: uint8(i + 1), A: 255})
+		path := filepath.Join(input, fmt.Sprintf("fresh-%03d.png", i))
+		f, err := os.Create(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = png.Encode(f, img); err != nil {
+			f.Close()
+			t.Fatal(err)
+		}
+		if err = f.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := range 83 {
+		fixtureCopy(t, "jpg", filepath.Join(input, fmt.Sprintf("pending-%03d.jpg", i)))
+	}
+	releaseLastPNG, releaseJPEG := make(chan struct{}), make(chan struct{})
 	var pngOnce, jpegOnce sync.Once
-	releaseAll := func() { pngOnce.Do(func() { close(releasePNG) }); jpegOnce.Do(func() { close(releaseJPEG) }) }
-	started := make(chan string, 2)
+	releaseAll := func() { pngOnce.Do(func() { close(releaseLastPNG) }); jpegOnce.Do(func() { close(releaseJPEG) }) }
+	pngDecoded := make(chan struct{}, 31)
 	s.prepareImage = func(path string) (image.Image, map[string]string, int, string, error) {
-		extension := filepath.Ext(path)
-		started <- extension
-		if extension == ".png" {
-			<-releasePNG
-		} else {
+		if filepath.Ext(path) == ".jpg" {
 			<-releaseJPEG
 		}
-		return PrepareImage(path)
+		img, values, orientation, profile, err := PrepareImage(path)
+		if err == nil && filepath.Ext(path) == ".png" {
+			pixel := color.NRGBAModel.Convert(img.At(0, 0)).(color.NRGBA)
+			if pixel.R == 32 {
+				<-releaseLastPNG
+			} else {
+				pngDecoded <- struct{}{}
+			}
+		}
+		return img, values, orientation, profile, err
 	}
-	events := make(chan model.ImportProgress, 32)
+	events := make(chan model.ImportProgress, 64)
 	done := make(chan error, 1)
 	finished := false
 	defer func() {
@@ -47,34 +73,39 @@ func TestImportReportsActualProcessingBeforeCommit(t *testing.T) {
 		_, err := s.Import(ctx, model.ImportRequest{Paths: []string{input}}, func(p model.ImportProgress) { events <- p })
 		done <- err
 	}()
-	for range 2 {
+	for range 31 {
 		select {
-		case <-started:
+		case <-pngDecoded:
 		case <-time.After(3 * time.Second):
-			t.Fatal("解码没有开始")
+			t.Fatal("PNG解码没有完成")
 		}
 	}
-	// 两个工作者都停在可控的解码边界，越过节流窗口后只放行 PNG。
+	// 留住最后一张 PNG 和 JPEG，越过节流窗口后只放行 PNG。
 	timer := time.NewTimer(110 * time.Millisecond)
 	<-timer.C
-	pngOnce.Do(func() { close(releasePNG) })
+	pngOnce.Do(func() { close(releaseLastPNG) })
 	found := false
 	timeout := time.NewTimer(3 * time.Second)
 	defer timeout.Stop()
 	for !found {
 		select {
 		case p := <-events:
-			if p.Stage == "importing" && p.Processed == 4 {
-				if p.Total != 5 || p.Skipped != 3 || p.Imported != 0 {
-					t.Fatalf("处理中计数错误：%+v", p)
+			if p.Stage == "importing" {
+				if p.Processed != p.Imported+p.Skipped {
+					t.Fatalf("处理计数不相等：%+v", p)
 				}
-				found = true
+				if p.Processed == 37 {
+					if p.Total != 120 || p.Imported != 32 || p.Skipped != 5 {
+						t.Fatalf("处理中计数不符合状态表：%+v", p)
+					}
+					found = true
+				}
 			}
 		case err := <-done:
 			finished = true
-			t.Fatalf("还未完成 JPEG 却结束：%v", err)
+			t.Fatalf("还未完成JPEG却结束：%v", err)
 		case <-timeout.C:
-			t.Fatal("PNG 已处理完但进度仍停在零，没有中途处理进度")
+			t.Fatal("PNG已准备完成，但没有37/120、导入32、重复5的中途进度")
 		}
 	}
 	var persisted int
@@ -82,7 +113,7 @@ func TestImportReportsActualProcessingBeforeCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	if persisted != 1 {
-		t.Fatalf("尚未收尾却写入了 %d 条素材", persisted)
+		t.Fatalf("尚未收尾却写入了%d条素材", persisted)
 	}
 	jpegOnce.Do(func() { close(releaseJPEG) })
 	err := <-done
@@ -93,31 +124,43 @@ func TestImportReportsActualProcessingBeforeCommit(t *testing.T) {
 	close(events)
 	var final model.ImportProgress
 	for p := range events {
-		if p.Imported != 0 && p.Stage != "finishing" {
-			t.Fatalf("提交前宣称已导入：%+v", p)
+		if p.Processed != p.Imported+p.Skipped {
+			t.Fatalf("处理计数不相等：%+v", p)
 		}
 		final = p
 	}
-	if final.Stage != "finishing" || final.Total != 5 || final.Processed != 5 || final.Imported != 2 || final.Skipped != 3 {
+	if final.Stage != "finishing" || final.Total != 120 || final.Processed != 120 || final.Imported != 33 || final.Skipped != 87 {
 		t.Fatalf("最终计数错误：%+v", final)
 	}
 }
 
-func TestImportCommitFailureDoesNotReportImportedAssets(t *testing.T) {
+func TestImportCommitFailureResetsFinalResultAndRollsBackPreparedAssets(t *testing.T) {
 	ctx, lib, s := testLibrary(t)
 	if _, err := lib.DB.ExecContext(ctx, `CREATE TABLE commit_guard(asset_id TEXT REFERENCES assets(id),folder_id TEXT REFERENCES folders(id) DEFERRABLE INITIALLY DEFERRED);
  CREATE TRIGGER reject_commit AFTER INSERT ON assets BEGIN INSERT INTO commit_guard(asset_id,folder_id) VALUES(NEW.id,'missing-folder'); END`); err != nil {
 		t.Fatal(err)
 	}
 	var events []model.ImportProgress
-	_, err := s.Import(ctx, model.ImportRequest{Paths: []string{filepath.Join("testdata", "sample.png")}}, func(p model.ImportProgress) { events = append(events, p) })
+	result, err := s.Import(ctx, model.ImportRequest{Paths: []string{filepath.Join("testdata", "sample.png")}}, func(p model.ImportProgress) { events = append(events, p) })
 	if err == nil {
 		t.Fatal("延迟外键约束应在提交时失败")
 	}
+	prepared := false
 	for _, p := range events {
-		if p.Imported != 0 {
-			t.Fatalf("提交失败却报告已导入：%+v", p)
+		if p.Stage == "importing" || p.Stage == "finishing" {
+			if p.Processed != p.Imported+p.Skipped {
+				t.Fatalf("处理计数不相等：%+v", p)
+			}
+			if p.Imported == 1 {
+				prepared = true
+			}
 		}
+	}
+	if !prepared {
+		t.Fatal("没有报告素材准备完成的真实进度")
+	}
+	if result.Imported != 0 || result.Skipped != 0 || result.Restored != 0 {
+		t.Fatalf("失败的最终结果没有清零：%+v", result)
 	}
 	if len(snapshot(t, context.Background(), lib).Assets) != 0 || len(storedFiles(t, lib.Root)) != 0 {
 		t.Fatal("失败提交留下素材或文件")
