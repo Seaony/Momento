@@ -178,6 +178,7 @@ func (a *App) OpenWindow() {
 		TrafficLightPosition: &mygo.Point{X: 14, Y: 23},
 		BackgroundColor:      "light-dark(#ffffff, #18181b)", Content: ui.View(a.View),
 	})
+	a.ApplyWindowZoom()
 	a.Thumbnails = newThumbnailCache(func(fn func()) { a.Window.Update(fn) })
 	a.Window.OnFileDrop(func(e *mygo.FileDropEvent) { a.ImportPaths(e.Paths) })
 	a.Window.OnClose(func(e *mygo.CloseEvent) {
@@ -197,32 +198,6 @@ func (a *App) OpenWindow() {
 	})
 
 	go a.watchLibrary()
-}
-
-func (a *App) applyTheme(c *ui.Context) {
-	theme := *c.Theme()
-	if a.Preferences.Theme == "light" {
-		theme = *ui.LightTheme()
-	} else if a.Preferences.Theme == "dark" {
-		theme = *ui.DarkTheme()
-	}
-	if theme.Dark {
-		theme.TextMuted = ui.Hex("#B4B4BF")
-		theme.Accent = ui.Hex("#93C5FD")
-		theme.AccentHover = ui.Hex("#BFDBFE")
-		theme.AccentPressed = ui.Hex("#60A5FA")
-		theme.AccentText = ui.Hex("#111827")
-	} else {
-		theme.TextMuted = ui.Hex("#62626C")
-		theme.Accent = ui.Hex("#1D4ED8")
-		theme.AccentHover = ui.Hex("#1E40AF")
-		theme.AccentPressed = ui.Hex("#1E3A8A")
-		theme.AccentText = ui.RGB(255, 255, 255)
-	}
-	c.SetTheme(&theme)
-	if a.Preferences.Language != "system" && a.Preferences.Language != "" {
-		a.Texts.Language = a.Preferences.Language
-	}
 }
 
 func (a *App) View(c *ui.Context) {
@@ -883,15 +858,4 @@ func (a *App) InvalidateWindows() {
 	if a.SettingsWindow != nil {
 		a.SettingsWindow.Invalidate()
 	}
-}
-
-func (a *App) applyAppearance() {
-	source := mygo.ThemeSystem
-	switch a.Preferences.Theme {
-	case "light":
-		source = mygo.ThemeLight
-	case "dark":
-		source = mygo.ThemeDark
-	}
-	mygo.Theme.SetSource(source)
 }

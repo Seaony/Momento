@@ -44,7 +44,7 @@ func (p *Preferences) UnmarshalJSON(data []byte) error {
 }
 
 func NormalizePreferences(p Preferences) Preferences {
-	if !slices.Contains([]string{"system", "zh-Hans", "zh", "en", "ja"}, p.Language) {
+	if !slices.Contains([]string{"system", "zh-CN", "zh-Hans", "zh", "en", "ja"}, p.Language) {
 		p.Language = "system"
 	}
 	if !slices.Contains([]string{"system", "light", "light-gray", "dark-gray", "dark", "navy", "purple"}, p.Theme) {
@@ -142,6 +142,7 @@ func (a *App) SavePreferences() {
 	if a.MenuChanged != nil {
 		a.MenuChanged()
 	}
+	a.ApplyWindowZoom()
 	a.InvalidateWindows()
 	a.queuePreferences()
 }

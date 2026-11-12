@@ -323,4 +323,8 @@ var messages = map[string][3]string{
 	"updates_unconfigured":   {"此构建未配置更新地址和公钥，暂时无法检查更新。", "This build has no update source or public key configured. Update checks are unavailable.", "このビルドには配信先と公開鍵が設定されていないため、アップデートを確認できません。"},
 	"error_launch_at_login":  {"无法设置开机时启动：%s", "Could not change Open at Login: %s", "ログイン時に起動する設定を変更できませんでした：%s"},
 	"error_extension_listen": {"浏览器扩展服务无法启动：%s", "Could not start the browser extension service: %s", "ブラウザ機能拡張サービスを起動できませんでした：%s"},
+	"theme_light_gray":       {"浅灰", "Light Gray", "ライトグレー"},
+	"theme_dark_gray":        {"深灰", "Dark Gray", "ダークグレー"},
+	"theme_navy":             {"深蓝", "Navy", "ネイビー"},
+	"theme_purple":           {"深紫", "Purple", "パープル"},
 }
