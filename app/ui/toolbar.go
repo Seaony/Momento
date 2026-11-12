@@ -26,7 +26,15 @@ var toolbarFamilies = []struct{ ID, Hex string }{
 
 func (a *App) toolbar(c *ui.Context) {
 	t := c.Theme()
-	ui.Row(c.Key("toolbar")).Height(60).Shrink(0).FillWidth().Padding(12).Gap(6).
+	bar := c.TitleBar()
+	left, right := float32(12), float32(12)
+	if !a.SidebarVisible {
+		left += bar.Left
+	}
+	if !a.InspectorVisible {
+		right += bar.Right
+	}
+	ui.Row(c.Key("toolbar")).Height(MainToolbarHeight).Shrink(0).FillWidth().Padding(12, right, 12, left).Gap(6).DragWindow().
 		Background(t.Background).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Role(ui.RoleToolbar).FocusGroup(ui.Horizontal).Label(a.T("browse_tools")).Children(func() {
 		if toolbarIconButton(c.Key("toggle-sidebar"), a.T("toggle_sidebar"), "sidebar").Clicked() {
 			a.SidebarVisible = !a.SidebarVisible

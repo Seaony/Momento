@@ -29,7 +29,8 @@ func (a *App) sidebar(c *ui.Context) {
 	if a.Index != nil {
 		counts = a.Index.Counts()
 	}
-	ui.Column(c).Fill().Padding(12, 8, 8, 8).Gap(4).Background(c.Theme().Surface).Children(func() {
+	ui.Column(c).Fill().Padding(0, 8, 8, 8).Gap(4).Background(c.Theme().Surface).Children(func() {
+		ui.Box(c.Key("sidebar-titlebar")).Height(max(MainToolbarHeight, c.TitleBar().Bottom+8)).FillWidth().Shrink(0).DragWindow()
 		a.sidebarLibrary(c)
 		ui.Divider(c).Margin(8, 0)
 		ui.Scroll(c.Key("sidebar_scopes")).Grow(1).Gap(3).Children(func() {

@@ -14,7 +14,7 @@ var appLogo = func() *ui.Bitmap {
 }()
 
 func (a *App) welcome(c *ui.Context) {
-	ui.Column(c).Fill().Center().Gap(16).Children(func() {
+	ui.Column(c).Fill().Padding(max(MainToolbarHeight, c.TitleBar().Bottom+16), 24, 24, 24).Center().Gap(16).DragWindow().Children(func() {
 		ui.Image(c, appLogo).Size(96, 96).Fit(ui.Contain)
 		ui.Text(c, a.T("welcome")).FontSize(24).Bold()
 		ui.Text(c, a.T("welcome_hint")).TextColor(c.Theme().TextMuted)

@@ -120,7 +120,12 @@ func New() *App {
 func (a *App) T(key string, args ...any) string { return a.Texts.T(key, args...) }
 
 func (a *App) OpenWindow() {
-	a.Window = mygo.NewWindow(mygo.WindowOptions{Title: "Momento", Width: 1100, Height: 800, MinWidth: 1100, MinHeight: 640, StateKey: "main", Content: ui.View(a.View)})
+	a.Window = mygo.NewWindow(mygo.WindowOptions{
+		Title: "Momento", Width: 1100, Height: 800, MinWidth: 1100, MinHeight: 640, StateKey: "main",
+		TitleBarStyle: mygo.TitleBarHiddenInset, TitleBarHeight: 60,
+		TrafficLightPosition: &mygo.Point{X: 14, Y: 23},
+		BackgroundColor:      "light-dark(#ffffff, #18181b)", Content: ui.View(a.View),
+	})
 	a.Thumbnails = newThumbnailCache(func(fn func()) { a.Window.Update(fn) })
 	a.Window.OnFileDrop(func(e *mygo.FileDropEvent) { a.ImportPaths(e.Paths) })
 	a.Window.OnClose(func(e *mygo.CloseEvent) {
@@ -176,7 +181,10 @@ func (a *App) View(c *ui.Context) {
 					}
 				})
 				if a.InspectorVisible {
-					ui.Column(c).Width(280).Shrink(0).Background(c.Theme().Surface).BorderWidth(0, 0, 0, 1).BorderColor(c.Theme().Border).Children(func() { a.inspector(c) })
+					ui.Column(c).Width(280).Shrink(0).Background(c.Theme().Surface).BorderWidth(0, 0, 0, 1).BorderColor(c.Theme().Border).Children(func() {
+						ui.Box(c).Height(MainToolbarHeight).Shrink(0).FillWidth().Background(c.Theme().Background).DragWindow()
+						a.inspector(c)
+					})
 				}
 			})
 		}
