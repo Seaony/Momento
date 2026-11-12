@@ -1,0 +1,9 @@
+The attached taste-ref.png is the STYLE TARGET only (another app's icon; do not copy its character, bear ears, heart balloon or exact layout). Match its qualities: soft translucent jelly / frosted-glass character material with gentle inner light and slightly translucent edges; smooth simple gradients, no hard glossy hotspots, no dark cast shadow; a bright multi-hue pastel gradient background; the character scaled so big that the canvas crops it; slanted short line eyes with a playful expression; one raised small hand holding a prop that has its own tiny face; a few tiny white sparkle dots in empty space.
+The app: a visual reference library for designers, photographers and creators. It gathers saved images, screenshots, moodboards and photos into one private library on your own device (Mac now, iPhone and iPad later), shows them as a masonry grid of image cards, and sorts them by color, tag and folder.
+Output one full-bleed 1:1 square app-icon artwork, 1024x1024, square outer corners, no text, no letters, no numbers, no watermark, no border. One main subject only. Make it look like a professionally designed, high-quality App Store icon: confident shapes, crisp clean edges, strong contrast, readable at 32px.
+
+Concept J1 — a hamster that hoards pretty pictures, the way hamsters stuff their cheeks.
+Style: soft translucent jelly material, frosted pearl-white and warm apricot body.
+Composition: a plump hamster rising from the bottom-right corner, about 75% of the square, cropped by the bottom and right edges, cheeks puffed out with stored treasures.
+Expression: slanted short line eyes, smug and satisfied, rosy cheeks.
+Functional hook: its raised paw holds one big soft photo card (a rounded rectangle with a simple sunset-landscape picture inside) that has two tiny dot eyes. Background: pastel gradient from peach at top-left through pink to lilac at bottom-right, 4-5 tiny white sparkle dots.

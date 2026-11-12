@@ -1,0 +1,9 @@
+The attached taste-ref.png is the STYLE TARGET only (another app's icon; do not copy its character, bear ears, heart balloon or exact layout). Match its qualities: soft translucent jelly / frosted-glass character material with gentle inner light and slightly translucent edges; smooth simple gradients, no hard glossy hotspots, no dark cast shadow; a bright multi-hue pastel gradient background; the character scaled so big that the canvas crops it; slanted short line eyes with a playful expression; a few tiny white sparkle dots in empty space.
+The app: a visual reference library for designers, photographers and creators. It gathers saved images, screenshots, moodboards and photos into one private library on your own device (Mac now, iPhone and iPad later), shows them as a masonry grid of image cards, and sorts them by color, tag and folder.
+Output one full-bleed 1:1 square app-icon artwork, 1024x1024, square outer corners, no text, no letters, no numbers, no watermark, no border. One main subject only. Make it look like a professionally designed, high-quality App Store icon: confident shapes, crisp clean edges, strong contrast, readable at 32px.
+
+Concept K01 — a pelican whose beak pouch is a storage bag full of pictures.
+Style: soft translucent jelly material, milky white body, the pouch is clear peach jelly.
+Composition: a big pelican head rising from the bottom-right, about 75% of the square, long beak pointing to the upper-left, cropped by the bottom and right edges.
+Expression: slanted short line eyes, smug and satisfied.
+Functional hook: inside the translucent pouch you see two big rounded picture cards (coral and sky blue, each a simple mountain-and-sun picture), one with two tiny dot eyes peeking out. Background: pastel gradient from soft yellow at top-left through pink to lilac at bottom-right.
