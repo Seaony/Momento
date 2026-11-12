@@ -58,7 +58,7 @@ var messages = map[string][2]string{
 	"list_view":                      {"列表", "List"},
 	"toggle_sidebar":                 {"显示或隐藏侧栏", "Toggle Sidebar"},
 	"toggle_inspector":               {"显示或隐藏检查器", "Toggle Inspector"},
-	"result_count":                   {"%s 个结果", "%s results"},
+	"result_count":                   {"%s 个结果", "Results: %s"},
 	"no_results":                     {"没有找到「%s」", "No results for “%s”"},
 	"drop_images":                    {"把图片拖到这里", "Drop images here"},
 	"install_extension":              {"安装浏览器扩展", "Install Browser Extension"},
@@ -294,4 +294,6 @@ var messages = map[string][2]string{
 	"library_imported":               {"图库已导入", "Library imported"},
 	"library_exported":               {"图库已导出", "Library exported"},
 	"library_cache_rebuilt":          {"缓存已重建", "Cache rebuilt"},
+	"exif_resolution":                {"分辨率", "Resolution"},
+	"selected_no_tags":               {"这些素材都没有标签", "None of these images have tags"},
 }

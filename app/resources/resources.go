@@ -2,5 +2,5 @@ package resources
 
 import _ "embed"
 
-//go:embed icon.png
-var Icon []byte
+//go:embed welcome-icon.png
+var WelcomeIcon []byte

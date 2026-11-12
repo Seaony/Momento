@@ -59,6 +59,86 @@ func TestToolbarSearchAndViewSelection(t *testing.T) {
 	}
 }
 
+func TestToolbarResultCountOnlyDuringSearch(t *testing.T) {
+	for _, language := range []string{"en", "zh-CN"} {
+		t.Run(language, func(t *testing.T) {
+			a := toolbarTestApp()
+			a.Texts.Language = language
+			tt := toolbarTester(a)
+			if _, exists := tt.Find(a.T("result_count", "3")); exists {
+				t.Fatal("没有搜索时不应显示重复数量")
+			}
+			toolbarClick(t, tt, a.T("search_assets"))
+			tt.Type("alpine")
+			if !tt.HasText(a.T("result_count", "1")) {
+				t.Fatal("搜索时没有显示完整本地化结果数")
+			}
+			a.Query.Search = ""
+			a.Refine()
+			tt.Frame()
+			if _, exists := tt.Find(a.T("result_count", "3")); exists {
+				t.Fatal("清空搜索后数量没有消失")
+			}
+		})
+	}
+}
+
+func TestToolbarIconTooltips(t *testing.T) {
+	keys := []string{"toggle_sidebar", "filter", "sort", "view_masonry", "view_grid", "view_list", "import", "toggle_inspector"}
+	for _, language := range []string{"en", "zh-CN"} {
+		for _, key := range keys {
+			t.Run(language+"/"+key, func(t *testing.T) {
+				a := toolbarTestApp()
+				a.Texts.Language = language
+				tt := toolbarTester(a)
+				label := a.T(key)
+				box, ok := tt.Find(label)
+				if !ok {
+					t.Fatalf("缺少图标 %s", key)
+				}
+				tt.Move(box.X+box.W/2, box.Y+box.H/2)
+				tt.Advance(time.Second)
+				if !tt.HasText(label) {
+					t.Fatalf("悬停没有显示 %s", label)
+				}
+			})
+		}
+	}
+}
+
+func TestToolbarColorNamesAndSelection(t *testing.T) {
+	for _, language := range []string{"en", "zh-CN"} {
+		for _, family := range toolbarFamilies {
+			t.Run(language+"/"+family.ID, func(t *testing.T) {
+				a := toolbarTestApp()
+				a.Texts.Language = language
+				tt := toolbarTester(a)
+				toolbarClick(t, tt, a.T("filter"))
+				label := a.T("color_" + family.ID)
+				box, ok := tt.Find(label)
+				if !ok {
+					t.Fatalf("缺少颜色 %s", family.ID)
+				}
+				tt.Move(box.X+box.W/2, box.Y+box.H/2)
+				tt.Advance(time.Second)
+				if !tt.HasText(label) {
+					t.Fatalf("悬停没有显示颜色族 %s", label)
+				}
+				toolbarClick(t, tt, label)
+				access, ok := tt.Access(label)
+				if !ok || !access.Checked {
+					t.Fatalf("颜色族没有报告选中状态：%+v", access)
+				}
+				toolbarClick(t, tt, label)
+				access, ok = tt.Access(label)
+				if !ok || access.Checked {
+					t.Fatal("第二次点击没有取消选中")
+				}
+			})
+		}
+	}
+}
+
 func TestToolbarFiltersAndRepeatedSort(t *testing.T) {
 	a := toolbarTestApp()
 	tt := toolbarTester(a)

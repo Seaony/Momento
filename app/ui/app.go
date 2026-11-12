@@ -18,7 +18,6 @@ import (
 	"github.com/Seaony/Momento/app/internal/i18n"
 	"github.com/Seaony/Momento/app/internal/library"
 	"github.com/Seaony/Momento/app/internal/model"
-	"github.com/Seaony/Momento/app/resources"
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
@@ -77,7 +76,7 @@ type App struct {
 	generation                               uint64
 	scroll                                   ui.ScrollState
 	list                                     ui.ListState
-	grid                                     ui.GridState
+	grid                                     ui.ListState
 	selectedIndex                            int
 	anchor                                   int
 	hovered                                  string
@@ -86,14 +85,6 @@ type App struct {
 	layoutVersion                            uint64
 	visibleVersion                           uint64
 }
-
-var appLogo = func() *ui.Bitmap {
-	bitmap, err := ui.DecodeBitmap(resources.Icon)
-	if err != nil {
-		panic(err)
-	}
-	return bitmap
-}()
 
 func New() *App {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -204,28 +195,6 @@ func (a *App) View(c *ui.Context) {
 		c.Toast(a.Notice)
 		a.Notice = ""
 	}
-}
-
-func (a *App) welcome(c *ui.Context) {
-	ui.Column(c).Fill().Center().Gap(16).Children(func() {
-		ui.Image(c, appLogo).Size(96, 96).Fit(ui.Contain)
-		ui.Text(c, "Momento").FontSize(32).Bold()
-		ui.Text(c, a.T("welcome")).FontSize(24).Bold()
-		ui.Text(c, a.T("welcome_hint")).TextColor(c.Theme().TextMuted)
-		ui.Row(c).Gap(12).Margin(12, 0).Children(func() {
-			if ui.PrimaryButton(c, a.T("new_library")).Clicked() {
-				a.ShowNewLibrary()
-			}
-			if ui.Button(c, a.T("open_library")).Clicked() {
-				a.ChooseOpenLibrary()
-			}
-		})
-		for _, recent := range a.Recent {
-			if ui.Button(c.Key(recent.Path), recent.DisplayName).Width(320).Clicked() {
-				a.OpenLibrary(recent.Path)
-			}
-		}
-	})
 }
 
 func (a *App) ShowError(err error) {

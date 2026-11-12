@@ -7,11 +7,10 @@ import (
 
 const (
 	masonryMinWidth       float32 = 164
-	masonryGap            float32 = 12
+	masonryGap            float32 = 8
 	masonryMinHeight      float32 = 132
 	masonryMaxHeight      float32 = 278
 	masonryFallbackHeight float32 = 214
-	masonryImageInsets    float32 = 6
 )
 
 type MasonryItem struct {
@@ -43,7 +42,7 @@ func NewMasonry(ratios []float32, width float32) *MasonryLayout {
 		}
 		height := masonryFallbackHeight
 		if ratio > 0 && !math.IsInf(float64(ratio), 0) && !math.IsNaN(float64(ratio)) {
-			height = min(max((itemWidth-masonryImageInsets)/ratio+masonryImageInsets, masonryMinHeight), masonryMaxHeight)
+			height = min(max(itemWidth/ratio, masonryMinHeight), masonryMaxHeight)
 		}
 		item := MasonryItem{
 			Index: index,

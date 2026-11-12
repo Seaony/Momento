@@ -35,6 +35,11 @@ func TestStateScreenshots(t *testing.T) {
 		"welcome", "empty", "small", "single", "multiple", "large", "search-empty", "importing", "trash",
 		"preview", "settings", "export", "new-library", "error",
 		"grid", "list", "single-details", "single-details-bottom", "tag-picker", "folder-picker", "filter", "sort", "tags",
+		"search-results", "search-cleared", "grid-selected", "list-selected", "masonry-hover", "grid-hover", "list-hover",
+		"single-details-mixed-dpi", "single-details-mixed-dpi-bottom", "filter-selected", "filter-color-hover",
+	}
+	for _, key := range []string{"toggle_sidebar", "filter", "sort", "view_masonry", "view_grid", "view_list", "import", "toggle_inspector"} {
+		states = append(states, "toolbar-hover-"+key)
 	}
 	type record struct {
 		File       string `json:"file"`
@@ -55,9 +60,10 @@ func TestStateScreenshots(t *testing.T) {
 					t.Run(name, func(t *testing.T) {
 						a := fixture.app(t, state, language, appearance)
 						tt := ui.NewTester(a.View, 1100, height)
-						if state == "single-details-bottom" {
+						if strings.HasSuffix(state, "-bottom") {
 							tt.Scroll(960, float32(height-100), 0, 2000)
 						}
+						prepareScreenshotState(t, a, tt, state)
 						checkScreenshotState(t, a, tt, state)
 						file := name + ".png"
 						writeScreenshot(t, filepath.Join(dir, file), tt)
@@ -108,6 +114,7 @@ func newScreenshotFixture(t *testing.T) screenshotFixture {
 	if len(snapshot.Assets) != 14 || len(snapshot.Folders) != 0 || len(snapshot.Tags) != 0 {
 		t.Fatal("小图库必须有14张素材、没有文件夹和标签")
 	}
+	slices.SortFunc(snapshot.Assets, func(a, b model.Asset) int { return a.CreatedAt.Compare(b.CreatedAt) })
 	formats := make(map[string]int)
 	fixture := screenshotFixture{root: root, manifest: lib.Manifest, snapshot: snapshot, bitmaps: make(map[string]*ui.Bitmap)}
 	for _, asset := range snapshot.Assets {
@@ -159,7 +166,7 @@ func (fixture screenshotFixture) app(t *testing.T, state, language, appearance s
 			snapshot.Assets[i].Trashed = true
 		}
 	}
-	if state == "tag-picker" || state == "folder-picker" || state == "filter" || state == "tags" {
+	if state == "tag-picker" || state == "folder-picker" || strings.HasPrefix(state, "filter") || state == "tags" {
 		snapshot.Folders = []model.Folder{{ID: "design", Name: "Design references"}, {ID: "ui", Name: "UI layouts", ParentID: "design"}}
 		snapshot.Tags = []model.Tag{{ID: "reference", Name: "Reference"}, {ID: "landscape", Name: "Landscape 山水"}, {ID: "inspiration", Name: "Inspiration"}, {ID: "typography", Name: "Typography"}}
 		for i := range snapshot.Assets {
@@ -168,7 +175,7 @@ func (fixture screenshotFixture) app(t *testing.T, state, language, appearance s
 		}
 	}
 	detailsID := ""
-	if state == "single-details" || state == "single-details-bottom" {
+	if strings.HasPrefix(state, "single-details") {
 		for i := range snapshot.Assets {
 			asset := &snapshot.Assets[i]
 			if asset.Extension != "jpg" || len(asset.Colors) != 8 {
@@ -184,6 +191,9 @@ func (fixture screenshotFixture) app(t *testing.T, state, language, appearance s
 				"cameraMake": "FUJIFILM", "cameraModel": "FUJIFILM X-T5", "lensModel": "XF16-55mmF2.8 R LM WR",
 				"exposureTime": "1/250 s", "focalLength": "35 mm", "isoSpeedRatings": "200", "flashFired": "false",
 				"fNumber": "f/2.8", "exposureProgram": "Aperture priority", "meteringMode": "Multi-segment", "whiteBalance": "Auto",
+			}
+			if strings.Contains(state, "mixed-dpi") {
+				asset.EXIF["dpiHeight"] = "72"
 			}
 			break
 		}
@@ -205,6 +215,10 @@ func (fixture screenshotFixture) app(t *testing.T, state, language, appearance s
 		a.Query.Search = "moonlight poster"
 		a.Refine()
 	}
+	if state == "search-results" || state == "search-cleared" {
+		a.Query.Search = a.Visible[0].Name
+		a.Refine()
+	}
 	if state == "trash" {
 		a.Query.Scope = "trash"
 		a.Refine()
@@ -220,6 +234,9 @@ func (fixture screenshotFixture) app(t *testing.T, state, language, appearance s
 			t.Fatal("单选状态需要一张带8色色板的JPEG样本")
 		}
 	}
+	if state == "grid-selected" || state == "list-selected" || state == "masonry-hover" || state == "grid-hover" || state == "list-hover" {
+		a.Selected.Add(a.Visible[0].ID)
+	}
 	if detailsID != "" {
 		a.Selected.Add(detailsID)
 	}
@@ -228,18 +245,24 @@ func (fixture screenshotFixture) app(t *testing.T, state, language, appearance s
 			a.Selected.Add(asset.ID)
 		}
 	}
-	if state == "grid" {
+	if state == "grid" || state == "grid-selected" || state == "grid-hover" {
 		a.ViewMode = 1
 	}
-	if state == "list" {
+	if state == "list" || state == "list-selected" || state == "list-hover" {
 		a.ViewMode = 2
 	}
 	if state == "tag-picker" || state == "folder-picker" {
 		a.Inspector.LibraryID = a.Library.Manifest.LibraryID
 		a.Inspector.TagsOpen, a.Inspector.FoldersOpen = state == "tag-picker", state == "folder-picker"
 	}
-	if state == "filter" {
+	if strings.HasPrefix(state, "filter") {
 		a.Toolbar.FilterOpen = true
+	}
+	if state == "filter-selected" || state == "filter-color-hover" {
+		for _, family := range toolbarFamilies {
+			a.Query.ColorFamilies = append(a.Query.ColorFamilies, family.ID)
+		}
+		a.Refine()
 	}
 	if state == "sort" {
 		a.Toolbar.SortOpen = true
@@ -278,7 +301,11 @@ func (fixture screenshotFixture) app(t *testing.T, state, language, appearance s
 		a.Error = a.T("error_import_busy")
 	}
 	// 只预装首屏及邻近区域，仍遵守正式缓存的数量和内存上限。
-	for _, asset := range a.Visible[:min(64, len(a.Visible))] {
+	preload := a.Visible
+	if state == "search-cleared" {
+		preload = snapshot.Assets
+	}
+	for _, asset := range preload[:min(64, len(preload))] {
 		bitmap := sources[asset.ID]
 		if bitmap == nil {
 			t.Fatalf("样例素材没有真实缩略图：%s", asset.ID)
@@ -293,6 +320,35 @@ func (fixture screenshotFixture) app(t *testing.T, state, language, appearance s
 		t.Fatal("截图预装超过正式缩略图缓存上限")
 	}
 	return a
+}
+
+func prepareScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
+	t.Helper()
+	if state == "search-cleared" {
+		if err := tt.Click(a.T("search_assets")); err != nil {
+			t.Fatal(err)
+		}
+		tt.Key(ui.Cmd, ui.KeyA)
+		tt.Key(0, ui.KeyBackspace)
+	}
+	label := ""
+	if key, ok := strings.CutPrefix(state, "toolbar-hover-"); ok {
+		label = a.T(key)
+	}
+	if state == "filter-color-hover" {
+		label = a.T("color_gray")
+	}
+	if state == "masonry-hover" || state == "grid-hover" || state == "list-hover" {
+		label = a.Visible[1].Name
+	}
+	if label != "" {
+		box, ok := tt.Find(label)
+		if !ok || box.W <= 0 || box.H <= 0 {
+			t.Fatalf("找不到悬停目标 %s", label)
+		}
+		tt.Move(box.X+box.W/2, box.Y+box.H/2)
+		tt.Advance(time.Second)
+	}
 }
 
 func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
@@ -314,11 +370,11 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 		expect(a.T("drop_images"))
 		expect(a.T("install_extension"))
 		expect(a.T("no_selection"))
-	case "single":
+	case "single", "grid-selected", "list-selected", "masonry-hover", "grid-hover", "list-hover":
 		expect(a.T("title"))
 		expect(a.T("file_type"))
-		expect("JPG")
 		selected := a.SelectedAssets()[0]
+		expect(strings.ToUpper(selected.Extension))
 		for _, color := range selected.Colors {
 			if _, ok := tt.Find(a.T("copy_color", color.Hex)); !ok {
 				t.Fatalf("色板缺少 %s", color.Hex)
@@ -337,6 +393,15 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 	case "search-empty":
 		expect(a.T("search_empty", a.Query.Search))
 		expect(a.T("result_count", "0"))
+	case "search-results":
+		if len(a.Visible) != 1 {
+			t.Fatalf("搜索应只匹配一张素材，实际 %d", len(a.Visible))
+		}
+		expect(a.T("result_count", "1"))
+	case "search-cleared":
+		if a.Query.Search != "" || len(a.Visible) != 14 || tt.HasText(a.T("result_count", "14")) {
+			t.Fatal("清空搜索后应恢复14张素材并隐藏工具栏数量")
+		}
 	case "importing":
 		expect("37 / 120")
 		expect(a.T("import_counts", 32, 5))
@@ -373,16 +438,33 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 		for _, key := range []string{"operation_failed", "error_import_busy", "log_location", "copy_error", "close"} {
 			expect(a.T(key))
 		}
-	case "single-details", "single-details-bottom":
+	case "single-details", "single-details-bottom", "single-details-mixed-dpi", "single-details-mixed-dpi-bottom":
 		expect("example.com")
 		expect(a.T("exif_metadata"))
 		selected := a.SelectedAssets()
 		if len(selected) != 1 || len(selected[0].EXIF) != 19 {
 			t.Fatal("长检查器必须单选并带19个EXIF字段")
 		}
-		for key := range selected[0].EXIF {
-			expect(a.T("exif_" + key))
+		fields := 0
+		for _, key := range inspectorEXIFKeys {
+			if value := inspectorEXIFValue(selected[0].EXIF, key); value != "" {
+				fields++
+				expect(a.T("exif_" + key))
+			}
 		}
+		if fields != 16 {
+			t.Fatalf("19项原始EXIF去除重复尺寸并合并DPI后应显示16项，实际%d", fields)
+		}
+		for _, key := range []string{"pixelWidth", "pixelHeight", "dpiWidth", "dpiHeight"} {
+			if tt.HasText(a.T("exif_" + key)) {
+				t.Fatalf("检查器仍重复显示%s", key)
+			}
+		}
+		resolution := "300 dpi"
+		if strings.Contains(state, "mixed-dpi") {
+			resolution = "300 × 72 dpi"
+		}
+		expect(resolution)
 	case "tag-picker":
 		expect(a.T("search_tags"))
 		expect(a.T("create_tag"))
@@ -390,10 +472,21 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 	case "folder-picker":
 		expect(a.T("search_folders"))
 		expect(a.T("create_folder"))
-		expect("Design references / UI layouts (1/3)")
-	case "filter":
+		expect("Design references / UI layouts (2/3)")
+	case "filter", "filter-selected", "filter-color-hover":
 		for _, key := range []string{"filter_colors", "filter_tags", "filter_types"} {
 			expect(a.T(key))
+		}
+		if state != "filter" {
+			for _, family := range toolbarFamilies {
+				access, ok := tt.Access(a.T("color_" + family.ID))
+				if !ok || !access.Checked {
+					t.Fatalf("颜色族%s没有显示选中状态", family.ID)
+				}
+			}
+		}
+		if state == "filter-color-hover" {
+			expect(a.T("color_gray"))
 		}
 	case "sort":
 		for _, key := range []string{"sort_added", "sort_name", "sort_size", "sort_ascending", "sort_descending"} {
@@ -407,6 +500,20 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 		expect(a.T("no_selection"))
 		if counts := a.Index.Counts(); counts.All != 14 || counts.Uncategorized != 14 || counts.Untagged != 14 {
 			t.Fatalf("小图库侧栏计数错误：%+v", counts)
+		}
+	}
+	if key, ok := strings.CutPrefix(state, "toolbar-hover-"); ok {
+		expect(a.T(key))
+	}
+	if state != "welcome" {
+		if slices.Contains(tt.Texts(), a.T("inspector")) {
+			t.Fatal("检查器仍显示重复标题")
+		}
+		if _, ok := tt.Find(a.T("close_inspector")); ok {
+			t.Fatal("检查器仍有重复关闭按钮")
+		}
+		if a.Query.Search == "" && tt.HasText(a.T("result_count", toolbarNumber(len(a.Visible)))) {
+			t.Fatal("非搜索状态仍显示重复结果数")
 		}
 	}
 	for _, text := range tt.Texts() {

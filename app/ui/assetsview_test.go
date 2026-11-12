@@ -89,3 +89,25 @@ func TestAppearanceReturnsToSystem(t *testing.T) {
 		t.Fatal("跟随系统仍残留深色设置")
 	}
 }
+
+func TestAssetGridSelectionAfterScrolling(t *testing.T) {
+	a := assetViewFixture()
+	a.ViewMode = 1
+	snapshot := model.Snapshot{}
+	for i := 0; i < 500; i++ {
+		snapshot.Assets = append(snapshot.Assets, model.Asset{ID: fmt.Sprint(i), Name: fmt.Sprintf("Photo %03d", i), Width: 600, Height: 400, Extension: "jpg"})
+	}
+	a.applySnapshot(snapshot)
+	tt := ui.NewTester(a.assetArea, 700, 600)
+	if err := tt.Click("Photo 000"); err != nil {
+		t.Fatal(err)
+	}
+	a.grid.ScrollToEnd()
+	tt.Frame()
+	if err := tt.ClickWith(ui.Cmd, "Photo 499"); err != nil {
+		t.Fatal(err)
+	}
+	if a.Selected.Len() != 2 || !a.Selected.Has("0") || !a.Selected.Has("499") {
+		t.Fatal("滚动后网格没有保留加选")
+	}
+}

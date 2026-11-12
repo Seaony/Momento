@@ -35,7 +35,9 @@ func (a *App) toolbar(c *ui.Context) {
 		if search.Changed() {
 			a.Refine()
 		}
-		ui.Text(c, toolbarNumber(len(a.Visible))).SingleLine().Shrink(0).MinWidth(24).TextAlign(ui.End).FontSize(12).TextColor(t.TextMuted).Label(a.T("result_count", toolbarNumber(len(a.Visible))))
+		if strings.TrimSpace(a.Query.Search) != "" {
+			ui.Text(c, a.T("result_count", toolbarNumber(len(a.Visible)))).SingleLine().Shrink(0).FontSize(12).TextColor(t.TextMuted).Role(ui.RoleStatus)
+		}
 		filter := toolbarIconButton(c.Key("filter"), a.T("filter"), "filter")
 		if len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions) > 0 {
 			filter.Background(t.Selection)
@@ -106,17 +108,30 @@ func (a *App) filterPanel(c *ui.Context) {
 				ui.Row(c.Key(start)).Gap(6).Children(func() {
 					for _, family := range toolbarFamilies[start:min(start+8, len(toolbarFamilies))] {
 						chosen := slices.Contains(a.Query.ColorFamilies, family.ID)
-						button := ui.Button(c.Key(family.ID), "").Label(a.T("color_"+family.ID)).Tooltip(a.T("color_"+family.ID)).Size(32, 32).Padding(4).Radius(8)
+						button := ui.Button(c.Key(family.ID), "").Label(a.T("color_"+family.ID)).Tooltip(a.T("color_"+family.ID)).Size(32, 32).Padding(4).Radius(16)
+						if button.Clicked() {
+							chosen = !chosen
+							a.Query.ColorFamilies = toolbarToggle(a.Query.ColorFamilies, family.ID, chosen)
+							a.Refine()
+						}
+						button.Role(ui.RoleCheckBox).Checked(chosen)
 						if chosen {
 							button.Border(2, c.Theme().Accent).Background(c.Theme().Selection)
 						} else {
 							button.Border(1, ui.Transparent)
 						}
-						button.Children(func() { ui.Box(c).Size(22, 22).Radius(11).Background(ui.Hex(family.Hex)).Border(1, c.Theme().Border) })
-						if button.Clicked() {
-							a.Query.ColorFamilies = toolbarToggle(a.Query.ColorFamilies, family.ID, !chosen)
-							a.Refine()
-						}
+						button.Children(func() {
+							swatch := ui.Hex(family.Hex)
+							ui.Box(c).Size(22, 22).Radius(11).Background(swatch).Border(1, c.Theme().Border).Center().Children(func() {
+								if chosen {
+									checkColor := ui.RGB(255, 255, 255)
+									if 299*int(swatch.R)+587*int(swatch.G)+114*int(swatch.B) > 150000 {
+										checkColor = ui.RGB(17, 24, 39)
+									}
+									ui.Icon(c, toolbarColorCheck).Size(14, 14).TextColor(checkColor).PassThrough()
+								}
+							})
+						})
 					}
 				})
 			}

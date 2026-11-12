@@ -66,6 +66,23 @@ func TestExportQuantityCopy(t *testing.T) {
 	}
 }
 
+func TestSearchResultQuantityCopy(t *testing.T) {
+	for _, tc := range []struct {
+		language, count, want string
+	}{
+		{"en", "1", "Results: 1"},
+		{"en", "3", "Results: 3"},
+		{"en", "12,000", "Results: 12,000"},
+		{"zh-CN", "1", "1 个结果"},
+		{"zh-CN", "3", "3 个结果"},
+		{"zh-CN", "12,000", "12,000 个结果"},
+	} {
+		if got := (Catalog{Language: tc.language}).T("result_count", tc.count); got != tc.want {
+			t.Errorf("%s, count %s: got %q, want %q", tc.language, tc.count, got, tc.want)
+		}
+	}
+}
+
 func TestMessagesHaveBothLanguagesAndMatchingArguments(t *testing.T) {
 	for key, pair := range messages {
 		for i, value := range pair {

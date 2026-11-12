@@ -36,20 +36,13 @@ func (a *App) assetArea(c *ui.Context) {
 	a.hovered = ""
 	switch a.ViewMode {
 	case 1:
-		a.grid.Key = func(i int) any { return a.Visible[i].ID }
-		a.grid.Selection = nil
-		a.grid.Selected = nil
-		a.grid.Label = func(i int) string { return a.Visible[i].Name }
-		grid := ui.GridView(c.Key("grid"), &a.grid, len(a.Visible), 160, 190, func(i int) { a.assetCard(c, a.Visible[i], i, false) }).Grow(1).Gap(12).Padding(16)
-		if grid.Submitted() && a.selectedIndex >= 0 && a.selectedIndex < len(a.Visible) {
-			a.ShowPreview(a.Visible[a.selectedIndex].ID, false)
-		}
+		a.assetGrid(c)
 	case 2:
 		a.list.Key = func(i int) any { return a.Visible[i].ID }
 		a.list.Selection = nil
 		a.list.Selected = nil
 		a.list.Label = func(i int) string { return a.Visible[i].Name }
-		list := ui.List(c.Key("list"), &a.list, len(a.Visible), func(i int) { a.assetCard(c, a.Visible[i], i, true) }).Grow(1).Padding(12)
+		list := ui.List(c.Key("list"), &a.list, len(a.Visible), func(i int) { a.assetCard(c, a.Visible[i], i, true) }).Grow(1).Gap(0)
 		if list.Submitted() && a.selectedIndex >= 0 && a.selectedIndex < len(a.Visible) {
 			a.ShowPreview(a.Visible[a.selectedIndex].ID, false)
 		}
@@ -118,29 +111,36 @@ func (a *App) selectAsset(id string, index int, mods ui.Modifiers) {
 }
 
 func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool) {
+	selected := a.Selected.Has(asset.ID)
 	var card ui.Element
 	if list {
-		card = ui.Row(c.Key(asset.ID)).Height(96).Gap(14).Padding(8).Radius(4)
+		card = ui.Row(c.Key(asset.ID)).Height(96).FillWidth().Gap(14).Padding(8, 16).
+			BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border)
 	} else {
-		card = ui.Column(c.Key(asset.ID)).Fill().Padding(3).Radius(4)
+		card = ui.Column(c.Key(asset.ID)).Fill().Radius(6).FocusRing(false)
 	}
-	card.Label(asset.Name).Focusable()
-	if a.Selected.Has(asset.ID) {
-		card.Border(2, c.Theme().Accent)
-	} else {
-		card.Border(1, c.Theme().Border)
-	}
-	if card.Hovered() {
+	card.Label(asset.Name).Focusable().AccessSelected(selected)
+	hovered := card.Hovered()
+	if hovered {
 		a.hovered = asset.ID
-		card.Background(c.Theme().SurfaceHover)
+	}
+	if list {
+		switch {
+		case selected && hovered:
+			card.Background(c.Theme().Accent.Alpha(0.18))
+		case selected:
+			card.Background(c.Theme().Accent.Alpha(0.12))
+		case hovered:
+			card.Background(c.Theme().SurfaceHover)
+		}
 	}
 	card.Children(func() {
 		thumb := a.Bitmap(asset)
 		if list {
 			if thumb != nil {
-				ui.Image(c, thumb).Size(78, 78).Fit(ui.Contain).Radius(4)
+				ui.Image(c, thumb).Size(78, 78).Fit(ui.Cover).Radius(4)
 			} else {
-				ui.Box(c).Size(78, 78).Background(c.Theme().Surface)
+				ui.Box(c).Size(78, 78).Radius(4).Background(c.Theme().Surface)
 			}
 			ui.Column(c).Grow(1).Gap(6).Children(func() {
 				ui.Text(c, asset.Name).Bold().SingleLine()
@@ -149,13 +149,22 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool) 
 			ui.Text(c, strings.ToUpper(asset.Extension)).FontSize(12).TextColor(c.Theme().TextMuted)
 		} else {
 			if thumb != nil {
-				ui.Image(c, thumb).Fill().Fit(ui.Contain).Radius(4)
+				ui.Image(c, thumb).Fill().Fit(ui.Cover).Radius(6)
 			} else {
-				ui.Box(c).Fill().Background(c.Theme().Surface)
+				ui.Box(c).Fill().Radius(6).Background(c.Theme().Surface)
+			}
+			if hovered {
+				ui.Box(c).Absolute().Left(0).Top(0).Right(0).Bottom(0).Radius(6).
+					Background(ui.RGBA(255, 255, 255, 0.07)).PassThrough()
 			}
 			ui.Text(c, fmt.Sprintf("%d × %d", asset.Width, asset.Height)).Absolute().Bottom(6).Right(6).Padding(3, 5).Radius(4).FontSize(11).Background(ui.RGBA(0, 0, 0, 0.65)).TextColor(ui.RGB(255, 255, 255)).PassThrough()
+			if selected || card.FocusVisible() {
+				// 外圈不占图片空间，描边与图片之间留 2px。
+				ui.Box(c).Absolute().Left(-4).Top(-4).Right(-4).Bottom(-4).Radius(10).
+					Border(2, c.Theme().Accent).PassThrough()
+			}
 		}
-		if card.Hovered() || asset.Favorite {
+		if hovered || asset.Favorite {
 			button := ui.Button(c.Key("favorite"), "").Label(a.T("favorite")).Absolute().Top(6).Right(6).Size(28, 28).Children(func() { appIcon(c, "heart").Size(18, 18) })
 			if asset.Favorite {
 				button.Background(c.Theme().Accent)

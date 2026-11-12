@@ -19,7 +19,7 @@ type inspectorState struct {
 }
 
 var inspectorEXIFKeys = []string{
-	"fileCreatedAt", "fileModifiedAt", "contentCreatedAt", "pixelWidth", "pixelHeight", "dpiWidth", "dpiHeight",
+	"fileCreatedAt", "fileModifiedAt", "contentCreatedAt", "resolution",
 	"colorModel", "profileName", "cameraMake", "cameraModel", "lensModel", "exposureTime",
 	"focalLength", "isoSpeedRatings", "flashFired", "fNumber", "exposureProgram", "meteringMode",
 	"whiteBalance", "creator",
@@ -31,14 +31,6 @@ func (a *App) inspector(c *ui.Context) {
 	}
 	selected := a.SelectedAssets()
 	ui.Column(c).Fill().Children(func() {
-		ui.Row(c).Height(60).Shrink(0).Padding(16).Children(func() {
-			ui.Text(c, a.T("inspector")).Bold()
-			ui.Spacer(c)
-			if ui.Button(c, "×").Label(a.T("close_inspector")).Size(28, 28).Clicked() {
-				a.InspectorVisible = false
-			}
-		})
-		ui.Divider(c)
 		if len(selected) == 0 {
 			a.saveInspectorTitle()
 			a.Inspector.AssetID = ""
@@ -134,7 +126,7 @@ func (a *App) inspectorAsset(c *ui.Context, asset model.Asset) {
 			ui.Divider(c)
 			ui.Text(c, a.T("exif_metadata")).FontSize(12).Bold()
 			for _, key := range inspectorEXIFKeys {
-				if value := asset.EXIF[key]; value != "" {
+				if value := inspectorEXIFValue(asset.EXIF, key); value != "" {
 					if key == "flashFired" && (value == "true" || value == "false") {
 						value = a.T("exif_flash_" + value)
 					}
@@ -156,18 +148,35 @@ func (a *App) saveInspectorTitle() {
 
 func (a *App) inspectorDetail(c *ui.Context, key, value string) {
 	ui.Row(c).AlignItems(ui.Start).Gap(8).Children(func() {
-		ui.Text(c, a.T(key)).FontSize(12).TextColor(c.Theme().TextMuted).Width(84).Shrink(0)
+		ui.Text(c, a.T(key)).FontSize(12).TextColor(c.Theme().TextMuted).Width(112).Shrink(0).NoWrap()
 		ui.Text(c, value).FontSize(12).Grow(1).MinWidth(0).Selectable()
 	})
 }
 
 func hasInspectorEXIF(values map[string]string) bool {
 	for _, key := range inspectorEXIFKeys {
-		if values[key] != "" {
+		if inspectorEXIFValue(values, key) != "" {
 			return true
 		}
 	}
 	return false
+}
+
+func inspectorEXIFValue(values map[string]string, key string) string {
+	if key != "resolution" {
+		return values[key]
+	}
+	width, height := values["dpiWidth"], values["dpiHeight"]
+	if width == "" {
+		width = height
+	}
+	if width == "" {
+		return ""
+	}
+	if height == "" || width == height {
+		return width + " dpi"
+	}
+	return width + " × " + height + " dpi"
 }
 
 type inspectorMembership struct {
@@ -278,7 +287,11 @@ func (a *App) inspectorMemberships(c *ui.Context, selected []model.Asset, items 
 			})
 		}
 		if !found {
-			ui.Text(c, a.T("no_"+plural)).FontSize(12).TextColor(c.Theme().TextMuted)
+			key := "no_" + plural
+			if !folder && len(selected) > 1 {
+				key = "selected_no_tags"
+			}
+			ui.Text(c, a.T(key)).FontSize(12).TextColor(c.Theme().TextMuted)
 		}
 	})
 }
