@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"slices"
 	"strings"
 
@@ -11,11 +10,18 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
+type inspectorEdit struct {
+	ID, Name, Note, Source  string
+	Rename, Details, Failed bool
+}
+
 type inspectorState struct {
-	LibraryID                   string
-	AssetID, Title, SourceTitle string
-	TagsOpen, FoldersOpen       bool
-	TagSearch, FolderSearch     string
+	LibraryID                                   string
+	AssetID, Title, SourceTitle                 string
+	Note, SourceNote, SourceURL, SavedSourceURL string
+	TagsOpen, FoldersOpen                       bool
+	Pending                                     []inspectorEdit
+	TagSearch, FolderSearch                     string
 }
 
 var inspectorEXIFKeys = []string{
@@ -32,18 +38,16 @@ func (a *App) inspector(c *ui.Context) {
 	selected := a.SelectedAssets()
 	ui.Column(c).Fill().Children(func() {
 		if len(selected) == 0 {
-			a.saveInspectorTitle()
+			a.saveInspectorEdits()
 			a.Inspector.AssetID = ""
-			ui.Column(c).Grow(1).Center().Padding(24).Gap(8).Children(func() {
-				ui.Text(c, a.T("no_selection")).TextColor(c.Theme().TextMuted)
-			})
+			a.inspectorScope(c)
 			return
 		}
 		ui.Scroll(c.Key("inspector_content")).Grow(1).Padding(16).Gap(18).Children(func() {
 			if len(selected) == 1 {
 				a.inspectorAsset(c, selected[0])
 			} else {
-				a.saveInspectorTitle()
+				a.saveInspectorEdits()
 				a.Inspector.AssetID = ""
 				ui.Text(c, a.T("selected_assets", len(selected))).FontSize(18).Bold()
 			}
@@ -56,9 +60,22 @@ func (a *App) inspector(c *ui.Context) {
 func (a *App) inspectorAsset(c *ui.Context, asset model.Asset) {
 	if a.Inspector.AssetID != asset.ID || a.Inspector.SourceTitle != asset.Name {
 		if a.Inspector.AssetID != asset.ID {
-			a.saveInspectorTitle()
+			a.saveInspectorEdits()
 		}
 		a.Inspector.AssetID, a.Inspector.Title, a.Inspector.SourceTitle = asset.ID, asset.Name, asset.Name
+		a.Inspector.Note, a.Inspector.SourceNote = asset.Note, asset.Note
+		a.Inspector.SourceURL, a.Inspector.SavedSourceURL = asset.SourceURL, asset.SourceURL
+		for _, edit := range a.Inspector.Pending {
+			if edit.ID == asset.ID {
+				if edit.Rename {
+					a.Inspector.Title = edit.Name
+				}
+				if edit.Details {
+					a.Inspector.Note = edit.Note
+					a.Inspector.SourceURL = edit.Source
+				}
+			}
+		}
 	}
 	preview := ui.Column(c.Key("inspector_preview")).Height(176).Radius(8).
 		Background(c.Theme().Background).Center().Clip().Children(func() {
@@ -108,19 +125,29 @@ func (a *App) inspectorAsset(c *ui.Context, asset model.Asset) {
 		a.inspectorDetail(c, "dimensions", fmt.Sprintf("%d × %d", asset.Width, asset.Height))
 		a.inspectorDetail(c, "file_size", fileSize(asset.Size))
 		a.inspectorDetail(c, "date_added", asset.CreatedAt.Local().Format("2006-01-02 15:04"))
-		if asset.SourceURL != "" {
-			ui.Column(c).Gap(4).Children(func() {
-				ui.Text(c, a.T("source_url")).FontSize(12).TextColor(c.Theme().TextMuted)
-				label := asset.SourceURL
-				if parsed, err := url.Parse(asset.SourceURL); err == nil && parsed.Host != "" {
-					label = parsed.Host
-				}
-				if ui.Link(c, label, "").FontSize(12).Tooltip(asset.SourceURL).Clicked() {
-					c.OpenURLThen(asset.SourceURL, func(err error) { a.ShowError(err) })
-				}
-			})
+	})
+	ui.Column(c).Gap(6).Children(func() {
+		ui.Text(c, a.T("asset_note")).FontSize(12).TextColor(c.Theme().TextMuted)
+		note := ui.TextArea(c.Key("asset-note-"+asset.ID), &a.Inspector.Note).Label(a.T("asset_note")).Height(88).FillWidth().Disabled(a.Busy)
+		if note.FocusLeft() {
+			a.saveInspectorDetails()
 		}
 	})
+	ui.Column(c).Gap(6).Children(func() {
+		ui.Text(c, a.T("source_url")).FontSize(12).TextColor(c.Theme().TextMuted)
+		ui.Row(c).Gap(6).Children(func() {
+			source := ui.TextInput(c.Key("asset-source-"+asset.ID), &a.Inspector.SourceURL).Label(a.T("source_url")).Grow(1).MinWidth(0).Disabled(a.Busy)
+			if source.Submitted() || source.FocusLeft() {
+				a.saveInspectorDetails()
+			}
+			if strings.TrimSpace(a.Inspector.SourceURL) != "" {
+				if ui.Button(c.Key("open-source"), "").Label(a.T("open_source_url")).Tooltip(a.T("open_source_url")).Size(28, 28).Padding(0).Children(func() { ui.Image(c, browseLinkIcon).Size(18, 18) }).Clicked() {
+					c.OpenURLThen(strings.TrimSpace(a.Inspector.SourceURL), a.ShowError)
+				}
+			}
+		})
+	})
+
 	if hasInspectorEXIF(asset.EXIF) {
 		ui.Column(c).Gap(10).Children(func() {
 			ui.Divider(c)
@@ -137,14 +164,7 @@ func (a *App) inspectorAsset(c *ui.Context, asset model.Asset) {
 	}
 }
 
-func (a *App) saveInspectorTitle() {
-	name := strings.TrimSpace(a.Inspector.Title)
-	if a.Inspector.AssetID == "" || name == "" || name == a.Inspector.SourceTitle || a.Busy || a.Library == nil {
-		return
-	}
-	lib, id := a.Library, a.Inspector.AssetID
-	a.Run("rename_asset", func(ctx context.Context) error { return lib.RenameAsset(ctx, id, name) })
-}
+func (a *App) saveInspectorTitle() { a.saveInspectorEdits() }
 
 func (a *App) inspectorDetail(c *ui.Context, key, value string) {
 	ui.Row(c).AlignItems(ui.Start).Gap(8).Children(func() {
@@ -337,3 +357,115 @@ func inspectorFolderPath(folders []model.Folder, id string) string {
 	slices.Reverse(parts)
 	return strings.Join(parts, " / ")
 }
+
+func (a *App) inspectorScope(c *ui.Context) {
+	name, count, size := a.scopeSummary()
+	ui.Column(c).FillWidth().Padding(20, 16).Gap(16).Children(func() {
+		ui.Text(c, name).FontSize(18).Bold().FillWidth()
+		ui.Divider(c)
+		ui.Text(c, a.T("scope_information")).FontSize(12).Bold().TextColor(c.Theme().TextMuted)
+		a.inspectorDetail(c, "scope_asset_count", sidebarCount(count))
+		a.inspectorDetail(c, "scope_storage", fileSize(size))
+		if !a.TagPage && len(a.Visible) != count {
+			ui.Text(c, a.T("scope_filtered_count", toolbarNumber(len(a.Visible)))).FontSize(12).TextColor(c.Theme().TextMuted)
+		}
+	})
+}
+
+func (a *App) inspectorDraft() (inspectorEdit, bool) {
+	state := a.Inspector
+	name, source := strings.TrimSpace(state.Title), strings.TrimSpace(state.SourceURL)
+	rename := name != "" && name != state.SourceTitle
+	details := state.Note != state.SourceNote || source != state.SavedSourceURL
+	return inspectorEdit{ID: state.AssetID, Name: name, Note: state.Note, Source: source, Rename: rename, Details: details}, state.AssetID != "" && (rename || details)
+}
+
+func (a *App) InspectorEditsPending() bool {
+	_, dirty := a.inspectorDraft()
+	return dirty || len(a.Inspector.Pending) > 0
+}
+
+func (a *App) InspectorEditsFailed() bool {
+	return slices.ContainsFunc(a.Inspector.Pending, func(edit inspectorEdit) bool { return edit.Failed })
+}
+
+func (a *App) saveInspectorEdits() {
+	edit, dirty := a.inspectorDraft()
+	if !dirty || a.Library == nil {
+		return
+	}
+	found := false
+	for i, pending := range a.Inspector.Pending {
+		if pending.ID == edit.ID {
+			a.Inspector.Pending[i] = edit
+			found = true
+			break
+		}
+	}
+	if !found {
+		a.Inspector.Pending = append(a.Inspector.Pending, edit)
+	}
+	a.ContinueInspectorEdits()
+}
+
+// 锁屏和退出前调用；保存失败后再次明确调用才重试。
+func (a *App) FlushInspectorEdits() {
+	a.saveInspectorEdits()
+	for i := range a.Inspector.Pending {
+		a.Inspector.Pending[i].Failed = false
+	}
+	a.ContinueInspectorEdits()
+}
+
+// 每帧推进已失焦的草稿，不碰正在输入的内容，也不循环重试失败写入。
+func (a *App) ContinueInspectorEdits() {
+	if a.Busy || a.Library == nil {
+		return
+	}
+	for _, edit := range a.Inspector.Pending {
+		if !edit.Failed {
+			a.runInspectorEdit(edit)
+			return
+		}
+	}
+}
+
+func (a *App) runInspectorEdit(edit inspectorEdit) {
+	lib := a.Library
+	a.Run("update_asset_details", func(ctx context.Context) error {
+		err := func() error {
+			if edit.Rename {
+				if err := lib.RenameAsset(ctx, edit.ID, edit.Name); err != nil {
+					return err
+				}
+			}
+			if edit.Details {
+				return lib.UpdateAssetDetails(ctx, edit.ID, edit.Note, edit.Source)
+			}
+			return nil
+		}()
+		a.Window.Update(func() {
+			if err != nil {
+				for i, pending := range a.Inspector.Pending {
+					if pending.ID == edit.ID {
+						a.Inspector.Pending[i].Failed = true
+					}
+				}
+				return
+			}
+			a.Inspector.Pending = slices.DeleteFunc(a.Inspector.Pending, func(pending inspectorEdit) bool { return pending.ID == edit.ID })
+			if a.Inspector.AssetID == edit.ID {
+				if edit.Rename {
+					a.Inspector.SourceTitle = edit.Name
+				}
+				if edit.Details {
+					a.Inspector.SourceNote = edit.Note
+					a.Inspector.SavedSourceURL = edit.Source
+				}
+			}
+		})
+		return err
+	})
+}
+
+func (a *App) saveInspectorDetails() { a.saveInspectorEdits() }

@@ -62,7 +62,7 @@ func (a *App) tags(c *ui.Context) {
 		a.Tags.List.Label = func(i int) string { return tags[i].Name }
 		ui.List(c.Key("tag-list"), &a.Tags.List, len(tags), func(i int) {
 			tag := tags[i]
-			ui.Row(c).FillWidth().MinHeight(56).Gap(12).AlignItems(ui.Center).Padding(8, 0).
+			row := ui.Row(c.Key(tag.ID)).Label(tag.Name).Focusable().FillWidth().MinHeight(56).Gap(12).AlignItems(ui.Center).Padding(8, 0).
 				BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border).Children(func() {
 				ui.Text(c, tag.Name).Grow(1).MinWidth(0).SingleLine()
 				ui.Text(c, a.T("tag_asset_count", formatTagCount(counts[tag.ID]))).FontSize(12).TextColor(c.Theme().TextMuted)
@@ -79,6 +79,9 @@ func (a *App) tags(c *ui.Context) {
 					})
 				}
 			})
+			if row.DoubleClicked() || row.Submitted() {
+				a.BrowseTag(tag.ID)
+			}
 		}).Grow(1).FillWidth().Label(a.T("tag_management"))
 	})
 }

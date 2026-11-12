@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"slices"
 
 	"github.com/Seaony/Momento/app/internal/catalog"
 	"github.com/Seaony/Momento/app/internal/model"
@@ -41,28 +42,38 @@ func (a *App) sidebar(c *ui.Context) {
 		ui.Divider(c).Margin(8, 0)
 		ui.Scroll(c.Key("sidebar_scopes")).Grow(1).Gap(3).Children(func() {
 			a.sidebarScope(c, "all", "all", "照片", counts.All)
-			a.sidebarScope(c, "favorites", "favorites", "喜欢", counts.Favorites)
-			a.sidebarScope(c, "uncategorized", "uncategorized", "文件夹", counts.Uncategorized)
-			a.sidebarScope(c, "untagged", "untagged", "标签", counts.Untagged)
+			if !a.sidebarHidden("favorites") {
+				a.sidebarScope(c, "favorites", "favorites", "喜欢", counts.Favorites)
+			}
+			if !a.sidebarHidden("unfiled") {
+				a.sidebarScope(c, "uncategorized", "uncategorized", "文件夹", counts.Uncategorized)
+			}
+			if !a.sidebarHidden("untagged") {
+				a.sidebarScope(c, "untagged", "untagged", "标签", counts.Untagged)
+			}
+			if !a.sidebarHidden("random") {
+				a.sidebarScope(c, "random", "random_browse", "随机浏览", counts.All)
+			}
 			tags := a.sidebarRow(c.Key("tags_page"), a.T("tag_management"), "标签组", -1, a.TagPage)
 			if tags.Clicked() {
-				a.TagPage = true
-				a.Selected.Clear()
+				a.ShowTagsPage()
 			}
-			ui.Row(c).Height(40).Padding(8, 8, 0, 10).Children(func() {
-				title := ui.Text(c, a.T("folders")).FontSize(12).Bold().TextColor(c.Theme().TextMuted).Grow(1)
-				a.sidebarRootDrop(c, title)
-				if sidebarSymbolButton(c, a.T("new_folder")).Disabled(a.Busy).Clicked() {
-					a.sidebarCreateFolder("")
+			if !a.sidebarHidden("folders") {
+				ui.Row(c).Height(40).Padding(8, 8, 0, 10).Children(func() {
+					title := ui.Text(c, a.T("folders")).FontSize(12).Bold().TextColor(c.Theme().TextMuted).Grow(1)
+					a.sidebarRootDrop(c, title)
+					if sidebarSymbolButton(c, a.T("new_folder")).Disabled(a.Busy).Clicked() {
+						a.sidebarCreateFolder("")
+					}
+				})
+				a.sidebarFolders(c, counts)
+				root := ui.Box(c.Key("folders_root_drop")).Height(24).FillWidth().Label(a.T("move_to_root"))
+				if drag, over := ui.DragOver[AssetsDrag](root); over && a.sidebarCanDrop(drag) && drag.FolderID != "" {
+					root.Background(c.Theme().SurfaceHover).BorderWidth(0, 0, 2, 0).BorderColor(c.Theme().Accent)
 				}
-			})
-			a.sidebarFolders(c, counts)
-			root := ui.Box(c.Key("folders_root_drop")).Height(24).FillWidth().Label(a.T("move_to_root"))
-			if drag, over := ui.DragOver[AssetsDrag](root); over && a.sidebarCanDrop(drag) && drag.FolderID != "" {
-				root.Background(c.Theme().SurfaceHover).BorderWidth(0, 0, 2, 0).BorderColor(c.Theme().Accent)
-			}
-			if drag, ok := ui.Drop[AssetsDrag](root); ok {
-				a.sidebarMoveFolder(drag, "", folderInside)
+				if drag, ok := ui.Drop[AssetsDrag](root); ok {
+					a.sidebarMoveFolder(drag, "", folderInside)
+				}
 			}
 		})
 		ui.Divider(c)
@@ -93,7 +104,7 @@ func (a *App) sidebarRow(c *ui.Context, label, icon string, count int, selected 
 			ui.Image(c, sidebarIcon(icon)).Size(19, 19).Shrink(0)
 		}
 		ui.Text(c, label).SingleLine().Grow(1).MinWidth(0)
-		if count >= 0 {
+		if count >= 0 && a.Preferences.SidebarCounts {
 			color := c.Theme().TextMuted
 			if selected {
 				color = c.Theme().Text
@@ -220,10 +231,19 @@ func (a *App) sidebarFolders(c *ui.Context, counts catalog.Counts) {
 				if !a.TagPage && a.Query.Scope == "folder" && a.Query.FolderID == folder.ID {
 					color = c.Theme().Text
 				}
-				ui.Text(c, sidebarCount(counts.Folders[folder.ID])).FontSize(12).TextColor(color).Shrink(0)
+				if a.Preferences.SidebarCounts {
+					ui.Text(c, sidebarCount(counts.Folders[folder.ID])).FontSize(12).TextColor(color).Shrink(0)
+				}
 			})
 			if row.Clicked() {
 				a.SetScope("folder", folder.ID)
+			}
+			if row.DoubleClicked() {
+				if a.Preferences.FolderDoubleClick == "rename" {
+					a.renameSidebarFolder(folder)
+				} else if opened != nil {
+					*opened = !*opened
+				}
 			}
 			a.sidebarFolderDrop(c, row, folder)
 			row.PopoverMenu(func(m *ui.Menu) {
@@ -232,10 +252,7 @@ func (a *App) sidebarFolders(c *ui.Context, counts catalog.Counts) {
 					a.sidebarCreateFolder(folder.ID)
 				}
 				if m.Item(a.T("rename_folder")).Disabled(a.Busy).Chosen() {
-					lib := a.Library
-					a.Ask(a.T("rename_folder"), folder.Name, func(name string) {
-						a.Run("rename_folder", func(ctx context.Context) error { return lib.RenameFolder(ctx, folder.ID, name) })
-					})
+					a.renameSidebarFolder(folder)
 				}
 				m.Separator()
 				if m.Item(a.T("delete_folder")).Disabled(a.Busy).Chosen() {
@@ -337,4 +354,17 @@ func sidebarChevron(c *ui.Context, open bool) ui.Element {
 }
 func sidebarSymbolButton(c *ui.Context, label string) ui.Element {
 	return ui.ButtonBase(c).Size(28, 28).Radius(6).Label(label).Children(func() { ui.Icon(c, sidebarPlus).Size(16, 16) })
+}
+
+func (a *App) sidebarHidden(key string) bool {
+	return slices.Contains(a.Preferences.SidebarHidden, key)
+}
+func (a *App) renameSidebarFolder(folder model.Folder) {
+	if a.Busy || a.Library == nil {
+		return
+	}
+	lib := a.Library
+	a.Ask(a.T("rename_folder"), folder.Name, func(name string) {
+		a.Run("rename_folder", func(ctx context.Context) error { return lib.RenameFolder(ctx, folder.ID, name) })
+	})
 }

@@ -14,10 +14,11 @@ func (a *App) assetGrid(c *ui.Context) {
 			width -= 281
 		}
 	}
-	columns := max(1, int((width+8)/(160+8)))
+	scale := a.thumbnailScale()
+	columns := max(1, int((width+8)/(160*scale+8)))
 	rows := (len(a.Visible) + columns - 1) / columns
 	ui.List(c.Key("grid"), &a.grid, rows, func(row int) {
-		ui.Row(c).FillWidth().Height(190).Gap(8).AlignItems(ui.Stretch).Children(func() {
+		ui.Row(c).FillWidth().Height(190 * scale).Gap(8).AlignItems(ui.Stretch).Children(func() {
 			for column := range columns {
 				index := row*columns + column
 				cell := ui.Column(c).Grow(1).Basis(0).MinWidth(0)

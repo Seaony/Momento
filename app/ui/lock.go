@@ -41,6 +41,7 @@ func (a *App) LockNow() {
 	if a.Preferences.PasswordHash == "" {
 		return
 	}
+	a.FlushInspectorEdits()
 	a.Lock.Locked = true
 	a.Lock.DialogOpen = false
 	if !a.Lock.Saving {

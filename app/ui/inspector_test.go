@@ -11,7 +11,7 @@ import (
 )
 
 func inspectorTestApp(selected ...model.Asset) *App {
-	a := &App{Texts: i18n.Catalog{Language: "en"}, Visible: selected, InspectorVisible: true}
+	a := &App{Preferences: DefaultPreferences(), Texts: i18n.Catalog{Language: "en"}, Visible: selected, InspectorVisible: true}
 	for _, asset := range selected {
 		a.Selected.Add(asset.ID)
 	}
@@ -33,7 +33,7 @@ func TestInspectorCopyFailure(t *testing.T) {
 func TestInspectorNoSelection(t *testing.T) {
 	a := inspectorTestApp()
 	tt := ui.NewTester(a.inspector, 280, 640)
-	if !tt.HasText(a.T("no_selection")) || tt.HasText(a.T("exif_metadata")) {
+	if !tt.HasText(a.T("scope_information")) || !tt.HasText(a.T("all")) || !tt.HasText("0 B") || tt.HasText(a.T("exif_metadata")) {
 		t.Fatalf("空选状态错误: %v", tt.Texts())
 	}
 	if tt.HasText(a.T("inspector")) {

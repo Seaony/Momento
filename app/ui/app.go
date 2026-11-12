@@ -90,9 +90,12 @@ type App struct {
 	Error, Notice                            string
 	SettingsOpen, NewLibraryOpen, ExportOpen bool
 	Preferences                              Preferences
+	Browse                                   browseState
 	Lock                                     lockState
 	Import                                   importState
 	Quitting                                 bool
+	quitAfterInspector                       bool
+	pendingLibraryAfterEdits                 string
 	TextInputFocused                         bool
 	menuPreviewOpen                          bool
 	PreferencesChanged                       func()
@@ -200,6 +203,8 @@ func (a *App) OpenWindow() {
 func (a *App) View(c *ui.Context) {
 	a.applyTheme(c)
 	a.SyncMenuFocus(c)
+	a.ContinueInspectorEdits()
+	a.completeInspectorTransitions()
 	if a.IsLocked() {
 		a.lockScreen(c)
 		return
@@ -320,7 +325,7 @@ func (a *App) refine(resetScroll bool) {
 	if a.Index == nil {
 		return
 	}
-	a.Visible = a.Index.Query(a.Query)
+	a.Visible = a.browseAssets(a.Query)
 	a.visibleVersion++
 	if resetScroll {
 		a.scroll = ui.ScrollState{}
@@ -339,11 +344,7 @@ func (a *App) refine(resetScroll bool) {
 }
 func (a *App) Refresh() { a.Run("reload", func(ctx context.Context) error { return nil }) }
 func (a *App) SetScope(scope, folderID string) {
-	a.Query.Scope = scope
-	a.Query.FolderID = folderID
-	a.TagPage = false
-	a.Selected.Clear()
-	a.Refine()
+	a.navigateScope(scope, folderID, false)
 }
 func (a *App) SelectedAssets() []model.Asset {
 	var out []model.Asset
@@ -383,6 +384,12 @@ func (a *App) ChooseOpenLibrary() {
 	}()
 }
 func (a *App) OpenLibrary(path string) {
+	a.FlushInspectorEdits()
+	if a.InspectorEditsPending() {
+		a.pendingLibraryAfterEdits = path
+		return
+	}
+
 	if a.Busy {
 		if a.Library == nil {
 			a.pendingOpen = path
@@ -432,6 +439,8 @@ func (a *App) OpenLibrary(path string) {
 			a.Assets = assets.New(lib.Root, lib.DB)
 			a.Assets.AppVersion = mygo.App.Version()
 			a.generation++
+			a.Browse = browseState{}
+			a.Inspector = inspectorState{}
 			a.Query = catalog.Query{Sort: a.Preferences.Sort, Descending: a.Preferences.SortDescending}
 			a.Selected.Clear()
 			a.TagPage = false
@@ -676,7 +685,7 @@ func (a *App) shortcuts(c *ui.Context) {
 	if a.Preview.Open {
 		return
 	}
-	for _, action := range []string{"new_library", "open_library", "import", "import_folder", "export", "settings", "search", "filter", "sort", "inspector", "sidebar", "view_masonry", "view_grid", "view_list"} {
+	for _, action := range []string{"new_library", "open_library", "import", "import_folder", "export", "settings", "search", "filter", "sort", "inspector", "sidebar", "back", "forward", "thumbnail_larger", "thumbnail_smaller", "view_masonry", "view_grid", "view_list"} {
 		if !a.ActionShortcut(c, action) {
 			continue
 		}
@@ -703,6 +712,14 @@ func (a *App) shortcuts(c *ui.Context) {
 			a.InspectorVisible = !a.InspectorVisible
 		case "sidebar":
 			a.SidebarVisible = !a.SidebarVisible
+		case "back":
+			a.NavigateBack()
+		case "forward":
+			a.NavigateForward()
+		case "thumbnail_larger":
+			a.ChangeThumbnailSize(.1)
+		case "thumbnail_smaller":
+			a.ChangeThumbnailSize(-.1)
 		case "view_masonry":
 			a.ViewMode = 0
 		case "view_grid":
@@ -733,9 +750,9 @@ func (a *App) shortcuts(c *ui.Context) {
 	if a.ActionShortcut(c, "preview") && !a.Preview.Open {
 		held := a.Shortcut("preview") == "Space"
 		if id := a.hovered; id != "" {
-			a.ShowPreview(id, held)
+			a.ActivateAsset(id, held)
 		} else if selected := a.SelectedAssets(); len(selected) > 0 {
-			a.ShowPreview(selected[0].ID, held)
+			a.ActivateAsset(selected[0].ID, held)
 		}
 	}
 }
@@ -853,6 +870,8 @@ func (a *App) QueueImport(imageURL, pageURL string) {
 	a.drainPending()
 }
 func (a *App) drainPending() {
+	a.ContinueInspectorEdits()
+	a.completeInspectorTransitions()
 	if a.Busy {
 		return
 	}

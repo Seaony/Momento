@@ -39,12 +39,33 @@ func (a *App) toolbar(c *ui.Context) {
 		if toolbarIconButton(c.Key("toggle-sidebar"), a.T("toggle_sidebar"), "sidebar").Clicked() {
 			a.SidebarVisible = !a.SidebarVisible
 		}
+		if ui.Button(c.Key("history-back"), "").Label(a.T("navigate_back")).Tooltip(a.T("navigate_back")).Size(24, 34).Padding(0).Disabled(!a.CanNavigateBack()).Children(func() { ui.Icon(c, sidebarArrow).Rotate(180).Size(14, 14) }).Clicked() {
+			a.NavigateBack()
+		}
+		if ui.Button(c.Key("history-forward"), "").Label(a.T("navigate_forward")).Tooltip(a.T("navigate_forward")).Size(24, 34).Padding(0).Disabled(!a.CanNavigateForward()).Children(func() { ui.Icon(c, sidebarArrow).Size(14, 14) }).Clicked() {
+			a.NavigateForward()
+		}
 		search := ui.SearchField(c.Key("asset-search"), &a.Query.Search).Bind(&a.Search).Placeholder(a.T("search_assets")).Label(a.T("search_assets")).Grow(1).MinWidth(96).Height(34)
 		if search.Changed() {
 			a.Refine()
 		}
 		if strings.TrimSpace(a.Query.Search) != "" {
 			ui.Text(c, a.T("result_count", toolbarNumber(len(a.Visible)))).SingleLine().Shrink(0).FontSize(12).TextColor(t.TextMuted).Role(ui.RoleStatus)
+		}
+		if a.toolbarWidth(c) >= 760 {
+			ui.Row(c.Key("thumbnail-size-control")).Width(120).Shrink(0).Gap(4).AlignItems(ui.Center).Children(func() {
+				disabled := a.ViewMode == 2
+				if ui.Button(c.Key("thumbnail-smaller"), "−").Label(a.T("thumbnail_smaller")).Tooltip(a.T("thumbnail_smaller")).Size(20, 28).Padding(0).Disabled(disabled || a.thumbnailScale() <= .5).Clicked() {
+					a.ChangeThumbnailSize(-.1)
+				}
+				size := float64(a.thumbnailScale())
+				if ui.Slider(c.Key("thumbnail-size"), &size, .5, 2).Label(a.T("thumbnail_size")).Tooltip(a.T("thumbnail_size")).Grow(1).MinWidth(0).Basis(0).Disabled(disabled).Changed() {
+					a.SetThumbnailSize(float32(size))
+				}
+				if ui.Button(c.Key("thumbnail-larger"), "+").Label(a.T("thumbnail_larger")).Tooltip(a.T("thumbnail_larger")).Size(20, 28).Padding(0).Disabled(disabled || a.thumbnailScale() >= 2).Clicked() {
+					a.ChangeThumbnailSize(.1)
+				}
+			})
 		}
 		filter := toolbarIconButton(c.Key("filter"), a.T("filter"), "filter")
 		if len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions) > 0 {
@@ -55,7 +76,11 @@ func (a *App) toolbar(c *ui.Context) {
 			a.Toolbar.SortOpen = false
 		}
 		ui.Popover(c.Key("filters"), filter, &a.Toolbar.FilterOpen, func() { a.filterPanel(c) }).Width(340).MaxHeight(560)
-		sort := toolbarIconButton(c.Key("sort"), a.T("sort"), "sort")
+		sort := toolbarIconButton(c.Key("sort"), a.T("sort"), "sort").Disabled(a.Query.Scope == "random")
+		if a.Query.Scope == "random" {
+			sort.Tooltip(a.T("random_no_sort"))
+			a.Toolbar.SortOpen = false
+		}
 		if sort.Clicked() {
 			a.Toolbar.SortOpen = !a.Toolbar.SortOpen
 			a.Toolbar.FilterOpen = false
@@ -208,6 +233,9 @@ func (a *App) sortPanel(c *ui.Context) {
 }
 
 func (a *App) changeSort(field string) {
+	if a.Query.Scope == "random" {
+		return
+	}
 	if a.Query.Sort == field || a.Query.Sort == "" && field == "added" {
 		a.Query.Descending = !a.Query.Descending
 	} else {
@@ -253,4 +281,17 @@ func toolbarNumber(n int) string {
 		text = text[:i] + "," + text[i:]
 	}
 	return text
+}
+
+func (a *App) toolbarWidth(c *ui.Context) float32 {
+	width, _ := c.Size()
+	if width >= 900 {
+		if a.SidebarVisible {
+			width -= a.SidebarWidth + 1
+		}
+		if a.InspectorVisible {
+			width -= 281
+		}
+	}
+	return width
 }

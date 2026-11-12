@@ -403,7 +403,7 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 	case "empty":
 		expect(a.T("drop_images"))
 		expect(a.T("install_extension"))
-		expect(a.T("no_selection"))
+		expect(a.T("scope_information"))
 	case "single", "grid-selected", "list-selected", "masonry-hover", "grid-hover", "list-hover":
 		expect(a.T("title"))
 		expect(a.T("file_type"))
@@ -531,7 +531,7 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 		expect(a.T("tag_total", "4"))
 		expect("Landscape 山水")
 	default:
-		expect(a.T("no_selection"))
+		expect(a.T("scope_information"))
 		if counts := a.Index.Counts(); counts.All != 14 || counts.Uncategorized != 14 || counts.Untagged != 14 {
 			t.Fatalf("小图库侧栏计数错误：%+v", counts)
 		}

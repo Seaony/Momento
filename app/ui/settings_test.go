@@ -150,6 +150,15 @@ func TestSettingsQuickLookIsMacOnly(t *testing.T) {
 		if tt.HasText(a.T("system_preview")) != (platform == "darwin") {
 			t.Fatalf("%s的快速查看选项错误", platform)
 		}
+		a.Settings.Tab = SettingsGeneral
+		tt.Frame()
+		key := "system_tray_icon"
+		if platform == "darwin" {
+			key = "tray_icon"
+		}
+		if !tt.HasText(a.T(key)) || tt.HasText(a.T("dock_when_hidden")) != (platform == "darwin") {
+			t.Fatalf("%s的后台设置平台文案错误", platform)
+		}
 	}
 }
 
@@ -271,5 +280,43 @@ func TestSettingsWindowScreenshots(t *testing.T) {
 	}
 	if err = os.WriteFile(filepath.Join(dir, "manifest.json"), data, 0600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSettingsAutoImportRuleEditsStayInCurrentLibrary(t *testing.T) {
+	a, _ := finalSettingsScreenshotState("en", "light", "import")
+	a.Preferences.AutoImport["other"] = []AutoImportRule{{Path: "other-path", Enabled: true}}
+	tt := ui.NewTester(func(c *ui.Context) { a.settingsView(c, UpdateCheckStatus{}) }, 760, 560)
+	rule := a.Preferences.AutoImport["settings-screenshot"][0]
+	toggle, ok := tt.AccessByRole(ui.RoleSwitch, a.T("auto_import_enabled", rule.Path))
+	if !ok {
+		t.Fatal("缺少监视开关")
+	}
+	tt.ClickAt(toggle.Bounds.X+toggle.Bounds.W/2, toggle.Bounds.Y+toggle.Bounds.H/2)
+	if a.Preferences.AutoImport["settings-screenshot"][0].Enabled {
+		t.Fatal("监视开关未保存")
+	}
+	if err := tt.Click(a.T("remove")); err != nil {
+		t.Fatal(err)
+	}
+	if len(a.Preferences.AutoImport["settings-screenshot"]) != 0 || len(a.Preferences.AutoImport["other"]) != 1 {
+		t.Fatal("删除规则影响了其他图库")
+	}
+}
+
+func TestSettingsNotificationsDisabledKeepChoices(t *testing.T) {
+	a := settingsTestApp("en", "dark")
+	a.Settings.Tab = SettingsNotifications
+	a.Preferences.Notify = false
+	tt := ui.NewTester(func(c *ui.Context) { a.settingsView(c, UpdateCheckStatus{}) }, 760, 560)
+	for _, key := range []string{"notify_extension", "notify_auto_import", "notify_duplicate"} {
+		item, ok := tt.AccessByRole(ui.RoleCheckBox, a.T(key))
+		if !ok || !item.Disabled || !item.Checked {
+			t.Fatalf("关闭通知应保留事件选择且禁用:%s", key)
+		}
+	}
+	sound, ok := tt.AccessByRole(ui.RoleSwitch, a.T("notify_sound"))
+	if !ok || !sound.Disabled || !sound.Checked {
+		t.Fatal("关闭通知应保留声音选择且禁用")
 	}
 }

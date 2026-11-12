@@ -12,7 +12,7 @@ import (
 
 func sidebarTestApp() *App {
 	snapshot := model.Snapshot{Assets: []model.Asset{{ID: "a", Name: "Landscape", Favorite: true}, {ID: "b", Name: "Portrait", FolderIDs: []string{"root"}}, {ID: "c", Name: "Deleted", Trashed: true}}, Folders: []model.Folder{{ID: "root", Name: "Design references"}, {ID: "child", Name: "UI details", ParentID: "root"}}}
-	app := &App{Texts: i18n.Catalog{Language: "en"}, Library: &library.Library{Manifest: model.Manifest{LibraryID: "test", DisplayName: "Design Library"}}, Snapshot: snapshot, Index: catalog.New(snapshot), Query: catalog.Query{Sort: "added", Descending: true}}
+	app := &App{Preferences: DefaultPreferences(), Texts: i18n.Catalog{Language: "en"}, Library: &library.Library{Manifest: model.Manifest{LibraryID: "test", DisplayName: "Design Library"}}, Snapshot: snapshot, Index: catalog.New(snapshot), Query: catalog.Query{Sort: "added", Descending: true}}
 	app.Refine()
 	return app
 }

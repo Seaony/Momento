@@ -44,7 +44,7 @@ func (a *App) assetArea(c *ui.Context) {
 		a.list.Label = func(i int) string { return a.Visible[i].Name }
 		list := ui.List(c.Key("list"), &a.list, len(a.Visible), func(i int) { a.assetCard(c, a.Visible[i], i, true) }).Grow(1).Gap(0)
 		if list.Submitted() && a.selectedIndex >= 0 && a.selectedIndex < len(a.Visible) {
-			a.ShowPreview(a.Visible[a.selectedIndex].ID, false)
+			a.ActivateAsset(a.Visible[a.selectedIndex].ID, false)
 		}
 	default:
 		scroll := ui.Scroll(c.Key("masonry")).Grow(1).FillWidth().TrackScroll(&a.scroll).Padding(16)
@@ -68,7 +68,7 @@ func (a *App) assetArea(c *ui.Context) {
 					ratios[i] = float32(v.Width) / float32(v.Height)
 				}
 			}
-			a.layout = NewMasonry(ratios, w)
+			a.layout = NewMasonryScaled(ratios, w, a.thumbnailScale())
 			a.layoutWidth = w
 			a.layoutVersion = a.visibleVersion
 		}
@@ -181,7 +181,7 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool) 
 		if !a.Selected.Has(asset.ID) {
 			a.selectAsset(asset.ID, index, 0)
 		}
-		a.ShowPreview(asset.ID, false)
+		a.ActivateAsset(asset.ID, false)
 	}
 	if a.Library != nil {
 		ids := a.selectedIDs()
@@ -203,7 +203,7 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool) 
 			ids = []string{asset.ID}
 		}
 		if m.Item(a.T("preview")).Chosen() {
-			a.ShowPreview(asset.ID, false)
+			a.ActivateAsset(asset.ID, false)
 		}
 		if m.Item(a.T("export")).Chosen() {
 			if !a.Selected.Has(asset.ID) {

@@ -74,6 +74,11 @@ func main() {
 				app.InvalidateWindows()
 				return
 			}
+			if !e.SessionEnding && !app.PrepareInspectorQuit() {
+				e.PreventDefault()
+				app.InvalidateWindows()
+				return
+			}
 			if err := app.FlushPreferences(); err != nil && !e.SessionEnding {
 				e.PreventDefault()
 				app.InvalidateWindows()
@@ -211,10 +216,13 @@ func menuItems(a *appui.App, platform string) []*mygo.MenuItem {
 		paste = role("paste", "shortcut_paste", mygo.RolePaste)
 	}
 	edit := []*mygo.MenuItem{role("undo", "shortcut_undo", mygo.RoleUndo), role("redo", "shortcut_redo", mygo.RoleRedo), mygo.Separator(), role("cut", "shortcut_cut", mygo.RoleCut), role("copy", "shortcut_copy", mygo.RoleCopy), paste, role("select_all", "select_all", mygo.RoleSelectAll)}
-
+	back := item("navigate_back", "CmdOrCtrl+[", a.NavigateBack)
+	back.Disabled = !a.CanNavigateBack()
+	forward := item("navigate_forward", "CmdOrCtrl+]", a.NavigateForward)
+	forward.Disabled = !a.CanNavigateForward()
 	return []*mygo.MenuItem{appMenu, {Label: a.T("menu_file"), Submenu: fileItems}, {Label: a.T("menu_edit"), Submenu: edit}, {Label: a.T("menu_view"), Submenu: []*mygo.MenuItem{
-		item("view_masonry", "CmdOrCtrl+1", func() { a.ViewMode = 0 }), item("view_grid", "CmdOrCtrl+2", func() { a.ViewMode = 1 }), item("view_list", "CmdOrCtrl+3", func() { a.ViewMode = 2 }), mygo.Separator(),
-
+		item("view_masonry", "CmdOrCtrl+1", func() { a.ViewMode = 0 }), item("view_grid", "CmdOrCtrl+2", func() { a.ViewMode = 1 }), item("view_list", "CmdOrCtrl+3", func() { a.ViewMode = 2 }), mygo.Separator(), back, forward,
+		item("thumbnail_larger", "CmdOrCtrl+=", func() { a.ChangeThumbnailSize(.1) }), item("thumbnail_smaller", "CmdOrCtrl+-", func() { a.ChangeThumbnailSize(-.1) }), mygo.Separator(),
 		item("search", "CmdOrCtrl+F", func() { a.Search.Focus() }), item("filter", "CmdOrCtrl+Alt+F", a.ToggleFilter), item("sort", "CmdOrCtrl+Alt+S", a.ToggleSort), item("inspector", "CmdOrCtrl+Alt+I", func() { a.InspectorVisible = !a.InspectorVisible }), item("sidebar", "", func() { a.SidebarVisible = !a.SidebarVisible }), mygo.Separator(), role("fullscreen", "shortcut_fullscreen", mygo.RoleToggleFullScreen),
 	}}, {Role: mygo.RoleWindowMenu}}
 }

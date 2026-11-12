@@ -98,9 +98,38 @@ func (a *App) closeMainWindow(e *mygo.CloseEvent) {
 		return
 	}
 	e.PreventDefault()
+	a.FlushInspectorEdits()
 	if a.Preferences.CloseAction == "background" {
 		a.HideMainWindow()
 		return
 	}
 	mygo.App.Quit()
+}
+
+func (a *App) PrepareInspectorQuit() bool {
+	a.FlushInspectorEdits()
+	if a.InspectorEditsPending() {
+		a.quitAfterInspector = true
+		return false
+	}
+	return true
+}
+func (a *App) completeInspectorTransitions() {
+	if a.InspectorEditsFailed() {
+		a.quitAfterInspector = false
+		a.pendingLibraryAfterEdits = ""
+		return
+	}
+	if a.Busy || a.InspectorEditsPending() {
+		return
+	}
+	if a.quitAfterInspector {
+		a.quitAfterInspector = false
+		mygo.App.Quit()
+		return
+	}
+	if path := a.pendingLibraryAfterEdits; path != "" {
+		a.pendingLibraryAfterEdits = ""
+		a.OpenLibrary(path)
+	}
 }

@@ -25,8 +25,14 @@ type MasonryLayout struct {
 
 // ratios 为图片宽高比，外侧留白由调用方负责。
 func NewMasonry(ratios []float32, width float32) *MasonryLayout {
-	width = max(width, masonryMinWidth)
-	count := max(1, int((width+masonryGap)/(masonryMinWidth+masonryGap)))
+	return NewMasonryScaled(ratios, width, 1)
+}
+
+func NewMasonryScaled(ratios []float32, width, scale float32) *MasonryLayout {
+	scale = max(.5, min(2, scale))
+	minWidth := masonryMinWidth * scale
+	width = max(width, minWidth)
+	count := max(1, int((width+masonryGap)/(minWidth+masonryGap)))
 	itemWidth := (width - float32(count-1)*masonryGap) / float32(count)
 	layout := &MasonryLayout{columns: make([][]MasonryItem, count)}
 	heights := make([]float32, count)
@@ -40,9 +46,9 @@ func NewMasonry(ratios []float32, width float32) *MasonryLayout {
 				column = candidate
 			}
 		}
-		height := masonryFallbackHeight
+		height := masonryFallbackHeight * scale
 		if ratio > 0 && !math.IsInf(float64(ratio), 0) && !math.IsNaN(float64(ratio)) {
-			height = min(max(itemWidth/ratio, masonryMinHeight), masonryMaxHeight)
+			height = min(max(itemWidth/ratio, masonryMinHeight*scale), masonryMaxHeight*scale)
 		}
 		item := MasonryItem{
 			Index: index,

@@ -130,4 +130,43 @@ var sidebarIcons = map[string]*ui.SVG{
       <path stroke-width="2" fill="none" stroke="#5D7198" d="M12 12.5A3.5 3.5 0 1 0 19 12.5A3.5 3.5 0 1 0 12 12.5Z" mask="url(#ol-i6-1)" /></svg>`)),
 }
 
-func sidebarIcon(name string) *ui.SVG { return sidebarIcons[name] }
+func sidebarIcon(name string) *ui.SVG {
+	if name == "随机浏览" {
+		return browseRandomIcon
+	}
+	return sidebarIcons[name]
+}
+
+var browseRandomIcon = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -3 31 31" fill="none"><defs><linearGradient id="loS-i0" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ADBBD5" /><stop offset="1" stop-color="#9EAECD" /></linearGradient><linearGradient id="upS-i0" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D8DFEB" /><stop offset="1" stop-color="#C1CBDF" /></linearGradient>
+  <filter id="sh-i0" x="-40%" y="-40%" width="180%" height="190%" color-interpolation-filters="sRGB">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="2" /><feOffset dy="2" result="o" />
+    <feColorMatrix in="o" type="matrix" values="0 0 0 0 0.655 0 0 0 0 0.714 0 0 0 0 0.82 0 0 0 0.21 0" />
+    <feMerge><feMergeNode /><feMergeNode in="SourceGraphic" /></feMerge>
+  </filter>
+  <filter id="hi-i0" x="-10%" y="-10%" width="120%" height="130%" color-interpolation-filters="sRGB">
+    <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="a" />
+    <feOffset in="a" dy="0.7" /><feGaussianBlur stdDeviation="0.35" />
+    <feComposite in2="a" operator="arithmetic" k2="-1" k3="1" />
+    <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.5 0" />
+    <feBlend in2="SourceGraphic" mode="overlay" />
+  </filter><mask height="109" width="111" y="-40" x="-40" maskUnits="userSpaceOnUse" id="ol-i0-0"><rect x="-40" y="-40" width="111" height="109" fill="#fff"></rect><path d="M4 4.4Q4 2.2 6.2 2.2L20.2 2.2Q22.4 2.2 22.4 4.4L22.4 18.4Q22.4 20.6 20.2 20.6L6.2 20.6Q4 20.6 4 18.4Z" fill-rule="nonzero" fill="#000" /></mask><mask height="109" width="111" y="-40" x="-40" maskUnits="userSpaceOnUse" id="ol-i0-1"><rect x="-40" y="-40" width="111" height="109" fill="#fff"></rect><path d="M9.8 9.2Q9.8 7 12 7L24.8 7Q27 7 27 9.2L27 22Q27 24.2 24.8 24.2L12 24.2Q9.8 24.2 9.8 22Z" fill-rule="nonzero" fill="#000" /></mask></defs><g filter="url(#sh-i0)"><g filter="url(#hi-i0)"><path d="M4 4.4Q4 2.2 6.2 2.2L20.2 2.2Q22.4 2.2 22.4 4.4L22.4 18.4Q22.4 20.6 20.2 20.6L6.2 20.6Q4 20.6 4 18.4Z" fill="url(#loS-i0)" /></g></g><path stroke-width="2" fill="none" stroke="#5D7198" mask="url(#ol-i0-0)" d="M4 4.4Q4 2.2 6.2 2.2L20.2 2.2Q22.4 2.2 22.4 4.4L22.4 18.4Q22.4 20.6 20.2 20.6L6.2 20.6Q4 20.6 4 18.4Z" />
+      <circle cx="9.8" cy="7.6" r="1.4" fill="#fff" />
+      <g filter="url(#sh-i0)"><g filter="url(#hi-i0)"><path d="M9.8 9.2Q9.8 7 12 7L24.8 7Q27 7 27 9.2L27 22Q27 24.2 24.8 24.2L12 24.2Q9.8 24.2 9.8 22Z" fill="url(#upS-i0)" /></g></g><path stroke-width="2" fill="none" stroke="#5D7198" mask="url(#ol-i0-1)" d="M9.8 9.2Q9.8 7 12 7L24.8 7Q27 7 27 9.2L27 22Q27 24.2 24.8 24.2L12 24.2Q9.8 24.2 9.8 22Z" />
+      <circle fill="#4A4B78" cx="14.2" cy="11.4" r="1.4" /><circle fill="#4A4B78" cx="22.6" cy="11.4" r="1.4" /><circle fill="#4A4B78" cx="18.4" cy="15.6" r="1.4" /><circle fill="#4A4B78" cx="14.2" cy="19.8" r="1.4" /><circle fill="#4A4B78" cx="22.6" cy="19.8" r="1.4" /></svg>`))
+var browseLinkIcon = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -3 31 31" fill="none"><defs><linearGradient id="loS-i1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ADBBD5" /><stop offset="1" stop-color="#9EAECD" /></linearGradient><linearGradient id="upS-i1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D8DFEB" /><stop offset="1" stop-color="#C1CBDF" /></linearGradient>
+  <filter id="sh-i1" x="-40%" y="-40%" width="180%" height="190%" color-interpolation-filters="sRGB">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="2" /><feOffset dy="2" result="o" />
+    <feColorMatrix in="o" type="matrix" values="0 0 0 0 0.655 0 0 0 0 0.714 0 0 0 0 0.82 0 0 0 0.21 0" />
+    <feMerge><feMergeNode /><feMergeNode in="SourceGraphic" /></feMerge>
+  </filter>
+  <filter id="hi-i1" x="-10%" y="-10%" width="120%" height="130%" color-interpolation-filters="sRGB">
+    <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="a" />
+    <feOffset in="a" dy="0.7" /><feGaussianBlur stdDeviation="0.35" />
+    <feComposite in2="a" operator="arithmetic" k2="-1" k3="1" />
+    <feColorMatrix type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.5 0" />
+    <feBlend in2="SourceGraphic" mode="overlay" />
+  </filter><mask height="109" width="111" y="-40" x="-40" maskUnits="userSpaceOnUse" id="ol-i1-0"><rect x="-40" y="-40" width="111" height="109" fill="#fff"></rect><path d="M-7.8 0Q-7.8 -4.8 -3 -4.8L3 -4.8Q7.8 -4.8 7.8 0L7.8 0Q7.8 4.8 3 4.8L-3 4.8Q-7.8 4.8 -7.8 0ZM-5 0Q-5 -2 -3 -2L3 -2Q5 -2 5 0L5 0Q5 2 3 2L-3 2Q-5 2 -5 0Z" fill-rule="evenodd" fill="#000" /></mask><mask height="109" width="111" y="-40" x="-40" maskUnits="userSpaceOnUse" id="ol-i1-1"><rect x="-40" y="-40" width="111" height="109" fill="#fff"></rect><path d="M-7.8 0Q-7.8 -4.8 -3 -4.8L3 -4.8Q7.8 -4.8 7.8 0L7.8 0Q7.8 4.8 3 4.8L-3 4.8Q-7.8 4.8 -7.8 0ZM-5 0Q-5 -2 -3 -2L3 -2Q5 -2 5 0L5 0Q5 2 3 2L-3 2Q-5 2 -5 0Z" fill-rule="evenodd" fill="#000" /></mask></defs>
+      <g transform="rotate(-45 15.5 12.5)">
+        <g transform="translate(11.3 12.5)"><g filter="url(#sh-i1)"><g filter="url(#hi-i1)"><path d="M-7.8 0Q-7.8 -4.8 -3 -4.8L3 -4.8Q7.8 -4.8 7.8 0L7.8 0Q7.8 4.8 3 4.8L-3 4.8Q-7.8 4.8 -7.8 0ZM-5 0Q-5 -2 -3 -2L3 -2Q5 -2 5 0L5 0Q5 2 3 2L-3 2Q-5 2 -5 0Z" fill-rule="evenodd" fill="url(#loS-i1)" /></g></g><path stroke-width="2" fill="none" stroke="#5D7198" mask="url(#ol-i1-0)" d="M-7.8 0Q-7.8 -4.8 -3 -4.8L3 -4.8Q7.8 -4.8 7.8 0L7.8 0Q7.8 4.8 3 4.8L-3 4.8Q-7.8 4.8 -7.8 0ZM-5 0Q-5 -2 -3 -2L3 -2Q5 -2 5 0L5 0Q5 2 3 2L-3 2Q-5 2 -5 0Z" fill-rule="evenodd" /></g>
+        <g transform="translate(19.7 12.5)"><g filter="url(#sh-i1)"><g filter="url(#hi-i1)"><path d="M-7.8 0Q-7.8 -4.8 -3 -4.8L3 -4.8Q7.8 -4.8 7.8 0L7.8 0Q7.8 4.8 3 4.8L-3 4.8Q-7.8 4.8 -7.8 0ZM-5 0Q-5 -2 -3 -2L3 -2Q5 -2 5 0L5 0Q5 2 3 2L-3 2Q-5 2 -5 0Z" fill-rule="evenodd" fill="url(#upS-i1)" /></g></g><path stroke-width="2" fill="none" stroke="#5D7198" mask="url(#ol-i1-1)" d="M-7.8 0Q-7.8 -4.8 -3 -4.8L3 -4.8Q7.8 -4.8 7.8 0L7.8 0Q7.8 4.8 3 4.8L-3 4.8Q-7.8 4.8 -7.8 0ZM-5 0Q-5 -2 -3 -2L3 -2Q5 -2 5 0L5 0Q5 2 3 2L-3 2Q-5 2 -5 0Z" fill-rule="evenodd" /></g>
+      </g></svg>`))
