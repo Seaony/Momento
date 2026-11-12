@@ -14,7 +14,7 @@
 - `internal/model/` 放共享值类型；`internal/library/` 管图库包、SQLite、文件夹、标签和最近图库；`internal/assets/` 管图片处理、导入导出和回收站；`internal/catalog/` 管内存筛选、排序和计数；`internal/browser/` 管本机扩展服务；`internal/i18n/` 管中英文；`ui/` 放全部界面。
 - `internal/` 不引用 mygo/ui 或应用 ui 包，必须能单独测试。
 - SQLite 使用 modernc.org/sqlite；数据库只保存包内相对路径；图库是可整体移动、复制和备份的 `.momento` 目录包。
-- 数据读写和解码在后台进行，通过 Window.Update 更新界面；缩略图缓存必须有数量和内存上限。
+- 数据读写和解码在后台进行，通过 Window.Update 异步更新界面；需要同步读取主线程状态时用 RunOnMain，不把 Update 当同步调用。缩略图缓存必须有数量和内存上限。
 - 用户可见文案全部通过 internal/i18n，中文英文 key 必须齐全。
 
 ## 开发
@@ -29,6 +29,7 @@ go test ./internal/...
 go test ./...
 ```
 
+- 离线截图：`MOMENTO_SCREENSHOTS=1 go test ./ui -run '^TestStateScreenshots$' -count=1`。开发样本：`go run ./cmd/sample-library -path <新路径>.momento -count <数量>`；目标不得覆盖已有数据。
 - 写 mygo API 前读 v0.9.0 对应官方 docs 和 examples/gallery，并用 go doc 与编译器核对。不要凭记忆猜 API，不修改第三方或 vendor 代码。
 - 界面检查使用 ui.Render / ui.Tester 离线截图，不操作用户的浏览器。
 - 保留 com.seaony.Momento、momento://import?url=、.momento 文件关联，以及 127.0.0.1:47641 的扩展 HTTP 契约。
@@ -41,10 +42,12 @@ go test ./...
 - 覆盖 JPEG、PNG、GIF、WebP、TIFF、BMP、HEIC、AVIF 的导入和缩略图。
 - 筛选和排序保留大样本基准；界面使用少量行为测试和状态截图，不为间距字号写源码匹配测试。
 - 修改后运行相关测试、build、vet 和 git diff --check。未执行项目标明 not run，不编造结果。
+- 界面修改合并后，由独立子代理重出最终代码的完整截图，逐张对照状态表和当前修改单核对位置、顺序、文案与交互；不能用旧截图代替修改验收。
 
 ## 并行与提交
 
-- 共享 model、main.go、ui/app.go、go.mod 只由主会话改；子代理按文件分工，不提交、不建分支或 worktree，构建产物放各自 /tmp 目录。
+- 主会话负责总控、集成和提交；共享 model、main.go、ui/app.go、go.mod 只由主会话集成修改。子代理按文件独占分工，不碰他人文件，不提交、不建分支或 worktree，构建产物放各自独立目录。
 - 本次重写按任务文件的 P0 顺序推进，每块完成并验证后提交并立即推送 origin master。禁止 force push、secrets、WIP 提交。
 - 提交格式 `<type>: <一句简短中文>`，type 为 feat / fix / refactor / test / docs / chore，无正文和署名。
 - 不把 develop 的任何内容带进功能分支，不使用改名 refspec。
+- 发布流程只建立草稿，不自动公开；更新私钥和签名证书不进仓库。交叉编译、打包、正式签名、公证、签名更新和真机运行分别记录验证结果。
