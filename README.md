@@ -22,6 +22,8 @@ Momento keeps images on your own disk, organized by color, tags and nested folde
 - Export originals, JPEG or PNG. Deleted images stay in the library's trash until restored or permanently deleted.
 - Use English or Simplified Chinese, with system, light or dark appearance.
 
+Folder counts and the images shown when opening a folder include only its direct members, excluding images in subfolders.
+
 ## Quick start
 
 Install Go 1.27.3 or later, then run:
@@ -33,6 +35,8 @@ go tool mygo dev
 ```
 
 The CLI is pinned in `go.mod`; no Bun, Node, web frontend or cgo is needed. Linux requires GTK 3. The development command opens a real application window and rebuilds it when Go files change.
+
+During window capture or sharing, macOS may replace the traffic lights with a purple `Window sharing` system control. Its menu still offers close, minimize and full screen. This is not a development badge; the normal traffic lights appear when the system control is absent.
 
 ## Development
 

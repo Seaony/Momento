@@ -92,3 +92,54 @@ func TestSidebarRejectsOtherLibraryDrag(t *testing.T) {
 		t.Fatal("忙碌时仍接收写入")
 	}
 }
+
+func TestSidebarScreenshotFolderCounts(t *testing.T) {
+	fixture := newScreenshotFixture(t)
+	for _, state := range []string{"filter", "filter-selected", "filter-color-hover"} {
+		t.Run(state, func(t *testing.T) {
+			app := fixture.app(t, state, "en", "light")
+			counts := app.Index.Counts()
+			if counts.All != 14 || counts.Uncategorized != 0 || counts.Folders["design"] != 7 || counts.Folders["ui"] != 7 {
+				t.Fatalf("筛选截图的父子文件夹计数错误：%+v", counts)
+			}
+			for i, asset := range app.Snapshot.Assets {
+				want := "design"
+				if i%2 != 0 {
+					want = "ui"
+				}
+				if len(asset.FolderIDs) != 1 || asset.FolderIDs[0] != want {
+					t.Fatalf("第%d张截图素材的直接文件夹为%v，期望%s", i+1, asset.FolderIDs, want)
+				}
+			}
+			tt := ui.NewTester(app.sidebar, 236, 800)
+			if err := tt.Click(app.T("toggle_folder", "Design references")); err != nil {
+				t.Fatal(err)
+			}
+			if !tt.HasText("UI layouts") {
+				t.Fatal("展开后没有显示存放其余7张素材的子文件夹")
+			}
+			sevens := 0
+			for _, text := range tt.Texts() {
+				if text == "7" {
+					sevens++
+				}
+			}
+			if sevens != 2 {
+				t.Fatalf("父子文件夹应各显示7，实际出现%d个7", sevens)
+			}
+			for _, folder := range app.Snapshot.Folders {
+				if err := tt.Click(folder.Name); err != nil {
+					t.Fatal(err)
+				}
+				if app.Query.Scope != "folder" || app.Query.FolderID != folder.ID || len(app.Visible) != 7 {
+					t.Fatalf("点击%s后应只显示7张直接成员，实际范围%+v、数量%d", folder.Name, app.Query, len(app.Visible))
+				}
+				for _, asset := range app.Visible {
+					if len(asset.FolderIDs) != 1 || asset.FolderIDs[0] != folder.ID {
+						t.Fatalf("%s范围混入了其他文件夹素材%s", folder.Name, asset.ID)
+					}
+				}
+			}
+		})
+	}
+}
