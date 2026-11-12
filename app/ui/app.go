@@ -17,6 +17,7 @@ import (
 	"github.com/Seaony/Momento/app/internal/catalog"
 	"github.com/Seaony/Momento/app/internal/i18n"
 	"github.com/Seaony/Momento/app/internal/library"
+	"github.com/Seaony/Momento/app/internal/libraryicon"
 	"github.com/Seaony/Momento/app/internal/model"
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -91,6 +92,7 @@ type App struct {
 	SettingsOpen, NewLibraryOpen, ExportOpen bool
 	Preferences                              Preferences
 	Browse                                   browseState
+	Welcome                                  welcomeState
 	Lock                                     lockState
 	Import                                   importState
 	Quitting                                 bool
@@ -403,6 +405,10 @@ func (a *App) OpenLibrary(path string) {
 		a.workMu.Lock()
 		defer a.workMu.Unlock()
 		lib, err := library.Open(a.ctx, path)
+		var iconErr error
+		if err == nil {
+			iconErr = libraryicon.Install(lib.Root)
+		}
 		var snapshot model.Snapshot
 		if err == nil {
 			snapshot, err = lib.Snapshot(a.ctx)
@@ -435,6 +441,9 @@ func (a *App) OpenLibrary(path string) {
 				}
 			}
 			a.Library = lib
+			if iconErr != nil {
+				a.ShowError(iconErr)
+			}
 			a.manifest = lib.Manifest
 			a.Assets = assets.New(lib.Root, lib.DB)
 			a.Assets.AppVersion = mygo.App.Version()

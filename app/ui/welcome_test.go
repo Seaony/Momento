@@ -14,7 +14,7 @@ import (
 func TestWelcomeHasOneHeadingAndCreateAction(t *testing.T) {
 	for _, language := range []string{"zh-CN", "en"} {
 		t.Run(language, func(t *testing.T) {
-			a := &App{Texts: i18n.Catalog{Language: language}}
+			a := &App{Texts: i18n.Catalog{Language: language}, Preferences: Preferences{Onboarded: true}}
 			tt := ui.NewTester(a.welcome, 1100, 640)
 			if tt.HasText("Momento") || !tt.HasText(a.T("welcome")) || !tt.HasText(a.T("welcome_hint")) {
 				t.Fatalf("欢迎页标题或说明不正确：%v", tt.Texts())
@@ -40,7 +40,7 @@ func TestWelcomeScreenshots(t *testing.T) {
 	for _, language := range []string{"zh-CN", "en"} {
 		for _, dark := range []bool{false, true} {
 			for _, height := range []int{640, 800} {
-				a := &App{Texts: i18n.Catalog{Language: language}}
+				a := &App{Texts: i18n.Catalog{Language: language}, Preferences: Preferences{Onboarded: true}}
 				tt := ui.NewTester(a.welcome, 1100, height)
 				tt.SetDark(dark)
 				theme := "light"

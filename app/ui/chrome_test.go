@@ -47,6 +47,7 @@ func TestNativeWindowControlsLeaveActionsAccessible(t *testing.T) {
 			} else if library.Y+library.H/2 != MainToolbarHeight/2 {
 				t.Fatalf("没有左侧窗口按钮时，图库切换器应在工具栏首行居中：%+v", library)
 			}
+			a.Preferences.Onboarded = true
 			welcome := ui.NewTester(a.welcome, 1100, 640)
 			welcome.SetTitleBar(platform.bar)
 			create, ok := welcome.Find(a.T("new_library"))

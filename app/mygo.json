@@ -37,7 +37,8 @@
           "LSItemContentTypes": [
             "com.seaony.momento.library"
           ],
-          "LSTypeIsPackage": true
+          "LSTypeIsPackage": true,
+          "CFBundleTypeIconFile": "library.icns"
         }
       ],
       "UTExportedTypeDeclarations": [
@@ -51,7 +52,8 @@
             "public.filename-extension": [
               "momento"
             ]
-          }
+          },
+          "UTTypeIconFile": "library.icns"
         }
       ]
     }

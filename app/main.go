@@ -95,6 +95,9 @@ func main() {
 	mygo.App.WhenReady(func() {
 		app = appui.New()
 		app.OpenWindow()
+		if err := installLibraryFileAssociation(); err != nil {
+			app.ShowError(err)
+		}
 		app.SettingsRequested = func() { showSettingsWindow(app) }
 		appui.OnUpdateChange(app.InvalidateWindows)
 		desktop := installDesktop(app)
