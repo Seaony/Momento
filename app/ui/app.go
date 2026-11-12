@@ -182,7 +182,7 @@ func (a *App) View(c *ui.Context) {
 				})
 				if a.InspectorVisible {
 					ui.Column(c).Width(280).Shrink(0).Background(c.Theme().Surface).BorderWidth(0, 0, 0, 1).BorderColor(c.Theme().Border).Children(func() {
-						ui.Box(c).Height(MainToolbarHeight).Shrink(0).FillWidth().Background(c.Theme().Background).DragWindow()
+						ui.Box(c).Height(MainToolbarHeight).Shrink(0).FillWidth().DragWindow()
 						a.inspector(c)
 					})
 				}

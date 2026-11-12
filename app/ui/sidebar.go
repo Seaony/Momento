@@ -30,8 +30,14 @@ func (a *App) sidebar(c *ui.Context) {
 		counts = a.Index.Counts()
 	}
 	ui.Column(c).Fill().Padding(0, 8, 8, 8).Gap(4).Background(c.Theme().Surface).Children(func() {
-		ui.Box(c.Key("sidebar-titlebar")).Height(max(MainToolbarHeight, c.TitleBar().Bottom+8)).FillWidth().Shrink(0).DragWindow()
-		a.sidebarLibrary(c)
+		if c.TitleBar().Left > 0 {
+			ui.Box(c.Key("sidebar-titlebar")).Height(max(MainToolbarHeight, c.TitleBar().Bottom+8)).FillWidth().Shrink(0).DragWindow()
+			a.sidebarLibrary(c)
+		} else {
+			ui.Column(c.Key("sidebar-titlebar")).Height(MainToolbarHeight).FillWidth().Shrink(0).Center().DragWindow().Children(func() {
+				a.sidebarLibrary(c)
+			})
+		}
 		ui.Divider(c).Margin(8, 0)
 		ui.Scroll(c.Key("sidebar_scopes")).Grow(1).Gap(3).Children(func() {
 			a.sidebarScope(c, "all", "all", "照片", counts.All)

@@ -37,8 +37,15 @@ func TestNativeWindowControlsLeaveActionsAccessible(t *testing.T) {
 			side := ui.NewTester(a.sidebar, 236, 640)
 			side.SetTitleBar(platform.bar)
 			library, ok := side.Find(a.T("library_menu"))
-			if !ok || library.Y < platform.bar.Bottom {
-				t.Fatalf("图库切换器被系统窗口按钮覆盖：%+v", library)
+			if !ok {
+				t.Fatal("图库切换器不可见")
+			}
+			if platform.bar.Left > 0 {
+				if library.Y < platform.bar.Bottom {
+					t.Fatalf("图库切换器被系统窗口按钮覆盖：%+v", library)
+				}
+			} else if library.Y+library.H/2 != MainToolbarHeight/2 {
+				t.Fatalf("没有左侧窗口按钮时，图库切换器应在工具栏首行居中：%+v", library)
 			}
 			welcome := ui.NewTester(a.welcome, 1100, 640)
 			welcome.SetTitleBar(platform.bar)
