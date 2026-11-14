@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -23,13 +24,13 @@ func TestToolbarResponsiveActionsAndSearchShortcut(t *testing.T) {
 					ui.Column(c).Fill().Children(func() { a.toolbar(c); ui.Spacer(c) })
 				}, width, 640)
 				tt.Frame()
-				for _, key := range []string{"filter", "sort", "preview", "import", "toggle_inspector"} {
+				for _, key := range []string{"filter", "sort", "import"} {
 					e, ok := tt.Access(a.T(key))
 					if !ok || e.Bounds.X < 0 || e.Bounds.X+e.Bounds.W > float32(width) || e.Bounds.Y+e.Bounds.H > MainToolbarHeight {
 						t.Fatalf("%s 超出工具栏：%+v", key, e)
 					}
 				}
-				if width < 744 {
+				if width < 384 {
 					toolbarClick(t, tt, a.T("view_mode"))
 				}
 				toolbarClick(t, tt, a.T("view_grid"))
@@ -50,6 +51,13 @@ func TestToolbarResponsiveActionsAndSearchShortcut(t *testing.T) {
 				if a.Query.Search != "" || len(a.Visible) != 3 {
 					t.Fatal("清空搜索没有恢复素材")
 				}
+				importButton, _ := tt.Access(a.T("import"))
+				for _, key := range []string{"filter", "sort", "view_mode"} {
+					control, ok := tt.Access(a.T(key))
+					if ok && control.Bounds.X+control.Bounds.W > importButton.Bounds.X {
+						t.Fatalf("导入不是最右入口：%s", key)
+					}
+				}
 				for _, text := range tt.Texts() {
 					if strings.ContainsAny(text, "⟦⟧") || strings.Contains(text, "%!") {
 						t.Fatalf("文案格式错误：%s", text)
@@ -60,29 +68,19 @@ func TestToolbarResponsiveActionsAndSearchShortcut(t *testing.T) {
 	}
 }
 
-func TestToolbarPreviewStartsWithSelection(t *testing.T) {
-	a := toolbarTestApp()
-	a.Selected.Add("b")
-	tt := toolbarTester(a)
-	toolbarClick(t, tt, a.T("preview"))
-	if !a.Preview.Open || a.Preview.ID != "b" || a.Preview.Held {
-		t.Fatalf("预览没有从选中素材开始：%+v", a.Preview)
-	}
-}
-
 func TestToolbarPolishScreenshots(t *testing.T) {
 	if os.Getenv("MOMENTO_TOOLBAR_POLISH_SCREENSHOTS") != "1" {
 		t.Skip("设置 MOMENTO_TOOLBAR_POLISH_SCREENSHOTS=1 输出工具栏截图")
 	}
-	dir := "/tmp/momento-polish/shots/toolbar"
+	dir := "/tmp/momento-polish/shots2/toolbar"
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
 	fixture := newScreenshotFixture(t)
 	for _, theme := range []string{"light", "dark"} {
-		for _, state := range []string{"wide", "narrow", "max-sidebar", "filters", "sort", "thumbnail", "views"} {
+		for _, state := range []string{"wide", "narrow", "max-sidebar", "filters", "sort", "thumbnail", "no-sidebar"} {
 			t.Run(theme+"/"+state, func(t *testing.T) {
-				a := fixture.app(t, "small", "zh-CN", theme)
+				a := fixture.app(t, "single", "zh-CN", theme)
 				width := 1100
 				if state == "wide" {
 					width = 1440
@@ -91,14 +89,18 @@ func TestToolbarPolishScreenshots(t *testing.T) {
 				if state == "max-sidebar" {
 					a.SidebarWidth = 340
 				}
+				if state == "no-sidebar" {
+					a.SidebarVisible = false
+				}
 				tt := ui.NewTester(a.View, width, 900)
 				tt.SetLocale(a.Texts.Locale())
 				tt.SetTitleBar(ui.TitleBar{Height: MainToolbarHeight, Left: 80, Bottom: 37})
 				tt.SetWindowActive(true)
-				keys := map[string]string{"filters": "filter", "sort": "sort", "thumbnail": "thumbnail_size", "views": "view_mode", "max-sidebar": "search_assets"}
+				keys := map[string]string{"filters": "filter", "sort": "sort", "thumbnail": "thumbnail_size", "max-sidebar": "search_assets"}
 				if key := keys[state]; key != "" {
 					toolbarClick(t, tt, a.T(key))
 				}
+				tt.Advance(time.Second)
 				writeScreenshot(t, filepath.Join(dir, state+"-"+theme+".png"), tt)
 			})
 		}

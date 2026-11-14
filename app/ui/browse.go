@@ -20,18 +20,8 @@ type browseLocation struct {
 }
 
 type browseState struct {
-	History     []browseLocation
-	Position    int
 	RandomOrder map[string]int
 	TagID       string
-}
-
-func (a *App) browseLocation() browseLocation {
-	scope := a.Query.Scope
-	if scope == "" {
-		scope = "all"
-	}
-	return browseLocation{Scope: scope, FolderID: a.Query.FolderID, TagID: a.Browse.TagID, SmartFolderID: a.Query.SmartFolderID, TagPage: a.TagPage}
 }
 
 func (a *App) navigateScope(scope, folderID string, tags bool) {
@@ -39,14 +29,6 @@ func (a *App) navigateScope(scope, folderID string, tags bool) {
 		scope = "all"
 	}
 	next := browseLocation{Scope: scope, FolderID: folderID, TagPage: tags}
-	current := a.browseLocation()
-	if len(a.Browse.History) == 0 {
-		a.Browse.History = []browseLocation{current}
-	}
-	if next != current {
-		a.Browse.History = append(a.Browse.History[:a.Browse.Position+1], next)
-		a.Browse.Position = len(a.Browse.History) - 1
-	}
 	if scope == "random" && !tags {
 		a.shuffleBrowse()
 	}
@@ -66,33 +48,10 @@ func (a *App) applyBrowseLocation(location browseLocation) {
 }
 
 func (a *App) BrowseTag(id string) {
-	current := a.browseLocation()
-	next := browseLocation{Scope: "tag", TagID: id}
-	if len(a.Browse.History) == 0 {
-		a.Browse.History = []browseLocation{current}
-	}
-	if next != current {
-		a.Browse.History = append(a.Browse.History[:a.Browse.Position+1], next)
-		a.Browse.Position = len(a.Browse.History) - 1
-	}
-	a.applyBrowseLocation(next)
+	a.applyBrowseLocation(browseLocation{Scope: "tag", TagID: id})
 }
 
-func (a *App) ShowTagsPage()            { a.navigateScope(a.Query.Scope, a.Query.FolderID, true) }
-func (a *App) CanNavigateBack() bool    { return a.Browse.Position > 0 }
-func (a *App) CanNavigateForward() bool { return a.Browse.Position+1 < len(a.Browse.History) }
-func (a *App) NavigateBack() {
-	if a.CanNavigateBack() {
-		a.Browse.Position--
-		a.applyBrowseLocation(a.Browse.History[a.Browse.Position])
-	}
-}
-func (a *App) NavigateForward() {
-	if a.CanNavigateForward() {
-		a.Browse.Position++
-		a.applyBrowseLocation(a.Browse.History[a.Browse.Position])
-	}
-}
+func (a *App) ShowTagsPage() { a.navigateScope(a.Query.Scope, a.Query.FolderID, true) }
 
 func (a *App) shuffleBrowse() {
 	ids := make([]string, 0, len(a.Snapshot.Assets))
@@ -145,7 +104,8 @@ func (a *App) SetThumbnailSize(size float32) {
 	}
 	a.Preferences.ThumbnailSize = size
 	a.layout = nil
-	a.SavePreferences()
+	a.queuePreferences()
+	a.InvalidateWindows()
 }
 func (a *App) ChangeThumbnailSize(delta float32) {
 	if a.ViewMode != 2 {
@@ -207,57 +167,4 @@ func (a *App) ActivateAsset(id string, space bool) {
 		}
 	}
 	a.ShowPreview(id, space)
-}
-
-func (a *App) scopeName() string {
-	if a.TagPage {
-		return a.T("tag_management")
-	}
-	switch a.Query.Scope {
-	case "random":
-		return a.T("random_browse")
-	case "tag":
-		for _, tag := range a.Snapshot.Tags {
-			if tag.ID == a.Browse.TagID {
-				return tag.Name
-			}
-		}
-	case "smart":
-		for _, folder := range a.Snapshot.SmartFolders {
-			if folder.ID == a.Query.SmartFolderID {
-				return folder.Name
-			}
-		}
-	case "folder":
-		for _, folder := range a.Snapshot.Folders {
-			if folder.ID == a.Query.FolderID {
-				return folder.Name
-			}
-		}
-	case "", "all":
-		return a.T("all")
-	default:
-		return a.T(a.Query.Scope)
-	}
-	return a.T("all")
-}
-
-func (a *App) scopeSummary() (string, int, int64) {
-	query := catalog.Query{Scope: a.Query.Scope, FolderID: a.Query.FolderID, SmartFolderID: a.Query.SmartFolderID}
-	if a.TagPage || query.Scope == "random" {
-		query.Scope = "all"
-	}
-	if query.Scope == "tag" {
-		query.Scope = "all"
-		query.TagIDs = []string{a.Browse.TagID}
-	}
-	if a.Index == nil {
-		return a.scopeName(), 0, 0
-	}
-	assets := a.Index.Query(query)
-	var size int64
-	for _, asset := range assets {
-		size += asset.Size
-	}
-	return a.scopeName(), len(assets), size
 }

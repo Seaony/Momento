@@ -81,7 +81,7 @@ func newAssetsViewPerformanceFixture(tb testing.TB, height, selected int) assets
 	for i, asset := range a.Visible {
 		ratios[i] = float32(asset.Width) / float32(asset.Height)
 	}
-	a.layout = NewMasonry(ratios, 1100-236-281-32)
+	a.layout = NewMasonry(ratios, 1100-32-a.SidebarShownWidth()-a.InspectorTargetWidth()-1)
 	f.preload(0)
 	f.tester = ui.NewTester(a.View, 1100, height)
 	// 首次测量使用回退宽度，先让真实分栏尺寸稳定再定位到库中间。

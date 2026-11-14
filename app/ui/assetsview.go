@@ -20,8 +20,68 @@ func (a *App) contentTopInset() float32 {
 }
 
 func (a *App) assetArea(c *ui.Context) {
+	a.hovered = ""
+	scroll := ui.Scroll(c.Key("assets")).Grow(1).FillWidth().TrackScroll(&a.scroll)
+	inset := scroll.AnimateTo("header-inset", a.contentTopInset(), motionSpring)
+	scroll.Padding(inset+16, 16, 16).ScrollbarInsets(inset, 0, 0)
+	box := scroll.Bounds()
+	width, height := box.W-32, box.H
+	if width <= 0 {
+		width, height = c.Size()
+		width -= 32 + a.SidebarShownWidth() + a.InspectorShownWidth()
+		if a.chromeLayoutReady {
+			width--
+		}
+	}
+	width = a.assetLayoutWidth(c, scroll, width)
+	if height <= 0 {
+		height = 640
+	}
+	viewportTop := a.scroll.Y - inset - 16
+	top, bottom := max(0, viewportTop-height), viewportTop+2*height
+	var items []MasonryItem
+	var contentHeight float32
+	switch a.ViewMode {
+	case 1, 2:
+		items, contentHeight = a.assetRows(width, top, bottom)
+	default:
+		if a.layout == nil || a.layoutVersion != a.visibleVersion || a.layoutWidth != width {
+			ratios := make([]float32, len(a.Visible))
+			for i, asset := range a.Visible {
+				w, h := assetDisplaySize(asset)
+				if h > 0 {
+					ratios[i] = float32(w) / float32(h)
+				}
+			}
+			a.layout = NewMasonryScaled(ratios, width, a.thumbnailScale())
+			a.layoutWidth, a.layoutVersion = width, a.visibleVersion
+		}
+		items, contentHeight = a.layout.Visible(top, bottom), a.layout.Height()
+	}
+	scroll.Children(func() {
+		canvas := ui.Box(c.Key("asset-canvas")).Height(contentHeight).FillWidth().Shrink(0)
+		canvas.Children(func() {
+			for _, item := range items {
+				asset := a.Visible[item.Index]
+				card := ui.Column(c.Key(asset.ID)).Absolute().Left(item.X).Top(item.Y).Size(item.Width, item.Height)
+				// 只给屏幕中的卡片过渡，离屏位置直接更新，滚动本身不做位置动画。
+				if item.Y+item.Height > viewportTop+inset && item.Y < viewportTop+height {
+					layoutMotion(card)
+				}
+				card.Children(func() { a.assetCard(c, asset, item.Index, a.ViewMode == 2, item.Width) })
+			}
+		})
+		if canvas.Clicked() {
+			a.clearAssetSelection()
+		}
+	})
+	if scroll.Clicked() {
+		a.clearAssetSelection()
+	}
+	a.assetPreviewShortcut(c, scroll)
 	if len(a.Visible) == 0 {
-		ui.Column(c).Grow(1).FillWidth().Padding(a.contentTopInset(), 24, 24).Center().Gap(12).Children(func() {
+		fadeMotion(ui.Column(c.Key("asset-empty")).Absolute().Top(inset).Left(24).Right(24).Bottom(24).
+			Center().Gap(12).PassThrough()).Children(func() {
 			if a.Query.Search != "" {
 				ui.Text(c, a.T("search_empty", a.Query.Search)).FontSize(20).Bold()
 				ui.Text(c, a.T("result_count", "0")).TextColor(c.Theme().TextMuted)
@@ -34,68 +94,50 @@ func (a *App) assetArea(c *ui.Context) {
 					if primaryButton(c, a.T("import"), false).Clicked() {
 						a.ChooseImport(false)
 					}
-					if ui.Button(c, a.T("install_extension")).Clicked() {
+					if secondaryButton(c, a.T("install_extension")).Clicked() {
 						c.OpenURL("https://github.com/Seaony/Momento-Chomre-Extension/releases/latest")
 					}
 				})
 			}
 		})
-		return
 	}
-	a.hovered = ""
-	switch a.ViewMode {
-	case 1:
-		a.assetGrid(c)
-	case 2:
-		a.list.Key = func(i int) any { return a.Visible[i].ID }
-		a.list.Selection = nil
-		a.list.Selected = nil
-		a.list.Label = func(i int) string { return a.Visible[i].Name }
-		list := ui.List(c.Key("list"), &a.list, len(a.Visible), func(i int) { a.assetCard(c, a.Visible[i], i, true) }).Grow(1).Gap(0).Padding(a.contentTopInset()+8, 16, 16).ScrollbarInsets(a.contentTopInset(), 0, 0)
-		if list.Submitted() && a.selectedIndex >= 0 && a.selectedIndex < len(a.Visible) {
-			a.ActivateAsset(a.Visible[a.selectedIndex].ID, false)
-		}
-		a.assetPreviewShortcut(c, list)
-	default:
-		scroll := ui.Scroll(c.Key("masonry")).Grow(1).FillWidth().TrackScroll(&a.scroll).Padding(a.contentTopInset()+16, 16, 16).ScrollbarInsets(a.contentTopInset(), 0, 0)
-		box := scroll.Bounds()
-		w, h := box.W-32, box.H
-		if w <= 0 {
-			cw, ch := c.Size()
-			w = cw - 32
-			if a.SidebarVisible {
-				w -= a.SidebarWidth + 1
-			}
-			if a.InspectorVisible {
-				w -= 280
-			}
-			h = ch
-		}
-		if a.layout == nil || a.layoutVersion != a.visibleVersion || a.layoutWidth != w {
-			ratios := make([]float32, len(a.Visible))
-			for i, v := range a.Visible {
-				vw, vh := assetDisplaySize(v)
-				if vh > 0 {
-					ratios[i] = float32(vw) / float32(vh)
-				}
-			}
-			a.layout = NewMasonryScaled(ratios, w, a.thumbnailScale())
-			a.layoutWidth = w
-			a.layoutVersion = a.visibleVersion
-		}
-		if h <= 0 {
-			h = 640
-		}
-		top, bottom := max(0, a.scroll.Y-a.contentTopInset()-16-h), a.scroll.Y-a.contentTopInset()-16+2*h
-		scroll.Children(func() {
-			ui.Box(c).Height(a.layout.Height()).FillWidth().Shrink(0).Children(func() {
-				for _, item := range a.layout.Visible(top, bottom) {
-					ui.Column(c.Key(a.Visible[item.Index].ID)).Absolute().Left(item.X).Top(item.Y).Size(item.Width, item.Height).Children(func() { a.assetCard(c, a.Visible[item.Index], item.Index, false) })
-				}
-			})
-		})
-		a.assetPreviewShortcut(c, scroll)
+}
+
+type assetChromeLayout struct {
+	sidebar, inspector bool
+	moving             bool
+}
+
+func (a *App) assetLayoutWidth(c *ui.Context, scroll ui.Element, actual float32) float32 {
+	if !a.chromeLayoutReady {
+		return actual
 	}
+	inspector := a.InspectorTargetWidth() > 0
+	state := ui.Local(scroll, "chrome-layout", func() assetChromeLayout {
+		return assetChromeLayout{sidebar: a.SidebarVisible, inspector: inspector}
+	})
+	if state.sidebar != a.SidebarVisible || state.inspector != inspector {
+		state.sidebar, state.inspector, state.moving = a.SidebarVisible, inspector, true
+	}
+	sidebarWidth := float32(0)
+	if a.SidebarVisible {
+		sidebarWidth = a.SidebarWidth
+	}
+	if state.moving && a.SidebarShownWidth() == sidebarWidth && a.InspectorShownWidth() == a.InspectorTargetWidth() {
+		state.moving = false
+	}
+	if state.moving {
+		// 栏宽正在变化时只朝最终卡片位置移动一次，避免每帧重排造成拖尾。
+		width, _ := c.Size()
+		return width - 32 - sidebarWidth - a.InspectorTargetWidth() - 1
+	}
+	return actual
+}
+
+func (a *App) clearAssetSelection() {
+	a.Selected.Clear()
+	a.selectedIndex, a.anchor = -1, -1
+	a.CollapseInspector()
 }
 
 func (a *App) selectAsset(id string, index int, mods ui.Modifiers) {
@@ -120,14 +162,19 @@ func (a *App) selectAsset(id string, index int, mods ui.Modifiers) {
 		a.anchor = index
 	}
 	a.selectedIndex = index
+	if a.Selected.Len() == 0 {
+		a.CollapseInspector()
+	} else {
+		a.RevealInspector()
+	}
 }
 
-func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool) {
+func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, frameWidth float32) {
 	width, height := assetDisplaySize(asset)
 	selected := a.Selected.Has(asset.ID)
 	var card ui.Element
 	if list {
-		card = ui.Row(c.Key(asset.ID)).Height(64).FillWidth().Gap(16).Padding(8, 10).Radius(8).
+		card = ui.Row(c.Key(asset.ID)).Fill().Gap(16).Padding(8, 10).Radius(8).
 			BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border)
 	} else {
 		card = ui.Column(c.Key(asset.ID)).Fill().Radius(8).FocusRing(false)
@@ -144,16 +191,23 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool) 
 	if hovered {
 		a.hovered = asset.ID
 	}
+	background := ui.Transparent
+	if a.ViewMode == 1 && !list {
+		background = c.Theme().Surface
+	}
 	if list {
 		switch {
 		case selected && hovered:
-			card.Background(c.Theme().Accent.Alpha(0.18))
+			background = c.Theme().Accent.Alpha(.18)
 		case selected:
-			card.Background(c.Theme().Accent.Alpha(0.12))
+			background = c.Theme().Accent.Alpha(.12)
+		case card.Pressed():
+			background = warmOverlay(c.Theme(), .11)
 		case hovered:
-			card.Background(warmOverlay(c.Theme(), .06))
+			background = warmOverlay(c.Theme(), .06)
 		}
 	}
+	animateColors(card, background, c.Theme().Text)
 	card.Children(func() {
 		if revealFocus {
 			// 把页头遮住的高度算进定位目标，键盘聚焦时图片仍露在页头下方。
@@ -163,40 +217,49 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool) 
 		thumb := a.Bitmap(asset)
 		if list {
 			if thumb != nil {
-				ui.Image(c, thumb).Size(48, 48).Fit(ui.Cover).Radius(6)
+				ui.Image(c.Key("thumbnail"), thumb).Size(48, 48).Fit(ui.Cover).Radius(6)
 			} else {
 				ui.Box(c).Size(48, 48).Radius(6).Background(c.Theme().Surface)
 			}
-			ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
+			fadeMotion(ui.Column(c.Key("list-meta")).Grow(1).MinWidth(0).Gap(4)).Children(func() {
 				ui.Text(c, asset.Name).FontSize(13).Bold().SingleLine()
 				ui.Text(c, fmt.Sprintf("%d × %d · %s", width, height, fileSize(asset.Size))).FontSize(12).TextColor(c.Theme().TextMuted)
 			})
-			ui.Text(c, strings.ToUpper(asset.Extension)).FontSize(12).TextColor(c.Theme().TextMuted).Margin(0, 36, 0, 0)
+			fadeMotion(ui.Text(c.Key("list-extension"), strings.ToUpper(asset.Extension)).FontSize(12).TextColor(c.Theme().TextMuted).Margin(0, 36, 0, 0))
 		} else {
 			radius := float32(8)
 			if a.ViewMode == 1 {
 				radius = 10
-				ui.Box(c).Fill().Padding(16).Children(func() {
+				ui.Box(c.Key("grid-image")).Fill().Padding(16).Center().Children(func() {
 					if thumb != nil {
-						ui.Image(c, thumb).Fill().Fit(ui.Contain).Radius(4)
+						w, h := thumb.Size()
+						scale := max(0, frameWidth-32) / max(float32(w), float32(h))
+						ui.Image(c.Key("thumbnail"), thumb).Size(float32(w)*scale, float32(h)*scale).Fit(ui.Contain).Radius(4)
 					}
 				})
 			} else if thumb != nil {
-				ui.Image(c, thumb).Fill().Fit(ui.Cover).Radius(radius)
+				ui.Image(c.Key("thumbnail"), thumb).Fill().Fit(ui.Cover).Radius(radius)
 			} else {
 				ui.Box(c).Fill().Radius(radius).Background(c.Theme().Surface)
 			}
+			shade := ui.Box(c.Key("hover-shade")).Absolute().Left(0).Top(0).Right(0).Bottom(0).Radius(radius).PassThrough()
+			darkness := ui.Transparent
 			if hovered {
-				ui.Box(c).Absolute().Left(0).Top(0).Right(0).Bottom(0).Radius(radius).
-					Background(ui.RGBA(58, 35, 24, .07)).PassThrough()
-				ui.Text(c, fmt.Sprintf("%d × %d", width, height)).Absolute().Bottom(6).Right(6).
+				darkness = ui.RGBA(58, 35, 24, .07)
+			}
+			if card.Pressed() {
+				darkness = ui.RGBA(58, 35, 24, .11)
+			}
+			shade.Background(shade.AnimateColor("shade", darkness, motionColor))
+			if hovered {
+				fadeMotion(ui.Text(c.Key("dimensions"), fmt.Sprintf("%d × %d", width, height)).Absolute().Bottom(6).Right(6).
 					Padding(3, 6).Radius(8).FontSize(12).Material(panelMaterial(c.Theme())).
-					TextColor(c.Theme().Text).PassThrough()
+					TextColor(c.Theme().Text).PassThrough())
 			}
 			if selected || focused {
 				// 外圈不占图片空间，描边与图片之间留 2px。
-				ui.Box(c).Absolute().Left(-4).Top(-4).Right(-4).Bottom(-4).Radius(radius+4).
-					Border(2, c.Theme().Accent).PassThrough()
+				fadeMotion(ui.Box(c.Key("selection-ring")).Absolute().Left(-4).Top(-4).Right(-4).Bottom(-4).Radius(radius+4).
+					Border(2, c.Theme().Accent).PassThrough())
 			}
 		}
 		if hovered || asset.Favorite {
@@ -211,15 +274,32 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool) 
 					PassThrough().ScrollIntoView()
 			}
 			*wasFavoriteFocused = favoriteFocused
-			if asset.Favorite {
-				button.Border(1, c.Theme().Accent)
+			fadeMotion(button)
+			ink, tint, border := c.Theme().TextMuted, c.Theme().Background.Alpha(.94), ui.Transparent
+			if button.Hovered() {
+				ink, tint = c.Theme().Text, c.Theme().SurfaceHover.Alpha(.94)
 			}
+			if button.Pressed() {
+				tint = c.Theme().SurfacePressed.Alpha(.94)
+			}
+			if asset.Favorite {
+				border = c.Theme().Accent
+			}
+			button.Material(frostedSurface{tint: button.AnimateColor("favorite-tint", tint, motionColor), blur: 22}).
+				TextColor(button.AnimateColor("favorite-ink", ink, motionColor)).
+				Border(1, button.AnimateColor("favorite-border", border, motionColor))
 			if button.Clicked() {
 				a.SetFavorite([]string{asset.ID}, !asset.Favorite)
 			}
 		}
 	})
-	if card.Clicked() {
+	if card.Shortcut(0, ui.KeyEnter) {
+		a.selectAsset(asset.ID, index, c.Modifiers())
+		a.ActivateAsset(asset.ID, false)
+	} else if card.Clicked() {
+		if !a.InspectorVisible && c.Modifiers() == 0 {
+			a.assetClickID, a.assetClickBounds = asset.ID, card.Bounds()
+		}
 		a.selectAsset(asset.ID, index, c.Modifiers())
 	}
 	if card.DoubleClicked() {
@@ -294,7 +374,7 @@ func (a *App) importProgress(c *ui.Context) {
 	if p == nil {
 		return
 	}
-	ui.Column(c).Height(importProgressHeight).Shrink(0).Padding(12, 16).Gap(6).Material(toolbarMaterial(c.Theme())).Children(func() {
+	ui.Column(c.Key("import-progress")).Transition(ui.ElementTransition{Animation: &motionSpring, Height: true, Enter: &ui.Motion{Y: -10, Collapse: true}, Exit: &ui.Motion{Y: -10, Collapse: true}}).Height(importProgressHeight).Shrink(0).Padding(12, 16).Gap(6).Material(toolbarMaterial(c.Theme())).Children(func() {
 		ui.Row(c).Children(func() {
 			ui.Text(c, a.T("import_stage_"+p.Stage)).Bold()
 			ui.Spacer(c)

@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/Seaony/Momento/app/internal/catalog"
 	"github.com/Seaony/Momento/app/internal/i18n"
@@ -137,5 +139,38 @@ func TestTagsLocalizedControlsFit(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestTagsOnlyBuildVisibleRows(t *testing.T) {
+	snapshot := model.Snapshot{}
+	for i := range 12000 {
+		name := fmt.Sprintf("Tag %05d", i)
+		snapshot.Tags = append(snapshot.Tags, model.Tag{ID: name, Name: name})
+	}
+	a := tagsTestApp(snapshot)
+	tt := tagsTester(a)
+	if !tt.HasText("Tag 00000") || tt.HasText("Tag 11999") || len(tt.AccessAll()) > 200 {
+		t.Fatalf("标签页没有按可见窗口构建：%d 个元素", len(tt.AccessAll()))
+	}
+	tt.Scroll(400, 500, 0, 1000000)
+	tt.Advance(time.Second)
+	if !tt.HasText("Tag 11999") || tt.HasText("Tag 00000") || len(tt.AccessAll()) > 200 {
+		t.Fatalf("标签页滚到底后没有更新可见窗口：%d 个元素", len(tt.AccessAll()))
+	}
+}
+
+func TestTagsImportInsetMovesSmoothly(t *testing.T) {
+	a := tagsTestApp(model.Snapshot{Tags: []model.Tag{{ID: "a", Name: "Reference"}}})
+	tt := tagsTester(a)
+	before, _ := tt.Find(a.T("new_tag"))
+	a.Progress = &model.ImportProgress{Stage: "importing", Total: 10}
+	tt.Frame()
+	tt.Advance(90 * time.Millisecond)
+	middle, _ := tt.Find(a.T("new_tag"))
+	tt.Advance(time.Second)
+	after, _ := tt.Find(a.T("new_tag"))
+	if middle.Y <= before.Y || middle.Y >= after.Y || after.Y-before.Y != 120 {
+		t.Fatalf("导入进度出现时标签内容没有平滑让位：%+v → %+v → %+v", before, middle, after)
 	}
 }

@@ -33,7 +33,7 @@ type entry struct {
 	tagNames        []string
 }
 
-// Index 对应一次图库快照；数据变化后用新快照重建。
+// 结构变化后重建索引；使用时间不影响搜索项和计数，可直接更新。
 type Index struct {
 	snapshot model.Snapshot
 	entries  []entry
@@ -159,6 +159,15 @@ func (idx *Index) Query(q Query) []model.Asset {
 		assets[i] = idx.snapshot.Assets[source]
 	}
 	return assets
+}
+
+func (idx *Index) UpdateLastUsed(ids map[string]bool, at time.Time) {
+	for i := range idx.snapshot.Assets {
+		asset := &idx.snapshot.Assets[i]
+		if ids[asset.ID] && at.After(asset.LastUsedAt) {
+			asset.LastUsedAt = at
+		}
+	}
 }
 
 func (idx *Index) Counts() Counts {

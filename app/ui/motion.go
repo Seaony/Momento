@@ -1,8 +1,9 @@
 package ui
 
 import (
-	"github.com/egoist/mygo/ui"
 	"time"
+
+	"github.com/egoist/mygo/ui"
 )
 
 var motionSpring = ui.Animation{Spring: ui.SpringOptions{Duration: 250 * time.Millisecond, Bounce: .04}}
@@ -40,4 +41,36 @@ func motionTarget(on bool) float32 {
 		return 1
 	}
 	return 0
+}
+
+func (a *App) noticeViewport(c *ui.Context) {
+	width, _ := c.Size()
+	ui.ToastViewportBase(c, func(viewport ui.Element, toasts []ui.Toast) {
+		viewport.Padding(24).AlignItems(ui.Center).Gap(8)
+		for _, notice := range toasts {
+			parts := ui.ToastBase(c, notice)
+			parts.Root.Row().AlignItems(ui.Center).Gap(12).Padding(10, 14).Radius(12).
+				MaxWidth(width-48).Material(panelMaterial(c.Theme())).TextColor(c.Theme().Text).
+				Border(1, c.Theme().Border).Shadow(0, 4, 16, 0, ui.RGBA(40, 24, 16, .16)).
+				Transition(ui.ElementTransition{Animation: &motionSpring, Position: true, Enter: &ui.Motion{Y: 12}, Exit: &ui.Motion{Y: 12}})
+			parts.Root.Children(func() {
+				ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
+					ui.Text(c, notice.Title)
+					if notice.Description != "" {
+						ui.Text(c, notice.Description).TextColor(c.Theme().TextMuted)
+					}
+				})
+				if notice.Action != "" {
+					parts.ActionButton().Padding(4, 8).Children(func() { ui.Text(c, notice.Action) })
+				}
+				close := parts.CloseButton().Label(a.T("close")).Tooltip(a.T("close")).Size(24, 24).Radius(6).Center()
+				background, text := ui.Transparent, c.Theme().TextMuted
+				if close.Hovered() {
+					background, text = c.Theme().SurfaceHover, c.Theme().Text
+				}
+				animateColors(close, background, text)
+				close.Children(func() { appSymbol(c, "x") })
+			})
+		}
+	})
 }

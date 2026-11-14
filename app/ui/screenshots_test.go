@@ -403,7 +403,6 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 	case "empty":
 		expect(a.T("drop_images"))
 		expect(a.T("install_extension"))
-		expect(a.T("scope_information"))
 	case "single", "grid-selected", "list-selected", "masonry-hover", "grid-hover", "list-hover":
 		expect(a.T("title"))
 		expect(a.T("file_type"))
@@ -432,9 +431,6 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 	case "search-results":
 		if len(a.Visible) != 1 {
 			t.Fatalf("搜索应只匹配一张素材，实际 %d", len(a.Visible))
-		}
-		if _, ok := tt.Find(a.T("result_count", "1")); !ok {
-			expect(a.T("result_count", "1"))
 		}
 	case "search-cleared":
 		if a.Query.Search != "" || len(a.Visible) != 14 || tt.HasText(a.T("result_count", "14")) {
@@ -538,7 +534,6 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 		expect(a.T("tag_total", "4"))
 		expect("Landscape 山水")
 	default:
-		expect(a.T("scope_information"))
 		if counts := a.Index.Counts(); counts.All != 14 || counts.Uncategorized != 14 || counts.Untagged != 14 {
 			t.Fatalf("小图库侧栏计数错误：%+v", counts)
 		}
@@ -549,12 +544,6 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 	if state != "welcome" {
 		if slices.Contains(tt.Texts(), a.T("inspector")) {
 			t.Fatal("检查器仍显示重复标题")
-		}
-		if _, ok := tt.Find(a.T("close_inspector")); ok {
-			t.Fatal("检查器仍有重复关闭按钮")
-		}
-		if a.Query.Search == "" && tt.HasText(a.T("result_count", toolbarNumber(len(a.Visible)))) {
-			t.Fatal("非搜索状态仍显示重复结果数")
 		}
 	}
 	for _, text := range tt.Texts() {

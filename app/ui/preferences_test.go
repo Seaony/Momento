@@ -19,7 +19,7 @@ func TestPreferencesMissingFieldsKeepDefaults(t *testing.T) {
 	if p.Language != "ja" || p.Theme != "dark" || !p.AutoCheckUpdates || !p.BrowserExtensionEnabled || p.LaunchAtLogin {
 		t.Fatalf("缺字段的偏好没有保留开关默认值：%+v", p)
 	}
-	if p.ViewMode != 0 || p.Sort != "added" || !p.SortDescending || !p.SidebarVisible || !p.InspectorVisible || p.SidebarWidth != 236 {
+	if p.ViewMode != 0 || p.Sort != "added" || !p.SortDescending || !p.SidebarVisible || p.SidebarWidth != 236 {
 		t.Fatalf("缺字段的偏好没有保留界面默认状态：%+v", p)
 	}
 }
@@ -30,7 +30,7 @@ func TestPreferencesExplicitFalseSurvivesLoading(t *testing.T) {
 		t.Fatal(err)
 	}
 	p = NormalizePreferences(p)
-	if p.AutoCheckUpdates || p.BrowserExtensionEnabled || p.SortDescending || p.SidebarVisible || p.InspectorVisible {
+	if p.AutoCheckUpdates || p.BrowserExtensionEnabled || p.SortDescending || p.SidebarVisible {
 		t.Fatalf("明确关闭的偏好被默认值覆盖：%+v", p)
 	}
 }
@@ -116,7 +116,7 @@ func TestPreferencesFlushPreventsOlderWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := readTestPreferences(t, a.configDir)
-	if p.ViewMode != 2 || p.Sort != "name" || p.SortDescending || p.SidebarVisible || !p.InspectorVisible || p.SidebarWidth != 312 {
+	if p.ViewMode != 2 || p.Sort != "name" || p.SortDescending || p.SidebarVisible || p.SidebarWidth != 312 {
 		t.Fatalf("立即退出后的文件被旧状态覆盖：%+v", p)
 	}
 }
@@ -247,6 +247,27 @@ func TestLegacyThemesMigrateToTwoPalettes(t *testing.T) {
 		}
 		if saved["theme"] != want {
 			t.Errorf("仍在保存旧主题 %s", old)
+		}
+	}
+}
+
+func TestLegacyInspectorPreferenceIsIgnored(t *testing.T) {
+	for _, value := range []string{"true", "false"} {
+		p := DefaultPreferences()
+		if err := json.Unmarshal([]byte(`{"inspectorVisible":`+value+`}`), &p); err != nil {
+			t.Fatal(err)
+		}
+		a := &App{Preferences: p, InspectorVisible: true}
+		a.RestoreUIState()
+		if a.InspectorVisible {
+			t.Fatal("检查器恢复了旧显示状态")
+		}
+		data, err := json.Marshal(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(data), "inspectorVisible") {
+			t.Fatal("仍保存检查器显示状态")
 		}
 	}
 }

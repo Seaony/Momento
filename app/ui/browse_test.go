@@ -10,41 +10,6 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-func TestBrowseHistoryBranchesAndIncludesTagPage(t *testing.T) {
-	a := sidebarTestApp()
-	a.SetScope("favorites", "")
-	a.SetScope("folder", "root")
-	a.BrowseTag("ref")
-	a.NavigateBack()
-	if a.Query.FolderID != "root" {
-		t.Fatal("标签范围没有保存历史")
-	}
-	a.ShowTagsPage()
-	if !a.TagPage || !a.CanNavigateBack() || a.CanNavigateForward() {
-		t.Fatal("标签页没有进入历史")
-	}
-	a.NavigateBack()
-	if a.TagPage || a.Query.FolderID != "root" {
-		t.Fatal("后退没有恢复文件夹范围")
-	}
-	a.NavigateBack()
-	if a.Query.Scope != "favorites" {
-		t.Fatal("后退没有恢复收藏范围")
-	}
-	a.NavigateForward()
-	if a.Query.FolderID != "root" {
-		t.Fatal("前进没有恢复文件夹范围")
-	}
-	a.SetScope("trash", "")
-	if a.CanNavigateForward() {
-		t.Fatal("切换新范围后仍保留旧的前进记录")
-	}
-	a.NavigateBack()
-	if a.Query.FolderID != "root" {
-		t.Fatal("新范围没有保存来源")
-	}
-}
-
 func TestRandomBrowseKeepsAllActiveAssetsAndStableFiltering(t *testing.T) {
 	a := toolbarTestApp()
 	for i := range 30 {
@@ -91,29 +56,6 @@ func TestRandomBrowseKeepsAllActiveAssetsAndStableFiltering(t *testing.T) {
 	a.changeSort("name")
 	if a.Query.Sort != sort {
 		t.Fatal("随机浏览仍允许排序")
-	}
-}
-
-func TestScopeSummaryMatchesSidebarCountsWithSearch(t *testing.T) {
-	a := sidebarTestApp()
-	for i := range a.Snapshot.Assets {
-		a.Snapshot.Assets[i].Size = int64((i + 1) * 100)
-	}
-	a.Index = catalog.New(a.Snapshot)
-	for _, tc := range []struct {
-		scope, folder string
-		count         int
-		size          int64
-	}{
-		{"all", "", 2, 300}, {"favorites", "", 1, 100}, {"folder", "root", 1, 200}, {"trash", "", 1, 300}, {"random", "", 2, 300},
-	} {
-		a.SetScope(tc.scope, tc.folder)
-		a.Query.Search = "missing"
-		a.Refine()
-		_, count, size := a.scopeSummary()
-		if count != tc.count || size != tc.size || len(a.Visible) != 0 {
-			t.Fatalf("范围合计不符：%s %d %d", tc.scope, count, size)
-		}
 	}
 }
 
@@ -205,17 +147,15 @@ func TestInspectorNotesAndSourceCanBeEdited(t *testing.T) {
 	}
 }
 
-func TestBrowseTagShowsItsAssetsAndHistory(t *testing.T) {
+func TestBrowseTagShowsItsAssetsAndClearsPreviousScope(t *testing.T) {
 	a := toolbarTestApp()
 	a.BrowseTag("ref")
-	name, count, _ := a.scopeSummary()
-	if name != "Reference" || count != 1 || len(a.Visible) != 1 || a.Visible[0].ID != "a" {
+	if a.Query.Scope != "tag" || a.Browse.TagID != "ref" || len(a.Visible) != 1 || a.Visible[0].ID != "a" {
 		t.Fatal("标签范围不正确")
 	}
 	a.SetScope("trash", "")
-	a.NavigateBack()
-	if a.Query.Scope != "tag" || a.Browse.TagID != "ref" || len(a.Visible) != 1 {
-		t.Fatal("历史没有恢复标签范围")
+	if a.Query.Scope != "trash" || a.Browse.TagID != "" || a.TagPage {
+		t.Fatal("切换回收站后仍保留标签范围")
 	}
 }
 

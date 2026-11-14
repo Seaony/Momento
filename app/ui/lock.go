@@ -84,10 +84,13 @@ func (a *App) ShowPasswordSettings(mode string) {
 }
 
 func (a *App) lockScreen(c *ui.Context) {
-	ui.Column(c).Fill().Padding(max(MainToolbarHeight, c.TitleBar().Bottom+16), 24, 24, 24).
-		Center().Material(frostedSurface{tint: c.Theme().Background.Alpha(.78), blur: 28}).DragWindow().Children(func() {
-		ui.Column(c).Width(400).MaxWidthPercent(100).Padding(24).Center().Gap(16).Radius(12).
-			Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border).Children(func() {
+	backdrop := ui.Column(c.Key("lock-screen")).Fill().Padding(max(MainToolbarHeight, c.TitleBar().Bottom+16), 24, 24, 24).
+		Center().Material(frostedSurface{tint: c.Theme().Background.Alpha(.78), blur: 28}).DragWindow()
+	backdrop.Children(func() {
+		panel := ui.Column(c.Key("unlock-panel")).Width(400).MaxWidthPercent(100).Padding(24).Center().Gap(16).Radius(12).
+			Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border)
+		dialogMotion(backdrop, panel)
+		panel.Children(func() {
 			ui.Image(c, appLogo).Size(80, 80).Fit(ui.Contain)
 			ui.Text(c, a.T("password_locked")).FontSize(24).Bold().TextColor(titleColor(c.Theme()))
 			ui.Column(c).FillWidth().Gap(12).Children(func() {
@@ -121,6 +124,7 @@ func (a *App) passwordSettingsDialog(c *ui.Context) {
 			panel := ui.Column(c.Key("password-settings")).Width(420).MaxWidthPercent(92).MaxHeightPercent(92).
 				Padding(24).Gap(12).Radius(12).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border).
 				Role(ui.RoleDialog).Label(title)
+			dialogMotion(back, panel)
 			panel.Children(func() {
 				dialogHeading(c, "lock", title)
 				var submit bool
@@ -142,7 +146,7 @@ func (a *App) passwordSettingsDialog(c *ui.Context) {
 				}
 				a.passwordFeedback(c)
 				ui.Row(c).Gap(8).Justify(ui.End).Margin(4, 0, 0, 0).Children(func() {
-					if ui.Button(c, a.T("cancel")).Disabled(a.PasswordOperationPending()).Clicked() {
+					if settingsButton(c, a.T("cancel")).Disabled(a.PasswordOperationPending()).Clicked() {
 						a.closePasswordDialog()
 					}
 					ready := !a.PasswordOperationPending() && a.passwordCooldown() == 0

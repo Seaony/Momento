@@ -15,7 +15,7 @@ import (
 var settingsPlatform = func() string { return runtime.GOOS }
 
 func settingsError(c *ui.Context, text string) {
-	ui.Text(c, text).FontSize(12).TextColor(c.Theme().Danger).Padding(4, 16, 12, 16).Role(ui.RoleAlert)
+	fadeMotion(ui.Text(c, text).FontSize(12).TextColor(c.Theme().Danger).Padding(4, 16, 12, 16)).Role(ui.RoleAlert)
 }
 
 func (a *App) switchSetting(c *ui.Context, key string, value *bool, disabled bool) {
@@ -30,13 +30,16 @@ func (a *App) switchSetting(c *ui.Context, key string, value *bool, disabled boo
 func settingsSegments(c *ui.Context, label string, selected *int, labels ...string) ui.Element {
 	theme := c.Theme()
 	parts := ui.SegmentedBase(c, selected, len(labels))
+	items := make([]ui.Element, len(labels))
 	parts.Track.AlignItems(ui.Stretch).Padding(4).Gap(4).Radius(8).Background(warmOverlay(theme, .04)).Border(1, theme.Border).Label(label).Children(func() {
 		for i, text := range labels {
 			segment := parts.Segment(i).MinHeight(28).Padding(4, 12).Radius(4).Cursor(ui.CursorPointer).Label(text)
 			styleSegment(c, segment, i == *selected)
+			items[i] = segment
 			segment.Children(func() { ui.Text(c, text).SingleLine() })
 		}
 	})
+	slidingSegmentTrack(c, parts.Track, items, *selected, 4, 4)
 	return parts.Track.FillEqually()
 }
 
@@ -89,7 +92,8 @@ func (a *App) appearanceSettings(c *ui.Context) {
 			zoom := settingsMenuButton(c.Key("ui-zoom"), a.T("ui_zoom"))
 			zoom.Children(func() {
 				ui.Text(c, label).SingleLine()
-				appSymbol(c, "chevrons-up-down").Size(15, 15).Shrink(0).TextColor(symbolColor(c.Theme(), zoom.Hovered()))
+				symbol := appSymbol(c, "chevrons-up-down").Size(15, 15).Shrink(0)
+				symbol.TextColor(symbol.AnimateColor("symbol-color", symbolColor(c.Theme(), zoom.Hovered()), motionColor))
 			}).Menu(func(menu *ui.Menu) {
 				for i, choice := range labels {
 					if menu.Item(choice).Radio(a.Preferences.UIZoom == codes[i]).Chosen() {
@@ -121,7 +125,7 @@ func (a *App) sidebarSettings(c *ui.Context) {
 					for i := start; i < min(start+3, len(items)); i++ {
 						item := items[i]
 						shown := !slices.Contains(a.Preferences.SidebarHidden, item.key)
-						if ui.Checkbox(c.Key(item.key), &shown, a.T(item.label)).Grow(1).MinWidth(0).Disabled(item.fixed).Changed() {
+						if settingsCheckbox(c.Key(item.key), &shown, a.T(item.label)).Grow(1).MinWidth(0).Disabled(item.fixed).Changed() {
 							a.setSidebarShown(item.key, shown)
 						}
 					}
@@ -135,7 +139,7 @@ func (a *App) sidebarSettings(c *ui.Context) {
 		ui.Row(c).FillWidth().Padding(16).Gap(8).Children(func() {
 			for _, item := range []struct{ key, label string }{{"quick", "quick_access"}, {"smart", "smart_folders"}, {"folders", "folders"}} {
 				shown := !slices.Contains(a.Preferences.SidebarHidden, item.key)
-				if ui.Checkbox(c.Key(item.key), &shown, a.T(item.label)).Grow(1).MinWidth(0).Changed() {
+				if settingsCheckbox(c.Key(item.key), &shown, a.T(item.label)).Grow(1).MinWidth(0).Changed() {
 					a.setSidebarShown(item.key, shown)
 				}
 			}
@@ -217,7 +221,8 @@ func (a *App) importSettings(c *ui.Context) {
 					target := settingsMenuButton(c, a.T("auto_import_target")).Width(160)
 					target.Children(func() {
 						ui.Text(c, folderName).SingleLine().Grow(1).MinWidth(0)
-						appSymbol(c, "chevrons-up-down").Size(15, 15).Shrink(0).TextColor(symbolColor(c.Theme(), target.Hovered()))
+						symbol := appSymbol(c, "chevrons-up-down").Size(15, 15).Shrink(0)
+						symbol.TextColor(symbol.AnimateColor("symbol-color", symbolColor(c.Theme(), target.Hovered()), motionColor))
 					}).Menu(func(m *ui.Menu) {
 						if m.Item(a.T("auto_import_library_root")).Radio(rule.FolderID == "").Chosen() {
 							rules[i].FolderID = ""
@@ -309,7 +314,7 @@ func (a *App) notificationsSettings(c *ui.Context) {
 		ui.Column(c).FillWidth().Padding(12, 16).Gap(12).Children(func() {
 			for _, event := range []struct{ key, label string }{{"extension", "notify_extension"}, {"auto-import", "notify_auto_import"}, {"duplicate", "notify_duplicate"}} {
 				checked := slices.Contains(a.Preferences.NotifyEvents, event.key)
-				if ui.Checkbox(c.Key(event.key), &checked, a.T(event.label)).Disabled(!a.Preferences.Notify).Changed() {
+				if settingsCheckbox(c.Key(event.key), &checked, a.T(event.label)).Disabled(!a.Preferences.Notify).Changed() {
 					a.Preferences.NotifyEvents = slices.DeleteFunc(a.Preferences.NotifyEvents, func(key string) bool { return key == event.key })
 					if checked {
 						a.Preferences.NotifyEvents = append(a.Preferences.NotifyEvents, event.key)

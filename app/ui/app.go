@@ -64,7 +64,6 @@ type Preferences struct {
 	Sort                    string                      `json:"sort"`
 	SortDescending          bool                        `json:"sortDescending"`
 	SidebarVisible          bool                        `json:"sidebarVisible"`
-	InspectorVisible        bool                        `json:"inspectorVisible"`
 	SidebarWidth            float32                     `json:"sidebarWidth"`
 }
 
@@ -86,6 +85,9 @@ type App struct {
 	TagPage                                  bool
 	SidebarVisible, InspectorVisible         bool
 	SidebarWidth                             float32
+	sidebarShownWidth, inspectorShownWidth   float32
+	sidebarSplitWidth                        float32
+	chromeLayoutReady                        bool
 	Search                                   ui.Handle
 	Busy                                     bool
 	Progress                                 *model.ImportProgress
@@ -101,6 +103,7 @@ type App struct {
 	quitAfterInspector                       bool
 	pendingLibraryAfterEdits                 string
 	TextInputFocused                         bool
+	menuInspectorAvailable                   bool
 	menuPreviewOpen                          bool
 	PreferencesChanged                       func()
 	WindowShown                              func()
@@ -113,6 +116,7 @@ type App struct {
 	Dialog                                   dialogsState
 	Tags                                     tagsState
 	MenuChanged                              func()
+	InspectorAvailabilityChanged             func(bool)
 	PromptOpen, ConfirmOpen                  bool
 	PromptTitle, PromptValue                 string
 	PromptSubmit                             func(string)
@@ -132,11 +136,11 @@ type App struct {
 	workMu                                   sync.Mutex
 	generation                               uint64
 	scroll                                   ui.ScrollState
-	list                                     ui.ListState
-	grid                                     ui.ListState
 	selectedIndex                            int
 	anchor                                   int
 	hovered                                  string
+	assetClickID, pendingAssetActivation     string
+	assetClickBounds                         ui.Rect
 	layout                                   *MasonryLayout
 	layoutWidth                              float32
 	layoutVersion                            uint64
@@ -145,7 +149,7 @@ type App struct {
 
 func New() *App {
 	ctx, cancel := context.WithCancel(context.Background())
-	a := &App{ctx: ctx, cancel: cancel, SidebarVisible: true, InspectorVisible: true, SidebarWidth: 236, selectedIndex: -1, anchor: -1, Preferences: DefaultPreferences(), Query: catalog.Query{Sort: "added", Descending: true}}
+	a := &App{ctx: ctx, cancel: cancel, SidebarVisible: true, SidebarWidth: 236, selectedIndex: -1, anchor: -1, Preferences: DefaultPreferences(), Query: catalog.Query{Sort: "added", Descending: true}}
 	dir, err := library.ConfigDir()
 	if err != nil {
 		a.Error = a.Texts.Error(err)
@@ -218,35 +222,45 @@ func (a *App) View(c *ui.Context) {
 	if a.Library == nil {
 		a.welcome(c)
 	} else {
-		body := func() {
-			ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
-				ui.Column(c).Grow(1).MinWidth(0).Background(c.Theme().Background).Children(func() {
-					if a.TagPage {
-						a.tags(c)
-					} else {
-						a.assetArea(c)
-					}
-					ui.Column(c.Key("main-header")).Absolute().Top(0).Left(0).Right(0).Children(func() {
-						a.toolbar(c)
-						if a.Progress != nil {
+		if !a.InspectorAvailable() && a.InspectorVisible {
+			a.CollapseInspector()
+		}
+		workspace := ui.Row(c.Key("workspace")).Fill().ObserveInput(a.observeAssetDoubleClick).HandleInput(a.activateAssetDoubleClick)
+		if a.chromeLayoutReady && a.SidebarVisible && a.sidebarSplitWidth != a.sidebarShownWidth {
+			a.SidebarWidth = max(196, min(340, a.sidebarSplitWidth))
+		}
+		a.SidebarWidth = max(196, min(340, a.SidebarWidth))
+		sidebarTarget := float32(0)
+		if a.SidebarVisible {
+			sidebarTarget = a.SidebarWidth
+		}
+		a.sidebarShownWidth = workspace.AnimateTo("sidebar-width", sidebarTarget, motionSpring)
+		a.inspectorShownWidth = workspace.AnimateTo("inspector-width", a.InspectorTargetWidth(), motionSpring)
+		a.chromeLayoutReady = true
+		workspace.Children(func() {
+			body := func() {
+				ui.Row(c.Key("library-body")).Fill().AlignItems(ui.Stretch).Children(func() {
+					ui.Column(c.Key("content")).Grow(1).MinWidth(0).Background(c.Theme().Background).Children(func() {
+						if a.TagPage {
+							a.tags(c)
+						} else {
+							a.assetArea(c)
+						}
+						ui.Column(c.Key("main-header")).Absolute().Top(0).Left(0).Right(0).Children(func() {
+							a.toolbar(c)
 							a.importProgress(c)
+						})
+					})
+					ui.Column(c.Key("inspector-slot")).Width(a.inspectorShownWidth).Shrink(0).Clip().Children(func() {
+						if a.InspectorVisible && a.InspectorAvailable() {
+							fadeMotion(ui.Column(c.Key("inspector-content")).Width(280).FillHeight().Background(c.Theme().Surface).BorderWidth(0, 0, 0, 1).BorderColor(c.Theme().Border)).Children(func() { a.inspector(c) })
 						}
 					})
 				})
-				if a.InspectorVisible {
-					ui.Column(c).Width(280).Shrink(0).Background(c.Theme().Surface).BorderWidth(0, 0, 0, 1).BorderColor(c.Theme().Border).Children(func() {
-						ui.Box(c).Height(MainToolbarHeight).Shrink(0).FillWidth().DragWindow()
-						a.inspector(c)
-					})
-				}
-			})
-		}
-		if a.SidebarVisible {
-			a.SidebarWidth = max(196, min(340, a.SidebarWidth))
-			ui.Split(c, &a.SidebarWidth, func() { a.sidebar(c) }, body).SplitReset(236).Fill()
-		} else {
-			body()
-		}
+			}
+			a.sidebarSplitWidth = a.sidebarShownWidth
+			ui.Split(c.Key("library-split"), &a.sidebarSplitWidth, func() { a.sidebar(c) }, body).SplitReset(236).Fill()
+		})
 	}
 	a.shortcuts(c)
 	a.preview(c)
@@ -258,6 +272,7 @@ func (a *App) View(c *ui.Context) {
 		c.Toast(a.Notice)
 		a.Notice = ""
 	}
+	a.noticeViewport(c)
 }
 
 func (a *App) ShowError(err error) {
@@ -706,7 +721,7 @@ func (a *App) shortcuts(c *ui.Context) {
 	if a.Preview.Open {
 		return
 	}
-	for _, action := range []string{"new_library", "open_library", "import", "import_folder", "export", "settings", "search", "filter", "sort", "inspector", "sidebar", "back", "forward", "thumbnail_larger", "thumbnail_smaller", "view_masonry", "view_grid", "view_list"} {
+	for _, action := range []string{"new_library", "open_library", "import", "import_folder", "export", "settings", "search", "filter", "sort", "inspector", "sidebar", "thumbnail_larger", "thumbnail_smaller", "view_masonry", "view_grid", "view_list"} {
 		if !a.ActionShortcut(c, action) {
 			continue
 		}
@@ -730,13 +745,9 @@ func (a *App) shortcuts(c *ui.Context) {
 		case "sort":
 			a.ToggleSort()
 		case "inspector":
-			a.InspectorVisible = !a.InspectorVisible
+			a.ToggleInspector()
 		case "sidebar":
 			a.SidebarVisible = !a.SidebarVisible
-		case "back":
-			a.NavigateBack()
-		case "forward":
-			a.NavigateForward()
 		case "thumbnail_larger":
 			a.ChangeThumbnailSize(.1)
 		case "thumbnail_smaller":
@@ -761,10 +772,15 @@ func (a *App) shortcuts(c *ui.Context) {
 	if a.ActionShortcut(c, "delete") {
 		a.RequestDelete(a.selectedIDs())
 	}
+	if c.Shortcut(0, ui.KeyEscape) {
+		a.Selected.Clear()
+		a.CollapseInspector()
+	}
 	if a.ActionShortcut(c, "select_all") {
 		for _, v := range a.Visible {
 			a.Selected.Add(v.ID)
 		}
+		a.RevealInspector()
 	}
 	if c.Shortcut(0, ui.KeyF) && a.hovered != "" {
 		if asset, ok := a.assetByID[a.hovered]; ok {
@@ -786,6 +802,12 @@ func (a *App) SyncMenuFocus(c *ui.Context) {
 		a.menuPreviewOpen = a.Preview.Open
 		if a.MenuChanged != nil {
 			a.MenuChanged()
+		}
+	}
+	if available := a.InspectorAvailable(); a.menuInspectorAvailable != available {
+		a.menuInspectorAvailable = available
+		if a.InspectorAvailabilityChanged != nil {
+			a.InspectorAvailabilityChanged(available)
 		}
 	}
 }
@@ -943,11 +965,19 @@ func (a *App) RevealInspector() {
 	}
 }
 
-func (a *App) CollapseInspector() { a.InspectorVisible = false }
+func (a *App) CollapseInspector() {
+	if !a.InspectorVisible {
+		return
+	}
+	a.saveInspectorEdits()
+	a.InspectorVisible = false
+}
 
 func (a *App) ToggleInspector() {
-	if a.InspectorAvailable() {
-		a.InspectorVisible = !a.InspectorVisible
+	if a.InspectorVisible {
+		a.CollapseInspector()
+	} else {
+		a.RevealInspector()
 	}
 }
 
@@ -962,4 +992,47 @@ func (a *App) OpenHelp() {
 	if err := mygo.Shell.OpenExternal(a.HelpURL()); err != nil {
 		a.ShowError(err)
 	}
+}
+
+func (a *App) SidebarShownWidth() float32 {
+	if !a.chromeLayoutReady && a.SidebarVisible {
+		return a.SidebarWidth
+	}
+	return a.sidebarShownWidth
+}
+
+func (a *App) InspectorShownWidth() float32 {
+	if !a.chromeLayoutReady && a.InspectorVisible && a.InspectorAvailable() {
+		return 280
+	}
+	return a.inspectorShownWidth
+}
+
+func (a *App) InspectorTargetWidth() float32 {
+	if a.InspectorVisible && a.InspectorAvailable() {
+		return 280
+	}
+	return 0
+}
+
+// 检查器展开会移动卡片，第二击仍归第一次点击的素材。
+func (a *App) observeAssetDoubleClick(ev ui.InputEvent) {
+	if ev.Kind != ui.InputPointerDown || ev.Button != 0 {
+		return
+	}
+	a.pendingAssetActivation = ""
+	if ev.Clicks == 2 && ev.Mods == 0 && !a.Preview.Open && a.Selected.Has(a.assetClickID) && a.assetClickBounds.Contains(ev.X, ev.Y) {
+		a.pendingAssetActivation = a.assetClickID
+	}
+	a.assetClickID = ""
+}
+
+func (a *App) activateAssetDoubleClick(ev ui.InputEvent) bool {
+	if ev.Kind != ui.InputPointerDown || a.pendingAssetActivation == "" {
+		return false
+	}
+	id := a.pendingAssetActivation
+	a.pendingAssetActivation = ""
+	a.ActivateAsset(id, false)
+	return true
 }

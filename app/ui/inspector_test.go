@@ -32,15 +32,70 @@ func TestInspectorCopyFailure(t *testing.T) {
 
 func TestInspectorNoSelection(t *testing.T) {
 	a := inspectorTestApp()
+	a.InspectorVisible = false
+	a.RevealInspector()
+	a.ToggleInspector()
+	if a.InspectorVisible || a.InspectorAvailable() {
+		t.Fatal("没有选择时仍能打开检查器")
+	}
 	tt := ui.NewTester(a.inspector, 280, 640)
-	if !tt.HasText(a.T("scope_information")) || !tt.HasText(a.T("all")) || !tt.HasText("0 B") || tt.HasText(a.T("exif_metadata")) {
-		t.Fatalf("空选状态错误: %v", tt.Texts())
+	if len(tt.Texts()) != 0 || len(tt.AccessAll()) != 0 {
+		t.Fatalf("没有选择时仍渲染检查器：%v", tt.Texts())
 	}
-	if tt.HasText(a.T("inspector")) {
-		t.Fatal("检查器仍显示重复标题")
+}
+
+func TestInspectorFollowsSelectionAndReopensSameAsset(t *testing.T) {
+	a := inspectorTestApp(model.Asset{ID: "a", Name: "Landscape.jpg"}, model.Asset{ID: "b", Name: "Portrait.jpg"})
+	a.Selected.Clear()
+	a.InspectorVisible = false
+	a.selectAsset("a", 0, 0)
+	if !a.InspectorVisible || !a.InspectorAvailable() {
+		t.Fatal("单选后没有展开检查器")
 	}
-	if _, ok := tt.Find(a.T("close_inspector")); ok {
-		t.Fatal("检查器仍显示重复关闭按钮")
+	tt := ui.NewTester(a.inspector, 280, 640)
+	if !tt.HasText("Landscape.jpg") {
+		t.Fatal("检查器顶部没有显示素材名")
+	}
+	if err := tt.Click(a.T("close_inspector")); err != nil {
+		t.Fatal(err)
+	}
+	if a.InspectorVisible || a.Selected.Len() != 1 {
+		t.Fatal("收起检查器没有保留选择")
+	}
+	a.selectAsset("a", 0, 0)
+	if !a.InspectorVisible {
+		t.Fatal("再次点击同一素材没有重开检查器")
+	}
+	a.selectAsset("b", 1, ui.Cmd)
+	tt.Frame()
+	if !a.InspectorVisible || a.Selected.Len() != 2 || !tt.HasText(a.T("selected_assets", 2)) {
+		t.Fatal("多选检查器没有展开或标题不符")
+	}
+	a.selectAsset("a", 0, ui.Cmd)
+	a.selectAsset("b", 1, ui.Cmd)
+	a.RevealInspector()
+	a.ToggleInspector()
+	tt.Frame()
+	if a.InspectorAvailable() || a.InspectorVisible || len(tt.Texts()) != 0 {
+		t.Fatal("取消全部选择后仍可打开检查器")
+	}
+}
+
+func TestInspectorLocalizedHeaderKeepsCollapseVisible(t *testing.T) {
+	for _, language := range []string{"en", "ja"} {
+		t.Run(language, func(t *testing.T) {
+			a := inspectorTestApp(model.Asset{ID: "a", Name: "A very long landscape reference name that must leave room for the collapse button.jpg"})
+			a.Texts.Language = language
+			tt := ui.NewTester(a.inspector, 280, 640)
+			button, ok := tt.Find(a.T("close_inspector"))
+			if !ok || button.X < 0 || button.X+button.W > 280 || button.Y < 0 || button.Y+button.H > 44 {
+				t.Fatalf("长素材名挤出了收起按钮：%+v", button)
+			}
+			heading, ok := tt.Find(a.Visible[0].Name)
+			if !ok || heading.X+heading.W > button.X {
+				t.Fatalf("单行标题与收起按钮重叠：%+v，%+v", heading, button)
+			}
+		})
 	}
 }
 

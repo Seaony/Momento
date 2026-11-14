@@ -18,7 +18,7 @@ func DefaultPreferences() Preferences {
 		PreviewFit: "smart", PreviewChecker: true, SelectImported: true,
 		AutoImport: map[string][]AutoImportRule{}, Shortcuts: map[string]string{},
 		Notify: true, NotifyEvents: []string{"extension", "auto-import", "duplicate"}, NotifySound: true, ThumbnailSize: 1,
-		Sort: "added", SortDescending: true, SidebarVisible: true, InspectorVisible: true, SidebarWidth: 236,
+		Sort: "added", SortDescending: true, SidebarVisible: true, SidebarWidth: 236,
 	}
 }
 
@@ -136,7 +136,8 @@ func (a *App) RestoreUIState() {
 	a.Preferences = NormalizePreferences(a.Preferences)
 	p := a.Preferences
 	a.ViewMode, a.Query.Sort, a.Query.Descending = p.ViewMode, p.Sort, p.SortDescending
-	a.SidebarVisible, a.InspectorVisible, a.SidebarWidth = p.SidebarVisible, p.InspectorVisible, p.SidebarWidth
+	a.SidebarVisible, a.SidebarWidth = p.SidebarVisible, p.SidebarWidth
+	a.InspectorVisible = false
 }
 
 func (a *App) SavePreferences() {
@@ -169,7 +170,7 @@ func (a *App) captureUIState() bool {
 	if p.Sort == "" {
 		p.Sort, p.SortDescending = "added", true
 	}
-	p.SidebarVisible, p.InspectorVisible, p.SidebarWidth = a.SidebarVisible, a.InspectorVisible, a.SidebarWidth
+	p.SidebarVisible, p.SidebarWidth = a.SidebarVisible, a.SidebarWidth
 	p = NormalizePreferences(p)
 	if reflect.DeepEqual(p, a.Preferences) {
 		return false

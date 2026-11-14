@@ -99,3 +99,34 @@ func TestGlobalShortcutFailureRemainsVisibleAndCanRetry(t *testing.T) {
 		t.Fatal("清除按键未注销原注册")
 	}
 }
+
+func TestInspectorMenuFollowsSelectionAndHelpIsAvailable(t *testing.T) {
+	a := desktopTestApp()
+	for _, platform := range []string{"darwin", "windows", "linux"} {
+		items := menuItems(a, platform)
+		if got := menuAction(items, "inspector"); got == nil || !got.Disabled {
+			t.Fatal("无选择时检查器菜单没有置灰")
+		}
+		if menuAction(items, "back") != nil || menuAction(items, "forward") != nil {
+			t.Fatal("菜单保留了历史导航")
+		}
+		if menuAction(items, "user_guide") == nil {
+			t.Fatal("缺少使用说明入口")
+		}
+		a.Selected.Add("selected")
+		if got := menuAction(menuItems(a, platform), "inspector"); got == nil || got.Disabled {
+			t.Fatal("有选择时检查器菜单仍禁用")
+		}
+		a.Selected.Clear()
+	}
+	for _, tc := range []struct{ language, url string }{
+		{"zh-CN", "https://github.com/Seaony/Momento/blob/master/README.zh-CN.md"},
+		{"en", "https://github.com/Seaony/Momento#readme"},
+		{"ja", "https://github.com/Seaony/Momento#readme"},
+	} {
+		a.Texts.Language = tc.language
+		if a.HelpURL() != tc.url {
+			t.Fatalf("帮助链接错误：%s", a.HelpURL())
+		}
+	}
+}

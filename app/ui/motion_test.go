@@ -1,9 +1,11 @@
 package ui
 
 import (
-	"github.com/egoist/mygo/ui"
+	"bytes"
 	"testing"
 	"time"
+
+	"github.com/egoist/mygo/ui"
 )
 
 func TestMotionColorUsesIntermediateFrames(t *testing.T) {
@@ -31,5 +33,35 @@ func TestPhosphorFoundationHasBothWeights(t *testing.T) {
 		if regular == nil || phosphorFill[name] == nil {
 			t.Fatalf("%s 缺少Regular或Fill", name)
 		}
+	}
+}
+
+func TestNoticeUsesAnimatedEntryAndExit(t *testing.T) {
+	a := &App{Preferences: DefaultPreferences()}
+	add := false
+	tt := ui.NewTester(func(c *ui.Context) {
+		a.applyTheme(c)
+		ui.Box(c).Fill().Background(c.Theme().Background)
+		if add {
+			c.Toast("保存成功")
+			add = false
+		}
+		a.noticeViewport(c)
+	}, 640, 480)
+	before := append([]byte(nil), tt.Image().Pix...)
+	add = true
+	tt.Frame()
+	tt.Advance(87 * time.Millisecond)
+	middle := append([]byte(nil), tt.Image().Pix...)
+	tt.Advance(time.Second)
+	if bytes.Equal(before, middle) || bytes.Equal(middle, tt.Image().Pix) {
+		t.Fatal("提示条没有淡入滑动中间帧")
+	}
+	if err := tt.Click(a.T("close")); err != nil {
+		t.Fatal(err)
+	}
+	tt.Advance(time.Second)
+	if tt.HasText("保存成功") {
+		t.Fatal("提示条关闭后仍存在")
 	}
 }

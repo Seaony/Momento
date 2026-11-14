@@ -22,16 +22,7 @@ type gBrowsingState struct {
 }
 
 func (a *App) BrowseSmartFolder(id string) {
-	current := a.browseLocation()
-	next := browseLocation{Scope: "smart", SmartFolderID: id}
-	if len(a.Browse.History) == 0 {
-		a.Browse.History = []browseLocation{current}
-	}
-	if next != current {
-		a.Browse.History = append(a.Browse.History[:a.Browse.Position+1], next)
-		a.Browse.Position = len(a.Browse.History) - 1
-	}
-	a.applyBrowseLocation(next)
+	a.applyBrowseLocation(browseLocation{Scope: "smart", SmartFolderID: id})
 }
 
 func (a *App) quickAccessTarget(entry model.QuickAccess) (name, icon string, count int, selected bool) {

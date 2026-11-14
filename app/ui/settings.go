@@ -78,15 +78,17 @@ func (a *App) settingsView(c *ui.Context, update UpdateCheckStatus) {
 						ui.Divider(c).Margin(4, 8)
 					}
 					row := ui.ButtonBase(c.Key(tab.key)).FillWidth().Height(32).Padding(4, 8).Gap(10).Radius(8).Cursor(ui.CursorPointer).Label(a.T(tab.key)).Role(ui.RoleTab).AccessSelected(a.Settings.Tab == i).Justify(ui.Start)
+					background, text := ui.Transparent, c.Theme().TextMuted
 					if i == a.Settings.Tab {
-						row.Background(c.Theme().Selection).TextColor(titleColor(c.Theme()))
+						background, text = c.Theme().Selection, titleColor(c.Theme())
 					} else if row.Pressed() {
-						row.Background(warmOverlay(c.Theme(), .11))
+						background, text = warmOverlay(c.Theme(), .11), c.Theme().Text
 					} else if row.Hovered() {
-						row.Background(warmOverlay(c.Theme(), .08))
+						background, text = warmOverlay(c.Theme(), .08), c.Theme().Text
 					}
+					animateColors(row, background, text)
 					row.Children(func() {
-						ui.Image(c, settingsIcons[tab.icon]).Size(20, 20).Shrink(0)
+						sidebarRowIcon(c, tab.icon, a.Settings.Tab == i, row.Hovered()).Size(18, 18).Shrink(0)
 						label := ui.Text(c, a.T(tab.key)).FontSize(13).SingleLine().Grow(1).MinWidth(0)
 						if i == a.Settings.Tab {
 							label.Bold()
@@ -106,7 +108,7 @@ func (a *App) settingsView(c *ui.Context, update UpdateCheckStatus) {
 				ui.Text(c, a.T(settingsTabs[a.Settings.Tab].key)).FontSize(13).Bold().TextColor(titleColor(c.Theme())).SingleLine()
 			})
 			ui.Scroll(c.Key("settings-content")).TrackScroll(&a.Settings.Scroll).Grow(1).Padding(16, 24, 24, 24).Children(func() {
-				ui.Column(c.Key(a.Settings.Tab)).FillWidth().Gap(24).Children(func() {
+				fadeMotion(ui.Column(c.Key(a.Settings.Tab)).FillWidth().Gap(24)).Children(func() {
 					switch a.Settings.Tab {
 					case SettingsAppearance:
 						a.appearanceSettings(c)
@@ -167,7 +169,8 @@ func settingsMenuButton(c *ui.Context, label string) ui.Element {
 	} else if button.Hovered() {
 		background = warmOverlay(c.Theme(), .08)
 	}
-	return button.Background(background)
+	animateColors(button, background, c.Theme().Text)
+	return button
 }
 
 func settingsButton(c *ui.Context, label string) ui.Element {
@@ -230,7 +233,8 @@ func (a *App) languageMenu(c *ui.Context) {
 	trigger := settingsMenuButton(c, a.T("language"))
 	trigger.Children(func() {
 		ui.Text(c, labels[selected]).SingleLine()
-		appSymbol(c, "chevrons-up-down").Size(15, 15).Shrink(0).TextColor(symbolColor(c.Theme(), trigger.Hovered()))
+		symbol := appSymbol(c, "chevrons-up-down").Size(15, 15).Shrink(0)
+		symbol.TextColor(symbol.AnimateColor("symbol-color", symbolColor(c.Theme(), trigger.Hovered()), motionColor))
 	}).Menu(func(m *ui.Menu) {
 		for i, label := range labels {
 			if m.Item(label).Radio(a.Preferences.Language == codes[i]).Chosen() {
@@ -326,7 +330,7 @@ func (a *App) updateMessage(c *ui.Context, update UpdateCheckStatus, centered bo
 		color = c.Theme().Danger
 	}
 	if text != "" {
-		message := ui.Text(c, text).FontSize(12).TextColor(color).Padding(0, 4).Role(ui.RoleStatus)
+		message := fadeMotion(ui.Text(c, text).FontSize(12).TextColor(color).Padding(0, 4)).Role(ui.RoleStatus)
 		if centered {
 			message.FillWidth().TextAlign(ui.Center)
 		}
@@ -338,6 +342,7 @@ func settingsPanel(c *ui.Context, open *bool, width float32, body func()) ui.Ele
 		backdrop.Material(frostedSurface{tint: ui.Hex("#211A16").Alpha(.42), blur: 12})
 		panel.Width(width).MaxWidthPercent(92).MaxHeightPercent(92).Padding(24).Gap(12).
 			Radius(12).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border)
+		dialogMotion(backdrop, panel)
 		body()
 	})
 }

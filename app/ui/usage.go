@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/Seaony/Momento/app/internal/catalog"
 	"github.com/Seaony/Momento/app/internal/model"
 	"github.com/egoist/mygo"
 )
@@ -40,7 +39,7 @@ func (a *App) MarkAssetsUsed(ids []string) {
 					a.assetByID[asset.ID] = *asset
 				}
 			}
-			a.Index = catalog.New(a.Snapshot)
+			a.Index.UpdateLastUsed(used, at)
 			if a.Query.Scope == "recent" {
 				a.refine(false)
 			}

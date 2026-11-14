@@ -136,8 +136,10 @@ func main() {
 }
 
 func installMenu(a *appui.App) {
+	var menus []*mygo.Menu
 	makeMenu := func() *mygo.Menu {
 		menu := mygo.NewMenu(menuItems(a, runtime.GOOS))
+		menus = append(menus, menu)
 		for _, definition := range appui.ShortcutDefinitions {
 			if item := menu.ItemByID(definition.Action); item != nil {
 				accelerator := a.Shortcut(definition.Action)
@@ -166,6 +168,13 @@ func installMenu(a *appui.App) {
 	if a.SettingsWindow != nil {
 		a.SettingsWindow.SetTitle(a.T("settings"))
 	}
+	a.InspectorAvailabilityChanged = func(available bool) {
+		for _, menu := range menus {
+			if item := menu.ItemByID("inspector"); item != nil {
+				item.SetEnabled(available)
+			}
+		}
+	}
 }
 
 func menuItems(a *appui.App, platform string) []*mygo.MenuItem {
@@ -176,10 +185,6 @@ func menuItems(a *appui.App, platform string) []*mygo.MenuItem {
 			action = "lock"
 		case "paste_import":
 			action = "paste"
-		case "navigate_back":
-			action = "back"
-		case "navigate_forward":
-			action = "forward"
 		case "preview_fit_window":
 			action = "preview_fit"
 		case "preview_actual_size":
@@ -225,15 +230,13 @@ func menuItems(a *appui.App, platform string) []*mygo.MenuItem {
 		copyItem.Accelerator = a.Shortcut("copy")
 	}
 	edit := []*mygo.MenuItem{role("undo", "shortcut_undo", mygo.RoleUndo), role("redo", "shortcut_redo", mygo.RoleRedo), mygo.Separator(), role("cut", "shortcut_cut", mygo.RoleCut), copyItem, paste, role("select_all", "select_all", mygo.RoleSelectAll)}
-	back := item("navigate_back", "CmdOrCtrl+[", a.NavigateBack)
-	back.Disabled = !a.CanNavigateBack()
-	forward := item("navigate_forward", "CmdOrCtrl+]", a.NavigateForward)
-	forward.Disabled = !a.CanNavigateForward()
+	inspector := item("inspector", "CmdOrCtrl+Alt+I", a.ToggleInspector)
+	inspector.Disabled = !a.InspectorAvailable()
 	return []*mygo.MenuItem{appMenu, {Label: a.T("menu_file"), Submenu: fileItems}, {Label: a.T("menu_edit"), Submenu: edit}, {Label: a.T("menu_view"), Submenu: []*mygo.MenuItem{
-		item("view_masonry", "CmdOrCtrl+1", func() { a.ViewMode = 0 }), item("view_grid", "CmdOrCtrl+2", func() { a.ViewMode = 1 }), item("view_list", "CmdOrCtrl+3", func() { a.ViewMode = 2 }), mygo.Separator(), back, forward,
+		item("view_masonry", "CmdOrCtrl+1", func() { a.ViewMode = 0 }), item("view_grid", "CmdOrCtrl+2", func() { a.ViewMode = 1 }), item("view_list", "CmdOrCtrl+3", func() { a.ViewMode = 2 }), mygo.Separator(),
 		item("thumbnail_larger", "CmdOrCtrl+=", func() { a.ChangeThumbnailSize(.1) }), item("thumbnail_smaller", "CmdOrCtrl+-", func() { a.ChangeThumbnailSize(-.1) }), mygo.Separator(),
-		item("search", "CmdOrCtrl+K", a.FocusSearch), item("filter", "CmdOrCtrl+Alt+F", a.ToggleFilter), item("sort", "CmdOrCtrl+Alt+S", a.ToggleSort), item("inspector", "CmdOrCtrl+Alt+I", func() { a.InspectorVisible = !a.InspectorVisible }), item("sidebar", "", func() { a.SidebarVisible = !a.SidebarVisible }), mygo.Separator(), role("fullscreen", "shortcut_fullscreen", mygo.RoleToggleFullScreen),
+		item("search", "CmdOrCtrl+K", a.FocusSearch), item("filter", "CmdOrCtrl+Alt+F", a.ToggleFilter), item("sort", "CmdOrCtrl+Alt+S", a.ToggleSort), inspector, item("sidebar", "", func() { a.SidebarVisible = !a.SidebarVisible }), mygo.Separator(), role("fullscreen", "shortcut_fullscreen", mygo.RoleToggleFullScreen),
 	}}, {Label: a.T("preview"), Submenu: []*mygo.MenuItem{
 		item("preview_zoom_in", "CmdOrCtrl+=", a.PreviewZoomIn), item("preview_zoom_out", "CmdOrCtrl+-", a.PreviewZoomOut), item("preview_fit_window", "CmdOrCtrl+0", a.PreviewFitToWindow), item("preview_actual_size", "CmdOrCtrl+1", a.PreviewActualSize),
-	}}, {Role: mygo.RoleWindowMenu}}
+	}}, {Role: mygo.RoleWindowMenu}, {Label: a.T("help"), Submenu: []*mygo.MenuItem{item("user_guide", "", a.OpenHelp)}}}
 }

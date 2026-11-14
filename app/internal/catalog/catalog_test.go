@@ -191,3 +191,27 @@ func BenchmarkQuery10K(b *testing.B) {
 		})
 	}
 }
+
+func TestUsageUpdateKeepsSearchCountsAndSnapshotOwnership(t *testing.T) {
+	snapshot := sampleSnapshot()
+	idx := New(snapshot)
+	counts := idx.Counts()
+	now := time.Date(2026, 11, 15, 0, 0, 0, 0, time.UTC)
+	idx.UpdateLastUsed(map[string]bool{"a": true, "e": true, "missing": true}, now)
+	idx.UpdateLastUsed(map[string]bool{"a": true}, now.Add(-time.Hour))
+	if got := assetIDs(idx.Query(Query{Scope: "recent", Now: now})); !slices.Equal(got, []string{"a"}) {
+		t.Fatalf("使用时间或回收站筛选错误：%v", got)
+	}
+	if got := assetIDs(idx.Query(Query{Search: "WARM"})); !slices.Equal(got, []string{"a"}) {
+		t.Fatalf("更新使用时间破坏了搜索：%v", got)
+	}
+	if !reflect.DeepEqual(counts, idx.Counts()) {
+		t.Fatal("更新使用时间改变了计数")
+	}
+	if !snapshot.Assets[0].LastUsedAt.IsZero() {
+		t.Fatal("索引改写了传入快照")
+	}
+	if !idx.Snapshot().Assets[0].LastUsedAt.Equal(now) {
+		t.Fatal("旧回调覆盖了更新的使用时间")
+	}
+}

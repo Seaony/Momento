@@ -172,6 +172,15 @@ func (a *App) themeSwatches(c *ui.Context, centered bool) {
 			name := a.T(themeNameKey(key))
 			button := ui.ButtonBase(c.Key(key)).Width(92).Padding(4).Column().Gap(8).AlignItems(ui.Center).Radius(8).Cursor(ui.CursorPointer).Label(name).Tooltip(name).AccessSelected(selected)
 			hovered := button.Hovered()
+			text := theme.TextMuted
+			outline := ui.Transparent
+			if selected {
+				text, outline = theme.Text, theme.Accent
+			} else if hovered {
+				text, outline = theme.Text, theme.Focus
+			}
+			text = button.AnimateColor("theme-label", text, motionColor)
+			outline = button.AnimateColor("theme-outline", outline, motionColor)
 			button.Children(func() {
 				ui.Box(c).Size(76, 48).Radius(8).Draw(func(p *ui.Painter, r ui.Rect) {
 					palette := momentoTheme(key, theme.Dark)
@@ -190,17 +199,9 @@ func (a *App) themeSwatches(c *ui.Context, centered bool) {
 						}
 					})
 					p.Stroke(r, theme.Border, 8, 1)
-					if selected {
-						p.Stroke(ui.Rect{X: r.X - 3, Y: r.Y - 3, W: r.W + 6, H: r.H + 6}, theme.Accent, 11, 2)
-					} else if hovered {
-						p.Stroke(ui.Rect{X: r.X - 2, Y: r.Y - 2, W: r.W + 4, H: r.H + 4}, theme.Focus, 10, 1)
-					}
+					p.Stroke(ui.Rect{X: r.X - 3, Y: r.Y - 3, W: r.W + 6, H: r.H + 6}, outline, 11, 2)
 				})
-				color := theme.TextMuted
-				if selected || hovered {
-					color = theme.Text
-				}
-				ui.Text(c, name).FontSize(12).TextColor(color).SingleLine()
+				ui.Text(c, name).FontSize(12).TextColor(text).SingleLine()
 			})
 			if button.Clicked() {
 				a.Preferences.Theme = key

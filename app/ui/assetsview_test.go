@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -102,7 +103,7 @@ func TestAssetGridSelectionAfterScrolling(t *testing.T) {
 	if err := tt.Click("Photo 000"); err != nil {
 		t.Fatal(err)
 	}
-	a.grid.ScrollToEnd()
+	a.scroll.Y = math.MaxFloat32
 	tt.Frame()
 	if err := tt.ClickWith(ui.Cmd, "Photo 499"); err != nil {
 		t.Fatal(err)

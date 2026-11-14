@@ -42,8 +42,6 @@ var ShortcutDefinitions = []ShortcutDefinition{
 	{"sort", "sort", "view", "CmdOrCtrl+Alt+S", false},
 	{"inspector", "inspector", "view", "CmdOrCtrl+Alt+I", false},
 	{"sidebar", "sidebar", "view", "", false},
-	{"back", "navigate_back", "view", "CmdOrCtrl+[", false},
-	{"forward", "navigate_forward", "view", "CmdOrCtrl+]", false},
 	{"thumbnail_larger", "thumbnail_larger", "view", "CmdOrCtrl+=", false},
 	{"thumbnail_smaller", "thumbnail_smaller", "view", "CmdOrCtrl+-", false},
 	{"fullscreen", "shortcut_fullscreen", "view", "Ctrl+Super+F", false},

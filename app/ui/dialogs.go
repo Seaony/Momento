@@ -41,7 +41,7 @@ func (a *App) dialogs(c *ui.Context) {
 
 func dialogHeading(c *ui.Context, icon, title string) {
 	ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
-		appIcon(c, icon).Size(24, 24)
+		appIcon(c, icon).Size(18, 18).TextColor(c.Theme().TextMuted)
 		ui.Text(c, title).FontSize(20).Bold().TextColor(titleColor(c.Theme())).Grow(1)
 	})
 }
@@ -58,15 +58,17 @@ func (a *App) confirmationDialog(c *ui.Context) {
 			a.ConfirmOpen = false
 		}
 		backdrop.Children(func() {
-			ui.Column(c).Width(420).MaxWidthPercent(92).Padding(24).Gap(12).Radius(12).
+			panel := ui.Column(c).Width(420).MaxWidthPercent(92).Padding(24).Gap(12).Radius(12).
 				Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border).
-				Role(ui.RoleAlertDialog).Label(a.ConfirmTitle).Description(a.ConfirmDetail).Children(func() {
+				Role(ui.RoleAlertDialog).Label(a.ConfirmTitle).Description(a.ConfirmDetail)
+			dialogMotion(backdrop, panel)
+			panel.Children(func() {
 				dialogHeading(c, "warning", a.ConfirmTitle)
 				if a.ConfirmDetail != "" {
 					ui.Text(c, a.ConfirmDetail).FillWidth().TextColor(c.Theme().TextMuted)
 				}
 				ui.Row(c).FillWidth().Wrap().Justify(ui.End).Gap(8).Margin(8, 0, 0, 0).Children(func() {
-					if ui.Button(c, a.T("cancel")).Clicked() {
+					if settingsButton(c, a.T("cancel")).Clicked() {
 						a.ConfirmOpen = false
 					}
 					confirm := primaryButton(c, a.T("confirm"), false).AutoFocus().TextColor(c.Theme().InverseText)
@@ -76,7 +78,7 @@ func (a *App) confirmationDialog(c *ui.Context) {
 					} else if confirm.Hovered() {
 						color = color.Mix(c.Theme().Text, .08)
 					}
-					if confirm.Background(color).Clicked() {
+					if confirm.Background(confirm.AnimateColor("danger-surface", color, motionColor)).Clicked() {
 						a.ConfirmOpen = false
 						confirmed = true
 					}
@@ -105,11 +107,11 @@ func (a *App) newLibraryDialog(c *ui.Context) {
 			location = a.T("choose_library_location")
 		}
 		ui.Text(c, location).FontSize(12).TextColor(c.Theme().TextMuted).SingleLine().Tooltip(location)
-		if ui.Button(c, a.T("choose_location")).FillWidth().Disabled(a.Busy || a.Dialog.Picking || strings.TrimSpace(a.Dialog.NewName) == "").Clicked() {
+		if settingsButton(c, a.T("choose_location")).FillWidth().Disabled(a.Busy || a.Dialog.Picking || strings.TrimSpace(a.Dialog.NewName) == "").Clicked() {
 			a.pickLibraryLocation()
 		}
 		ui.Row(c).Gap(8).Justify(ui.End).Margin(8, 0, 0, 0).Children(func() {
-			if ui.Button(c, a.T("cancel")).Disabled(a.Busy || a.Dialog.Picking).Clicked() {
+			if settingsButton(c, a.T("cancel")).Disabled(a.Busy || a.Dialog.Picking).Clicked() {
 				a.NewLibraryOpen = false
 			}
 			ready := !a.Busy && !a.Dialog.Picking && strings.TrimSpace(a.Dialog.NewName) != "" && a.Dialog.NewPath != ""
@@ -166,19 +168,19 @@ func (a *App) exportDialog(c *ui.Context) {
 		}
 		ui.Text(c, a.T("export_format")).Bold().Margin(4, 0, 0, 0)
 		ui.RadioGroup(c, func() {
-			ui.Radio(c, &a.Dialog.Format, model.ExportOriginal, a.T("export_original"))
-			ui.Radio(c, &a.Dialog.Format, model.ExportJPEG, a.T("export_jpeg"))
-			ui.Radio(c, &a.Dialog.Format, model.ExportPNG, a.T("export_png"))
+			animatedRadio(c, &a.Dialog.Format, model.ExportOriginal, a.T("export_original"))
+			animatedRadio(c, &a.Dialog.Format, model.ExportJPEG, a.T("export_jpeg"))
+			animatedRadio(c, &a.Dialog.Format, model.ExportPNG, a.T("export_png"))
 		}).Label(a.T("export_format")).Disabled(a.Dialog.Picking)
 		if a.Dialog.Format == model.ExportJPEG {
-			ui.Row(c).Margin(4, 0, 0, 0).Children(func() {
+			fadeMotion(ui.Row(c.Key("jpeg-quality-title")).Margin(4, 0, 0, 0)).Children(func() {
 				ui.Text(c, a.T("jpeg_quality")).Bold().Grow(1)
 				ui.Text(c, fmt.Sprintf("%.0f%%", a.Dialog.Quality*100)).TextColor(c.Theme().TextMuted)
 			})
-			ui.Slider(c.Key("jpeg-quality"), &a.Dialog.Quality, 0.01, 1).Label(a.T("jpeg_quality")).FillWidth().Disabled(a.Dialog.Picking)
+			fadeMotion(ui.Slider(c.Key("jpeg-quality"), &a.Dialog.Quality, 0.01, 1).Label(a.T("jpeg_quality")).FillWidth()).Disabled(a.Dialog.Picking)
 		}
 		ui.Row(c).Gap(8).Justify(ui.End).Margin(8, 0, 0, 0).Children(func() {
-			if ui.Button(c, a.T("cancel")).Disabled(a.Dialog.Picking).Clicked() {
+			if settingsButton(c, a.T("cancel")).Disabled(a.Dialog.Picking).Clicked() {
 				a.ExportOpen = false
 			}
 			if primaryButton(c, a.T("export"), a.Busy || a.Dialog.Picking || a.Selected.Len() == 0).Clicked() {
@@ -239,7 +241,7 @@ func (a *App) promptDialog(c *ui.Context) {
 		ui.Text(c, a.PromptTitle).FontSize(20).Bold().TextColor(titleColor(c.Theme()))
 		input := ui.TextInput(c.Key("prompt-value"), &a.PromptValue).Label(a.PromptTitle).AutoFocus().FillWidth()
 		ui.Row(c).Gap(8).Justify(ui.End).Margin(8, 0, 0, 0).Children(func() {
-			if ui.Button(c, a.T("cancel")).Clicked() {
+			if settingsButton(c, a.T("cancel")).Clicked() {
 				a.PromptOpen = false
 				a.PromptSubmit = nil
 			}
@@ -267,7 +269,7 @@ func (a *App) errorDialog(c *ui.Context) {
 		ui.Text(c, a.T("log_location")).Bold().Margin(4, 0, 0, 0)
 		ui.Text(c, logging.Directory()).FontSize(12).TextColor(c.Theme().TextMuted).Selectable()
 		ui.Row(c).Gap(8).Justify(ui.End).Margin(8, 0, 0, 0).Children(func() {
-			if ui.Button(c, a.T("copy_error")).Clicked() {
+			if settingsButton(c, a.T("copy_error")).Clicked() {
 				details := a.Error + "\n" + a.T("log_location") + ": " + logging.Directory()
 				c.WriteClipboardThen(details, func(err error) {
 					if err != nil {

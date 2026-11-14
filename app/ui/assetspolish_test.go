@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/Seaony/Momento/app/internal/model"
 	"github.com/egoist/mygo/ui"
@@ -115,13 +116,13 @@ func TestAssetPolishScreenshots(t *testing.T) {
 	if os.Getenv("MOMENTO_ASSET_POLISH_SCREENSHOTS") != "1" {
 		t.Skip("设置 MOMENTO_ASSET_POLISH_SCREENSHOTS=1 生成素材区截图")
 	}
-	dir := "/tmp/momento-polish/shots/assets"
+	dir := "/tmp/momento-polish/shots2/assets"
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
 	fixture := newScreenshotFixture(t)
 	for _, theme := range []string{"light", "dark"} {
-		for _, state := range []string{"masonry-hover", "grid-hover", "list-hover", "search-empty", "importing", "masonry-scroll"} {
+		for _, state := range []string{"masonry-hover", "grid-hover", "list-hover", "empty", "search-empty", "importing", "masonry-scroll"} {
 			t.Run(theme+"/"+state, func(t *testing.T) {
 				a := fixture.app(t, state, "zh-CN", theme)
 				if state == "masonry-scroll" {
@@ -136,7 +137,8 @@ func TestAssetPolishScreenshots(t *testing.T) {
 				if state == "masonry-scroll" {
 					tt.Scroll(650, 450, 0, 180)
 				}
-				if state != "search-empty" {
+				tt.Advance(time.Second)
+				if len(a.Visible) > 0 {
 					box, ok := tt.Find(a.Visible[0].Name)
 					if state != "masonry-scroll" && (!ok || box.Y < a.contentTopInset()) {
 						t.Fatalf("首行落在页头后：%+v", box)

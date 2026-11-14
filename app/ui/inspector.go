@@ -36,20 +36,31 @@ func (a *App) inspector(c *ui.Context) {
 		a.Inspector = inspectorState{LibraryID: a.Library.Manifest.LibraryID}
 	}
 	selected := a.SelectedAssets()
+	if len(selected) == 0 {
+		a.saveInspectorEdits()
+		a.Inspector.AssetID = ""
+		return
+	}
+	title := a.T("selected_assets", len(selected))
+	if len(selected) == 1 {
+		title = selected[0].Name
+	}
 	ui.Column(c).Grow(1).FillWidth().MinHeight(0).Children(func() {
-		if len(selected) == 0 {
-			a.saveInspectorEdits()
-			a.Inspector.AssetID = ""
-			a.inspectorScope(c)
-			return
+		if bar := c.TitleBar(); bar.Right > 0 {
+			ui.Box(c.Key("inspector-window-controls")).Height(max(bar.Bottom, bar.Height)).Shrink(0).FillWidth().DragWindow()
 		}
-		ui.Scroll(c.Key("inspector_content")).Grow(1).Padding(16).Gap(16).Children(func() {
+		ui.Row(c.Key("inspector-header")).Height(44).Shrink(0).FillWidth().Padding(8, 16).Gap(8).Children(func() {
+			ui.Text(c.Key("inspector-heading"), title).FontSize(13).Bold().TextColor(titleColor(c.Theme())).SingleLine().Grow(1).MinWidth(0).ContentTransition(ui.ContentTransition{Animation: &motionSpring})
+			if inspectorIconButton(c.Key("collapse-inspector"), a.T("close_inspector"), "collapse-inspector").Shrink(0).Clicked() {
+				a.CollapseInspector()
+			}
+		})
+		ui.Scroll(c.Key("inspector_content")).Grow(1).Padding(0, 16, 16, 16).Gap(16).Children(func() {
 			if len(selected) == 1 {
-				a.inspectorAsset(c, selected[0])
+				fadeMotion(ui.Column(c.Key("inspector-asset-" + selected[0].ID))).FillWidth().Gap(16).Children(func() { a.inspectorAsset(c, selected[0]) })
 			} else {
 				a.saveInspectorEdits()
 				a.Inspector.AssetID = ""
-				ui.Text(c, a.T("selected_assets", len(selected))).FontSize(18).Bold().TextColor(titleColor(c.Theme()))
 			}
 			a.inspectorTags(c, selected)
 			a.inspectorFolders(c, selected)
@@ -259,7 +270,7 @@ func (a *App) inspectorMemberships(c *ui.Context, selected []model.Asset, items 
 							if count > 0 && !all {
 								label += fmt.Sprintf(" (%d/%d)", count, len(selected))
 							}
-							if ui.Checkbox(c.Key(item.ID), &all, label).Disabled(a.Busy).Changed() {
+							if settingsCheckbox(c.Key(item.ID), &all, label).Disabled(a.Busy).Changed() {
 								set(item.ID, all)
 							}
 						}
@@ -267,7 +278,7 @@ func (a *App) inspectorMemberships(c *ui.Context, selected []model.Asset, items 
 							ui.Text(c, a.T("no_"+plural)).FontSize(12).TextColor(c.Theme().TextMuted)
 						}
 					})
-					if ui.Button(c, a.T("create_"+kind)).Disabled(a.Busy).Clicked() {
+					if secondaryButton(c, a.T("create_"+kind)).Disabled(a.Busy).Clicked() {
 						*open = false
 						lib := a.Library
 						a.Ask(a.T("create_"+kind), *search, func(name string) {
@@ -297,7 +308,7 @@ func (a *App) inspectorMemberships(c *ui.Context, selected []model.Asset, items 
 				continue
 			}
 			found = true
-			ui.Row(c.Key("member_" + item.ID)).Gap(8).Children(func() {
+			layoutMotion(ui.Row(c.Key("member_" + item.ID))).Gap(8).Children(func() {
 				ui.Text(c, item.Label).FontSize(12).Grow(1).MinWidth(0)
 				if len(selected) > 1 {
 					ui.Textf(c, "%d/%d", count, len(selected)).FontSize(12).TextColor(c.Theme().TextMuted)
@@ -312,7 +323,7 @@ func (a *App) inspectorMemberships(c *ui.Context, selected []model.Asset, items 
 			if !folder && len(selected) > 1 {
 				key = "selected_no_tags"
 			}
-			ui.Text(c, a.T(key)).FontSize(12).TextColor(c.Theme().TextMuted)
+			fadeMotion(ui.Text(c.Key("membership-empty"), a.T(key))).FontSize(12).TextColor(c.Theme().TextMuted)
 		}
 	})
 }
@@ -357,20 +368,6 @@ func inspectorFolderPath(folders []model.Folder, id string) string {
 	}
 	slices.Reverse(parts)
 	return strings.Join(parts, " / ")
-}
-
-func (a *App) inspectorScope(c *ui.Context) {
-	name, count, size := a.scopeSummary()
-	ui.Column(c).FillWidth().Padding(16).Gap(16).Children(func() {
-		ui.Text(c, name).FontSize(18).Bold().TextColor(titleColor(c.Theme())).FillWidth()
-		ui.Divider(c)
-		ui.Text(c, a.T("scope_information")).FontSize(12).Bold().TextColor(c.Theme().TextMuted)
-		a.inspectorDetail(c, "scope_asset_count", sidebarCount(count))
-		a.inspectorDetail(c, "scope_storage", fileSize(size))
-		if !a.TagPage && len(a.Visible) != count {
-			ui.Text(c, a.T("scope_filtered_count", toolbarNumber(len(a.Visible)))).FontSize(12).TextColor(c.Theme().TextMuted)
-		}
-	})
 }
 
 func (a *App) inspectorDraft() (inspectorEdit, bool) {
@@ -473,21 +470,16 @@ func (a *App) saveInspectorDetails() { a.saveInspectorEdits() }
 
 func inspectorIconButton(c *ui.Context, label, icon string) ui.Element {
 	button := ui.ButtonBase(c).Label(label).Tooltip(label).Size(28, 28).Padding(0).Radius(8).Cursor(ui.CursorPointer)
+	background, text := ui.Transparent, c.Theme().TextMuted
 	if button.Pressed() {
-		button.Background(warmOverlay(c.Theme(), .11))
+		background = warmOverlay(c.Theme(), .11)
 	} else if button.Hovered() {
-		button.Background(warmOverlay(c.Theme(), .06))
+		background = warmOverlay(c.Theme(), .06)
 	}
-	button.TextColor(c.Theme().TextMuted)
 	if button.Hovered() {
-		button.TextColor(c.Theme().Text)
+		text = c.Theme().Text
 	}
-	button.Children(func() {
-		if momentoSymbols[icon] != nil {
-			appSymbol(c, icon).Size(14, 14)
-		} else {
-			appIcon(c, icon).Size(20, 20)
-		}
-	})
+	animateColors(button, background, text)
+	button.Children(func() { appIcon(c, icon).Size(16, 16) })
 	return button
 }

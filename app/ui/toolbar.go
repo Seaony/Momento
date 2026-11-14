@@ -2,7 +2,6 @@ package ui
 
 import (
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/Seaony/Momento/app/internal/model"
@@ -37,71 +36,38 @@ func (a *App) FocusSearch() {
 func (a *App) toolbar(c *ui.Context) {
 	t := c.Theme()
 	bar := c.TitleBar()
-	left, right := float32(12), float32(12)
-	if !a.SidebarVisible {
-		left += bar.Left
-	}
-	if !a.InspectorVisible {
-		right += bar.Right
-	}
+	left := 12 + max(float32(0), bar.Left-a.SidebarShownWidth())
+	right := 12 + max(float32(0), bar.Right-a.InspectorShownWidth())
 	width := a.toolbarWidth(c) - left - right
-	compact := width < 720
 	hint := displayShortcut(a.Shortcut("search"))
 	if !a.Preview.Open && a.ActionShortcut(c, "search") {
 		a.FocusSearch()
 	}
-
 	row := ui.Row(c.Key("toolbar")).Height(MainToolbarHeight).Shrink(0).FillWidth().Padding(12, right, 12, left).Gap(4).DragWindow().
 		Material(toolbarMaterial(t)).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Role(ui.RoleToolbar).FocusGroup(ui.Horizontal).Label(a.T("browse_tools"))
 	if bounds := row.LayoutBounds(); bounds.W > 0 {
 		width = bounds.W - left - right
-		compact = width < 720
 	}
 	row.Children(func() {
-		if !a.SidebarVisible && toolbarIconButton(c.Key("toggle-sidebar"), a.T("toggle_sidebar"), "sidebar").Clicked() {
-			a.SidebarVisible = true
-		}
-		ui.Row(c.Key("history")).Gap(0).Shrink(0).Children(func() {
-			if toolbarIconButton(c.Key("history-back"), a.T("navigate_back"), "chevron-left").Width(26).Disabled(!a.CanNavigateBack()).Clicked() {
-				a.NavigateBack()
+		if !a.SidebarVisible {
+			button := fadeMotion(toolbarIconButton(c.Key("toggle-sidebar"), a.T("toggle_sidebar"), "sidebar"))
+			if button.Clicked() {
+				a.SidebarVisible = true
 			}
-			if toolbarIconButton(c.Key("history-forward"), a.T("navigate_forward"), "chevron-right").Width(26).Disabled(!a.CanNavigateForward()).Clicked() {
-				a.NavigateForward()
-			}
-		})
-		titleWidth := float32(160)
-		if compact {
-			titleWidth = 76
 		}
-		name := a.scopeName()
-		count := len(a.Visible)
-		if a.TagPage {
-			count = len(a.Snapshot.Tags)
-		}
-		location := ui.Row(c.Key("location")).Width(titleWidth).MinWidth(0).Gap(8).Padding(0, 4)
-		if !compact {
-			location.Grow(1)
-		}
-		location.Children(func() {
-			ui.Text(c.Key("location-title"), name).FontSize(22).Bold().TextColor(titleColor(t)).SingleLine().Shrink(1).MinWidth(0).Tooltip(name)
-			label := a.T("result_count", toolbarNumber(count))
-			counter := ui.Text(c.Key("location-count"), toolbarNumber(count)).FontSize(12).TextColor(t.TextMuted).SingleLine().Shrink(0)
-			if strings.TrimSpace(a.Query.Search) != "" {
-				counter.Label(label).Tooltip(label).Role(ui.RoleStatus)
-			}
-		})
-		if width < 540 {
+		if width < 500 {
 			search := toolbarIconButton(c.Key("compact-search"), a.T("search_assets"), "search")
 			if search.Clicked() {
 				a.Toolbar.SearchOpen = !a.Toolbar.SearchOpen
 				a.Search.Focus()
 			}
-			frostedPopover(c.Key("search-popover"), search, &a.Toolbar.SearchOpen, func() { a.toolbarSearch(c, true, hint) }).Width(320)
+			frostedPopover(c.Key("search-popover"), search, &a.Toolbar.SearchOpen, func() { a.toolbarSearch(c, hint) }).Width(360)
 		} else {
 			a.Toolbar.SearchOpen = false
-			a.toolbarSearch(c, !compact, hint)
+			a.toolbarSearch(c, hint)
 		}
-		if width >= 920 {
+		ui.Spacer(c)
+		if width >= 800 {
 			a.Toolbar.ThumbnailOpen = false
 			a.thumbnailSizeSlider(c.Key("inline-thumbnail-size"))
 		} else {
@@ -122,10 +88,7 @@ func (a *App) toolbar(c *ui.Context) {
 				})
 			}).Width(160)
 		}
-		filter := toolbarIconButton(c.Key("filter"), a.T("filter"), "filter")
-		if len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions) > 0 {
-			filter.Background(t.Selection)
-		}
+		filter := toolbarIconButton(c.Key("filter"), a.T("filter"), "filter", len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions) > 0)
 		if filter.Clicked() {
 			a.Toolbar.FilterOpen = !a.Toolbar.FilterOpen
 			a.Toolbar.SortOpen = false
@@ -145,7 +108,7 @@ func (a *App) toolbar(c *ui.Context) {
 			a.Toolbar.ViewOpen = false
 		}
 		frostedPopover(c.Key("sorting"), sort, &a.Toolbar.SortOpen, func() { a.sortPanel(c) }).Width(220)
-		if compact {
+		if width < 360 {
 			view := toolbarIconButton(c.Key("view-menu"), a.T("view_mode"), []string{"masonry", "grid", "list"}[a.ViewMode])
 			if view.Clicked() {
 				a.Toolbar.ViewOpen = !a.Toolbar.ViewOpen
@@ -158,21 +121,25 @@ func (a *App) toolbar(c *ui.Context) {
 			a.Toolbar.ViewOpen = false
 			a.viewSwitcher(c)
 		}
-		if toolbarIconButton(c.Key("preview"), a.T("preview"), "slideshow").Disabled(len(a.Visible) == 0 || a.TagPage).Clicked() {
-			id := a.Visible[0].ID
-			if selected := a.SelectedAssets(); len(selected) > 0 {
-				id = selected[0].ID
+		if version := AvailableUpdateVersion(); version != "" {
+			update := toolbarIconButton(c.Key("available-update"), a.T("update"), "import", true).Tooltip(a.T("update_to_version", version))
+			if update.Clicked() {
+				ShowAvailableUpdate()
 			}
-			a.ShowPreview(id, false)
 		}
-		button := primaryButtonState(c, toolbarButton(c.Key("import"), a.T("import")).Background(t.Accent).TextColor(t.AccentText), a.Busy)
-		if button.Pressed() {
-			button.Background(t.AccentPressed)
+		button := ui.ButtonBase(c.Key("import")).Label(a.T("import")).Tooltip(a.T("import")).Size(32, 34).Shrink(0).Padding(0).Radius(8).Cursor(ui.CursorPointer).Disabled(a.Busy).DimDisabled(false)
+		background, text := t.Accent, t.AccentText
+		if a.Busy {
+			background, text = t.Surface, t.TextMuted
+			button.Border(1, t.Border)
+		} else if button.Pressed() {
+			background = t.AccentPressed
 		} else if button.Hovered() {
-			button.Background(t.AccentHover)
+			background = t.AccentHover
 		}
+		animateColors(button, background, text)
 		button.Children(func() {
-			appIcon(c, "import").Size(20, 20)
+			appIcon(c, "import")
 			if width >= 660 {
 				ui.Text(c, a.T("import")).SingleLine().Bold()
 			}
@@ -188,48 +155,36 @@ func (a *App) toolbar(c *ui.Context) {
 				a.ChooseImport(true)
 			}
 		})
-		if version := AvailableUpdateVersion(); version != "" {
-			update := toolbarIconButton(c.Key("available-update"), a.T("update"), "import").Tooltip(a.T("update_to_version", version)).Background(t.Selection)
-			if update.Clicked() {
-				ShowAvailableUpdate()
-			}
-		}
-		if toolbarIconButton(c.Key("toggle-inspector"), a.T("toggle_inspector"), "inspector").Clicked() {
-			a.InspectorVisible = !a.InspectorVisible
-		}
 	})
 }
 
-func toolbarButton(c *ui.Context, label string) ui.Element {
+func toolbarIconButton(c *ui.Context, label, name string, selected ...bool) ui.Element {
 	t := c.Theme()
 	button := ui.ButtonBase(c).Label(label).Tooltip(label).Size(32, 34).Shrink(0).Padding(0).Radius(8).Cursor(ui.CursorPointer)
+	background, text := ui.Transparent, t.TextMuted
+	if len(selected) > 0 && selected[0] {
+		background = t.Selection
+	}
 	if button.Pressed() {
-		button.Background(warmOverlay(t, .11))
+		background, text = warmOverlay(t, .11), t.Text
 	} else if button.Hovered() {
-		button.Background(warmOverlay(t, .08))
+		background, text = warmOverlay(t, .08), t.Text
 	}
-	return button
-}
-
-func toolbarIconButton(c *ui.Context, label, name string) ui.Element {
-	button := toolbarButton(c, label).TextColor(c.Theme().TextMuted)
-	if button.Hovered() {
-		button.TextColor(c.Theme().Text)
-	}
+	animateColors(button, background, text)
 	return button.Children(func() {
 		if momentoSymbols[name] != nil {
-			appSymbol(c, name).Size(18, 18)
+			appSymbol(c, name)
 		} else {
-			appIcon(c, name).Size(20, 20)
+			appIcon(c, name)
 		}
 	})
 }
 
-func (a *App) toolbarSearch(c *ui.Context, full bool, hint string) {
+func (a *App) toolbarSearch(c *ui.Context, hint string) {
 	t := c.Theme()
-	field := ui.Row(c.Key("asset-search-field")).Height(34).Grow(1).MinWidth(166).MaxWidth(300).Gap(6).Padding(0, 8).Radius(8).Background(t.Surface.Alpha(.65)).Border(1, t.Border)
+	field := ui.Row(c.Key("asset-search-field")).Height(34).Grow(1).MinWidth(220).MaxWidth(360).Gap(6).Padding(0, 8).Radius(8).Border(1, t.Border)
 	field.Children(func() {
-		appIcon(c, "search").Size(20, 20).Shrink(0)
+		appIcon(c, "search").TextColor(t.TextMuted).Shrink(0)
 		input := ui.TextInputBase(c.Key("asset-search"), &a.Query.Search).Bind(&a.Search).Search().Placeholder(a.T("search_assets")).Label(a.T("search_assets")).Tooltip(a.T("search_assets")).Grow(1).MinWidth(0).FillHeight().FocusRing(false)
 		if input.Changed() {
 			a.Refine()
@@ -240,32 +195,49 @@ func (a *App) toolbarSearch(c *ui.Context, full bool, hint string) {
 				a.Refine()
 				a.Search.Focus()
 			}
-		} else if full && hint != "" {
+		} else if hint != "" {
 			ui.Text(c, hint).FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(0).Padding(1, 5).Radius(4).Border(1, t.Border)
 		}
 	})
+	background, border := t.Surface.Alpha(.65), t.Border
 	if field.FocusWithin() {
-		field.Border(1, t.Focus)
+		border, background = t.Focus, t.Background
 	}
+	field.Border(1, field.AnimateColor("field-border", border, motionColor))
+	animateColors(field, background, t.Text)
+	layoutMotion(field)
 }
 
 func (a *App) viewSwitcher(c *ui.Context) {
 	t := c.Theme()
 	seg := ui.SegmentedBase(c.Key("view-mode"), &a.ViewMode, 3)
+	items := make([]ui.Element, 3)
 	seg.Track.Gap(2).Padding(2).Radius(8).Background(warmOverlay(t, .04)).Border(1, t.Border).Height(34).Shrink(0).Label(a.T("view_mode")).Children(func() {
 		for i, item := range []struct{ ID, Label string }{{"masonry", "view_masonry"}, {"grid", "view_grid"}, {"list", "view_list"}} {
 			part := seg.Segment(i).Size(28, 28).Padding(0).Center().Radius(4).Cursor(ui.CursorPointer).Label(a.T(item.Label)).Tooltip(a.T(item.Label))
 			styleSegment(c, part, a.ViewMode == i)
-			part.Children(func() { appIcon(c, item.ID).Size(20, 20) })
+			items[i] = part
+			part.Children(func() { appIcon(c, item.ID) })
 		}
 	})
+	slidingSegmentTrack(c, seg.Track, items, a.ViewMode, 2, 2)
 }
 
 func (a *App) filterPanel(c *ui.Context) {
 	ui.Column(c).Gap(12).Children(func() {
 		ui.Row(c).Children(func() {
 			ui.Text(c, a.T("filter")).Bold().Grow(1)
-			if ui.Button(c, a.T("clear_filters")).Disabled(len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions) == 0).Clicked() {
+			clear := ui.ButtonBase(c.Key("clear-filters")).Height(28).Padding(0, 8).Radius(8).Cursor(ui.CursorPointer).Label(a.T("clear_filters")).Disabled(len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions) == 0)
+			background, text := ui.Transparent, c.Theme().TextMuted
+			if clear.Hovered() {
+				background, text = warmOverlay(c.Theme(), .08), c.Theme().Text
+			}
+			if clear.Pressed() {
+				background = warmOverlay(c.Theme(), .11)
+			}
+			animateColors(clear, background, text)
+			clear.Children(func() { ui.Text(c, a.T("clear_filters")).SingleLine() })
+			if clear.Clicked() {
 				a.Query.ColorFamilies = nil
 				a.Query.TagIDs = nil
 				a.Query.Extensions = nil
@@ -286,10 +258,17 @@ func (a *App) filterPanel(c *ui.Context) {
 						}
 						button.Role(ui.RoleCheckBox).Checked(chosen)
 						if chosen {
-							button.Border(2, c.Theme().Accent).Background(c.Theme().Selection)
+							button.Border(2, c.Theme().Accent)
 						} else {
 							button.Border(1, ui.Transparent)
 						}
+						background := ui.Transparent
+						if chosen {
+							background = c.Theme().Selection
+						} else if button.Hovered() {
+							background = warmOverlay(c.Theme(), .08)
+						}
+						animateColors(button, background, c.Theme().Text)
 						button.Children(func() {
 							swatch := ui.Hex(family.Hex)
 							ui.Box(c).Size(22, 22).Radius(11).Background(swatch).Border(1, c.Theme().Border).Center().Children(func() {
@@ -317,7 +296,7 @@ func (a *App) filterPanel(c *ui.Context) {
 				}
 				matched++
 				chosen := slices.Contains(a.Query.TagIDs, tag.ID)
-				if ui.Checkbox(c.Key("filter-tag-"+tag.ID), &chosen, tag.Name).FillWidth().Changed() {
+				if settingsCheckbox(c.Key("filter-tag-"+tag.ID), &chosen, tag.Name).FillWidth().Changed() {
 					a.Query.TagIDs = toolbarToggle(a.Query.TagIDs, tag.ID, chosen)
 					a.Refine()
 				}
@@ -334,7 +313,7 @@ func (a *App) filterPanel(c *ui.Context) {
 			ui.Row(c).Wrap().Gap(6).Children(func() {
 				for _, ext := range types {
 					chosen := slices.Contains(a.Query.Extensions, ext)
-					if ui.Toggle(c.Key("extension-"+ext), &chosen, strings.ToUpper(ext)).Changed() {
+					if animatedToggle(c.Key("extension-"+ext), &chosen, strings.ToUpper(ext)).Changed() {
 						a.Query.Extensions = toolbarToggle(a.Query.Extensions, ext, chosen)
 						a.Refine()
 					}
@@ -349,10 +328,19 @@ func (a *App) sortPanel(c *ui.Context) {
 		ui.Text(c, a.T("sort")).Bold()
 		for _, item := range []struct{ ID, Label string }{{"added", "sort_added"}, {"name", "sort_name"}, {"size", "sort_size"}} {
 			chosen := a.Query.Sort == item.ID || a.Query.Sort == "" && item.ID == "added"
-			row := ui.Button(c.Key(item.ID), a.T(item.Label)).FillWidth().Justify(ui.Start)
+			row := ui.ButtonBase(c.Key(item.ID)).Height(32).FillWidth().Justify(ui.Start).Padding(0, 10).Radius(8).Cursor(ui.CursorPointer).Label(a.T(item.Label))
+			background, text := ui.Transparent, c.Theme().TextMuted
 			if chosen {
-				row.Background(c.Theme().Selection)
+				background, text = c.Theme().Selection, c.Theme().Text
 			}
+			if row.Hovered() {
+				background, text = warmOverlay(c.Theme(), .08), c.Theme().Text
+			}
+			if row.Pressed() {
+				background = warmOverlay(c.Theme(), .11)
+			}
+			animateColors(row, background, text)
+			row.Children(func() { ui.Text(c, a.T(item.Label)).SingleLine() })
 			if row.Clicked() {
 				a.changeSort(item.ID)
 				a.Toolbar.SortOpen = false
@@ -360,8 +348,8 @@ func (a *App) sortPanel(c *ui.Context) {
 		}
 		ui.Divider(c)
 		descending := a.Query.Descending
-		ui.Radio(c, &descending, false, a.T("sort_ascending"))
-		ui.Radio(c, &descending, true, a.T("sort_descending"))
+		animatedRadio(c, &descending, false, a.T("sort_ascending"))
+		animatedRadio(c, &descending, true, a.T("sort_descending"))
 		if descending != a.Query.Descending {
 			a.Query.Descending = descending
 			a.Refine()
@@ -412,25 +400,9 @@ func toolbarToggle(values []string, value string, on bool) []string {
 	return values
 }
 
-func toolbarNumber(n int) string {
-	text := strconv.Itoa(n)
-	for i := len(text) - 3; i > 0; i -= 3 {
-		text = text[:i] + "," + text[i:]
-	}
-	return text
-}
-
 func (a *App) toolbarWidth(c *ui.Context) float32 {
 	width, _ := c.Size()
-	if width >= 900 {
-		if a.SidebarVisible {
-			width -= a.SidebarWidth + 1
-		}
-		if a.InspectorVisible {
-			width -= 280
-		}
-	}
-	return width
+	return width - a.SidebarShownWidth() - a.InspectorShownWidth()
 }
 
 func (a *App) thumbnailSizeSlider(c *ui.Context) {

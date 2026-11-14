@@ -88,6 +88,7 @@ func (a *App) selectImportResult(ids []string) {
 			a.Selected.Add(id)
 		}
 	}
+	a.RevealInspector()
 }
 
 func (a *App) closeMainWindow(e *mygo.CloseEvent) {

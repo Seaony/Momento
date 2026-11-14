@@ -43,7 +43,7 @@ func sidebarMaterial(c *ui.Context, e ui.Element) {
 func frostedPopover(c *ui.Context, anchor ui.Element, open *bool, content func()) ui.Element {
 	panel := ui.Popover(c, anchor, open, content)
 	if panel.Valid() {
-		panel.Material(panelMaterial(c.Theme())).Radius(12)
+		popupMotion(panel).Material(panelMaterial(c.Theme())).Radius(12)
 	}
 	return panel
 }

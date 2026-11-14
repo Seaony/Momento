@@ -257,6 +257,7 @@ func (a *App) extensionImportPicker(c *ui.Context) {
 	ui.DialogBase(c.Key("extension-import-picker"), &open, func(backdrop, panel ui.Element) {
 		backdrop.Material(frostedSurface{tint: ui.Hex("#211A16").Alpha(.42), blur: 12})
 		panel.Width(420).MaxWidthPercent(92).MaxHeightPercent(92).Padding(24).Gap(12).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border).Radius(12).Label(a.T("extension_picker_title"))
+		dialogMotion(backdrop, panel)
 		dialogHeading(c, "import", a.T("extension_picker_title"))
 		ui.Text(c, a.T("folders")).Bold()
 		choices := a.importFolderChoices()
@@ -267,7 +268,7 @@ func (a *App) extensionImportPicker(c *ui.Context) {
 				break
 			}
 		}
-		ui.Button(c.Key("picker-folder"), label).FillWidth().Label(a.T("folders")).Menu(func(m *ui.Menu) {
+		settingsButton(c.Key("picker-folder"), label).FillWidth().Label(a.T("folders")).Menu(func(m *ui.Menu) {
 			for _, choice := range choices {
 				if m.Item(choice.Label).Radio(choice.ID == a.Import.PickerFolder).Chosen() {
 					a.Import.PickerFolder = choice.ID
@@ -278,13 +279,13 @@ func (a *App) extensionImportPicker(c *ui.Context) {
 		ui.Scroll(c).MaxHeight(240).FillWidth().Gap(8).Children(func() {
 			for _, tag := range a.Snapshot.Tags {
 				selected := a.Import.PickerTags[tag.ID]
-				if ui.Checkbox(c.Key(tag.ID), &selected, tag.Name).Changed() {
+				if settingsCheckbox(c.Key(tag.ID), &selected, tag.Name).Changed() {
 					a.Import.PickerTags[tag.ID] = selected
 				}
 			}
 		})
 		ui.Row(c).Justify(ui.End).Gap(8).Children(func() {
-			if ui.Button(c, a.T("cancel")).Clicked() {
+			if settingsButton(c, a.T("cancel")).Clicked() {
 				open = false
 			}
 			if primaryButton(c, a.T("import"), false).Clicked() {

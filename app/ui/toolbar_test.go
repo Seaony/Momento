@@ -67,38 +67,13 @@ func TestToolbarSearchAndViewSelection(t *testing.T) {
 	a.SidebarVisible = false
 	tt.Frame()
 	toolbarClick(t, tt, a.T("toggle_sidebar"))
-	toolbarClick(t, tt, a.T("toggle_inspector"))
-	if !a.SidebarVisible || a.InspectorVisible {
+	if !a.SidebarVisible {
 		t.Fatal("折叠按钮未切换状态")
 	}
 }
 
-func TestToolbarResultCountOnlyDuringSearch(t *testing.T) {
-	for _, language := range []string{"en", "zh-CN"} {
-		t.Run(language, func(t *testing.T) {
-			a := toolbarTestApp()
-			a.Texts.Language = language
-			tt := toolbarTester(a)
-			if _, exists := tt.Find(a.T("result_count", "3")); exists {
-				t.Fatal("没有搜索时不应显示重复数量")
-			}
-			toolbarClick(t, tt, a.T("search_assets"))
-			tt.Type("alpine")
-			if _, exists := tt.AccessByRole(ui.RoleStatus, a.T("result_count", "1")); !exists {
-				t.Fatal("搜索时没有保留完整本地化结果数")
-			}
-			a.Query.Search = ""
-			a.Refine()
-			tt.Frame()
-			if _, exists := tt.Find(a.T("result_count", "3")); exists {
-				t.Fatal("清空搜索后数量没有消失")
-			}
-		})
-	}
-}
-
 func TestToolbarIconTooltips(t *testing.T) {
-	keys := []string{"toggle_sidebar", "filter", "sort", "view_masonry", "view_grid", "view_list", "import", "toggle_inspector"}
+	keys := []string{"toggle_sidebar", "filter", "sort", "view_masonry", "view_grid", "view_list", "import"}
 	for _, language := range []string{"en", "zh-CN"} {
 		for _, key := range keys {
 			t.Run(language+"/"+key, func(t *testing.T) {
@@ -205,9 +180,6 @@ func TestToolbarActualTypesAndToggle(t *testing.T) {
 	if got := toolbarToggle(values, "red", false); len(got) != 0 {
 		t.Fatalf("移除筛选：%v", got)
 	}
-	if got := toolbarNumber(12000); got != "12,000" {
-		t.Fatal(got)
-	}
 }
 
 func TestToolbarUpdateAppearsOnlyForKnownVersion(t *testing.T) {
@@ -238,6 +210,7 @@ func TestNarrowToolbarKeepsThumbnailPopover(t *testing.T) {
 			ui.Box(c).Width(280)
 		})
 	}, 1100, 640)
+	tt.Frame()
 	button, ok := tt.AccessByRole(ui.RoleButton, a.T("thumbnail_size"))
 	if !ok || button.Disabled {
 		t.Fatal("默认1100窗口没有缩略图入口")

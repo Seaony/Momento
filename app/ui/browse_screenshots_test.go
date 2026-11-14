@@ -110,22 +110,26 @@ func TestBrowseScreenshots(t *testing.T) {
 				if state == "details-bottom" {
 					tt.Scroll(float32(width-100), 540, 0, 500)
 				}
-				name, count, size := a.scopeSummary()
+				count, size := 0, int64(0)
+				for _, asset := range a.Visible {
+					count++
+					size += asset.Size
+				}
 				if state == "all" && (count != 12000 || !tt.HasText("12,000")) {
 					t.Fatal("全部素材合计不符")
 				}
 				if state == "folder" && (count != 400 || !tt.HasText("400")) {
 					t.Fatal("文件夹素材合计不符")
 				}
-				if state == "trash-empty" && (count != 0 || size != 0 || !tt.HasText("0 B")) {
-					t.Fatal("空回收站合计不符")
+				if state == "trash-empty" && count != 0 {
+					t.Fatal("空回收站仍有素材")
 				}
-				if state == "search-empty" && (count != 12000 || len(a.Visible) != 0 || !tt.HasText(a.T("scope_filtered_count", "0"))) {
-					t.Fatal("搜索结果与范围合计没有分开")
+				if state == "search-empty" && len(a.Visible) != 0 {
+					t.Fatal("空搜索仍显示素材")
 				}
 				file := fmt.Sprintf("%s-%s-%s.png", state, language, theme)
 				writeScreenshot(t, filepath.Join(dir, file), tt)
-				records = append(records, record{file, state, language, theme, name, count, len(a.Visible), size})
+				records = append(records, record{file, state, language, theme, a.Query.Scope, count, len(a.Visible), size})
 			}
 		}
 	}
