@@ -53,8 +53,8 @@ func TestInspectorFollowsSelectionAndReopensSameAsset(t *testing.T) {
 		t.Fatal("单选后没有展开检查器")
 	}
 	tt := ui.NewTester(a.inspector, 280, 640)
-	if !tt.HasText("Landscape.jpg") {
-		t.Fatal("检查器顶部没有显示素材名")
+	if field, ok := tt.AccessByRole(ui.RoleTextField, a.T("title")); !ok || field.Value != "Landscape.jpg" {
+		t.Fatal("检查器没有显示可编辑的素材名")
 	}
 	if err := tt.Click(a.T("close_inspector")); err != nil {
 		t.Fatal(err)
@@ -91,9 +91,9 @@ func TestInspectorLocalizedHeaderKeepsCollapseVisible(t *testing.T) {
 			if !ok || button.X < 0 || button.X+button.W > 280 || button.Y < 0 || button.Y+button.H > 44 {
 				t.Fatalf("长素材名挤出了收起按钮：%+v", button)
 			}
-			heading, ok := tt.Find(a.Visible[0].Name)
-			if !ok || heading.X+heading.W > button.X {
-				t.Fatalf("单行标题与收起按钮重叠：%+v，%+v", heading, button)
+			filename, ok := tt.AccessByRole(ui.RoleTextField, a.T("title"))
+			if !ok || filename.Value != a.Visible[0].Name || filename.Bounds.X < 0 || filename.Bounds.X+filename.Bounds.W > 280 || filename.Bounds.Y < button.Y+button.H {
+				t.Fatalf("预览下的文件名没有完整保留，或与收起按钮重叠：%+v，%+v", filename, button)
 			}
 		})
 	}
@@ -218,5 +218,57 @@ func TestInspectorScrollReachesMemberships(t *testing.T) {
 	button, ok := tt.Find(a.T("add_folders"))
 	if !ok || button.Y < MainToolbarHeight || button.Y+button.H > 640 {
 		t.Fatalf("滚到底后文件夹操作仍在窗口之外：%+v", button)
+	}
+}
+
+func TestInspectorLocalizedStructureAndMetadataWrapping(t *testing.T) {
+	for _, language := range []string{"en", "ja"} {
+		t.Run(language, func(t *testing.T) {
+			asset := model.Asset{ID: "a", Name: "Landscape reference.jpg", Extension: "jpg", Width: 2400, Height: 1600, Size: 1258291,
+				Note: "Two lines\nReference notes", SourceURL: "https://example.com/reference", TagIDs: []string{"tag"}, FolderIDs: []string{"folder"},
+				Colors: []model.Color{{Hex: "#A1B2C3"}}}
+			a := inspectorTestApp(asset)
+			a.Texts.Language, a.Preferences.Language = language, language
+			a.Snapshot.Tags = []model.Tag{{ID: "tag", Name: "Landscape references"}}
+			a.Snapshot.Folders = []model.Folder{{ID: "folder", Name: "Design references"}}
+			tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.inspector(c) }, 280, 1000)
+			tt.SetLocale(a.Texts.Locale())
+			tt.Frame()
+			preview, _ := tt.Find(a.T("image_preview"))
+			filename, _ := tt.AccessByRole(ui.RoleTextField, a.T("title"))
+			summary, _ := tt.Find("2400 × 1600 · JPG")
+			swatch, _ := tt.Find(a.T("copy_color", "#A1B2C3"))
+			info, _ := tt.Find(a.T("file_size"))
+			tag, _ := tt.Find("Landscape references")
+			folder, _ := tt.Find("Design references")
+			note, _ := tt.AccessByRole(ui.RoleTextField, a.T("asset_note"))
+			source, _ := tt.AccessByRole(ui.RoleTextField, a.T("source_url"))
+			for i, bounds := range []ui.Rect{preview, filename.Bounds, summary, swatch, info, tag, folder, note.Bounds, source.Bounds} {
+				if bounds.W <= 0 || bounds.H <= 0 || bounds.X < 0 || bounds.X+bounds.W > 280 {
+					t.Fatalf("第%d个检查器区域没有显示或横向溢出：%+v", i, bounds)
+				}
+			}
+			if preview.Y >= filename.Bounds.Y || filename.Bounds.Y >= summary.Y || summary.Y >= swatch.Y || swatch.Y >= info.Y || info.Y >= tag.Y || tag.Y >= folder.Y || folder.Y >= note.Bounds.Y || note.Bounds.Y >= source.Bounds.Y {
+				t.Fatal("检查器没有按预览、文件名、尺寸格式、色板、信息、标签、文件夹、备注、来源排列")
+			}
+			if filename.Value != asset.Name || note.Value != asset.Note || source.Value != asset.SourceURL {
+				t.Fatal("重排丢失了文件名、备注或来源的完整值")
+			}
+			asset.EXIF = map[string]string{"exposureProgram": "Aperture Priority"}
+			a.Visible = []model.Asset{asset}
+			var needHeight float32
+			metadata := ui.NewTester(func(c *ui.Context) {
+				a.applyTheme(c)
+				a.inspector(c)
+				_, needHeight = c.MeasureText(space48*2, ui.Span{Text: a.T("exif_exposureProgram"), Font: c.Theme().Font, Size: fontSecondary, Lang: language})
+				needHeight *= float32(fontSecondary) / max(c.Theme().FontSize, fontSecondary)
+			}, 280, 1000)
+			metadata.SetLocale(a.Texts.Locale())
+			metadata.Frame()
+			label, ok := metadata.Find(a.T("exif_exposureProgram"))
+			if !ok || label.H+1 < needHeight {
+				t.Fatalf("长元数据标签没有按可用宽度换行：%+v，需要高度%f", label, needHeight)
+			}
+		})
 	}
 }
