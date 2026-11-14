@@ -1,0 +1,84 @@
+Kubai Icons License
+
+Copyright (c) 2026 Kubai087
+
+This repository (the "Skill") is a method for drawing dynamic icons: the rules in
+PROMPT.md and SKILL.md, the engine in src/engine.js, the example icons in
+src/icons.js, the gallery in index.html and src/app.js, the self-check in
+scripts/, the early versions in history/, and the documentation and images.
+
+The Skill is source-available, not open source. You may use it as set out below.
+All other rights are reserved.
+
+1. Using the Skill
+
+   You may install and run the Skill, including for commercial work, to design
+   icons for yourself or for others.
+
+2. Your icons belong to you
+
+   Icons you create with the Skill, including the icon definitions you write,
+   the SVG and images you render, and their animations ("Your Output"), belong
+   to you. Kubai087 claims no rights in Your Output, and you do not need to
+   credit the Skill.
+
+   The example icons that ship in src/icons.js are part of the Skill, not Your
+   Output. You may use them in your own products and projects, animated or
+   exported as static files, without credit, but you may not distribute them
+   on their own as an icon set, pack or library.
+
+3. Shipping icons with the engine
+
+   Your Output needs the engine to run. You may copy src/engine.js,
+   src/icons.js, src/app.js, index.html and scripts/ into a project that holds
+   your icon set, change them as that project needs, and distribute that
+   project on its own or inside your products, commercial or not, as long as:
+
+   (a) the copyright notice at the top of each copied file stays in place; and
+   (b) the project does not include PROMPT.md, SKILL.md, or text copied,
+       adapted or translated from them, and is not offered as a skill, prompt
+       or template for generating icons.
+
+4. Private changes
+
+   You may change any part of the Skill for your own use or for use inside your
+   organization. Changed versions may be shared outside your organization only
+   as section 3 allows.
+
+5. Sharing the Skill
+
+   You may share exact, unmodified copies of the Skill free of charge, with this
+   license and every notice kept intact. Forks on GitHub made to propose
+   changes back to this repository are allowed.
+
+6. What you may not do
+
+   - Distribute a modified version of the Skill, or any work that copies,
+     adapts or translates PROMPT.md or SKILL.md, except as sections 3 and 5
+     allow.
+   - Present the Skill or any part of it under another name or as your own
+     work, or remove or change its copyright and license notices.
+   - Sell, rent or sublicense the Skill itself, or charge for access to it.
+     Charging for icons you design with it is fine.
+   - Use the Kubai or Lumno name or logo to suggest that your product or icon
+     set is made or endorsed by Kubai087.
+
+7. Contributions
+
+   If you submit a contribution to this repository, you grant Kubai087 a
+   perpetual, worldwide, royalty-free license to use, change and distribute it
+   under any terms, including this license.
+
+8. Termination
+
+   If you break these terms, your rights under this license end. If it is the
+   first time and you stop within 30 days of being told, they come back.
+
+9. No warranty
+
+   THE SKILL IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+   ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+   WITH THE SKILL OR THE USE OR OTHER DEALINGS IN THE SKILL.
