@@ -175,7 +175,7 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 			if a.Preferences.PreviewPixelated && p.pixelBitmap != nil {
 				bitmap = p.pixelBitmap
 			}
-			photo := previewPhoto(c.Key(struct{ ID string }{asset.ID}), bitmap, radiusSmall, a.Preferences.PreviewChecker, ui.Contain).
+			photo := previewPhoto(c.Key(struct{ ID string }{asset.ID}), bitmap, previewPhotoRadius, a.Preferences.PreviewChecker, ui.Contain).
 				Absolute().Label(asset.Name)
 			photoWidth, photoHeight := float32(bw)*p.Zoom, float32(bh)*p.Zoom
 			photo.Left((p.viewport.W-photoWidth)/2+p.Pan.X).Top((p.viewport.H-photoHeight)/2+p.Pan.Y).Size(photoWidth, photoHeight)
@@ -210,7 +210,7 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 		}
 	} else if p.errorText != "" {
 		viewport.Center().Children(func() {
-			ui.Column(c).MaxWidth(previewInfoMaxWidth).Padding(space16).Gap(space8).Children(func() {
+			ui.Column(c).MaxWidth(previewInfoWidth).Padding(space16).Gap(space8).Children(func() {
 				ui.Text(c, a.T("preview_failed")).FontSize(fontBody).FontWeight(600).TextColor(paletteFor(c.Theme()).Text)
 				ui.Text(c, p.errorText).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary)
 			})

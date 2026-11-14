@@ -107,7 +107,7 @@ func (a *App) appearanceSettings(c *ui.Context) {
 			}
 			zoom := settingsMenuButton(c.Key("ui-zoom"), a.T("ui_zoom"))
 			zoom.Children(func() {
-				ui.Text(c, label).Font(monoFont(c)).FontSize(fontNumber).SingleLine()
+				ui.Text(c, label).FontFeatures("tnum").FontSize(fontNumber).SingleLine()
 				symbol := appSymbol(c, "chevrons-up-down").Size(iconSmall, iconSmall).Shrink(0)
 				symbol.TextColor(symbol.AnimateColor("symbol-color", symbolColor(c.Theme(), zoom.Hovered()), motionColor))
 			}).Menu(func(menu *ui.Menu) {

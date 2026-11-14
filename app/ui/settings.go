@@ -192,7 +192,7 @@ func (a *App) settingsVersionText(c *ui.Context) ui.Element {
 		if label := strings.TrimSpace(before); label != "" {
 			ui.Text(c, label)
 		}
-		ui.Text(c, mygo.App.Version()).Font(monoFont(c)).FontSize(fontNumber)
+		ui.Text(c, mygo.App.Version()).FontFeatures("tnum").FontSize(fontNumber)
 		if label := strings.TrimSpace(after); label != "" {
 			ui.Text(c, label)
 		}
@@ -299,7 +299,7 @@ func (a *App) extensionSettings(c *ui.Context) {
 				ui.Row(c).Gap(space8).AlignItems(ui.Center).Role(ui.RoleStatus).Label(status).Children(func() {
 					ui.Text(c, message).FontSize(fontSecondary).SingleLine()
 					if a.ExtensionStatus.State == browser.Running {
-						ui.Text(c, a.ExtensionStatus.Address).Font(monoFont(c)).FontSize(fontNumber).SingleLine()
+						ui.Text(c, a.ExtensionStatus.Address).FontFeatures("tnum").FontSize(fontNumber).SingleLine()
 					}
 				})
 			})

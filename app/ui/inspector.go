@@ -120,7 +120,7 @@ func (a *App) inspectorAsset(c *ui.Context, asset model.Asset) {
 		if input.Submitted() || input.FocusLeft() {
 			a.saveInspectorTitle()
 		}
-		ui.Textf(c.Key("inspector-dimensions"), "%d × %d · %s", width, height, strings.ToUpper(asset.Extension)).Font(monoFont(c)).FontSize(fontNumber).TextColor(p.TextSecondary)
+		ui.Textf(c.Key("inspector-dimensions"), "%d × %d · %s", width, height, strings.ToUpper(asset.Extension)).FontFeatures("tnum").FontSize(fontNumber).TextColor(p.TextSecondary)
 	})
 	if len(asset.Colors) > 0 {
 		ui.Row(c).Gap(space4).Children(func() {
@@ -211,7 +211,7 @@ func (a *App) inspectorDetail(c *ui.Context, key, value string) {
 		text := ui.Text(c, value).FontSize(fontSecondary).TextColor(p.Text).Grow(1).MinWidth(0).TextAlign(ui.End).Selectable()
 		switch key {
 		case "file_size", "date_added", "exif_fileCreatedAt", "exif_fileModifiedAt", "exif_contentCreatedAt", "exif_resolution", "exif_exposureTime", "exif_focalLength", "exif_isoSpeedRatings", "exif_fNumber":
-			text.Font(monoFont(c)).FontSize(fontNumber)
+			text.FontFeatures("tnum").FontSize(fontNumber)
 		}
 	})
 }
@@ -342,7 +342,7 @@ func (a *App) inspectorMemberships(c *ui.Context, selected []model.Asset, items 
 			layoutMotion(ui.Row(c.Key("member_"+item.ID))).AlignSelf(ui.Start).MaxWidthPercent(100).Height(space32).Padding(0, space8).Radius(radiusPanel).Background(paletteFor(c.Theme()).Subtle).Gap(space8).Children(func() {
 				ui.Text(c, item.Label).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).Text).SingleLine().Tooltip(item.Label).Grow(1).MinWidth(0)
 				if len(selected) > 1 {
-					ui.Textf(c, "%d/%d", count, len(selected)).Font(monoFont(c)).FontSize(fontNumber).TextColor(paletteFor(c.Theme()).TextSecondary)
+					ui.Textf(c, "%d/%d", count, len(selected)).FontFeatures("tnum").FontSize(fontNumber).TextColor(paletteFor(c.Theme()).TextSecondary)
 				}
 				if inspectorRemoveButton(c, a.T("remove_"+kind, item.Name)).Disabled(a.Busy).Clicked() {
 					set(item.ID, false)

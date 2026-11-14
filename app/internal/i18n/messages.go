@@ -8,8 +8,6 @@ var messages = map[string][3]string{
 	"user_guide":                     {"使用说明", "User Guide", "使い方"},
 	"collapse_inspector":             {"收起检查器", "Collapse Inspector", "インスペクタを閉じる"},
 	"clear_search":                   {"清空搜索", "Clear Search", "検索をクリア"},
-	"organize":                       {"整理", "Organize", "整理"},
-	"smart_empty_action":             {"按规则自动归集", "Organize by rules", "ルールで自動整理"},
 	"library_more":                   {"更多操作", "More Actions", "その他の操作"},
 	"library_drag_reorder":           {"拖动排序", "Drag to Reorder", "ドラッグして並べ替え"},
 	"remove_recent_library":          {"从列表中移除", "Remove from List", "リストから削除"},

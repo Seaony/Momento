@@ -1,33 +1,11 @@
 package ui
 
 import (
-	"embed"
-	"fmt"
 	"runtime"
 	"strings"
-
-	"github.com/egoist/mygo/ui"
 )
 
-//go:embed fonts/*.ttf fonts/*-OFL.txt
-var bundledFonts embed.FS
-
-func init() {
-	for _, face := range []struct{ file, family string }{
-		{"Inter-Regular.ttf", "Inter"}, {"Inter-Medium.ttf", "Inter"},
-		{"Inter-SemiBold.ttf", "Inter"}, {"Inter-Bold.ttf", "Inter"},
-		{"GeistMono-Regular.ttf", "Geist Mono"},
-	} {
-		data, err := bundledFonts.ReadFile("fonts/" + face.file)
-		if err == nil {
-			err = ui.RegisterFont(data, face.family)
-		}
-		if err != nil {
-			panic(fmt.Errorf("载入内置字体 %s：%w", face.file, err))
-		}
-	}
-}
-
+// 中日文字形：系统界面字体没有汉字时按这里的顺序补。
 func cjkFont(locale string) string {
 	if strings.HasPrefix(locale, "ja") {
 		switch runtime.GOOS {
@@ -49,5 +27,5 @@ func cjkFont(locale string) string {
 	}
 }
 
-func uiFont(locale string) string   { return "Inter, " + cjkFont(locale) }
-func monoFont(c *ui.Context) string { return "Geist Mono, " + cjkFont(c.Locale()) }
+// 和旧版 macOS 一样用系统界面字体（macOS 上是 SF Pro），数字用 tnum 等宽数字，不另带字体。
+func uiFont(locale string) string { return "system-ui, " + cjkFont(locale) }

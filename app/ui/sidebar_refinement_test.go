@@ -26,7 +26,7 @@ func TestSidebarLibraryTriggerFitsSidebar(t *testing.T) {
 				}, int(width), 80)
 				tt.SetLocale(a.Texts.Locale())
 				trigger, ok := tt.Find(a.T("library_menu"))
-				if !ok || trigger.X+trigger.W > width || trigger.H != controlSmall {
+				if !ok || trigger.X+trigger.W > width || trigger.H != sidebarLibraryHeight {
 					t.Fatalf("切换器超出侧栏或高度不对：%+v，可用宽度%.0f", trigger, width)
 				}
 			})

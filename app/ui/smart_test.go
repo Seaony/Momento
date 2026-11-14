@@ -354,7 +354,7 @@ func TestSmartFoldersSwitchHidesEntriesAndKeepsData(t *testing.T) {
 		t.Fatal("关闭智能文件夹后完整侧栏仍有智能文件夹")
 	}
 	sidebar := ui.NewTester(a.sidebarSmartFolders, 236, 320)
-	if sidebar.HasText(a.T("smart_folders")) || sidebar.HasText("Landscape Rules") || sidebar.HasText(a.T("smart_empty_action")) {
+	if sidebar.HasText(a.T("new_smart_folder")) || sidebar.HasText("Landscape Rules") {
 		t.Fatal("关闭智能文件夹后侧栏仍显示分组")
 	}
 	quick := ui.NewTester(a.sidebarQuickAccess, 236, 320)
@@ -364,7 +364,7 @@ func TestSmartFoldersSwitchHidesEntriesAndKeepsData(t *testing.T) {
 	a.SetSmartFoldersEnabled(true)
 	sidebar.Frame()
 	quick.Frame()
-	if !sidebar.HasText(a.T("smart_folders")) || !sidebar.HasText("Landscape Rules") || !sidebar.HasText("Portrait Rules") || !quick.HasText("Landscape Rules") {
+	if !sidebar.HasText(a.T("new_smart_folder")) || !sidebar.HasText("Landscape Rules") || !sidebar.HasText("Portrait Rules") || !quick.HasText("Landscape Rules") {
 		t.Fatal("重新打开后智能文件夹和固定项没有回来")
 	}
 	if len(a.Snapshot.SmartFolders) != 2 || len(a.Snapshot.QuickAccess) != 3 {

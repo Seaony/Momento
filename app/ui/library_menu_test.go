@@ -49,7 +49,7 @@ func TestLibraryTriggerHidesImageCount(t *testing.T) {
 		}
 	}
 	trigger, ok := tt.Find(a.T("library_menu"))
-	if !ok || trigger.H != controlSmall {
+	if !ok || trigger.H != sidebarLibraryHeight {
 		t.Fatalf("切换器应为紧凑高度：%+v", trigger)
 	}
 }

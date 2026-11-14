@@ -26,7 +26,7 @@ func (a *App) sidebarLibrary(c *ui.Context) {
 	if a.Library != nil {
 		name = a.libraryName()
 	}
-	trigger := ui.ButtonBase(c.Key("library_switcher")).Height(controlSmall).MinWidth(0).AlignSelf(ui.Start).Padding(0, space8).Gap(space8).Radius(radiusControl).Cursor(ui.CursorPointer).Label(a.T("library_menu")).Expanded(a.Sidebar.LibraryOpen)
+	trigger := ui.ButtonBase(c.Key("library_switcher")).Height(sidebarLibraryHeight).MinWidth(0).AlignSelf(ui.Start).Padding(0, sidebarLibraryEnd, 0, sidebarLibraryInset).Gap(space8).Radius(sidebarRowRadius).Cursor(ui.CursorPointer).Label(a.T("library_menu")).Expanded(a.Sidebar.LibraryOpen)
 	background := ui.Transparent
 	if trigger.Pressed() {
 		background = p.Pressed
@@ -35,9 +35,14 @@ func (a *App) sidebarLibrary(c *ui.Context) {
 	}
 	animateColors(trigger, background, p.Text)
 	trigger.Children(func() {
-		ui.Image(c, appLogo).Size(space20, space20).Radius(radiusSmall).Shrink(0)
+		ui.Image(c, appLogo).Size(space20, space20).Radius(sidebarLogoRadius).Shrink(0)
 		ui.Text(c, name).FontSize(fontBody).FontWeight(600).SingleLine().MinWidth(0)
-		appSymbol(c, "chevrons-up-down").Size(iconSmall, iconSmall).TextColor(p.TextSecondary).Shrink(0)
+		caret := p.TextSecondary
+		if trigger.Hovered() || a.Sidebar.LibraryOpen {
+			caret = p.Text
+		}
+		mark := appSymbol(c, "chevrons-up-down").Size(iconSmall, iconSmall).Shrink(0)
+		mark.TextColor(mark.AnimateColor("caret", caret, motionColor))
 	})
 	if trigger.Clicked() {
 		a.Sidebar.LibraryOpen = !a.Sidebar.LibraryOpen

@@ -176,7 +176,7 @@ func (a *App) exportDialog(c *ui.Context) {
 		if a.Dialog.Format == model.ExportJPEG {
 			fadeMotion(ui.Row(c.Key("jpeg-quality-title")).Margin(space4, 0, 0, 0)).Children(func() {
 				ui.Text(c, a.T("jpeg_quality")).FontWeight(600).Grow(1)
-				ui.Text(c, fmt.Sprintf("%.0f%%", a.Dialog.Quality*100)).Font(monoFont(c)).FontSize(fontNumber).TextColor(paletteFor(c.Theme()).TextSecondary)
+				ui.Text(c, fmt.Sprintf("%.0f%%", a.Dialog.Quality*100)).FontFeatures("tnum").FontSize(fontNumber).TextColor(paletteFor(c.Theme()).TextSecondary)
 			})
 			fadeMotion(ui.Slider(c.Key("jpeg-quality"), &a.Dialog.Quality, 0.01, 1).Label(a.T("jpeg_quality")).FillWidth()).Disabled(a.Dialog.Picking)
 		}

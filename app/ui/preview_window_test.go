@@ -323,15 +323,15 @@ func TestPreviewHoldHintFitsEnglishAndJapanese(t *testing.T) {
 		tt := ui.NewTester(func(c *ui.Context) {
 			w.infoView(c, a)
 			textWidth, _ = c.MeasureText(0, ui.Span{Text: a.T("preview_hold_to_pin"), Size: fontSecondary})
-		}, previewInfoMinWidth, previewInfoHeight)
-		if available := float32(previewInfoMinWidth - 2*previewInfoSide); textWidth > available {
+		}, previewInfoWidth, previewInfoHeight)
+		if available := float32(previewInfoWidth - 2*previewInfoSide); textWidth > available {
 			t.Fatalf("%s固定提示宽%.1f，超过信息卡可用%.1f", language, textWidth, available)
 		}
 		if !tt.HasText(a.T("preview_hold_to_pin")) {
 			t.Fatal("缺少固定提示三语文案")
 		}
 		for _, element := range tt.AccessAll() {
-			if element.Bounds.W > 0 && element.Bounds.H > 0 && (element.Bounds.X < 0 || element.Bounds.Y < 0 || element.Bounds.X+element.Bounds.W > previewInfoMinWidth+.1 || element.Bounds.Y+element.Bounds.H > previewInfoHeight+.1) {
+			if element.Bounds.W > 0 && element.Bounds.H > 0 && (element.Bounds.X < 0 || element.Bounds.Y < 0 || element.Bounds.X+element.Bounds.W > previewInfoWidth+.1 || element.Bounds.Y+element.Bounds.H > previewInfoHeight+.1) {
 				t.Fatalf("元素超出窗口：%+v", element)
 			}
 		}

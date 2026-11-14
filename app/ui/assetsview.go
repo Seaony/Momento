@@ -266,7 +266,7 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 			}
 			ui.Column(c.Key("list-meta")).Grow(1).MinWidth(0).Gap(space4).Children(func() {
 				ui.Text(c, asset.Name).FontSize(fontBody).FontWeight(600).SingleLine()
-				ui.Text(c.Key("list-values"), fmt.Sprintf("%d × %d · %s", width, height, fileSize(asset.Size))).Font(monoFont(c)).FontSize(fontNumber).TextColor(p.TextSecondary).SingleLine()
+				ui.Text(c.Key("list-values"), fmt.Sprintf("%d × %d · %s", width, height, fileSize(asset.Size))).FontFeatures("tnum").FontSize(fontNumber).TextColor(p.TextSecondary).SingleLine()
 			})
 			ui.Text(c.Key("list-extension"), strings.ToUpper(asset.Extension)).FontSize(fontSecondary).TextColor(p.TextSecondary).Margin(0, space40, 0, 0)
 		} else {
@@ -292,7 +292,7 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 			alpha := card.AnimateTo("dimensions-opacity", visibility, motionColor)
 			if hovered || alpha > 0 {
 				ui.Text(c.Key("dimensions"), fmt.Sprintf("%d × %d", width, height)).Absolute().Bottom(space8).Right(space8).
-					Padding(space4, space8).Radius(radiusControl).Font(monoFont(c)).FontSize(fontNumber).Material(panelMaterial(c.Theme())).
+					Padding(space4, space8).Radius(radiusControl).FontFeatures("tnum").FontSize(fontNumber).Material(panelMaterial(c.Theme())).
 					TextColor(p.Text).Opacity(alpha).PassThrough()
 			}
 		}
@@ -421,7 +421,7 @@ func (a *App) importProgress(c *ui.Context) {
 		ui.Row(c).Children(func() {
 			ui.Text(c, a.T("import_stage_"+p.Stage)).FontSize(fontBody).FontWeight(600).TextColor(colors.Text)
 			ui.Spacer(c)
-			ui.Text(c, fmt.Sprintf("%d / %d", p.Processed, p.Total)).Font(monoFont(c)).FontSize(fontNumber).TextColor(colors.TextSecondary)
+			ui.Text(c, fmt.Sprintf("%d / %d", p.Processed, p.Total)).FontFeatures("tnum").FontSize(fontNumber).TextColor(colors.TextSecondary)
 		})
 		ui.Text(c, a.T("import_counts", p.Imported, p.Skipped)).FontSize(fontBody).TextColor(colors.TextSecondary)
 		ui.Text(c, filepath.Base(p.CurrentFile)).SingleLine().FontSize(fontSecondary).TextColor(colors.TextSecondary)

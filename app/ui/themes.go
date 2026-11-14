@@ -26,7 +26,7 @@ var lightPalette = designPalette{
 	BorderSubtle: ui.Hex("#F3E3D6"), Border: ui.Hex("#EAD6C6"),
 	Text: ui.Hex("#2B221D"), TextSecondary: ui.Hex("#6F5F55"), TextTertiary: ui.Hex("#7D6B60"),
 	SegmentSelected: ui.Hex("#FFFFFF"),
-	Field:           ui.Hex("#FAF3ED"), FieldHover: ui.Hex("#F7EEE6"),
+	Field:           ui.Hex("#F7EEE6"), FieldHover: ui.Hex("#F3E8DE"),
 	Accent: ui.Hex("#F47B45"), AccentHover: ui.Hex("#FA8B59"), AccentPressed: ui.Hex("#E8733D"),
 	OnAccent: ui.Hex("#2B221D"), Focus: ui.Hex("#D9622C"), Link: ui.Hex("#A74320"),
 	Danger: ui.Hex("#B91C1C"), Warning: ui.Hex("#8F4500"), Success: ui.Hex("#166534"),
@@ -40,7 +40,7 @@ var darkPalette = designPalette{
 	BorderSubtle: ui.Hex("#252321"), Border: ui.Hex("#322F2D"),
 	Text: ui.Hex("#F4F0ED"), TextSecondary: ui.Hex("#B6AEA8"), TextTertiary: ui.Hex("#938A84"),
 	SegmentSelected: ui.Hex("#2F2C2A"),
-	Field:           ui.Hex("#1C1B1A"), FieldHover: ui.Hex("#222020"),
+	Field:           ui.Hex("#222020"), FieldHover: ui.Hex("#282625"),
 	Accent: ui.Hex("#FF9A66"), AccentHover: ui.Hex("#FFAB7E"), AccentPressed: ui.Hex("#F48A54"),
 	OnAccent: ui.Hex("#2B221D"), Focus: ui.Hex("#FF9A66"), Link: ui.Hex("#FFB48F"),
 	Danger: ui.Hex("#FF9B9B"), Warning: ui.Hex("#FCD478"), Success: ui.Hex("#88DDA9"),
@@ -81,11 +81,39 @@ const (
 	iconMedium    = 16 // 菜单、检查器里的图标
 	iconSmall     = 14 // 箭头、行内小图标
 	iconTiny      = 12 // 药丸里的移除按钮
-	controlHeight = 32 // 按钮、输入框、侧栏行
+	controlHeight = 32 // 按钮、输入框
 	controlSmall  = 28 // 紧凑按钮、图标按钮
 	controlLarge  = 36 // 主要入口按钮
 	checkSize     = 16 // 复选框、单选框
 	rowHeight     = 44 // 设置导航、菜单里的两行项
+
+	// 侧栏照旧版 macOS（git 2a13147^ MomentoSidebarView.swift）抄的规格。
+	sidebarPadding          = 14 // 侧栏左右留白
+	sidebarLibraryGap       = 18 // 图库选择器和第一行之间
+	sidebarLibraryInset     = 5  // 图库选择器左边留白
+	sidebarLogoRadius       = 5
+	sidebarLibraryHeight    = 26
+	sidebarRowHeight        = 30
+	sidebarRowGap           = 2
+	sidebarRowPadding       = 8 // 行内左右留白
+	sidebarRowRadius        = 9
+	sidebarIconBox          = 18 // 图标占位宽
+	sidebarIconSize         = iconMedium
+	sidebarIconGap          = 10
+	sidebarWeight           = 500
+	sidebarCountSize        = fontGroup
+	sidebarCountGap         = 6
+	sidebarBadgeSize        = 8 // 回收站角标
+	sidebarDividerInset     = 12
+	sidebarDividerSpace     = 6 // 分隔线上下各留
+	sidebarSectionGap       = 18
+	sidebarGroupGap         = 6  // 入口组、分隔线、文件夹分区之间
+	sidebarHeader           = 32 // 「快速访问」标题行
+	sidebarLibraryEnd       = 7  // 图库选择器右边留白
+	sidebarFolderIndent     = 18
+	sidebarFooterButtonSize = 28
+	sidebarFooterGap        = 6
+	sidebarFooterPadding    = 9
 
 	panelNarrow = 360 // 弹出层、引导里的窄面板
 	panelDialog = 420 // 对话框

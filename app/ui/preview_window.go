@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/Seaony/Momento/app/internal/model"
@@ -16,14 +15,17 @@ const previewPeekThreshold = 250 * time.Millisecond
 const previewPinThreshold = 3 * time.Second
 const previewWindowDuration = 250 * time.Millisecond
 
-// 预览由两块磨砂组成：上面图片卡，下面单独一块信息卡（和旧版 macOS 一致）。
+// 预览照旧版 macOS（git 2a13147^ MomentoAssetPreviewOverlay.swift）：上面图片卡，下面单独一块信息卡。
 const (
-	previewPadding       = space8                                     // 图片卡内边距；图片圆角 4 + 8 = 卡片圆角 12
-	previewInfoHeight    = space48 + space4                           // 信息卡高度：名称 + 尺寸两行
-	previewInfoGap       = space12                                    // 图片卡和信息卡之间的空隙
-	previewInfoMinWidth  = 360                                        // 小图下信息卡也放得下文件名和按钮
-	previewInfoMaxWidth  = 560                                        // 大图下信息卡不跟着拉得太长
-	previewInfoSide      = space12 + 2*controlSmall + space4 + space8 // 两侧按钮占位，文字居中不压按钮
+	previewPadding       = 14                    // 图片卡内边距
+	previewCardRadius    = 30                    // 图片卡圆角
+	previewPhotoRadius   = 12                    // 图片圆角
+	previewInfoRadius    = 16                    // 信息卡圆角
+	previewInfoHeight    = 52                    // 上下各 10 + 名称 + 3 + 尺寸
+	previewInfoGap       = 12                    // 图片卡和信息卡之间
+	previewInfoWidth     = 560                   // 信息卡固定宽度，屏幕放不下时才缩
+	previewInfoInset     = 14                    // 信息卡左右内边距，关闭按钮贴着它
+	previewInfoSide      = previewInfoInset + 48 // 文字两侧留给关闭按钮的位置，保证居中
 	previewMinimumWidth  = 200
 	previewMinimumHeight = 160
 )
@@ -340,15 +342,15 @@ func (w *previewWindow) create(a *App) {
 	area := mygo.Screen.DisplayMatching(parent).WorkArea
 	w.frame, w.infoFrame = previewLayout(parent, area, w.asset, a.Preferences.PreviewFit == "fit")
 	w.hostAnimating = true
-	glass := func(frame mygo.Rectangle, parentWindow *mygo.Window, view func(c *ui.Context)) *mygo.Window {
+	glass := func(frame mygo.Rectangle, radius int, parentWindow *mygo.Window, view func(c *ui.Context)) *mygo.Window {
 		return mygo.NewWindow(mygo.WindowOptions{Title: w.asset.Name, Width: frame.Width, Height: frame.Height,
-			Hidden: true, Frameless: true, Transparent: true, CornerRadius: radiusPanel, SkipTaskbar: true,
+			Hidden: true, Frameless: true, Transparent: true, CornerRadius: radius, SkipTaskbar: true,
 			DisableResize: true, DisableMaximize: true, DisableMinimize: true, DisableFullScreen: true,
 			Vibrancy: mygo.VibrancyGlass, VibrancyTint: previewGlassTint(), Parent: parentWindow,
 			BackgroundColor: "rgba(0,0,0,0)", Content: ui.View(view)})
 	}
-	w.window = glass(w.frame, nil, func(c *ui.Context) { w.view(c, a) })
-	w.info = glass(w.infoFrame, w.window, func(c *ui.Context) { w.infoView(c, a) })
+	w.window = glass(w.frame, previewCardRadius, nil, func(c *ui.Context) { w.view(c, a) })
+	w.info = glass(w.infoFrame, previewInfoRadius, w.window, func(c *ui.Context) { w.infoView(c, a) })
 	w.window.SetMinimumSize(1, 1)
 	w.info.SetMinimumSize(1, 1)
 	w.applyFrames(.92, 0, 0)
@@ -389,7 +391,7 @@ func previewLayout(parent, area mygo.Rectangle, asset model.Asset, enlarge bool)
 	scale := min(limit, previewFitZoom(float32(iw), float32(ih), float32(maxW-pad), float32(maxImageH-pad)))
 	width := min(maxW, max(previewMinimumWidth, int(float32(iw)*scale)+pad))
 	height := min(maxImageH, max(previewMinimumHeight, int(float32(ih)*scale)+pad))
-	infoWidth := min(maxW, min(previewInfoMaxWidth, max(previewInfoMinWidth, width)))
+	infoWidth := min(maxW, previewInfoWidth)
 	total := height + previewInfoGap + previewInfoHeight
 	x, y := parent.X+(parent.Width-width)/2, parent.Y+(parent.Height-total)/2
 	if area.Width > 0 {
@@ -560,13 +562,13 @@ func (w *previewWindow) move(a *App, delta int) {
 }
 
 // 两块卡片共用的磨砂底：系统材质上再铺一层很淡的色板色，浅色发白、深色近黑。
-func previewCard(c *ui.Context, key any) ui.Element {
+func previewCard(c *ui.Context, key any, radius float32) ui.Element {
 	p := paletteFor(c.Theme())
 	tint := p.Raised.Alpha(materialPanelAlpha)
 	if c.Theme().Dark {
 		tint = p.Background.Alpha(materialPanelAlpha)
 	}
-	return ui.Box(c.Key(key)).Fill().Radius(radiusPanel).Clip().Background(tint).Border(1, p.BorderSubtle)
+	return ui.Box(c.Key(key)).Fill().Radius(radius).Clip().Background(tint).Border(1, p.BorderSubtle)
 }
 
 // 图片卡窗口：只放图片；固定后悬停右上角出现关闭按钮。动画帧由这个窗口驱动。
@@ -620,7 +622,7 @@ func (w *previewWindow) view(c *ui.Context, a *App) {
 		w.load(a)
 	}
 	w.animatePicture(c, a)
-	surface := previewCard(c, "preview-window-surface")
+	surface := previewCard(c, "preview-window-surface", previewCardRadius)
 	if w.pinned {
 		surface.DragWindow()
 	}
@@ -628,7 +630,7 @@ func (w *previewWindow) view(c *ui.Context, a *App) {
 		w.viewport(c, a)
 		if w.pinned {
 			close := previewCardButton(c.Key("close-pinned-preview"), "close", a.T("close_preview"), false).
-				Absolute().Top(space8).Right(space8).Material(panelMaterial(c.Theme()))
+				Absolute().Top(previewPadding).Right(previewPadding).Material(panelMaterial(c.Theme()))
 			visible := surface.Hovered()
 			close.Opacity(close.AnimateTo("visible", motionTarget(visible), motionColor)).IgnoreInput(!visible)
 			if close.Clicked() {
@@ -641,41 +643,30 @@ func (w *previewWindow) view(c *ui.Context, a *App) {
 	}
 }
 
-// 信息卡窗口：名称 + 尺寸居中，左侧翻页，右侧关闭；按住空格时第二行换成提示和进度条。
+// 信息卡窗口：名称和尺寸居中，右侧圆形关闭按钮；按住空格时第二行换成提示，底部出进度条。
 func (w *previewWindow) infoView(c *ui.Context, a *App) {
 	a.applyTheme(c)
 	c.Root().Background(ui.Transparent)
 	now := c.Now()
 	pal := paletteFor(c.Theme())
-	index := slices.IndexFunc(w.items, func(asset model.Asset) bool { return asset.ID == w.asset.ID })
 	elapsed := now.Sub(w.pressedAt)
 	pinFade := w.pinned && now.Sub(w.pinnedAt) < 120*time.Millisecond
 	holding := w.picture.Held && elapsed >= previewPeekThreshold && !w.pinned || w.closing && w.closedHeld && elapsed >= previewPeekThreshold || pinFade
-	card := previewCard(c, "preview-info")
+	card := previewCard(c, "preview-info", previewInfoRadius)
 	card.Children(func() {
 		ui.Column(c.Key("preview-info-text")).Absolute().Left(previewInfoSide).Right(previewInfoSide).Top(0).Bottom(0).
-			Justify(ui.Center).AlignItems(ui.Center).Gap(space4 / 2).Children(func() {
-			ui.Text(c, w.asset.Name).FontSize(fontBody).FontWeight(600).TextColor(pal.Text).SingleLine().TextAlign(ui.Center).MaxWidthPercent(100).Tooltip(w.asset.Name)
+			Justify(ui.Center).AlignItems(ui.Center).Gap(3).Children(func() {
+			ui.Text(c, w.asset.Name).FontSize(fontBody).FontWeight(500).TextColor(pal.Text).SingleLine().TextAlign(ui.Center).MaxWidthPercent(100).Tooltip(w.asset.Name)
 			if holding {
-				ui.Text(c.Key("preview-hold-hint"), a.T("preview_hold_to_pin")).FontSize(fontSecondary).TextColor(pal.TextSecondary).SingleLine()
+				ui.Text(c.Key("preview-hold-hint"), a.T("preview_hold_to_pin")).FontSize(fontGroup).TextColor(pal.TextSecondary).SingleLine()
 			} else if w.picture.errorText != "" && w.picture.Bitmap != nil {
-				ui.Text(c, w.picture.errorText).FontSize(fontSecondary).TextColor(pal.Danger).SingleLine()
+				ui.Text(c, w.picture.errorText).FontSize(fontGroup).TextColor(pal.Danger).SingleLine()
 			} else {
-				ui.Text(c.Key("preview-meta"), previewMeta(w.asset)).FontSize(fontSecondary).FontFeatures("tnum").TextColor(pal.TextSecondary).SingleLine()
+				ui.Text(c.Key("preview-meta"), previewSubtitle(w.asset)).FontSize(fontGroup).FontFeatures("tnum").TextColor(pal.TextSecondary).SingleLine().TextAlign(ui.Center).MaxWidthPercent(100)
 			}
 		})
-		if len(w.items) > 1 {
-			ui.Row(c.Key("preview-nav")).Absolute().Left(space12).Top(0).Bottom(0).AlignItems(ui.Center).Gap(space4).Children(func() {
-				if previewCardButton(c.Key("previous-preview"), "chevron-left", a.T("previous_asset"), index <= 0).Clicked() {
-					w.move(a, -1)
-				}
-				if previewCardButton(c.Key("next-preview"), "chevron-right", a.T("next_asset"), index >= len(w.items)-1).Clicked() {
-					w.move(a, 1)
-				}
-			})
-		}
 		if !w.picture.Held && !w.closedHeld && !w.pinned {
-			ui.Row(c.Key("preview-close")).Absolute().Right(space12).Top(0).Bottom(0).AlignItems(ui.Center).Children(func() {
+			ui.Row(c.Key("preview-close")).Absolute().Right(previewInfoInset).Top(0).Bottom(0).AlignItems(ui.Center).Children(func() {
 				if previewCardButton(c.Key("close-preview"), "close", a.T("close_preview"), false).Clicked() {
 					w.close(a, c.Now())
 				}
@@ -690,7 +681,7 @@ func (w *previewWindow) infoView(c *ui.Context, a *App) {
 			if pinFade {
 				value, opacity = 1, 1-float32(now.Sub(w.pinnedAt))/float32(120*time.Millisecond)
 			}
-			ui.Box(c.Key("preview-hold-progress")).Absolute().Left(space12).Right(space12).Bottom(space4).Height(space4 / 2).
+			ui.Box(c.Key("preview-hold-progress")).Absolute().Left(previewInfoInset).Right(previewInfoInset).Bottom(space4).Height(space4 / 2).
 				Radius(space4 / 4).Background(pal.BorderSubtle).IgnoreInput(true).Opacity(opacity).Children(func() {
 				ui.Box(c).WidthPercent(value * 100).FillHeight().Radius(space4 / 4).Background(pal.Accent)
 			})
@@ -701,34 +692,25 @@ func (w *previewWindow) infoView(c *ui.Context, a *App) {
 	}
 }
 
-// 「尺寸 · 格式 · 大小」，缺的项不显示。
-func previewMeta(asset model.Asset) string {
-	var parts []string
+// 旧版第二行只有「宽 × 高」，没有尺寸时显示文件名。
+func previewSubtitle(asset model.Asset) string {
 	if width, height := assetDisplaySize(asset); width > 0 && height > 0 {
-		parts = append(parts, fmt.Sprintf("%d × %d", width, height))
+		return fmt.Sprintf("%d × %d", width, height)
 	}
-	if asset.Extension != "" {
-		parts = append(parts, strings.ToUpper(asset.Extension))
-	}
-	if asset.Size > 0 {
-		parts = append(parts, fileSize(asset.Size))
-	}
-	return strings.Join(parts, " · ")
+	return asset.Name
 }
 
-// 卡片上的圆形小按钮：平时透明，悬停浅底。
+// 卡片上的圆形磨砂按钮（旧版的玻璃按钮）：常驻浅底，悬停加深。
 func previewCardButton(c *ui.Context, symbol, label string, disabled bool) ui.Element {
 	p := paletteFor(c.Theme())
 	button := ui.ButtonBase(c).Size(controlSmall, controlSmall).Padding(0).Radius(controlSmall / 2).
-		Label(label).Tooltip(label).Disabled(disabled).Cursor(ui.CursorPointer)
-	background, text := ui.Transparent, p.TextSecondary
-	if button.Pressed() {
-		background, text = p.Pressed, p.Text
-	} else if button.Hovered() {
-		background, text = p.Hover, p.Text
+		Label(label).Tooltip(label).Disabled(disabled).Cursor(ui.CursorPointer).Justify(ui.Center).AlignItems(ui.Center)
+	background, text := p.Hover, p.Text
+	if button.Pressed() || button.Hovered() {
+		background = p.Pressed
 	}
 	animateColors(button, background, text)
-	button.Children(func() { appIcon(c, symbol).Size(iconMedium, iconMedium) })
+	button.Children(func() { appIcon(c, symbol).Size(iconSmall, iconSmall) })
 	return button
 }
 

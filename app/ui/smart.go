@@ -34,12 +34,15 @@ func (a *App) sidebarSmartFolders(c *ui.Context) {
 	if !a.Preferences.SmartFolders {
 		return
 	}
-	a.sidebarSectionHeader(c, a.T("smart_folders"), a.T("new_smart_folder"), 16, func() { a.EditSmartFolder("") })
-	if len(a.Snapshot.SmartFolders) == 0 {
-		if sidebarEmptyAction(c.Key("smart-empty"), a.T("smart_empty_action"), "smart-folder").Disabled(a.Busy || a.Library == nil).Clicked() {
-			a.EditSmartFolder("")
-		}
+	// 和文件夹一样平铺，最后一行新建。
+	sidebarDivider(c, sidebarGroupGap+sidebarDividerSpace-sidebarRowGap)
+	a.sidebarSmartRows(c)
+	if sidebarAddRow(c.Key("smart-add"), a.T("new_smart_folder"), "create-library").Disabled(a.Busy || a.Library == nil).Clicked() {
+		a.EditSmartFolder("")
 	}
+}
+
+func (a *App) sidebarSmartRows(c *ui.Context) {
 	for _, folder := range a.Snapshot.SmartFolders {
 		count := 0
 		if a.Index != nil {
@@ -273,7 +276,7 @@ func (a *App) smartRuleValue(c *ui.Context, rule *model.SmartRule, index int) {
 	}
 	input := fieldStyle(c, ui.TextInput(c, &rule.Value).Grow(1).MinWidth(0).Label(label).Placeholder(placeholder).Disabled(a.GBrowsing.Saving))
 	if rule.Field == "added" || rule.Field == "width" || rule.Field == "height" || rule.Field == "size" {
-		input.Font(monoFont(c))
+		input.FontFeatures("tnum")
 	}
 	if unit != "" {
 		ui.Text(c, unit).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary).Shrink(0)

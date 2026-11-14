@@ -277,7 +277,7 @@ func (a *App) shortcutsSettings(c *ui.Context) {
 		ui.Column(c.Key(group)).FillWidth().Gap(space8).Children(func() {
 			ui.Row(c).FillWidth().Padding(0, space4).Gap(space8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, a.T("shortcut_group_"+group)).FontSize(fontGroup).FontWeight(600).LetterSpacing(.6).TextColor(p.TextSecondary)
-				ui.Text(c, fmt.Sprintf("(%d)", len(definitions))).Font(monoFont(c)).FontSize(fontNumber).TextColor(p.TextSecondary)
+				ui.Text(c, fmt.Sprintf("(%d)", len(definitions))).FontFeatures("tnum").FontSize(fontNumber).TextColor(p.TextSecondary)
 				ui.Box(c).Grow(1)
 				if settingsButton(c, a.T("restore_defaults")).Clicked() {
 					a.ResetShortcuts(group)
