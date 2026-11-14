@@ -37,25 +37,52 @@
 
 主题选择在设置与引导共用三张带各自名称的预览卡，选中卡用品牌色描边。所有分段控件共用凸起底块，选中底块平滑移动。主按钮禁用时使用 Surface 底和 TextMuted 字色，不对整块按钮降低透明度，输入与无障碍语义仍为禁用。
 
-| 功能 | Phosphor 图标 |
+| 功能 | 官方图标名 |
 | --- | --- |
-| 全部 | Images |
-| 最近使用 | ClockCounterClockwise |
-| 已收藏 | Heart |
-| 随机浏览 | Shuffle |
-| 未分类 | Tray |
-| 未打标签 | TagSimple |
-| 标签管理 | Tag |
-| 文件夹 | Folder |
-| 回收站 | Trash |
-| 设置 / 帮助 | GearSix / Question |
-| 导入 | DownloadSimple |
-| 筛选 / 排序 | FunnelSimple / SortAscending |
-| 瀑布流 / 网格 / 列表 | SquaresFour / GridFour / List |
-| 搜索 / 缩略图大小 | MagnifyingGlass / FrameCorners |
-| 侧栏开关 / 检查器收起 | SidebarSimple / CaretDoubleRight |
-| 展开收起 / 下拉 | CaretRight / CaretDown / CaretUpDown |
-| 小操作 | Plus / Minus / X / Check |
+| 全部素材 / 素材预览 | Images (`images`) |
+| 最近使用 | ClockCounterClockwise (`clock-counter-clockwise`) |
+| 已收藏 | Heart (`heart`) |
+| 随机浏览 | Shuffle (`shuffle`) |
+| 未分类 | Tray (`tray`) |
+| 未打标签 / 标签 | TagSimple (`tag-simple`) |
+| 标签管理 | Tag (`tag`) |
+| 文件夹 | Folder (`folder`) |
+| 智能文件夹 | FolderSimpleStar (`folder-simple-star`) |
+| 回收站 | Trash (`trash`) |
+| 设置 / 通用 | GearSix (`gear-six`) |
+| 帮助 | Question (`question`) |
+| 导入 | DownloadSimple (`download-simple`) |
+| 导出 | UploadSimple (`upload-simple`) |
+| 筛选 | FunnelSimple (`funnel-simple`) |
+| 排序 | SortAscending (`sort-ascending`) |
+| 瀑布流 | SquaresFour (`squares-four`) |
+| 网格 | GridFour (`grid-four`) |
+| 列表 / 菜单 | List (`list`) |
+| 搜索 | MagnifyingGlass (`magnifying-glass`) |
+| 缩略图大小 | FrameCorners (`frame-corners`) |
+| 侧栏开关 | SidebarSimple (`sidebar-simple`) |
+| 收起检查器 | CaretDoubleRight (`caret-double-right`) |
+| 来源链接 | LinkSimple (`link-simple`) |
+| 打开外部来源 | ArrowSquareOut (`arrow-square-out`) |
+| 图库 | ImagesSquare (`images-square`) |
+| 新建图库 | FolderPlus (`folder-plus`) |
+| 密码锁 | LockSimple (`lock-simple`) |
+| 操控 | MouseSimple (`mouse-simple`) |
+| 快捷键 | Keyboard (`keyboard`) |
+| 通知 | Bell (`bell`) |
+| 外观 | Palette (`palette`) |
+| 浏览器扩展设置 | Globe (`globe`) |
+| 关于 / 信息 | Info (`info`) |
+| 显示 / 隐藏密码 | Eye / EyeSlash (`eye` / `eye-slash`) |
+| 编辑 | PencilSimple (`pencil-simple`) |
+| 扩展安装 | PuzzlePiece (`puzzle-piece`) |
+| 警告 | Warning (`warning`) |
+| 左右翻页 | CaretLeft / CaretRight (`caret-left` / `caret-right`) |
+| 展开 / 收起 | CaretDown / CaretUp (`caret-down` / `caret-up`) |
+| 上下双箭头 | CaretUpDown (`caret-up-down`) |
+| 新增 / 移除 | Plus / Minus (`plus` / `minus`) |
+| 关闭 / 勾选 | X / Check (`x` / `check`) |
+| 左右旋转 | ArrowCounterClockwise / ArrowClockwise (`arrow-counter-clockwise` / `arrow-clockwise`) |
 
 动画共用约 250ms、轻微回弹的弹簧，颜色过渡 120ms；交给 mygo 自动遵守系统减少动态效果，不增加动画开关。浮层从锚点方向淡入并从 0.96 放大，关闭反向；对话框背景淡入，面板轻微上移缩放。稳定素材身份驱动可见卡片布局变化，屏幕外直接就位。性能用 12000 张样本与 mygo 帧统计测量，平均与最差帧时间分别记录。
 
