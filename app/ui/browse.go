@@ -36,6 +36,10 @@ func (a *App) navigateScope(scope, folderID string, tags bool) {
 }
 
 func (a *App) applyBrowseLocation(location browseLocation) {
+	a.applyBrowseSelection(location, nil)
+}
+
+func (a *App) applyBrowseSelection(location browseLocation, selectedIDs []string) {
 	a.Query.Scope, a.Query.FolderID, a.TagPage = location.Scope, location.FolderID, location.TagPage
 	a.Browse.TagID = location.TagID
 	a.Query.SmartFolderID = location.SmartFolderID
@@ -43,6 +47,11 @@ func (a *App) applyBrowseLocation(location browseLocation) {
 		a.MenuChanged()
 	}
 	a.Selected.Clear()
+	for _, id := range selectedIDs {
+		if _, ok := a.assetByID[id]; ok {
+			a.Selected.Add(id)
+		}
+	}
 	a.Toolbar.SortOpen = false
 	a.Refine()
 }
@@ -116,23 +125,36 @@ func (a *App) ChangeThumbnailSize(delta float32) {
 var previewSystemItem = mygo.Shell.PreviewItem
 
 func (a *App) assetPreviewShortcut(c *ui.Context, area ui.Element) {
-	if a.Preview.Open || c.FocusTakesText() || a.Settings.RecordingShortcut != "" {
+	if a.PreviewInputPending() || a.PreviewOpen() || c.FocusTakesText() || a.Settings.RecordingShortcut != "" {
 		return
 	}
 	mods, key, ok := parseShortcut(a.Shortcut("preview"))
 	// 在卡片的祖先上认领按键，避免空格先变成点击或翻页。
 	if ok && area.Shortcut(mods, key) {
-		a.activatePreviewShortcut()
+		a.activatePreviewShortcut(c)
 	}
 }
 
-func (a *App) activatePreviewShortcut() {
-	held := a.Shortcut("preview") == "Space"
-	if id := a.hovered; id != "" {
-		a.ActivateAsset(id, held)
-	} else if selected := a.SelectedAssets(); len(selected) > 0 {
-		a.ActivateAsset(selected[0].ID, held)
+func (a *App) activatePreviewShortcut(c *ui.Context) {
+	id := a.hovered
+	if id == "" && a.selectedIndex >= 0 && a.selectedIndex < len(a.Visible) && a.Selected.Has(a.Visible[a.selectedIndex].ID) {
+		id = a.Visible[a.selectedIndex].ID
 	}
+	if id == "" {
+		for _, asset := range a.Visible {
+			if a.Selected.Has(asset.ID) {
+				id = asset.ID
+				break
+			}
+		}
+	}
+	if id == "" {
+		return
+	}
+	if a.Shortcut("preview") == "Space" && a.Preview.spaceDown.IsZero() {
+		a.Preview.spaceDown = c.Now()
+	}
+	a.ActivateAsset(id, true)
 }
 
 func (a *App) ActivateAsset(id string, space bool) {
@@ -166,5 +188,5 @@ func (a *App) ActivateAsset(id string, space bool) {
 			return
 		}
 	}
-	a.ShowPreview(id, space)
+	a.ShowPreview(id, space && a.Shortcut("preview") == "Space")
 }

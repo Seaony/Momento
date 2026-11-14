@@ -26,6 +26,7 @@ func (a *App) ShowMainWindow() {
 }
 
 func (a *App) HideMainWindow() {
+	a.CancelPreviewGesture()
 	if a.Window == nil {
 		return
 	}
@@ -82,13 +83,9 @@ func (a *App) selectImportResult(ids []string) {
 		return
 	}
 	a.Query.Search = ""
-	a.SetScope("all", "")
-	for _, id := range ids {
-		if _, ok := a.assetByID[id]; ok {
-			a.Selected.Add(id)
-		}
-	}
+	a.applyBrowseSelection(browseLocation{Scope: "all"}, ids)
 	a.RevealInspector()
+	a.FollowPreviewSelection()
 }
 
 func (a *App) closeMainWindow(e *mygo.CloseEvent) {

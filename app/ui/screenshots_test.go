@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Seaony/Momento/app/internal/assets"
 	"github.com/Seaony/Momento/app/internal/catalog"
 	"github.com/Seaony/Momento/app/internal/i18n"
 	"github.com/Seaony/Momento/app/internal/library"
@@ -50,12 +49,12 @@ func TestStateScreenshots(t *testing.T) {
 	}
 	states := []string{
 		"welcome", "empty", "small", "single", "multiple", "large", "search-empty", "importing", "trash",
-		"preview", "settings", "export", "new-library", "error",
+		"settings", "export", "new-library", "error",
 		"grid", "list", "single-details", "single-details-bottom", "tag-picker", "folder-picker", "filter", "sort", "tags",
 		"search-results", "search-cleared", "grid-selected", "list-selected", "masonry-hover", "grid-hover", "list-hover",
 		"single-details-mixed-dpi", "single-details-mixed-dpi-bottom", "filter-selected", "filter-color-hover",
 	}
-	for _, key := range []string{"toggle_sidebar", "filter", "sort", "view_masonry", "view_grid", "view_list", "import", "toggle_inspector"} {
+	for _, key := range []string{"toggle_sidebar", "filter", "sort", "view_masonry", "view_grid", "view_list", "import"} {
 		states = append(states, "toolbar-hover-"+key)
 	}
 	var records []screenshotRecord
@@ -311,17 +310,7 @@ func (fixture screenshotFixture) app(t *testing.T, state, language, appearance s
 		a.Busy = true
 		a.Progress = &model.ImportProgress{Stage: "importing", Total: 120, Processed: 37, Imported: 32, Skipped: 5, CurrentFile: "design-reference-037.jpg"}
 	}
-	if state == "preview" {
-		asset := a.Visible[1]
-		img, _, _, _, err := assets.PrepareImage(filepath.Join(fixture.root, filepath.FromSlash(asset.RelativePath)))
-		if err != nil {
-			t.Fatalf("读取预览原文件：%v", err)
-		}
-		a.Selected.Add(asset.ID)
-		a.Preview.ID, a.Preview.Open = asset.ID, true
-		a.Preview.target(fixture.root, asset.ID, asset.Rotation)
-		a.Preview.Bitmap = ui.NewBitmap(img)
-	}
+
 	if state == "export" {
 		a.Selected.Add(a.Visible[0].ID)
 		a.ExportOpen = true
@@ -443,16 +432,6 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 	case "trash":
 		if len(a.Visible) != 3 || a.Index.Counts().Trash != 3 {
 			t.Fatal("回收站必须只显示3张素材")
-		}
-	case "preview":
-		expect(a.T("preview_position", 2, 14))
-		if a.Preview.Bitmap == nil || a.Preview.Loading || a.Preview.targetRoot != a.Library.Root || a.Preview.targetID != a.Preview.ID {
-			t.Fatal("预览必须展示已经解码的真实原图")
-		}
-		for _, key := range []string{"previous_asset", "next_asset", "close_preview"} {
-			if _, ok := tt.Find(a.T(key)); !ok {
-				t.Fatalf("预览缺少本地化控件：%s", key)
-			}
 		}
 	case "settings":
 		for _, key := range []string{"settings_general", "settings_extension", "settings_about", "launch_at_login", "close_action", "automatic_updates", "check_updates"} {

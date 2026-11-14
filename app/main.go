@@ -84,6 +84,7 @@ func main() {
 				app.InvalidateWindows()
 				return
 			}
+			app.CloseAllPreviewWindows()
 			app.Quitting = true
 		}
 	})
@@ -146,10 +147,10 @@ func installMenu(a *appui.App) {
 				if a.Settings.RecordingShortcut != "" {
 					accelerator = ""
 				}
-				if a.Preview.Open && definition.Group != "preview" && (definition.Action == "view_masonry" || definition.Action == "thumbnail_larger" || definition.Action == "thumbnail_smaller") {
+				if a.PreviewOpen() && definition.Group != "preview" && (definition.Action == "view_masonry" || definition.Action == "thumbnail_larger" || definition.Action == "thumbnail_smaller") {
 					accelerator = ""
 				}
-				if !a.Preview.Open && definition.Group == "preview" {
+				if !a.PreviewOpen() && definition.Group == "preview" {
 					accelerator = ""
 				}
 				item.SetAccelerator(accelerator)

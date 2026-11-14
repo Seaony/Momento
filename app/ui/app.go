@@ -111,7 +111,7 @@ type App struct {
 	Sidebar                                  sidebarState
 	Toolbar                                  toolbarState
 	Inspector                                inspectorState
-	Preview                                  previewState
+	Preview                                  previewWindows
 	Settings                                 settingsState
 	Dialog                                   dialogsState
 	Tags                                     tagsState
@@ -205,6 +205,8 @@ func (a *App) OpenWindow() {
 	a.Window.OnFileDrop(func(e *mygo.FileDropEvent) { a.ImportPaths(e.Paths) })
 	a.ApplyWindowZoom()
 	a.Window.OnClose(a.closeMainWindow)
+	a.Window.OnBlur(a.CancelPreviewGesture)
+	a.Window.OnHide(a.CancelPreviewGesture)
 
 	go a.watchLibrary()
 }
@@ -225,7 +227,7 @@ func (a *App) View(c *ui.Context) {
 		if !a.InspectorAvailable() && a.InspectorVisible {
 			a.CollapseInspector()
 		}
-		workspace := ui.Row(c.Key("workspace")).Fill().ObserveInput(a.observeAssetDoubleClick).HandleInput(a.activateAssetDoubleClick)
+		workspace := ui.Row(c.Key("workspace")).Fill().ObserveInput(a.observeWorkspaceInput).HandleInput(a.activateAssetDoubleClick)
 		if a.chromeLayoutReady && a.SidebarVisible && a.sidebarSplitWidth != a.sidebarShownWidth {
 			a.SidebarWidth = max(196, min(340, a.sidebarSplitWidth))
 		}
@@ -262,8 +264,8 @@ func (a *App) View(c *ui.Context) {
 			ui.Split(c.Key("library-split"), &a.sidebarSplitWidth, func() { a.sidebar(c) }, body).SplitReset(236).Fill()
 		})
 	}
+	a.ReconcilePreviewKeys(c)
 	a.shortcuts(c)
-	a.preview(c)
 	a.dialogs(c)
 	a.extensionImportPicker(c)
 	a.smartFolderDialog(c)
@@ -364,6 +366,7 @@ func (a *App) refine(resetScroll bool) {
 			a.Selected.Remove(id)
 		}
 	}
+	a.FollowPreviewSelection()
 }
 func (a *App) Refresh() { a.Run("reload", func(ctx context.Context) error { return nil }) }
 func (a *App) SetScope(scope, folderID string) {
@@ -475,7 +478,7 @@ func (a *App) OpenLibrary(path string) {
 			a.Query = catalog.Query{Sort: a.Preferences.Sort, Descending: a.Preferences.SortDescending}
 			a.Selected.Clear()
 			a.TagPage = false
-			a.Preview.Open = false
+			a.ClosePreview()
 			a.Thumbnails.Clear()
 			a.applySnapshot(snapshot)
 			a.Window.SetTitle(lib.Manifest.DisplayName + " – Momento")
@@ -657,14 +660,6 @@ func (a *App) ExportTo(destination string, format model.ExportFormat, quality fl
 		return err
 	})
 }
-func (a *App) ShowPreview(id string, held bool) {
-	a.InitPreviewNavigation()
-	a.Preview.ID = id
-	a.MarkAssetsUsed([]string{id})
-	a.Preview.Open = true
-	a.Preview.Held = held
-}
-func (a *App) ClosePreview() { a.Preview.Open = false }
 func (a *App) Bitmap(asset model.Asset) *ui.Bitmap {
 	if a.Thumbnails == nil || a.Library == nil {
 		return nil
@@ -711,6 +706,9 @@ func (a *App) watchLibrary() {
 }
 
 func (a *App) shortcuts(c *ui.Context) {
+	if a.TakePreviewInput() {
+		return
+	}
 	if a.IsLocked() || a.Settings.RecordingShortcut != "" {
 		return
 	}
@@ -718,7 +716,7 @@ func (a *App) shortcuts(c *ui.Context) {
 		a.LockNow()
 		return
 	}
-	if a.Preview.Open {
+	if a.PreviewOpen() {
 		return
 	}
 	for _, action := range []string{"new_library", "open_library", "import", "import_folder", "export", "settings", "search", "filter", "sort", "inspector", "sidebar", "thumbnail_larger", "thumbnail_smaller", "view_masonry", "view_grid", "view_list"} {
@@ -775,20 +773,22 @@ func (a *App) shortcuts(c *ui.Context) {
 	if c.Shortcut(0, ui.KeyEscape) {
 		a.Selected.Clear()
 		a.CollapseInspector()
+		a.FollowPreviewSelection()
 	}
 	if a.ActionShortcut(c, "select_all") {
 		for _, v := range a.Visible {
 			a.Selected.Add(v.ID)
 		}
 		a.RevealInspector()
+		a.FollowPreviewSelection()
 	}
 	if c.Shortcut(0, ui.KeyF) && a.hovered != "" {
 		if asset, ok := a.assetByID[a.hovered]; ok {
 			a.SetFavorite([]string{asset.ID}, !asset.Favorite)
 		}
 	}
-	if a.ActionShortcut(c, "preview") && !a.Preview.Open {
-		a.activatePreviewShortcut()
+	if a.ActionShortcut(c, "preview") && !a.PreviewOpen() {
+		a.activatePreviewShortcut(c)
 	}
 }
 
@@ -797,9 +797,9 @@ func (a *App) SyncMenuFocus(c *ui.Context) {
 		return
 	}
 	focused := c.FocusTakesText()
-	if focused != a.TextInputFocused || a.menuPreviewOpen != a.Preview.Open {
+	if focused != a.TextInputFocused || a.menuPreviewOpen != a.PreviewOpen() {
 		a.TextInputFocused = focused
-		a.menuPreviewOpen = a.Preview.Open
+		a.menuPreviewOpen = a.PreviewOpen()
 		if a.MenuChanged != nil {
 			a.MenuChanged()
 		}
@@ -955,6 +955,7 @@ func (a *App) InvalidateWindows() {
 	if a.SettingsWindow != nil {
 		a.SettingsWindow.Invalidate()
 	}
+	a.InvalidatePreviewWindows()
 }
 
 func (a *App) InspectorAvailable() bool { return a.Selected.Len() > 0 && !a.TagPage }
@@ -1021,7 +1022,7 @@ func (a *App) observeAssetDoubleClick(ev ui.InputEvent) {
 		return
 	}
 	a.pendingAssetActivation = ""
-	if ev.Clicks == 2 && ev.Mods == 0 && !a.Preview.Open && a.Selected.Has(a.assetClickID) && a.assetClickBounds.Contains(ev.X, ev.Y) {
+	if ev.Clicks == 2 && ev.Mods == 0 && !a.PreviewOpen() && a.Selected.Has(a.assetClickID) && a.assetClickBounds.Contains(ev.X, ev.Y) {
 		a.pendingAssetActivation = a.assetClickID
 	}
 	a.assetClickID = ""
@@ -1035,4 +1036,9 @@ func (a *App) activateAssetDoubleClick(ev ui.InputEvent) bool {
 	a.pendingAssetActivation = ""
 	a.ActivateAsset(id, false)
 	return true
+}
+
+func (a *App) observeWorkspaceInput(ev ui.InputEvent) {
+	a.observeAssetDoubleClick(ev)
+	a.ObservePreviewInput(ev)
 }

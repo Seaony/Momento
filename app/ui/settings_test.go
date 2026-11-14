@@ -33,6 +33,17 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	mygo.App.SetVersion(config.Version)
+	if os.Getenv("MOMENTO_PREVIEW_FOCUS_PROBE") == "1" {
+		mygo.App.SetName("Momento Preview Probe")
+		mygo.App.SetActivationPolicy(mygo.ActivationPolicyAccessory)
+		mygo.App.OnWindowAllClosed(func() {})
+		mygo.App.WhenReady(func() { go func() { os.Exit(m.Run()) }() })
+		if err := mygo.App.Run(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	os.Exit(m.Run())
 }
 

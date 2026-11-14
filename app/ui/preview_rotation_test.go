@@ -83,7 +83,7 @@ func TestPreviewRotationChangeInvalidatesPendingDecode(t *testing.T) {
 func TestPreviewRotationButtonsDisabledWhileBusy(t *testing.T) {
 	a := previewFixture(288, 192)
 	a.Busy = true
-	tt := ui.NewTester(a.preview, 1100, 640)
+	tt := ui.NewTester(previewTestView(a), 1100, 640)
 	tt.Advance(5 * time.Millisecond)
 	for _, key := range []string{"preview_rotate_left", "preview_rotate_right"} {
 		label := a.T(key)
@@ -94,7 +94,7 @@ func TestPreviewRotationButtonsDisabledWhileBusy(t *testing.T) {
 		if err := tt.Click(label); err != nil {
 			t.Fatal(err)
 		}
-		if a.Preview.targetRotation != 0 || a.Preview.Bitmap == nil {
+		if a.Preview.active.picture.targetRotation != 0 || a.Preview.active.picture.Bitmap == nil {
 			t.Fatal("忙碌期间旋转按钮仍然操作了预览")
 		}
 	}

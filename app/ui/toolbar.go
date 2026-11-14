@@ -40,7 +40,7 @@ func (a *App) toolbar(c *ui.Context) {
 	right := 12 + max(float32(0), bar.Right-a.InspectorShownWidth())
 	width := a.toolbarWidth(c) - left - right
 	hint := displayShortcut(a.Shortcut("search"))
-	if !a.Preview.Open && a.ActionShortcut(c, "search") {
+	if !a.PreviewOpen() && a.ActionShortcut(c, "search") {
 		a.FocusSearch()
 	}
 	row := ui.Row(c.Key("toolbar")).Height(MainToolbarHeight).Shrink(0).FillWidth().Padding(12, right, 12, left).Gap(4).DragWindow().

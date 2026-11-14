@@ -34,7 +34,6 @@ func layoutMotion(e ui.Element) ui.Element {
 }
 
 // 同一素材的缩略图与预览共用身份，位置变化只影响屏幕内的元素。
-type assetMotionID struct{ ID string }
 
 func motionTarget(on bool) float32 {
 	if on {

@@ -138,6 +138,7 @@ func (a *App) clearAssetSelection() {
 	a.Selected.Clear()
 	a.selectedIndex, a.anchor = -1, -1
 	a.CollapseInspector()
+	a.FollowPreviewSelection()
 }
 
 func (a *App) selectAsset(id string, index int, mods ui.Modifiers) {
@@ -167,6 +168,7 @@ func (a *App) selectAsset(id string, index int, mods ui.Modifiers) {
 	} else {
 		a.RevealInspector()
 	}
+	a.FollowPreviewSelection()
 }
 
 func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, frameWidth float32) {

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -26,8 +27,9 @@ func TestNativeWindowControlsLeaveActionsAccessible(t *testing.T) {
 			a.SidebarVisible, a.InspectorVisible = false, false
 			tt := ui.NewTester(a.toolbar, 1100, MainToolbarHeight)
 			tt.SetTitleBar(platform.bar)
+			tt.Advance(300 * time.Millisecond)
 			left, leftOK := tt.Find(a.T("toggle_sidebar"))
-			right, rightOK := tt.Find(a.T("toggle_inspector"))
+			right, rightOK := tt.Find(a.T("import"))
 			if !leftOK || !rightOK || left.X < platform.bar.Left || right.X+right.W > 1100-platform.bar.Right {
 				t.Fatalf("工具栏操作被系统窗口按钮覆盖：左%+v，右%+v，按钮区域%+v", left, right, platform.bar)
 			}

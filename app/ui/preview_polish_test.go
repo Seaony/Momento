@@ -18,11 +18,6 @@ func polishedOverlayApp(language, theme, state string) (*App, func(*ui.Context))
 	a.Preferences.Onboarded = true
 	view := a.dialogs
 	switch state {
-	case "preview":
-		a = previewFixture(960, 640)
-		a.Texts.Language, a.Preferences.Theme = language, theme
-		a.Visible[0].Name = "暖光下的山间晨雾.jpg"
-		view = a.preview
 	case "locked":
 		a.Lock.Locked = true
 		a.Lock.ErrorKey = "password_wrong"
@@ -63,7 +58,7 @@ func polishedOverlayApp(language, theme, state string) (*App, func(*ui.Context))
 }
 
 func TestOverlayPolishLocalizedLayout(t *testing.T) {
-	states := []string{"preview", "locked", "password-change", "welcome", "onboarding-theme", "onboarding-extension", "confirmation", "new-library", "export", "error", "extension-picker"}
+	states := []string{"locked", "password-change", "welcome", "onboarding-theme", "onboarding-extension", "confirmation", "new-library", "export", "error", "extension-picker"}
 	for _, language := range []string{"en", "ja"} {
 		for _, theme := range []string{"light", "dark"} {
 			for _, state := range states {
@@ -114,7 +109,7 @@ func TestOverlayPolishScreenshots(t *testing.T) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	states := []string{"preview", "locked", "password-change", "welcome", "onboarding-theme", "onboarding-extension", "confirmation", "new-library", "export", "extension-picker"}
+	states := []string{"locked", "password-change", "welcome", "onboarding-theme", "onboarding-extension", "confirmation", "new-library", "export", "extension-picker"}
 	for _, theme := range []string{"light", "dark"} {
 		for _, state := range states {
 			t.Run(theme+"/"+state, func(t *testing.T) {

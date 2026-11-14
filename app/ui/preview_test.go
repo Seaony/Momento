@@ -17,29 +17,6 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-func TestPreviewFollowsVisibleOrderWithoutWrapping(t *testing.T) {
-	a := &App{Visible: []model.Asset{{ID: "c"}, {ID: "a"}, {ID: "b"}}, Preview: previewState{ID: "a", Open: true}}
-	a.movePreview(1)
-	if a.Preview.ID != "b" {
-		t.Fatalf("下一张 = %q", a.Preview.ID)
-	}
-	a.movePreview(1)
-	if a.Preview.ID != "b" {
-		t.Fatal("在列表末尾回到了开头")
-	}
-	a.movePreview(-1)
-	a.movePreview(-1)
-	a.movePreview(-1)
-	if a.Preview.ID != "c" {
-		t.Fatalf("上一张 = %q", a.Preview.ID)
-	}
-	a.Preview.ID = "filtered-out"
-	a.movePreview(1)
-	if a.Preview.ID != "filtered-out" {
-		t.Fatal("跳到了当前结果以外的素材")
-	}
-}
-
 func TestPreviewDropsResultsAfterSwitchingAssetOrLibrary(t *testing.T) {
 	p := previewState{Open: true}
 	bitmap := ui.NewBitmap(image.NewRGBA(image.Rect(0, 0, 4, 8)))
@@ -82,50 +59,25 @@ func TestPreviewFailureVisibleAndCloseDropsPendingResult(t *testing.T) {
 	}
 }
 
-func TestPreviewEscapeClosesDialog(t *testing.T) {
-	a := readyPreviewApp()
-	tt := ui.NewTester(a.preview, 1100, 640)
-	tt.Advance(5 * time.Millisecond)
-	if !tt.HasText("Preview original") {
-		if _, ok := tt.Find(a.T("close_preview")); !ok {
-			t.Fatal("没有渲染预览浮层")
-		}
-	}
-	tt.Key(0, ui.KeyEscape)
-	if a.Preview.Open || a.Preview.Bitmap != nil {
-		t.Fatal("Escape 没有关闭预览并释放原图")
-	}
-}
-
-func TestPreviewSpaceReleaseClosesHeldPreview(t *testing.T) {
-	a := readyPreviewApp()
-	tt := ui.NewTester(a.preview, 1100, 640)
-	tt.Advance(5 * time.Millisecond)
-	tt.KeyDown(ui.KeySpace)
-	a.Preview.Held = true
-	tt.Frame()
-	if !a.Preview.Open {
-		t.Fatal("空格仍按住时预览已关闭")
-	}
-	tt.KeyRepeat(0, ui.KeySpace)
-	if !a.Preview.Open {
-		t.Fatal("空格自动重复触发了关闭按钮")
-	}
-	tt.KeyUp(ui.KeySpace)
-	if a.Preview.Open || a.Preview.Bitmap != nil {
-		t.Fatal("松开空格没有关闭预览并释放原图")
-	}
-}
-
 func readyPreviewApp() *App {
-	a := &App{
-		Library: &library.Library{Root: "library.momento"},
-		Visible: []model.Asset{{ID: "one", Name: "Preview original", RelativePath: "assets/one.png"}},
-		Preview: previewState{ID: "one", Open: true},
-	}
-	a.Preview.target(a.Library.Root, a.Preview.ID, 0)
-	a.Preview.Bitmap = ui.NewBitmap(image.NewRGBA(image.Rect(0, 0, 240, 160)))
+	asset := model.Asset{ID: "one", Name: "Preview original", RelativePath: "assets/one.png", Width: 240, Height: 160}
+	a := &App{Library: &library.Library{Root: "library.momento"}, Visible: []model.Asset{asset}, Preferences: DefaultPreferences()}
+	w := &previewWindow{root: a.Library.Root, asset: asset, items: append([]model.Asset(nil), a.Visible...)}
+	w.picture.Open = true
+	w.picture.target(w.root, asset.ID, 0)
+	w.picture.Bitmap = ui.NewBitmap(image.NewRGBA(image.Rect(0, 0, 240, 160)))
+	a.Preview.active = w
 	return a
+}
+func previewTestView(a *App) func(*ui.Context) {
+	return func(c *ui.Context) {
+		ui.Box(c).Fill().TabStop(true).AutoFocus().ObserveInput(a.ObservePreviewInput).Children(func() {
+			if w := a.Preview.active; w != nil {
+				w.view(c, a)
+			}
+		})
+		a.ReconcilePreviewKeys(c)
+	}
 }
 
 func TestPreviewSmartFitAndKeyboardZoom(t *testing.T) {
@@ -139,9 +91,9 @@ func TestPreviewSmartFitAndKeyboardZoom(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			a := previewFixture(tc.w, tc.h)
 			a.Preferences.PreviewFit = tc.fit
-			tt := ui.NewTester(a.preview, 1100, 640)
+			tt := ui.NewTester(previewTestView(a), 1100, 640)
 			tt.Advance(5 * time.Millisecond)
-			p := &a.Preview
+			p := &a.Preview.active.picture
 			if !p.initialized || p.fitZoom <= 0 {
 				t.Fatal("预览没有按视口初始化")
 			}
@@ -174,17 +126,16 @@ func TestPreviewSmartFitAndKeyboardZoom(t *testing.T) {
 
 func TestPreviewPinchPanAndDoubleClick(t *testing.T) {
 	a := previewFixture(288, 192)
-	tt := ui.NewTester(a.preview, 1100, 640)
+	tt := ui.NewTester(previewTestView(a), 1000, 640)
 	tt.Advance(5 * time.Millisecond)
-	p := &a.Preview
+	p := &a.Preview.active.picture
 	cx, cy := p.viewport.X+p.viewport.W/2, p.viewport.Y+p.viewport.H/2
-	beforeHeader := tt.Image().RGBAAt(100, 95)
 	tt.Pinch(cx, cy, 4)
 	if p.Zoom != 4 {
 		t.Fatalf("捏合比例%v", p.Zoom)
 	}
-	if got := tt.Image().RGBAAt(100, 95); got != beforeHeader {
-		t.Fatalf("放大图片越过视口遮住了顶部操作栏: %+v", got)
+	if _, found := tt.AccessByRole(ui.RoleButton, a.T("close_preview")); !found {
+		t.Fatal("放大图片后关闭控制没有保留")
 	}
 
 	tt.Press(cx, cy)
@@ -210,10 +161,11 @@ func TestPreviewPinchPanAndDoubleClick(t *testing.T) {
 func TestPreviewWheelPreferencesAndBounds(t *testing.T) {
 	a := previewFixture(288, 192)
 	a.Visible = append(a.Visible, model.Asset{ID: "two"})
+	a.Preview.active.items = append([]model.Asset(nil), a.Visible...)
 	a.Preferences.PreviewWheel = "zoom"
-	tt := ui.NewTester(a.preview, 1100, 640)
+	tt := ui.NewTester(previewTestView(a), 1100, 640)
 	tt.Advance(5 * time.Millisecond)
-	p := &a.Preview
+	p := &a.Preview.active.picture
 	cx, cy := p.viewport.X+p.viewport.W/2, p.viewport.Y+p.viewport.H/2
 	tt.Wheel(cx, cy, 0, -40)
 	if p.Zoom <= 1 {
@@ -237,16 +189,16 @@ func TestPreviewWheelPreferencesAndBounds(t *testing.T) {
 	}
 	a.Preferences.PreviewWheel = "navigate"
 	now := time.Now()
-	a.previewInput(ui.InputEvent{Kind: ui.InputScroll, DY: 40, Time: now})
-	if p.ID != "two" {
+	a.Preview.active.input(a, ui.InputEvent{Kind: ui.InputScroll, DY: 40, Time: now})
+	if a.Preview.active.asset.ID != "two" {
 		t.Fatal("滚轮没有切到下一张")
 	}
-	a.previewInput(ui.InputEvent{Kind: ui.InputScroll, DY: -40, Time: now.Add(time.Millisecond)})
-	if p.ID != "two" {
+	a.Preview.active.input(a, ui.InputEvent{Kind: ui.InputScroll, DY: -40, Time: now.Add(time.Millisecond)})
+	if a.Preview.active.asset.ID != "two" {
 		t.Fatal("一次手势连续切换了素材")
 	}
-	a.previewInput(ui.InputEvent{Kind: ui.InputScroll, DY: -40, Time: now.Add(time.Second)})
-	if p.ID != "one" {
+	a.Preview.active.input(a, ui.InputEvent{Kind: ui.InputScroll, DY: -40, Time: now.Add(time.Second)})
+	if a.Preview.active.asset.ID != "one" {
 		t.Fatal("滚轮没有切到上一张")
 	}
 }
@@ -308,11 +260,11 @@ func TestPreviewCheckerAndSamplingChangeRenderedImage(t *testing.T) {
 			img.SetNRGBA(x, y, color.NRGBA{R: uint8(x), G: uint8(y), B: 240, A: 180})
 		}
 	}
-	a.Preview.Bitmap, a.Preview.pixelBitmap = previewBitmaps(img)
-	tt := ui.NewTester(a.preview, 1100, 640)
+	a.Preview.active.picture.Bitmap, a.Preview.active.picture.pixelBitmap = previewBitmaps(img)
+	tt := ui.NewTester(previewTestView(a), 1100, 640)
 	tt.Advance(5 * time.Millisecond)
-	a.Preview.Zoom = 4
-	a.Preview.initialized = true
+	a.Preview.active.picture.Zoom = 4
+	a.Preview.active.picture.initialized = true
 	tt.Frame()
 	smooth := append([]byte(nil), tt.Image().Pix...)
 	a.Preferences.PreviewPixelated = true
@@ -331,13 +283,16 @@ func TestPreviewCheckerAndSamplingChangeRenderedImage(t *testing.T) {
 func previewFixture(width, height int) *App {
 	a := readyPreviewApp()
 	a.Preferences = DefaultPreferences()
+	a.Visible[0].Width, a.Visible[0].Height = width, height
+	a.Preview.active.asset = a.Visible[0]
+	a.Preview.active.items = append([]model.Asset(nil), a.Visible...)
 	img := image.NewNRGBA(image.Rect(0, 0, width, height))
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
 			img.SetNRGBA(x, y, color.NRGBA{R: uint8((x/9)%2*140 + 40), G: uint8((y/9)%2*100 + 70), B: uint8((x+y)%200 + 30), A: 255})
 		}
 	}
-	a.Preview.Bitmap, a.Preview.pixelBitmap = previewBitmaps(img)
+	a.Preview.active.picture.Bitmap, a.Preview.active.picture.pixelBitmap = previewBitmaps(img)
 	return a
 }
 
@@ -372,19 +327,19 @@ func renderPreviewPicture(picture previewPicture) *image.RGBA {
 func TestPreviewUsesCustomShortcutAndPausesWhileRecording(t *testing.T) {
 	a := previewFixture(288, 192)
 	a.Preferences.Shortcuts["preview_zoom_in"] = "Alt+Z"
-	tt := ui.NewTester(a.preview, 1100, 640)
+	tt := ui.NewTester(previewTestView(a), 1100, 640)
 	tt.Advance(5 * time.Millisecond)
 	tt.Key(ui.Cmd, ui.KeyEqual)
-	if a.Preview.Zoom != 1 {
+	if a.Preview.active.picture.Zoom != 1 {
 		t.Fatal("改键后仍响应旧快捷键")
 	}
 	tt.Key(ui.Alt, ui.KeyZ)
-	if a.Preview.Zoom != 1.25 {
+	if a.Preview.active.picture.Zoom != 1.25 {
 		t.Fatal("没有响应自定义快捷键")
 	}
 	a.Settings.RecordingShortcut = "preview_zoom_out"
 	tt.Key(ui.Alt, ui.KeyZ)
-	if a.Preview.Zoom != 1.25 {
+	if a.Preview.active.picture.Zoom != 1.25 {
 		t.Fatal("录制快捷键时仍操作预览")
 	}
 }

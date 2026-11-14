@@ -7,7 +7,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -17,7 +16,6 @@ import (
 )
 
 type previewState struct {
-	ID                              string
 	Open, Held                      bool
 	Bitmap                          *ui.Bitmap
 	Loading                         bool
@@ -26,7 +24,6 @@ type previewState struct {
 	Pan                             ui.Point
 	targetRoot, targetID, errorText string
 	targetRotation                  int
-	navigation                      []string
 	pixelBitmap                     *ui.Bitmap
 	viewport                        ui.Rect
 	fitZoom                         float32
@@ -34,6 +31,10 @@ type previewState struct {
 	animation                       *previewAnimation
 	animationLoading                bool
 	nextFrameAt, wheelAt            time.Time
+	rotationBitmap, rotationPixels  *ui.Bitmap
+	rotationFrom, rotationTo        float32
+	slideDirection                  float32
+	slideFrames                     int
 }
 
 type previewAnimation struct {
@@ -48,10 +49,19 @@ type previewPicture struct {
 
 func (p *previewState) target(root, id string, rotation int) {
 	if root == "" {
-		p.navigation = nil
+		p.slideDirection, p.slideFrames = 0, 0
 	}
 	if p.targetRoot == root && p.targetID == id && p.targetRotation == rotation {
 		return
+	}
+	if root != "" && p.targetID == id && p.targetRotation != rotation {
+		p.rotationBitmap, p.rotationPixels = p.Bitmap, p.pixelBitmap
+		p.rotationFrom = p.rotationTo
+		delta := (rotation-p.targetRotation+540)%360 - 180
+		p.rotationTo += float32(delta)
+	} else {
+		p.rotationBitmap, p.rotationPixels = nil, nil
+		p.rotationFrom, p.rotationTo = 0, 0
 	}
 	p.Generation++
 	p.targetRoot, p.targetID, p.targetRotation = root, id, rotation
@@ -135,137 +145,111 @@ func (animation *previewAnimation) next() (previewPicture, error) {
 	return previewPicture{smooth, pixelated, &previewAnimation{animation.decoder, frame.Duration, animation.rotation}}, nil
 }
 
-func (a *App) preview(c *ui.Context) {
-	p := &a.Preview
-	if !p.Open {
-		p.target("", "", 0)
-		return
-	}
-	if a.Library == nil || p.Held && !c.KeyDown(ui.KeySpace) {
-		a.ClosePreview()
-		p.target("", "", 0)
-		return
-	}
-	if p.navigation == nil {
-		a.InitPreviewNavigation()
-	}
-	index := slices.Index(p.navigation, p.ID)
-	asset, found := a.previewAsset(p.ID)
-	if index < 0 || !found {
-		a.ClosePreview()
-		p.target("", "", 0)
-		return
-	}
-	p.target(a.Library.Root, asset.ID, asset.Rotation)
-	if p.Bitmap == nil && p.errorText == "" && !p.Loading {
-		a.loadPreview(asset, a.Library.Root)
-	}
-	a.animatePreview(c)
-	width, height := c.Size()
-	ui.DialogBase(c.Key("original-preview"), &p.Open, func(backdrop, panel ui.Element) {
-		backdrop.Material(frostedSurface{tint: c.Theme().Background.Alpha(.72), blur: 18})
-		panel.Column().Size(width*.86, height*.86).Padding(12).Gap(12).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border).Radius(12).
-			Label(a.T("preview_original")).TabStop(false).AutoFocus()
-		ui.Row(c).FillWidth().Gap(8).Padding(4, 8).Radius(8).Material(toolbarMaterial(c.Theme())).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, asset.Name).Bold().TextColor(titleColor(c.Theme())).Grow(1).SingleLine().Tooltip(asset.Name)
-			if previewSymbolButton(c.Key("preview-rotate-left"), "rotate-left", a.T("preview_rotate_left"), 32, a.Busy).Clicked() {
-				a.RotatePreview(-90)
-			}
-			if previewSymbolButton(c.Key("preview-rotate-right"), "rotate-right", a.T("preview_rotate_right"), 32, a.Busy).Clicked() {
-				a.RotatePreview(90)
-			}
-			ui.Textf(c, "%.0f%%", p.Zoom*100).FontSize(12).Width(56).TextAlign(ui.End).TextColor(c.Theme().TextMuted)
-			ui.Text(c, a.T("preview_position", index+1, len(p.navigation))).FontSize(12).TextColor(c.Theme().TextMuted)
-			if previewSymbolButton(c.Key("close-preview"), "close", a.T("close_preview"), 32, false).Clicked() {
-				a.ClosePreview()
-			}
-		})
-		ui.Row(c).FillWidth().Grow(1).MinHeight(0).Padding(0, 4).Gap(16).AlignItems(ui.Center).Children(func() {
-			if previewSymbolButton(c.Key("previous-preview"), "chevron-left", a.T("previous_asset"), 36, index == 0).Clicked() {
-				a.movePreview(-1)
-			}
-			a.previewViewport(c, asset)
-			if previewSymbolButton(c.Key("next-preview"), "chevron-right", a.T("next_asset"), 36, index == len(p.navigation)-1).Clicked() {
-				a.movePreview(1)
-			}
-		})
-		if a.previewShortcut(panel, "preview_previous") {
-			a.movePreview(-1)
-		}
-		if a.previewShortcut(panel, "preview_next") {
-			a.movePreview(1)
-		}
-		if a.previewShortcut(panel, "preview_zoom_in") {
-			a.PreviewZoomIn()
-		}
-		if a.previewShortcut(panel, "preview_zoom_out") {
-			a.PreviewZoomOut()
-		}
-		if a.previewShortcut(panel, "preview_fit") {
-			a.PreviewFitToWindow()
-		}
-		if a.previewShortcut(panel, "preview_actual") {
-			a.PreviewActualSize()
-		}
-	})
-	if !p.Open {
-		p.target("", "", 0)
-	}
-}
-
 func previewSymbolButton(c *ui.Context, symbol, label string, size float32, disabled bool) ui.Element {
-	button := ui.ButtonBase(c).Size(size, size).Padding(0).Radius(size/2).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border).
-		TextColor(c.Theme().TextMuted).Label(label).Tooltip(label).Disabled(disabled).Cursor(ui.CursorPointer)
-	if button.Hovered() || button.Pressed() {
-		button.TextColor(c.Theme().Text)
+	button := ui.ButtonBase(c).Size(size, size).Padding(0).Radius(size / 2).
+		Label(label).Tooltip(label).Disabled(disabled).Cursor(ui.CursorPointer)
+	background, text := ui.Transparent, c.Theme().TextMuted
+	if button.Pressed() {
+		background, text = warmOverlay(c.Theme(), .11), c.Theme().Text
+	} else if button.Hovered() {
+		background, text = warmOverlay(c.Theme(), .06), c.Theme().Text
 	}
-	button.Children(func() { appSymbol(c, symbol).Size(18, 18) })
+	animateColors(button, background, text)
+	button.Children(func() { appIcon(c, symbol).Size(18, 18) })
 	return button
 }
 
-func (a *App) previewViewport(c *ui.Context, asset model.Asset) {
-	p := &a.Preview
-	viewport := ui.Box(c.Key("preview-image")).Grow(1).FillHeight().MinWidth(0).MinHeight(0).Radius(4).Clip().Label(asset.Name).
-		Background(c.Theme().Surface).HandleInput(a.previewInput)
-	bounds := viewport.LayoutBounds()
-	if bounds.W > 0 && bounds.H > 0 {
-		changed := p.viewport.W != bounds.W || p.viewport.H != bounds.H
-		p.viewport = bounds
-		if p.Bitmap != nil {
-			bw, bh := p.Bitmap.Size()
-			p.fitZoom = previewFitZoom(float32(bw), float32(bh), bounds.W, bounds.H)
-			if !p.initialized {
-				p.fitMode = a.Preferences.PreviewFit == "fit"
-				p.Zoom = p.fitZoom
-				if !p.fitMode {
-					p.Zoom = min(1, p.Zoom)
-				}
-				p.initialized = true
-				c.After(0)
-			} else if changed && p.fitMode {
-				p.Zoom = p.fitZoom
-				p.Pan = ui.Point{}
-				c.After(0)
-			}
-			p.clampPan()
-		}
-	} else {
-		c.After(0)
+func (w *previewWindow) viewport(c *ui.Context, a *App) {
+	p, asset := &w.picture, w.asset
+	width, height := c.Size()
+	p.viewport = ui.Rect{X: 25, Y: 65, W: width - 50, H: height - 114}
+	viewport := ui.Box(c.Key("preview-image")).Absolute().Left(24).Top(64).Right(24).Bottom(48)
+	if !p.Open {
+		viewport.PassThrough().AccessHidden(true)
+		return
 	}
-	switch {
-	case p.Bitmap != nil:
-		viewport.Draw(func(painter *ui.Painter, r ui.Rect) {
-			painter.Clip(r, 0, func() {
-				imageRect := p.imageRect(r)
-				if a.Preferences.PreviewChecker {
-					drawPreviewChecker(painter, r, imageRect, c.Theme())
-				}
-				bitmap := p.Bitmap
-				if a.Preferences.PreviewPixelated && p.pixelBitmap != nil {
+	viewport.Label(asset.Name).HandleInput(func(ev ui.InputEvent) bool { return w.input(a, ev) })
+	if p.slideDirection != 0 {
+		viewport.ChildExit(ui.Motion{X: -64 * p.slideDirection, Scale: .98})
+	}
+	bitmap, bitmapTurn := p.Bitmap, p.rotationTo
+	if p.rotationBitmap != nil {
+		bitmap, bitmapTurn = p.rotationBitmap, p.rotationFrom
+	}
+	if bitmap == nil && p.errorText == "" {
+		bitmap = w.placeholder
+	}
+	if bitmap != nil {
+		bw, bh := bitmap.Size()
+		if p.Bitmap == nil && p.rotationBitmap == nil && asset.Width > 0 && asset.Height > 0 {
+			bw, bh = assetDisplaySize(asset)
+		}
+		fitWidth, fitHeight := bw, bh
+		if p.rotationBitmap != nil {
+			if p.Bitmap != nil {
+				fitWidth, fitHeight = p.Bitmap.Size()
+			} else if int(p.rotationTo-p.rotationFrom)%180 != 0 {
+				fitWidth, fitHeight = fitHeight, fitWidth
+			}
+		}
+		oldFit := p.fitZoom
+		p.fitZoom = min(2, previewFitZoom(float32(fitWidth), float32(fitHeight), p.viewport.W, p.viewport.H))
+		if !p.initialized {
+			p.fitMode = w.pinned || a.Preferences.PreviewFit == "fit"
+			p.Zoom = p.fitZoom
+			if !p.fitMode {
+				p.Zoom = min(1, p.Zoom)
+			}
+			p.initialized = true
+		} else if oldFit != p.fitZoom && p.fitMode {
+			p.Zoom, p.Pan = p.fitZoom, ui.Point{}
+		}
+		p.clampPan()
+		viewport.Children(func() {
+			if a.Preferences.PreviewPixelated {
+				if p.rotationPixels != nil {
+					bitmap = p.rotationPixels
+				} else if p.pixelBitmap != nil {
 					bitmap = p.pixelBitmap
 				}
-				painter.Image(bitmap, imageRect, ui.Contain)
-			})
+			}
+			photo := previewPhoto(c.Key(struct{ ID string }{asset.ID}), bitmap, 12, a.Preferences.PreviewChecker, ui.Contain).
+				Absolute().Label(asset.Name).Shadow(0, 12, 32, 0, ui.Hex("#211A16").Alpha(.24))
+			zoom := p.Zoom
+			if p.rotationBitmap != nil {
+				zoom = photo.AnimateTo("rotation-scale", p.Zoom, motionSpring)
+			} else {
+				photo.Jump("rotation-scale", p.Zoom)
+			}
+			turn := photo.AnimateTo("rotation", p.rotationTo, motionSpring)
+			if p.rotationBitmap != nil {
+				angle := float64(turn-bitmapTurn) * math.Pi / 180
+				cosine, sine := float32(math.Abs(math.Cos(angle))), float32(math.Abs(math.Sin(angle)))
+				rotatedWidth := float32(bw)*cosine + float32(bh)*sine
+				rotatedHeight := float32(bw)*sine + float32(bh)*cosine
+				zoom = min(zoom, previewFitZoom(rotatedWidth, rotatedHeight, p.viewport.W, p.viewport.H))
+			}
+			photoWidth, photoHeight := float32(bw)*zoom, float32(bh)*zoom
+			photo.Left((p.viewport.W-photoWidth)/2+p.Pan.X).Top((p.viewport.H-photoHeight)/2+p.Pan.Y).Size(photoWidth, photoHeight)
+			photo.Rotate(turn - bitmapTurn)
+			transition := ui.ElementTransition{Animation: &motionSpring, Colors: true, ScaleContent: true,
+				Enter: &ui.Motion{Scale: .94}, Exit: &ui.Motion{Scale: .94}}
+			if p.slideDirection == 0 {
+				transition.Enter = &ui.Motion{Opacity: 1}
+			} else {
+				transition.Enter = &ui.Motion{X: 64 * p.slideDirection, Scale: .98}
+				transition.Exit = &ui.Motion{X: -64 * p.slideDirection, Scale: .98}
+				p.slideFrames++
+				if p.slideFrames > 1 && !photo.Transitioning() {
+					p.slideDirection, p.slideFrames = 0, 0
+					c.Invalidate()
+				}
+			}
+			photo.Transition(transition)
+			if p.rotationBitmap != nil && p.Bitmap != nil && photo.Settled("rotation") && photo.Settled("rotation-scale") {
+				p.rotationBitmap, p.rotationPixels = nil, nil
+				c.Invalidate()
+			}
 		})
 		if p.canPan() {
 			viewport.Cursor(ui.CursorGrab)
@@ -278,20 +262,37 @@ func (a *App) previewViewport(c *ui.Context, asset model.Asset) {
 		}
 		if viewport.DoubleClicked() {
 			if math.Abs(float64(p.Zoom-p.fitZoom)) < .001 {
-				a.PreviewActualSize()
+				w.actualSize()
 			} else {
-				a.PreviewFitToWindow()
+				w.fitToWindow()
 			}
 		}
-	case p.errorText != "":
-		viewport.Column().Center().Gap(8).Children(func() {
-			ui.Text(c, a.T("preview_failed")).Bold()
-			ui.Text(c, p.errorText).TextColor(c.Theme().TextMuted).MaxWidth(560)
+	} else if p.errorText != "" {
+		viewport.Center().Children(func() {
+			ui.Column(c).MaxWidth(560).Padding(16).Gap(8).Radius(12).Material(panelMaterial(c.Theme())).Children(func() {
+				ui.Text(c, a.T("preview_failed")).Bold()
+				ui.Text(c, p.errorText).TextColor(c.Theme().TextMuted)
+			})
 		})
-	default:
-		viewport.Center().Children(func() { ui.Text(c, a.T("preview_loading")).TextColor(c.Theme().TextMuted) })
+	}
+	if p.Loading {
+		ui.Text(c, a.T("preview_loading")).Absolute().Top(64).Left(width/2).TranslatePercent(-50, 0).
+			FontSize(12).Padding(8, 12).Radius(12).Material(panelMaterial(c.Theme())).TextColor(c.Theme().TextMuted)
 	}
 }
+
+func previewPhoto(c *ui.Context, bitmap *ui.Bitmap, radius float32, checker bool, fit ui.Fit) ui.Element {
+	photo := ui.Box(c).Radius(radius).Clip().Role(ui.RoleImage).Background(c.Theme().Surface)
+	if checker {
+		theme := c.Theme()
+		photo.Draw(func(painter *ui.Painter, r ui.Rect) {
+			painter.Clip(r, radius, func() { drawPreviewChecker(painter, r, r, theme) })
+		})
+	}
+	photo.Children(func() { ui.Image(c, bitmap).Fill().Fit(fit).Radius(radius) })
+	return photo
+}
+
 func previewFitZoom(imageWidth, imageHeight, width, height float32) float32 {
 	if imageWidth <= 0 || imageHeight <= 0 || width <= 0 || height <= 0 {
 		return 1
@@ -334,8 +335,8 @@ func (p *previewState) zoomAt(scale, x, y float32) {
 	p.fitMode = false
 	p.clampPan()
 }
-func (a *App) previewInput(ev ui.InputEvent) bool {
-	p := &a.Preview
+func (w *previewWindow) input(a *App, ev ui.InputEvent) bool {
+	p := &w.picture
 	switch ev.Kind {
 	case ui.InputZoom:
 		p.zoomAt(ev.Scale, ev.X, ev.Y)
@@ -350,29 +351,49 @@ func (a *App) previewInput(ev ui.InputEvent) bool {
 			if ev.DY < 0 {
 				delta = -1
 			}
-			a.movePreview(delta)
+			w.move(a, delta)
 			p.wheelAt = ev.Time
 		}
 		return true
 	}
 	return false
 }
-func (a *App) PreviewZoomIn()  { p := &a.Preview; p.zoomAt(1.25, p.viewport.W/2, p.viewport.H/2) }
-func (a *App) PreviewZoomOut() { p := &a.Preview; p.zoomAt(.8, p.viewport.W/2, p.viewport.H/2) }
-func (a *App) PreviewFitToWindow() {
-	p := &a.Preview
+func (w *previewWindow) fitToWindow() {
+	p := &w.picture
 	if p.Bitmap != nil {
-		p.Zoom = p.fitZoom
-		p.Pan = ui.Point{}
-		p.fitMode = true
+		p.Zoom, p.Pan, p.fitMode = p.fitZoom, ui.Point{}, true
+	}
+}
+func (w *previewWindow) actualSize() {
+	p := &w.picture
+	if p.Bitmap != nil {
+		p.Zoom, p.Pan, p.fitMode = 1, ui.Point{}, false
+	}
+}
+func (a *App) PreviewZoomIn() {
+	if w := a.previewTarget(); w != nil {
+		p := &w.picture
+		p.zoomAt(1.25, p.viewport.W/2, p.viewport.H/2)
+		w.invalidate()
+	}
+}
+func (a *App) PreviewZoomOut() {
+	if w := a.previewTarget(); w != nil {
+		p := &w.picture
+		p.zoomAt(.8, p.viewport.W/2, p.viewport.H/2)
+		w.invalidate()
+	}
+}
+func (a *App) PreviewFitToWindow() {
+	if w := a.previewTarget(); w != nil {
+		w.fitToWindow()
+		w.invalidate()
 	}
 }
 func (a *App) PreviewActualSize() {
-	p := &a.Preview
-	if p.Bitmap != nil {
-		p.Zoom = 1
-		p.Pan = ui.Point{}
-		p.fitMode = false
+	if w := a.previewTarget(); w != nil {
+		w.actualSize()
+		w.invalidate()
 	}
 }
 func drawPreviewChecker(p *ui.Painter, viewport, image ui.Rect, theme *ui.Theme) {
@@ -393,14 +414,6 @@ func drawPreviewChecker(p *ui.Painter, viewport, image ui.Rect, theme *ui.Theme)
 	}
 }
 
-// 一次预览沿用打开时的顺序，最近使用重排只影响下次打开。
-func (a *App) InitPreviewNavigation() {
-	a.Preview.navigation = make([]string, len(a.Visible))
-	for i, asset := range a.Visible {
-		a.Preview.navigation[i] = asset.ID
-	}
-}
-
 func (a *App) previewAsset(id string) (model.Asset, bool) {
 	if asset, ok := a.assetByID[id]; ok {
 		return asset, true
@@ -412,31 +425,16 @@ func (a *App) previewAsset(id string) (model.Asset, bool) {
 	}
 	return model.Asset{}, false
 }
-
-func (a *App) movePreview(delta int) {
-	p := &a.Preview
-	if p.navigation == nil {
-		a.InitPreviewNavigation()
-	}
-	index := slices.Index(p.navigation, p.ID)
-	if index < 0 || index+delta < 0 || index+delta >= len(p.navigation) {
-		return
-	}
-	p.ID = p.navigation[index+delta]
-	a.MarkAssetsUsed([]string{p.ID})
-}
-func (a *App) loadPreview(asset model.Asset, root string) {
-	p := &a.Preview
+func (w *previewWindow) load(a *App) {
+	p := &w.picture
 	p.Loading = true
-	generation := p.Generation
-	win := a.Window
-	path := filepath.Join(root, filepath.FromSlash(asset.RelativePath))
+	generation, asset, root := p.Generation, w.asset, w.root
 	go func() {
-		picture, err := readPreviewPicture(path, asset.Rotation)
+		picture, err := readPreviewPicture(filepath.Join(root, filepath.FromSlash(asset.RelativePath)), asset.Rotation)
 		if err != nil {
 			slog.Error("原图预览加载失败", "asset", asset.ID, "error", err)
 		}
-		win.Update(func() {
+		w.update(func() {
 			p.finishPicture(generation, picture, err)
 			if generation == p.Generation && p.Open && err != nil {
 				p.errorText = a.Texts.Error(err)
@@ -444,8 +442,8 @@ func (a *App) loadPreview(asset model.Asset, root string) {
 		})
 	}()
 }
-func (a *App) animatePreview(c *ui.Context) {
-	p := &a.Preview
+func (w *previewWindow) animatePicture(c *ui.Context, a *App) {
+	p := &w.picture
 	if p.animation == nil || p.animationLoading || c.Preferences().ReduceMotion {
 		return
 	}
@@ -463,7 +461,7 @@ func (a *App) animatePreview(c *ui.Context) {
 		if err != nil {
 			slog.Error("预览动图播放失败", "asset", id, "error", err)
 		}
-		a.Window.Update(func() {
+		w.update(func() {
 			if generation != p.Generation || !p.Open {
 				return
 			}
@@ -471,7 +469,7 @@ func (a *App) animatePreview(c *ui.Context) {
 			if err != nil {
 				p.animation = nil
 				p.errorText = a.Texts.Error(err)
-				a.ShowError(err)
+				w.operationError = p.errorText
 				return
 			}
 			p.Bitmap, p.pixelBitmap, p.animation = picture.bitmap, picture.pixelBitmap, picture.animation

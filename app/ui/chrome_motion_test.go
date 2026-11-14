@@ -94,14 +94,7 @@ func TestAssetDoubleClickSurvivesInspectorOpening(t *testing.T) {
 		a.ViewMode = mode
 		a.InspectorVisible = false
 		a.Selected.Clear()
-		tt := ui.NewTester(func(c *ui.Context) {
-			if a.Preview.Open && a.Preview.Bitmap == nil {
-				asset := a.assetByID[a.Preview.ID]
-				a.Preview.target(a.Library.Root, asset.ID, asset.Rotation)
-				a.Preview.finish(a.Preview.Generation, fixture.bitmaps[asset.ID], nil)
-			}
-			a.View(c)
-		}, 1440, 900)
+		tt := ui.NewTester(a.View, 1440, 900)
 		tt.Advance(time.Second)
 		var id, name string
 		var target ui.Rect
@@ -118,8 +111,8 @@ func TestAssetDoubleClickSurvivesInspectorOpening(t *testing.T) {
 		tt.ClickAt(x, y)
 		tt.Advance(100 * time.Millisecond)
 		tt.ClickAt(x, y)
-		if !a.Preview.Open || a.Preview.ID != id {
-			t.Fatalf("视图%d检查器展开吞掉了%s的第二次点击：选中%v，预览%v/%s", mode, name, a.Selected.Len(), a.Preview.Open, a.Preview.ID)
+		if !a.PreviewOpen() || a.PreviewAssetID() != id {
+			t.Fatalf("视图%d检查器展开吞掉了%s的第二次点击：选中%v，预览%v/%s", mode, name, a.Selected.Len(), a.PreviewOpen(), a.PreviewAssetID())
 		}
 	}
 }

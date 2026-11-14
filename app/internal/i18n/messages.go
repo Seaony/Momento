@@ -209,6 +209,7 @@ var messages = map[string][3]string{
 	"loading_preview":                {"正在加载预览", "Loading preview", "プレビューを読み込み中"},
 	"copy_color":                     {"复制色值 %s", "Copy color %s", "カラー値%sをコピー"},
 	"exif_metadata":                  {"EXIF 信息", "EXIF Metadata", "EXIF情報"},
+	"preview_hold_to_pin":            {"继续按住，固定为窗口", "Keep holding to pin this window", "押し続けるとウインドウを固定"},
 	"preview_original":               {"预览原图", "Preview Original", "オリジナルをプレビュー"},
 	"preview_position":               {"%d / %d", "%d / %d", "%d / %d"},
 	"close_preview":                  {"关闭预览", "Close Preview", "プレビューを閉じる"},

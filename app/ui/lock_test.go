@@ -109,10 +109,10 @@ func TestPasswordLockRejectsWrongPasswordAcrossSurfaces(t *testing.T) {
 		}
 		a.closePasswordDialog()
 	}
-	a.Preview.Open, a.PromptOpen, a.ConfirmOpen = true, true, true
+	a.PromptOpen, a.ConfirmOpen = true, true
 	a.SettingsOpen = true
 	a.LockNow()
-	if !a.IsLocked() || a.Preview.Open || a.PromptOpen || a.ConfirmOpen || a.SettingsOpen || a.Lock.CurrentPassword != "" {
+	if !a.IsLocked() || a.PreviewOpen() || a.PromptOpen || a.ConfirmOpen || a.SettingsOpen || a.Lock.CurrentPassword != "" {
 		t.Fatal("立即锁定没有清理原界面与密码输入")
 	}
 	a.Lock.Password = "wrong"
