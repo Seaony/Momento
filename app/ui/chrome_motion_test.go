@@ -25,12 +25,14 @@ func TestChromeWidthsAnimateAndInspectorFollowsSelection(t *testing.T) {
 	if width := a.InspectorShownWidth(); width <= 0 || width >= 280 {
 		t.Fatalf("检查器没有中间宽度：%v", width)
 	}
-	tt.Advance(time.Second)
+	tt.Advance(163 * time.Millisecond)
+	tt.Frame()
 	if a.InspectorShownWidth() != 280 {
 		t.Fatalf("检查器未完成展开：%v", a.InspectorShownWidth())
 	}
 	tt.Key(0, ui.KeyEscape)
-	tt.Advance(time.Second)
+	tt.Advance(250 * time.Millisecond)
+	tt.Frame()
 	if a.Selected.Len() != 0 || a.InspectorVisible || a.InspectorShownWidth() != 0 {
 		t.Fatal("Esc没有清选并收起检查器")
 	}
@@ -50,7 +52,8 @@ func TestChromeWidthsAnimateAndInspectorFollowsSelection(t *testing.T) {
 	if width := a.SidebarShownWidth(); width <= 0 || width >= 236 {
 		t.Fatalf("侧栏没有中间宽度：%v", width)
 	}
-	tt.Advance(time.Second)
+	tt.Advance(163 * time.Millisecond)
+	tt.Frame()
 	if a.SidebarShownWidth() != 0 {
 		t.Fatal("侧栏未完成收起")
 	}
@@ -74,7 +77,7 @@ func TestChromeMotionScreenshots(t *testing.T) {
 			a.selectAsset(a.Visible[0].ID, 0, 0)
 		}
 		tt.Frame()
-		first := toolbarMotionFrames(tt, image.Rect(0, 0, 1440, 600))
+		first := motionFramesOver(tt, image.Rect(0, 0, 1440, 600), 340*time.Millisecond)
 		tt.Advance(time.Second)
 		if kind == "sidebar" {
 			a.SidebarVisible = true
@@ -82,7 +85,7 @@ func TestChromeMotionScreenshots(t *testing.T) {
 			a.CollapseInspector()
 		}
 		tt.Frame()
-		second := toolbarMotionFrames(tt, image.Rect(0, 0, 1440, 600))
+		second := motionFramesOver(tt, image.Rect(0, 0, 1440, 600), 340*time.Millisecond)
 		writeToolbarMotionSheet(t, "chrome-"+kind, first, second)
 	}
 }

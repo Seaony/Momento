@@ -9,6 +9,27 @@ import (
 var motionSpring = ui.Animation{Spring: ui.SpringOptions{Duration: 250 * time.Millisecond, Bounce: .04}}
 var motionColor = ui.Animation{Duration: 120 * time.Millisecond}
 
+type paneWidthMotion struct {
+	target    float32
+	changedAt time.Time
+}
+
+func animatePaneWidth(c *ui.Context, e ui.Element, key string, target float32) float32 {
+	state := ui.Local(e, key+"-target", func() paneWidthMotion { return paneWidthMotion{target: target} })
+	if state.target != target {
+		state.target, state.changedAt = target, c.Now()
+	}
+	// 弹簧的感知时长不等于结束时间，栏宽在约定终点收准，避免继续重排。
+	if state.changedAt.IsZero() || c.Now().Sub(state.changedAt) >= 250*time.Millisecond {
+		return e.Jump(key, target)
+	}
+	value := e.AnimateTo(key, target, motionSpring)
+	if !e.Settled(key) {
+		c.After(250*time.Millisecond - c.Now().Sub(state.changedAt))
+	}
+	return value
+}
+
 func animateColors(e ui.Element, background, text ui.Color) {
 	e.Background(e.AnimateColor("surface-color", background, motionColor)).TextColor(e.AnimateColor("text-color", text, motionColor))
 }
@@ -32,8 +53,6 @@ func layoutMotion(e ui.Element) ui.Element {
 	return e.Transition(ui.ElementTransition{Animation: &motionSpring, Position: true, Size: true,
 		Enter: &ui.Motion{Scale: .98}, Exit: &ui.Motion{Scale: .98}})
 }
-
-// 同一素材的缩略图与预览共用身份，位置变化只影响屏幕内的元素。
 
 func motionTarget(on bool) float32 {
 	if on {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/Seaony/Momento/app/internal/model"
 	"github.com/egoist/mygo/ui"
@@ -33,45 +34,63 @@ func (a *App) assetArea(c *ui.Context) {
 			width--
 		}
 	}
-	width = a.assetLayoutWidth(c, scroll, width)
 	if height <= 0 {
 		height = 640
 	}
 	viewportTop := a.scroll.Y - inset - 16
 	top, bottom := max(0, viewportTop-height), viewportTop+2*height
+	state := ui.Local(scroll, "asset-layout", func() assetLayoutState { return assetLayoutState{} })
 	var items []MasonryItem
 	var contentHeight float32
+	var columns int
 	switch a.ViewMode {
 	case 1, 2:
-		items, contentHeight = a.assetRows(width, top, bottom)
+		items, contentHeight, columns = a.assetRows(width, top, bottom)
 	default:
 		if a.layout == nil || a.layoutVersion != a.visibleVersion || a.layoutWidth != width {
-			ratios := make([]float32, len(a.Visible))
-			for i, asset := range a.Visible {
-				w, h := assetDisplaySize(asset)
-				if h > 0 {
-					ratios[i] = float32(w) / float32(h)
+			if state.ratios == nil || state.ratiosVersion != a.visibleVersion {
+				state.ratios = make([]float32, len(a.Visible))
+				for i, asset := range a.Visible {
+					w, h := assetDisplaySize(asset)
+					if h > 0 {
+						state.ratios[i] = float32(w) / float32(h)
+					}
 				}
+				state.ratiosVersion = a.visibleVersion
 			}
-			a.layout = NewMasonryScaled(ratios, width, a.thumbnailScale())
+			a.layout = NewMasonryScaled(state.ratios, width, a.thumbnailScale())
 			a.layoutWidth, a.layoutVersion = width, a.visibleVersion
 		}
-		items, contentHeight = a.layout.Visible(top, bottom), a.layout.Height()
+		items, contentHeight, columns = a.layout.Visible(top, bottom), a.layout.Height(), len(a.layout.columns)
 	}
+	moveCards := state.prepare(a.ViewMode, columns, width, a.thumbnailScale())
 	scroll.Children(func() {
-		canvas := ui.Box(c.Key("asset-canvas")).Height(contentHeight).FillWidth().Shrink(0)
-		canvas.Children(func() {
-			for _, item := range items {
-				asset := a.Visible[item.Index]
-				card := ui.Column(c.Key(asset.ID)).Absolute().Left(item.X).Top(item.Y).Size(item.Width, item.Height)
-				// 只给屏幕中的卡片过渡，离屏位置直接更新，滚动本身不做位置动画。
-				if item.Y+item.Height > viewportTop+inset && item.Y < viewportTop+height {
-					layoutMotion(card)
+		mode := ui.Box(c.Key(assetModeID{a.ViewMode})).Height(contentHeight).FillWidth().Shrink(0).
+			Transition(ui.ElementTransition{Duration: assetEnterDuration, ExitDuration: assetExitDuration, Colors: true,
+				Enter: &ui.Motion{Scale: .98}, Exit: &ui.Motion{}})
+		mode.Children(func() {
+			canvas := ui.Box(c.Key(assetCanvasID{state.generation})).Height(contentHeight).FillWidth().Shrink(0).
+				Transition(ui.ElementTransition{Duration: assetColumnsEnterDuration, ExitDuration: assetColumnsExitDuration, Colors: true,
+					Enter: &ui.Motion{}, Exit: &ui.Motion{}})
+			canvas.Children(func() {
+				for _, item := range items {
+					asset := a.Visible[item.Index]
+					card := ui.Column(c.Key(asset.ID)).Absolute().Left(item.X).Top(item.Y).Size(item.Width, item.Height)
+					// 形状与列数不变时才移动卡片；变宽、缩放和换视图都直接布局。
+					if moveCards && item.Y+item.Height > viewportTop+inset && item.Y < viewportTop+height {
+						card.Transition(ui.ElementTransition{Duration: assetEnterDuration, ExitDuration: assetExitDuration, Position: true,
+							Enter: &ui.Motion{}, Exit: &ui.Motion{}})
+					} else {
+						card.Transition(ui.ElementTransition{Duration: -1, Position: true, Size: true})
+					}
+					card.Children(func() { a.assetCard(c, asset, item.Index, a.ViewMode == 2, item.Width) })
 				}
-				card.Children(func() { a.assetCard(c, asset, item.Index, a.ViewMode == 2, item.Width) })
+			})
+			if canvas.Clicked() {
+				a.clearAssetSelection()
 			}
 		})
-		if canvas.Clicked() {
+		if mode.Clicked() {
 			a.clearAssetSelection()
 		}
 	})
@@ -103,35 +122,36 @@ func (a *App) assetArea(c *ui.Context) {
 	}
 }
 
-type assetChromeLayout struct {
-	sidebar, inspector bool
-	moving             bool
+const (
+	assetEnterDuration        = 180 * time.Millisecond
+	assetExitDuration         = 120 * time.Millisecond
+	assetColumnsEnterDuration = 90 * time.Millisecond
+	assetColumnsExitDuration  = 60 * time.Millisecond
+)
+
+type assetModeID struct{ mode int }
+type assetCanvasID struct{ generation uint64 }
+
+type assetLayoutState struct {
+	ready         bool
+	mode, columns int
+	width, scale  float32
+	generation    uint64
+	ratiosVersion uint64
+	ratios        []float32
 }
 
-func (a *App) assetLayoutWidth(c *ui.Context, scroll ui.Element, actual float32) float32 {
-	if !a.chromeLayoutReady {
-		return actual
+func (s *assetLayoutState) prepare(mode, columns int, width, scale float32) bool {
+	sameShape := s.ready && s.mode == mode && s.columns == columns
+	if s.ready && s.mode != mode {
+		s.generation = 0
+	} else if s.ready && s.columns != columns {
+		// 变列数单独使用短过渡，不沿用切换视图的时长。
+		s.generation++
 	}
-	inspector := a.InspectorTargetWidth() > 0
-	state := ui.Local(scroll, "chrome-layout", func() assetChromeLayout {
-		return assetChromeLayout{sidebar: a.SidebarVisible, inspector: inspector}
-	})
-	if state.sidebar != a.SidebarVisible || state.inspector != inspector {
-		state.sidebar, state.inspector, state.moving = a.SidebarVisible, inspector, true
-	}
-	sidebarWidth := float32(0)
-	if a.SidebarVisible {
-		sidebarWidth = a.SidebarWidth
-	}
-	if state.moving && a.SidebarShownWidth() == sidebarWidth && a.InspectorShownWidth() == a.InspectorTargetWidth() {
-		state.moving = false
-	}
-	if state.moving {
-		// 栏宽正在变化时只朝最终卡片位置移动一次，避免每帧重排造成拖尾。
-		width, _ := c.Size()
-		return width - 32 - sidebarWidth - a.InspectorTargetWidth() - 1
-	}
-	return actual
+	moveCards := !s.ready || sameShape && s.width == width && s.scale == scale
+	s.ready, s.mode, s.columns, s.width, s.scale = true, mode, columns, width, scale
+	return moveCards
 }
 
 func (a *App) clearAssetSelection() {
@@ -223,11 +243,11 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 			} else {
 				ui.Box(c).Size(48, 48).Radius(6).Background(c.Theme().Surface)
 			}
-			fadeMotion(ui.Column(c.Key("list-meta")).Grow(1).MinWidth(0).Gap(4)).Children(func() {
+			ui.Column(c.Key("list-meta")).Grow(1).MinWidth(0).Gap(4).Children(func() {
 				ui.Text(c, asset.Name).FontSize(13).Bold().SingleLine()
 				ui.Text(c, fmt.Sprintf("%d × %d · %s", width, height, fileSize(asset.Size))).FontSize(12).TextColor(c.Theme().TextMuted)
 			})
-			fadeMotion(ui.Text(c.Key("list-extension"), strings.ToUpper(asset.Extension)).FontSize(12).TextColor(c.Theme().TextMuted).Margin(0, 36, 0, 0))
+			ui.Text(c.Key("list-extension"), strings.ToUpper(asset.Extension)).FontSize(12).TextColor(c.Theme().TextMuted).Margin(0, 36, 0, 0)
 		} else {
 			radius := float32(8)
 			if a.ViewMode == 1 {

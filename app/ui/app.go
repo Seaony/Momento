@@ -236,8 +236,8 @@ func (a *App) View(c *ui.Context) {
 		if a.SidebarVisible {
 			sidebarTarget = a.SidebarWidth
 		}
-		a.sidebarShownWidth = workspace.AnimateTo("sidebar-width", sidebarTarget, motionSpring)
-		a.inspectorShownWidth = workspace.AnimateTo("inspector-width", a.InspectorTargetWidth(), motionSpring)
+		a.sidebarShownWidth = animatePaneWidth(c, workspace, "sidebar-width", sidebarTarget)
+		a.inspectorShownWidth = animatePaneWidth(c, workspace, "inspector-width", a.InspectorTargetWidth())
 		a.chromeLayoutReady = true
 		workspace.Children(func() {
 			body := func() {

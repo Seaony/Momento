@@ -50,7 +50,8 @@ func (a *App) toolbar(c *ui.Context) {
 	}
 	row.Children(func() {
 		if !a.SidebarVisible {
-			button := fadeMotion(toolbarIconButton(c.Key("toggle-sidebar"), a.T("toggle_sidebar"), "sidebar"))
+			button := toolbarIconButton(c.Key("toggle-sidebar"), a.T("toggle_sidebar"), "sidebar").
+				Transition(ui.ElementTransition{Animation: &motionColor, Enter: &ui.Motion{}, Exit: &ui.Motion{}})
 			if button.Clicked() {
 				a.SidebarVisible = true
 			}
@@ -205,7 +206,6 @@ func (a *App) toolbarSearch(c *ui.Context, hint string) {
 	}
 	field.Border(1, field.AnimateColor("field-border", border, motionColor))
 	animateColors(field, background, t.Text)
-	layoutMotion(field)
 }
 
 func (a *App) viewSwitcher(c *ui.Context) {

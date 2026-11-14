@@ -18,12 +18,17 @@ import (
 )
 
 func toolbarMotionFrames(tt *ui.Tester, crop image.Rectangle) []*image.RGBA {
+	return motionFramesOver(tt, crop, 250*time.Millisecond)
+}
+
+func motionFramesOver(tt *ui.Tester, crop image.Rectangle, duration time.Duration) []*image.RGBA {
 	var frames []*image.RGBA
 	previous := time.Duration(0)
-	for _, elapsed := range []time.Duration{0, 87500 * time.Microsecond, 175 * time.Millisecond, 250 * time.Millisecond} {
+	for _, elapsed := range []time.Duration{0, duration * 35 / 100, duration * 70 / 100, duration} {
 		if elapsed > previous {
 			tt.Advance(elapsed - previous)
 		}
+		tt.Frame()
 		frame := image.NewRGBA(image.Rect(0, 0, crop.Dx(), crop.Dy()))
 		draw.Draw(frame, frame.Bounds(), tt.Image(), crop.Min, draw.Src)
 		frames = append(frames, frame)

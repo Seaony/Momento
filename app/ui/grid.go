@@ -3,7 +3,7 @@ package ui
 import "math"
 
 // 规则网格和列表只计算可见窗口，卡片与瀑布流共用同一个画布和身份。
-func (a *App) assetRows(width, top, bottom float32) ([]MasonryItem, float32) {
+func (a *App) assetRows(width, top, bottom float32) ([]MasonryItem, float32, int) {
 	columns, gap, rowHeight := 1, float32(0), float32(64)
 	if a.ViewMode == 1 {
 		gap = masonryGap
@@ -27,5 +27,5 @@ func (a *App) assetRows(width, top, bottom float32) ([]MasonryItem, float32) {
 			items = append(items, MasonryItem{Index: index, X: float32(column) * (itemWidth + gap), Y: float32(row) * (rowHeight + gap), Width: itemWidth, Height: rowHeight})
 		}
 	}
-	return items, max(0, float32(rows)*(rowHeight+gap)-gap)
+	return items, max(0, float32(rows)*(rowHeight+gap)-gap), columns
 }
