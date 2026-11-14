@@ -115,7 +115,7 @@ func (a *App) inspectorAsset(c *ui.Context, asset model.Asset) {
 	}
 	ui.Column(c.Key("inspector-filename")).Gap(space4).Children(func() {
 		input := ui.TextInput(c.Key("asset_title_"+asset.ID), &a.Inspector.Title).
-			Label(a.T("title")).FontSize(fontBody).FontWeight(600).Background(p.Raised).Border(1, p.BorderSubtle).Radius(radiusControl).Disabled(a.Busy)
+			Label(a.T("title")).FontSize(fontBody).FontWeight(600).Background(p.Raised).Border(1, p.Border).Radius(radiusControl).Disabled(a.Busy)
 		if input.Submitted() || input.FocusLeft() {
 			a.saveInspectorTitle()
 		}
@@ -164,8 +164,9 @@ func (a *App) inspectorAsset(c *ui.Context, asset model.Asset) {
 func (a *App) inspectorNotes(c *ui.Context, asset model.Asset) {
 	p := paletteFor(c.Theme())
 	ui.Column(c).Gap(space8).Children(func() {
+		ui.Divider(c.Key("inspector-notes-divider")).Background(p.BorderSubtle)
 		ui.Text(c, a.T("asset_note")).FontSize(fontGroup).FontWeight(600).LetterSpacing(.8).TextColor(p.TextTertiary)
-		note := ui.TextArea(c.Key("asset-note-"+asset.ID), &a.Inspector.Note).Label(a.T("asset_note")).Height(88).Background(p.Raised).Border(1, p.BorderSubtle).Radius(radiusControl).FillWidth().Disabled(a.Busy)
+		note := ui.TextArea(c.Key("asset-note-"+asset.ID), &a.Inspector.Note).Label(a.T("asset_note")).Placeholder(a.T("asset_note_placeholder")).PlaceholderColor(p.TextTertiary).Height(88).Background(p.Raised).Border(1, p.Border).Radius(radiusControl).FillWidth().Disabled(a.Busy)
 		if note.FocusLeft() {
 			a.saveInspectorDetails()
 		}
@@ -173,10 +174,22 @@ func (a *App) inspectorNotes(c *ui.Context, asset model.Asset) {
 	ui.Column(c).Gap(space8).Children(func() {
 		ui.Text(c, a.T("source_url")).FontSize(fontGroup).FontWeight(600).LetterSpacing(.8).TextColor(p.TextTertiary)
 		ui.Row(c).Gap(space8).Children(func() {
-			source := ui.TextInput(c.Key("asset-source-"+asset.ID), &a.Inspector.SourceURL).Label(a.T("source_url")).Background(p.Raised).Border(1, p.BorderSubtle).Radius(radiusControl).TextColor(p.Link).Grow(1).MinWidth(0).Disabled(a.Busy)
-			if source.Submitted() || source.FocusLeft() {
-				a.saveInspectorDetails()
-			}
+			ui.Box(c.Key("source-field")).Grow(1).MinWidth(0).Height(space32).Children(func() {
+				source := ui.TextInput(c.Key("asset-source-"+asset.ID), &a.Inspector.SourceURL).Label(a.T("source_url")).Placeholder(a.T("source_url_placeholder")).PlaceholderColor(p.TextTertiary).Background(p.Raised).Border(1, p.Border).Radius(radiusControl).TextColor(p.Link).Fill().Disabled(a.Busy)
+				if source.Submitted() || source.FocusLeft() {
+					a.saveInspectorDetails()
+				}
+				if !source.Focused() {
+					source.TextColor(ui.Transparent).PlaceholderColor(ui.Transparent)
+					text, color := a.Inspector.SourceURL, p.Link
+					if text == "" {
+						text, color = a.T("source_url_placeholder"), p.TextTertiary
+					}
+					ui.Row(c.Key("source-display")).Absolute().Fill().Padding(0, space12).IgnoreInput(true).PassThrough().AccessHidden(true).Children(func() {
+						ui.Text(c, text).FontSize(fontBody).TextColor(color).SingleLine().Grow(1).MinWidth(0)
+					})
+				}
+			})
 			if strings.TrimSpace(a.Inspector.SourceURL) != "" {
 				if inspectorIconButton(c.Key("open-source"), a.T("open_source_url"), "external-link").Clicked() {
 					c.OpenURLThen(strings.TrimSpace(a.Inspector.SourceURL), a.ShowError)
@@ -328,7 +341,7 @@ func (a *App) inspectorMemberships(c *ui.Context, selected []model.Asset, items 
 				if len(selected) > 1 {
 					ui.Textf(c, "%d/%d", count, len(selected)).Font(monoFont(c)).FontSize(fontNumber).TextColor(paletteFor(c.Theme()).TextSecondary)
 				}
-				if inspectorIconButton(c, a.T("remove_"+kind, item.Name), "minus").Disabled(a.Busy).Clicked() {
+				if inspectorRemoveButton(c, a.T("remove_"+kind, item.Name)).Disabled(a.Busy).Clicked() {
 					set(item.ID, false)
 				}
 			})
@@ -497,5 +510,22 @@ func inspectorIconButton(c *ui.Context, label, icon string) ui.Element {
 	}
 	animateColors(button, background, text)
 	button.Children(func() { appIcon(c, icon).Size(16, 16) })
+	return button
+}
+
+func inspectorRemoveButton(c *ui.Context, label string) ui.Element {
+	p := paletteFor(c.Theme())
+	button := ui.ButtonBase(c).Label(label).Tooltip(label).Size(28, 28).Padding(0).Radius(radiusControl).Cursor(ui.CursorPointer)
+	background, text := ui.Transparent, p.TextTertiary
+	if button.Pressed() {
+		background = p.Pressed
+	} else if button.Hovered() {
+		background = p.Hover
+	}
+	if button.Hovered() {
+		text = p.Text
+	}
+	animateColors(button, background, text)
+	button.Children(func() { appIcon(c, "close").Size(space12, space12) })
 	return button
 }

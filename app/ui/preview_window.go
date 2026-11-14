@@ -14,6 +14,18 @@ const previewPeekThreshold = 250 * time.Millisecond
 const previewPinThreshold = 3 * time.Second
 const previewWindowDuration = 250 * time.Millisecond
 
+const (
+	previewMinimumWidth     = 400
+	previewWindowBorder     = 1
+	previewWindowInset      = space12
+	previewToolbarHeight    = space48
+	previewImageTop         = previewWindowInset + previewToolbarHeight + space12
+	previewImageBottom      = space48
+	previewNavigationSize   = 36
+	previewNavigationInset  = space16
+	previewNavigationGutter = previewNavigationInset + previewNavigationSize + space12
+)
+
 type previewWindows struct {
 	active       *previewWindow
 	pinned       []*previewWindow
@@ -217,7 +229,7 @@ func (w *previewWindow) advanceHold(a *App, now time.Time) {
 	a.Preview.pinned = append(a.Preview.pinned, w)
 	if w.window != nil {
 		w.window.SetAlwaysOnTop(true)
-		w.window.SetMinimumSize(300, 220)
+		w.window.SetMinimumSize(previewMinimumWidth, 220)
 		w.window.SetResizable(true)
 		w.window.SetMovable(true)
 	}
@@ -323,7 +335,7 @@ func (a *App) previewMenuChanged() {
 func (w *previewWindow) create(a *App) {
 	parent := a.Window.Bounds()
 	area := mygo.Screen.DisplayMatching(parent).WorkArea
-	w.frame = previewWindowBounds(parent, area, w.asset, a.Preferences.PreviewFit == "fit")
+	w.frame = previewWindowBounds(parent, area, w.asset, a.Preferences.PreviewFit == "fit", len(w.items) > 1)
 	w.hostAnimating = true
 	w.window = mygo.NewWindow(mygo.WindowOptions{Title: w.asset.Name, Width: w.frame.Width, Height: w.frame.Height,
 		Hidden: true, Frameless: true, Transparent: true, CornerRadius: radiusPanel, SkipTaskbar: true,
@@ -349,7 +361,7 @@ func (w *previewWindow) create(a *App) {
 	})
 	w.window.ShowInactive()
 }
-func previewWindowBounds(parent, area mygo.Rectangle, asset model.Asset, enlarge bool) mygo.Rectangle {
+func previewWindowBounds(parent, area mygo.Rectangle, asset model.Asset, enlarge, navigation bool) mygo.Rectangle {
 	maxW, maxH := max(1, parent.Width*8/10), max(1, parent.Height*8/10)
 	if area.Width > 0 {
 		maxW = min(maxW, area.Width)
@@ -362,8 +374,10 @@ func previewWindowBounds(parent, area mygo.Rectangle, asset model.Asset, enlarge
 	if enlarge {
 		limit = 2
 	}
-	scale := min(limit, previewFitZoom(float32(iw), float32(ih), float32(maxW-50), float32(maxH-114)))
-	width, height := min(maxW, max(300, int(float32(iw)*scale)+50)), min(maxH, max(220, int(float32(ih)*scale)+114))
+	side := previewImageSide(float32(maxW), float32(maxH), asset, navigation)
+	chromeHeight := previewImageTop + previewImageBottom
+	scale := min(limit, previewFitZoom(float32(iw), float32(ih), float32(maxW)-2*side, float32(maxH-chromeHeight)))
+	width, height := min(maxW, max(previewMinimumWidth, int(float32(iw)*scale)+int(2*side))), min(maxH, max(220, int(float32(ih)*scale)+chromeHeight))
 	x, y := parent.X+(parent.Width-width)/2, parent.Y+(parent.Height-height)/2
 	if area.Width > 0 {
 		x = max(area.X, min(x, area.X+area.Width-width))
@@ -373,6 +387,16 @@ func previewWindowBounds(parent, area mygo.Rectangle, asset model.Asset, enlarge
 	}
 	return mygo.Rectangle{X: x, Y: y, Width: width, Height: height}
 }
+
+// 小图把翻页按钮放在图外；大图或窄窗才允许按钮叠在图片上。
+func previewImageSide(width, height float32, asset model.Asset, navigation bool) float32 {
+	iw, ih := assetDisplaySize(asset)
+	if navigation && float32(iw) <= width-2*previewNavigationGutter && float32(ih) <= height-previewImageTop-previewImageBottom {
+		return previewNavigationGutter
+	}
+	return previewWindowInset
+}
+
 func scaledPreviewBounds(r mygo.Rectangle, scale float32) mygo.Rectangle {
 	width, height := int(math.Round(float64(float32(r.Width)*scale))), int(math.Round(float64(float32(r.Height)*scale)))
 	return mygo.Rectangle{X: r.X + (r.Width-width)/2, Y: r.Y + (r.Height-height)/2, Width: width, Height: height}
@@ -524,7 +548,11 @@ func (w *previewWindow) view(c *ui.Context, a *App) {
 		w.load(a)
 	}
 	w.animatePicture(c, a)
-	surface := ui.Box(c.Key("preview-window-surface")).Fill().Radius(radiusPanel).Clip().Material(frostedSurface{tint: paletteFor(c.Theme()).Background.Alpha(.72), blur: space24}).Border(1, paletteFor(c.Theme()).BorderSubtle)
+	tint := paletteFor(c.Theme()).Background.Alpha(.72)
+	if c.Theme().Dark {
+		tint = paletteFor(c.Theme()).Sidebar.Alpha(.86)
+	}
+	surface := ui.Box(c.Key("preview-window-surface")).Fill().Radius(radiusPanel).Clip().Material(frostedSurface{tint: tint, blur: space24}).Border(previewWindowBorder, paletteFor(c.Theme()).BorderSubtle)
 	if w.pinned {
 		surface.DragWindow()
 	}
@@ -532,7 +560,7 @@ func (w *previewWindow) view(c *ui.Context, a *App) {
 		w.viewport(c, a)
 		w.controls(c, a, surface.Hovered())
 		if w.operationError != "" {
-			ui.Column(c).Absolute().Top(space64).Left(space16).Right(space16).Padding(space8).Radius(radiusControl).Material(panelMaterial(c.Theme())).Children(func() { ui.Text(c, w.operationError).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).Danger) })
+			ui.Column(c).Absolute().Top(previewImageTop - previewWindowBorder).Left(previewWindowInset - previewWindowBorder).Right(previewWindowInset - previewWindowBorder).Padding(space8).Radius(radiusControl).Material(panelMaterial(c.Theme())).Children(func() { ui.Text(c, w.operationError).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).Danger) })
 		}
 
 		elapsed := now.Sub(w.pressedAt)
@@ -549,7 +577,7 @@ func (w *previewWindow) view(c *ui.Context, a *App) {
 				value = 1
 				opacity = 1 - float32(now.Sub(w.pinnedAt))/float32(120*time.Millisecond)
 			}
-			progress := ui.Column(c.Key("preview-hold-progress")).Absolute().Bottom(space12).Left(space24).Right(space24).Gap(space8).AlignItems(ui.Center).IgnoreInput(true).Opacity(opacity)
+			progress := ui.Column(c.Key("preview-hold-progress")).Absolute().Bottom(previewWindowInset - previewWindowBorder).Left(space24).Right(space24).Gap(space8).AlignItems(ui.Center).IgnoreInput(true).Opacity(opacity)
 			progress.Children(func() {
 				ui.Text(c, a.T("preview_hold_to_pin")).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary).SingleLine()
 				ui.Box(c).Width(180).Height(space4).Radius(space4 / 2).Background(paletteFor(c.Theme()).BorderSubtle).Children(func() {
@@ -590,11 +618,8 @@ func (w *previewWindow) controls(c *ui.Context, a *App, hovered bool) {
 	_, height := c.Size()
 	p := &w.picture
 	index := slices.IndexFunc(w.items, func(asset model.Asset) bool { return asset.ID == w.asset.ID })
-	right := float32(space8)
-	if w.pinned {
-		right = space48
-	}
-	elevated(ui.Row(c.Key("preview-controls")).Absolute().Top(space12).Left(space8).Right(right).Height(space48).Padding(space4).Gap(space4).AlignItems(ui.Center).Radius(space24).Material(panelMaterial(c.Theme())), c.Theme()).Children(func() {
+
+	elevated(ui.Row(c.Key("preview-controls")).Absolute().Top(previewWindowInset-previewWindowBorder).Left(previewWindowInset-previewWindowBorder).Right(previewWindowInset-previewWindowBorder).Height(previewToolbarHeight).Padding(space4).Gap(space4).AlignItems(ui.Center).Radius(space24).Material(panelMaterial(c.Theme())), c.Theme()).Children(func() {
 		ui.Column(c).Grow(1).MinWidth(0).Gap(space4).Children(func() {
 			ui.Text(c, w.asset.Name).FontSize(fontBody).FontWeight(600).TextColor(paletteFor(c.Theme()).Text).SingleLine().Tooltip(w.asset.Name)
 			iw, ih := assetDisplaySize(w.asset)
@@ -608,26 +633,25 @@ func (w *previewWindow) controls(c *ui.Context, a *App, hovered bool) {
 				a.rotatePreviewWindow(w, entry.delta)
 			}
 		}
-		if !w.picture.Held && !w.closedHeld && !w.pinned {
+		if w.pinned {
+			close := previewSymbolButton(c.Key("close-pinned-preview"), "close", a.T("close_preview"), 28, false)
+			visible := hovered
+			close.Opacity(motionTarget(visible)).IgnoreInput(!visible)
+			if close.Clicked() {
+				w.close(a, c.Now())
+			}
+		} else if !w.picture.Held && !w.closedHeld {
 			if previewSymbolButton(c.Key("close-preview"), "close", a.T("close_preview"), space32, false).Clicked() {
 				w.close(a, c.Now())
 			}
 		}
 	})
 	if len(w.items) > 1 {
-		if previewSymbolButton(c.Key("previous-preview"), "chevron-left", a.T("previous_asset"), 36, index <= 0).Absolute().Left(space16).Top(height/2).TranslatePercent(0, -50).Clicked() {
+		if previewSymbolButton(c.Key("previous-preview"), "chevron-left", a.T("previous_asset"), previewNavigationSize, index <= 0).Absolute().Left(previewNavigationInset-previewWindowBorder).Top(height/2-previewWindowBorder).TranslatePercent(0, -50).Clicked() {
 			w.move(a, -1)
 		}
-		if previewSymbolButton(c.Key("next-preview"), "chevron-right", a.T("next_asset"), 36, index >= len(w.items)-1).Absolute().Right(space16).Top(height/2).TranslatePercent(0, -50).Clicked() {
+		if previewSymbolButton(c.Key("next-preview"), "chevron-right", a.T("next_asset"), previewNavigationSize, index >= len(w.items)-1).Absolute().Right(previewNavigationInset-previewWindowBorder).Top(height/2-previewWindowBorder).TranslatePercent(0, -50).Clicked() {
 			w.move(a, 1)
-		}
-	}
-	if w.pinned {
-		close := previewSymbolButton(c.Key("close-pinned-preview"), "close", a.T("close_preview"), 28, false).Absolute().Right(space12).Top(space12)
-		visible := hovered
-		close.Opacity(motionTarget(visible)).IgnoreInput(!visible)
-		if close.Clicked() {
-			w.close(a, c.Now())
 		}
 	}
 }

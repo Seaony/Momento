@@ -20,7 +20,8 @@ func styleSegment(c *ui.Context, item ui.Element, selected bool) {
 func slidingSegmentTrack(c *ui.Context, track ui.Element, items []ui.Element, selected int, padding, gap float32) {
 	theme := c.Theme()
 	palette := paletteFor(theme)
-	background, hover, pressed := palette.Raised, palette.Hover, palette.Pressed
+	background := palette.SegmentSelected
+	hover, pressed := palette.SegmentSelected.Mix(palette.Text, .04), palette.SegmentSelected.Mix(palette.Text, .08)
 	if items[selected].Pressed() {
 		background = pressed
 	} else if items[selected].Hovered() {

@@ -16,7 +16,7 @@ func TestDialogDesignScreenshots(t *testing.T) {
 	if os.Getenv("MOMENTO_DIALOG_DESIGN_SCREENSHOTS") != "1" {
 		t.Skip("显式生成第三轮对话框与空图库联系图")
 	}
-	dir := "/tmp/momento-polish/shots3/dialogs"
+	dir := "/tmp/momento-polish/shots3/dialogs-fix"
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}

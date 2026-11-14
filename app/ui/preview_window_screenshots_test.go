@@ -47,7 +47,7 @@ func TestPreviewWindowScreenshots(t *testing.T) {
 		a := makeApp(theme)
 		w := a.Preview.active
 		w.openedAt = time.Now().Add(-time.Second)
-		r := previewWindowBounds(mygo.Rectangle{Width: 1100, Height: 800}, mygo.Rectangle{Width: 1440, Height: 900}, w.asset, a.Preferences.PreviewFit == "fit")
+		r := previewWindowBounds(mygo.Rectangle{Width: 1100, Height: 800}, mygo.Rectangle{Width: 1440, Height: 900}, w.asset, a.Preferences.PreviewFit == "fit", len(w.items) > 1)
 		tt := ui.NewTester(func(c *ui.Context) { w.view(c, a) }, r.Width, r.Height)
 		tt.SetLocale(a.Texts.Locale())
 		tt.Advance(300 * time.Millisecond)
@@ -56,7 +56,7 @@ func TestPreviewWindowScreenshots(t *testing.T) {
 	for _, kind := range []string{"quick", "peek", "pin"} {
 		a := makeApp("light")
 		w := a.Preview.active
-		r := previewWindowBounds(mygo.Rectangle{Width: 1100, Height: 800}, mygo.Rectangle{Width: 1440, Height: 900}, w.asset, a.Preferences.PreviewFit == "fit")
+		r := previewWindowBounds(mygo.Rectangle{Width: 1100, Height: 800}, mygo.Rectangle{Width: 1440, Height: 900}, w.asset, a.Preferences.PreviewFit == "fit", len(w.items) > 1)
 		tt := ui.NewTester(func(c *ui.Context) { w.view(c, a) }, r.Width, r.Height)
 		start := tt.Now()
 		w.openedAt, w.pressedAt = start, start

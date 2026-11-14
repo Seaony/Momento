@@ -129,7 +129,7 @@ func (a *App) sidebarFooter(c *ui.Context, trashCount int) {
 		}
 		trash.ContextMenu(func(m *ui.Menu) {
 			if m.Item(a.T("empty_trash")).Disabled(trashCount == 0 || a.Busy).Chosen() {
-				a.Confirm(a.T("empty_trash"), a.T("empty_trash_detail"), func() {
+				a.Confirm(a.T("empty_trash"), a.T("empty_trash_detail"), a.T("clear"), func() {
 					service := a.Assets
 					a.Run("empty_trash", func(ctx context.Context) error { return service.EmptyTrash(ctx) })
 				})
@@ -294,7 +294,7 @@ func (a *App) sidebarLibrary(c *ui.Context) {
 		ui.Image(c, appLogo).Size(space24+space4, space24+space4).Radius(radiusCard).Shrink(0)
 		ui.Column(c).Grow(1).MinWidth(0).Gap(0).Children(func() {
 			ui.Text(c, name).TextColor(p.Text).FontSize(fontBody).FontWeight(600).SingleLine().FillWidth().MinWidth(0)
-			ui.Text(c, countLabel).TextColor(p.TextSecondary).FontSize(fontSecondary).Font(monoFont(c)).SingleLine().FillWidth().MinWidth(0)
+			ui.Text(c, countLabel).TextColor(p.TextSecondary).FontSize(fontSecondary).SingleLine().FillWidth().MinWidth(0)
 		})
 		appSymbol(c, "chevrons-up-down").Size(14, 14).Shrink(0)
 	})
@@ -415,7 +415,7 @@ func (a *App) sidebarFolders(c *ui.Context, counts catalog.Counts) {
 				}
 				m.Separator()
 				if m.Item(a.T("delete_folder")).Disabled(a.Busy).Chosen() {
-					a.Confirm(a.T("delete_folder"), a.T("delete_folder_detail", folder.Name), func() {
+					a.Confirm(a.T("delete_folder"), a.T("delete_folder_detail", folder.Name), a.T("delete"), func() {
 						lib := a.Library
 						if a.Query.Scope == "folder" && sidebarFolderContains(a.Snapshot.Folders, folder.ID, a.Query.FolderID) {
 							a.SetScope("all", "")

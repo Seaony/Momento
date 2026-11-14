@@ -35,7 +35,7 @@ func polishedOverlayApp(language, theme, state string) (*App, func(*ui.Context))
 		}
 		view = a.welcome
 	case "confirmation":
-		a.Confirm(a.T("empty_trash"), a.T("empty_trash_detail"), func() {})
+		a.Confirm(a.T("empty_trash"), a.T("empty_trash_detail"), a.T("clear"), func() {})
 	case "new-library":
 		a.NewLibraryOpen = true
 	case "export":
@@ -64,8 +64,8 @@ func TestOverlayPolishLocalizedLayout(t *testing.T) {
 			for _, state := range states {
 				t.Run(fmt.Sprintf("%s/%s/%s", language, theme, state), func(t *testing.T) {
 					a, view := polishedOverlayApp(language, theme, state)
-					measure := map[string]float32{}
-					for _, key := range []string{"cancel", "confirm", "save", "new_library", "open_library", "choose_location", "create_library", "export", "copy_error", "close", "import", "password_unlock", "password_action_change", "onboarding_skip", "onboarding_next", "onboarding_previous", "onboarding_get_extension"} {
+					measure := map[string]float32{a.ConfirmLabel: 0}
+					for _, key := range []string{"cancel", "save", "new_library", "open_library", "choose_location", "create_library", "export", "copy_error", "close", "import", "password_unlock", "password_action_change", "onboarding_skip", "onboarding_next", "onboarding_previous", "onboarding_get_extension"} {
 						measure[a.T(key)] = 0
 					}
 					tt := ui.NewTester(func(c *ui.Context) {

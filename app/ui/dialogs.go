@@ -72,7 +72,7 @@ func (a *App) confirmationDialog(c *ui.Context) {
 					if settingsButton(c, a.T("cancel")).Clicked() {
 						a.ConfirmOpen = false
 					}
-					confirm := primaryButton(c, a.T("confirm"), false).AutoFocus().TextColor(c.Theme().InverseText)
+					confirm := primaryButton(c, a.ConfirmLabel, false).AutoFocus().TextColor(c.Theme().InverseText)
 					color := paletteFor(c.Theme()).Danger
 					if confirm.Pressed() {
 						color = color.Mix(c.Theme().Text, .15)
@@ -160,7 +160,7 @@ func libraryPackageName(name string) string {
 func (a *App) exportDialog(c *ui.Context) {
 	settingsPanel(c.Key("export"), &a.ExportOpen, 420, func() {
 		dialogHeading(c, "export", a.T("export"))
-		ui.Text(c, a.T("export_count", a.Selected.Len())).Font(monoFont(c)).FontSize(fontNumber).TextColor(paletteFor(c.Theme()).TextSecondary)
+		ui.Text(c, a.T("export_count", a.Selected.Len())).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary)
 		for _, asset := range a.SelectedAssets() {
 			if asset.Rotation != 0 {
 				ui.Text(c, a.T("export_rotation_metadata_hint")).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary)

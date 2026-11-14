@@ -163,8 +163,9 @@ func previewSymbolButton(c *ui.Context, symbol, label string, size float32, disa
 func (w *previewWindow) viewport(c *ui.Context, a *App) {
 	p, asset := &w.picture, w.asset
 	width, height := c.Size()
-	p.viewport = ui.Rect{X: space24 + 1, Y: space64 + 1, W: width - 2*(space24+1), H: height - space64 - space48 - 2}
-	viewport := ui.Box(c.Key("preview-image")).Absolute().Left(space24).Top(space64).Right(space24).Bottom(space48)
+	side := previewImageSide(width, height, asset, len(w.items) > 1)
+	p.viewport = ui.Rect{X: side, Y: previewImageTop, W: width - 2*side, H: height - previewImageTop - previewImageBottom}
+	viewport := ui.Box(c.Key("preview-image")).Absolute().Left(side - previewWindowBorder).Top(previewImageTop - previewWindowBorder).Right(side - previewWindowBorder).Bottom(previewImageBottom - previewWindowBorder)
 	if !p.Open {
 		viewport.PassThrough().AccessHidden(true)
 		return
@@ -277,7 +278,7 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 		})
 	}
 	if p.Loading {
-		ui.Text(c, a.T("preview_loading")).Absolute().Top(space64).Left(width/2).TranslatePercent(-50, 0).
+		ui.Text(c, a.T("preview_loading")).Absolute().Top(previewImageTop-previewWindowBorder).Left(width/2).TranslatePercent(-50, 0).
 			FontSize(fontSecondary).Padding(space8, space12).Radius(radiusPanel).Material(panelMaterial(c.Theme())).TextColor(paletteFor(c.Theme()).TextSecondary)
 	}
 }

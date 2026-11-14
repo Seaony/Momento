@@ -121,6 +121,7 @@ type App struct {
 	PromptTitle, PromptValue                 string
 	PromptSubmit                             func(string)
 	ConfirmTitle, ConfirmDetail              string
+	ConfirmLabel                             string
 	ConfirmAction                            func()
 	Thumbnails                               *thumbnailCache
 	manifest                                 model.Manifest
@@ -255,7 +256,7 @@ func (a *App) View(c *ui.Context) {
 					})
 					ui.Column(c.Key("inspector-slot")).Width(a.inspectorShownWidth).Shrink(0).Clip().Children(func() {
 						if a.InspectorVisible && a.InspectorAvailable() {
-							fadeMotion(ui.Column(c.Key("inspector-content")).Width(280).FillHeight().Background(c.Theme().Surface).BorderWidth(0, 0, 0, 1).BorderColor(c.Theme().Border)).Children(func() { a.inspector(c) })
+							fadeMotion(ui.Column(c.Key("inspector-content")).Width(280).FillHeight().Background(c.Theme().Background).BorderWidth(0, 0, 0, 1).BorderColor(c.Theme().Border)).Children(func() { a.inspector(c) })
 						}
 					})
 				})
@@ -290,9 +291,10 @@ func (a *App) Ask(title, initial string, submit func(string)) {
 	a.PromptSubmit = submit
 	a.PromptOpen = true
 }
-func (a *App) Confirm(title, detail string, action func()) {
+func (a *App) Confirm(title, detail, label string, action func()) {
 	a.ConfirmTitle = title
 	a.ConfirmDetail = detail
+	a.ConfirmLabel = label
 	a.ConfirmAction = action
 	a.ConfirmOpen = true
 }
@@ -566,7 +568,7 @@ func (a *App) DeleteLibrary() {
 		return
 	}
 	lib := a.Library
-	a.Confirm(a.T("delete_library"), a.T("delete_library_detail"), func() {
+	a.Confirm(a.T("delete_library"), a.T("delete_library_detail"), a.T("delete"), func() {
 		a.Busy = true
 		go func() {
 			a.workMu.Lock()
@@ -636,7 +638,7 @@ func (a *App) RequestDelete(ids []string) {
 		return
 	}
 	if a.Query.Scope == "trash" {
-		a.Confirm(a.T("delete_permanently"), a.T("delete_permanently_detail", len(ids)), func() {
+		a.Confirm(a.T("delete_permanently"), a.T("delete_permanently_detail", len(ids)), a.T("delete"), func() {
 			a.Run("delete_permanently", func(ctx context.Context) error { return service.DeletePermanently(ctx, ids) })
 		})
 	} else {

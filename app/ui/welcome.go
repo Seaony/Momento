@@ -118,7 +118,7 @@ func (a *App) onboarding(c *ui.Context) {
 				a.finishOnboarding()
 			}
 			ui.Box(c).Grow(1)
-			ui.Text(c, a.T("onboarding_progress", step+1, 3)).Font(monoFont(c)).FontSize(fontNumber).TextColor(paletteFor(c.Theme()).TextSecondary)
+			ui.Text(c, a.T("onboarding_progress", step+1, 3)).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary)
 			ui.Box(c).Grow(1)
 			if settingsButton(c, a.T("onboarding_previous")).Disabled(step == 0).Clicked() {
 				a.Welcome.Direction = -1

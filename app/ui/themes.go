@@ -13,6 +13,7 @@ var themeKeys = []string{"system", "light", "dark"}
 type designPalette struct {
 	Background, Sidebar, Raised, Subtle, Hover, Pressed, Selected ui.Color
 	BorderSubtle, Border, Text, TextSecondary, TextTertiary       ui.Color
+	SegmentSelected                                               ui.Color
 	Accent, AccentHover, AccentPressed, OnAccent, Focus, Link     ui.Color
 	Danger, Warning, Success, Shadow, Scrim                       ui.Color
 }
@@ -22,10 +23,11 @@ var lightPalette = designPalette{
 	Subtle: ui.Hex("#FDF1E8"), Hover: ui.Hex("#FBECE0"), Pressed: ui.Hex("#F7E2D2"), Selected: ui.Hex("#FFFFFF"),
 	BorderSubtle: ui.Hex("#F3E3D6"), Border: ui.Hex("#EAD6C6"),
 	Text: ui.Hex("#2B221D"), TextSecondary: ui.Hex("#6F5F55"), TextTertiary: ui.Hex("#7D6B60"),
-	Accent: ui.Hex("#F47B45"), AccentHover: ui.Hex("#FA8B59"), AccentPressed: ui.Hex("#E8733D"),
+	SegmentSelected: ui.Hex("#FFFFFF"),
+	Accent:          ui.Hex("#F47B45"), AccentHover: ui.Hex("#FA8B59"), AccentPressed: ui.Hex("#E8733D"),
 	OnAccent: ui.Hex("#2B221D"), Focus: ui.Hex("#D9622C"), Link: ui.Hex("#A74320"),
 	Danger: ui.Hex("#B91C1C"), Warning: ui.Hex("#8F4500"), Success: ui.Hex("#166534"),
-	Shadow: ui.RGBA(92, 56, 32, .07), Scrim: ui.RGBA(43, 34, 29, .18),
+	Shadow: ui.RGBA(92, 56, 32, .07), Scrim: ui.RGBA(43, 34, 29, .25),
 }
 
 var darkPalette = designPalette{
@@ -33,10 +35,11 @@ var darkPalette = designPalette{
 	Subtle: ui.Hex("#2A211B"), Hover: ui.Hex("#382B22"), Pressed: ui.Hex("#433126"), Selected: ui.Hex("#31271F"),
 	BorderSubtle: ui.Hex("#3A2D24"), Border: ui.Hex("#4B3A2E"),
 	Text: ui.Hex("#F6EEE7"), TextSecondary: ui.Hex("#CFBCAE"), TextTertiary: ui.Hex("#B29886"),
-	Accent: ui.Hex("#FF9A66"), AccentHover: ui.Hex("#FFAB7E"), AccentPressed: ui.Hex("#F48A54"),
+	SegmentSelected: ui.Hex("#4D3D31"),
+	Accent:          ui.Hex("#FF9A66"), AccentHover: ui.Hex("#FFAB7E"), AccentPressed: ui.Hex("#F48A54"),
 	OnAccent: ui.Hex("#2B221D"), Focus: ui.Hex("#FF9A66"), Link: ui.Hex("#FFB48F"),
 	Danger: ui.Hex("#FF9B9B"), Warning: ui.Hex("#FCD478"), Success: ui.Hex("#88DDA9"),
-	Shadow: ui.RGBA(0, 0, 0, .24), Scrim: ui.RGBA(0, 0, 0, .46),
+	Shadow: ui.RGBA(0, 0, 0, .24), Scrim: ui.RGBA(28, 23, 20, .60),
 }
 
 func paletteFor(t *ui.Theme) *designPalette {
@@ -75,7 +78,7 @@ func WindowBackgroundColor() string {
 	return nativeColorPair(lightPalette.Background, darkPalette.Background)
 }
 func previewGlassTint() string {
-	return nativeColorPair(lightPalette.Sidebar.Alpha(.28), darkPalette.Subtle.Alpha(.35))
+	return nativeColorPair(lightPalette.Sidebar.Alpha(.28), darkPalette.Sidebar.Alpha(.86))
 }
 
 // 系统主题只决定明暗，所有窗口共用暖橘品牌色。

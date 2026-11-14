@@ -85,7 +85,7 @@ func TestTagsDeletionRequiresConfirmation(t *testing.T) {
 	if err := tt.Click(a.T("delete_tag") + " Landscape"); err != nil {
 		t.Fatal(err)
 	}
-	if !a.ConfirmOpen || a.ConfirmTitle != a.T("delete_tag") || a.ConfirmDetail != a.T("delete_tag_detail", "Landscape") || a.ConfirmAction == nil {
+	if !a.ConfirmOpen || a.ConfirmTitle != a.T("delete_tag") || a.ConfirmDetail != a.T("delete_tag_detail", "Landscape") || a.ConfirmLabel != a.T("delete") || a.ConfirmAction == nil {
 		t.Fatal("删除标签没有要求确认")
 	}
 	if a.Busy || len(a.Snapshot.Tags) != 1 {

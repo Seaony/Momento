@@ -170,7 +170,7 @@ func TestDialogsSecondRoundScreenshots(t *testing.T) {
 				case "prompt":
 					a.Ask("重命名", "山间晨雾", func(string) {})
 				case "confirm":
-					a.Confirm("移到回收站", "这张图片会移到回收站，你可以稍后恢复。", func() {})
+					a.Confirm("移到回收站", "这张图片会移到回收站，你可以稍后恢复。", "移到回收站", func() {})
 				case "extension-picker":
 					a.Import = importState{PickerOpen: true, PickerReply: make(chan importChoice, 1), PickerTags: map[string]bool{}}
 					a.Snapshot.Tags = []model.Tag{{ID: "reference", Name: "设计参考"}, {ID: "photo", Name: "摄影"}}

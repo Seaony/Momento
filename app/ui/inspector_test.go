@@ -272,3 +272,78 @@ func TestInspectorLocalizedStructureAndMetadataWrapping(t *testing.T) {
 		})
 	}
 }
+
+func TestInspectorSourceDisplayKeepsCompleteEditableValue(t *testing.T) {
+	original := "https://example.com/references/landscape/early-morning-light?collection=mountain-study&image=warm-mist-2026"
+	a := inspectorTestApp(model.Asset{ID: "a", Name: "Landscape.jpg", SourceURL: original})
+	tt := ui.NewTester(a.inspector, 280, 1100)
+	field, ok := tt.AccessByRole(ui.RoleTextField, a.T("source_url"))
+	if !ok || field.Value != original {
+		t.Fatal("未编辑时来源字段丢失了完整地址")
+	}
+	field, ok = tt.AccessByRole(ui.RoleTextField, a.T("source_url"))
+	if !ok {
+		t.Fatal("来源输入框不存在")
+	}
+	tt.ClickAt(field.Bounds.X+field.Bounds.W/2, field.Bounds.Y+field.Bounds.H/2)
+	if !tt.Focused(a.T("source_url")) {
+		t.Fatal("省略文字层阻挡了来源字段聚焦")
+	}
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Key(ui.Cmd, ui.KeyC)
+	if tt.Clipboard() != original {
+		t.Fatal("编辑来源时无法选中并复制完整地址")
+	}
+	replacement := original + "&language=ja"
+	tt.Type(replacement)
+	if a.Inspector.SourceURL != replacement {
+		t.Fatalf("来源编辑值被省略显示截短：%q", a.Inspector.SourceURL)
+	}
+	if err := tt.Click(a.T("title")); err != nil {
+		t.Fatal(err)
+	}
+	draft, dirty := a.inspectorDraft()
+	if !dirty || !draft.Details || draft.Source != replacement {
+		t.Fatalf("失焦后保存草稿未保留完整来源：%+v", draft)
+	}
+	field, ok = tt.AccessByRole(ui.RoleTextField, a.T("source_url"))
+	if !ok {
+		t.Fatal("来源输入框不存在")
+	}
+	tt.ClickAt(field.Bounds.X+field.Bounds.W/2, field.Bounds.Y+field.Bounds.H/2)
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Key(ui.Cmd, ui.KeyC)
+	if tt.Clipboard() != replacement {
+		t.Fatal("再次编辑来源时完整地址没有恢复")
+	}
+}
+
+func TestInspectorEmptyNoteAndSourcePlaceholdersFit(t *testing.T) {
+	for _, language := range []string{"zh-CN", "en", "ja"} {
+		t.Run(language, func(t *testing.T) {
+			a := inspectorTestApp(model.Asset{ID: "a", Name: "Landscape.jpg"})
+			a.Texts.Language, a.Preferences.Language = language, language
+			var noteWidth, sourceWidth float32
+			tt := ui.NewTester(func(c *ui.Context) {
+				a.applyTheme(c)
+				a.inspector(c)
+				noteWidth, _ = c.MeasureText(0, ui.Span{Text: a.T("asset_note_placeholder"), Font: c.Theme().Font, Size: fontBody, Lang: language})
+				sourceWidth, _ = c.MeasureText(0, ui.Span{Text: a.T("source_url_placeholder"), Font: c.Theme().Font, Size: fontBody, Lang: language})
+			}, 280, 1000)
+			tt.SetLocale(a.Texts.Locale())
+			tt.Frame()
+			for _, check := range []struct {
+				label, placeholder string
+				width              float32
+			}{{a.T("asset_note"), a.T("asset_note_placeholder"), noteWidth}, {a.T("source_url"), a.T("source_url_placeholder"), sourceWidth}} {
+				field, ok := tt.AccessByRole(ui.RoleTextField, check.label)
+				if !ok || field.Value != "" || field.Bounds.W < check.width+2*space12 || field.Placeholder != check.placeholder {
+					t.Fatalf("空字段占位没有完整显示：%s，%+v，需要宽度%f", check.placeholder, field, check.width)
+				}
+			}
+			if a.Inspector.SourceURL != "" || a.Inspector.Note != "" || a.InspectorEditsPending() {
+				t.Fatal("占位文字被写进了草稿")
+			}
+		})
+	}
+}

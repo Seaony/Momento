@@ -198,7 +198,7 @@ func (a *App) toolbarSearch(c *ui.Context, hint string) {
 				a.Search.Focus()
 			}
 		} else if hint != "" {
-			ui.Text(c, hint).Font(monoFont(c)).FontSize(fontNumber).TextColor(p.TextSecondary).SingleLine().Shrink(0).Padding(0, space4).Radius(radiusSmall).Background(p.Subtle).Border(1, p.BorderSubtle)
+			ui.Text(c, hint).FontSize(fontSecondary).TextColor(p.TextSecondary).SingleLine().Shrink(0).Padding(0, space4).Radius(radiusSmall).Background(p.Subtle).Border(1, p.BorderSubtle)
 		}
 	})
 	border := p.Border

@@ -33,7 +33,7 @@ func TestSidebarLibraryCountLocalizedTextFits(t *testing.T) {
 					tt := ui.NewTester(func(c *ui.Context) {
 						a.applyTheme(c)
 						a.sidebarLibrary(c)
-						textWidth, _ = c.MeasureText(0, ui.Span{Text: label, Font: monoFont(c), Size: fontSecondary, Lang: language})
+						textWidth, _ = c.MeasureText(0, ui.Span{Text: label, Font: c.Theme().Font, Size: fontSecondary, Lang: language})
 					}, sidebarWidth-space24, 80)
 					tt.SetLocale(a.Texts.Locale())
 					bounds, ok := tt.Find(label)

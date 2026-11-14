@@ -14,7 +14,7 @@ import (
 
 func TestPreviewRound3LocalizedMetadata(t *testing.T) {
 	for _, language := range []string{"en", "ja"} {
-		for _, width := range []int{300, 338} {
+		for _, width := range []int{previewMinimumWidth, previewMinimumWidth + space16} {
 			t.Run(fmt.Sprintf("%s/%d", language, width), func(t *testing.T) {
 				a := previewFixture(64, 48)
 				a.Texts.Language, a.Preferences.Language = language, language
@@ -71,7 +71,7 @@ func TestPreviewRound3Screenshots(t *testing.T) {
 		}
 		w.picture.finishPicture(w.picture.Generation, picture, nil)
 		w.openedAt = time.Now().Add(-time.Second)
-		frame := previewWindowBounds(mygo.Rectangle{Width: 1100, Height: 800}, mygo.Rectangle{Width: 1440, Height: 900}, asset, a.Preferences.PreviewFit == "fit")
+		frame := previewWindowBounds(mygo.Rectangle{Width: 1100, Height: 800}, mygo.Rectangle{Width: 1440, Height: 900}, asset, a.Preferences.PreviewFit == "fit", len(w.items) > 1)
 		tt := ui.NewTester(func(c *ui.Context) { w.view(c, a) }, frame.Width, frame.Height)
 		tt.SetLocale(a.Texts.Locale())
 		tt.Advance(300 * time.Millisecond)

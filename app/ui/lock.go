@@ -178,7 +178,7 @@ func (a *App) passwordSettingsDialog(c *ui.Context) {
 func (a *App) passwordFeedback(c *ui.Context) {
 	if remaining := a.passwordCooldown(); remaining > 0 {
 		seconds := int((remaining + time.Second - 1) / time.Second)
-		ui.Text(c, a.T("password_cooldown", seconds)).Font(monoFont(c)).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).Danger)
+		ui.Text(c, a.T("password_cooldown", seconds)).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).Danger)
 		c.After(time.Second)
 	} else if a.Lock.ErrorKey != "" && a.Lock.ErrorKey != "password_cooldown" {
 		text := a.T(a.Lock.ErrorKey)

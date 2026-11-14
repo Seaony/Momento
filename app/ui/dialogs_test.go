@@ -32,17 +32,19 @@ func TestDialogsPromptRequiresNameAndSubmitsOnce(t *testing.T) {
 func TestDialogsConfirmationCancelDoesNotRunAction(t *testing.T) {
 	a := &App{}
 	calls := 0
-	a.Confirm("Delete", "Delete these images?", func() { calls++ })
+	a.Confirm("Delete", "Delete these images?", a.T("delete"), func() { calls++ })
 	tt := ui.NewTester(a.dialogs, 1100, 640)
 	tt.Key(0, ui.KeyEscape)
 	if calls != 0 || a.ConfirmOpen {
 		t.Fatal("Escape 必须取消")
 	}
-	a.Confirm("Delete", "Delete these images?", func() { calls++ })
+	a.Confirm("Delete", "Delete these images?", a.T("delete"), func() { calls++ })
 	tt.Frame()
-	if err := tt.Click(a.T("confirm")); err != nil {
-		t.Fatal(err)
+	button, ok := tt.AccessByRole(ui.RoleButton, a.T("delete"))
+	if !ok {
+		t.Fatal("确认框没有显示删除按钮")
 	}
+	tt.ClickAt(button.Bounds.X+button.Bounds.W/2, button.Bounds.Y+button.Bounds.H/2)
 	if calls != 1 || a.ConfirmOpen {
 		t.Fatal("确认应执行一次并关闭")
 	}
@@ -75,12 +77,12 @@ func TestDialogsExportDefaultsAndErrorCopy(t *testing.T) {
 func TestConfirmationKeepsDefaultActionAndIgnoresOutsideClick(t *testing.T) {
 	a := &App{}
 	calls := 0
-	a.Confirm("Delete", "Delete these images?", func() { calls++ })
+	a.Confirm("Delete", "Delete these images?", a.T("delete"), func() { calls++ })
 	tt := ui.NewTester(a.dialogs, 1100, 640)
 	if alert, ok := tt.AccessByRole(ui.RoleAlertDialog, "Delete"); !ok || alert.Description != "Delete these images?" {
 		t.Fatal("确认框没有保留读屏标题和说明")
 	}
-	if !tt.Focused(a.T("confirm")) {
+	if !tt.Focused(a.T("delete")) {
 		t.Fatal("确认操作没有默认键盘焦点")
 	}
 	tt.Key(0, ui.KeyEnter)
@@ -91,7 +93,7 @@ func TestConfirmationKeepsDefaultActionAndIgnoresOutsideClick(t *testing.T) {
 	if calls != 1 {
 		t.Fatal("下一帧重复执行确认")
 	}
-	a.Confirm("Delete", "Delete these images?", func() { calls++ })
+	a.Confirm("Delete", "Delete these images?", a.T("delete"), func() { calls++ })
 	tt.Frame()
 	tt.ClickAt(12, 12)
 	if !a.ConfirmOpen || calls != 1 {

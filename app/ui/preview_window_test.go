@@ -133,7 +133,7 @@ func TestPreviewWindowBoundsAndCloseAreContinuous(t *testing.T) {
 	parent := mygo.Rectangle{X: 100, Y: 100, Width: 1200, Height: 800}
 	area := mygo.Rectangle{Width: 1440, Height: 900}
 	for _, asset := range []model.Asset{{Width: 4000, Height: 3000}, {Width: 100, Height: 80}, {Width: 200, Height: 4000}} {
-		r := previewWindowBounds(parent, area, asset, true)
+		r := previewWindowBounds(parent, area, asset, true, true)
 		if r.Width > 960 || r.Height > 640 || r.X < area.X || r.Y < area.Y || r.X+r.Width > area.Width || r.Y+r.Height > area.Height {
 			t.Fatalf("窗口越界：%+v", r)
 		}

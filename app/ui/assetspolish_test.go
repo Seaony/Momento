@@ -248,3 +248,98 @@ func TestAssetThirdRoundScreenshots(t *testing.T) {
 		})
 	}
 }
+
+func TestAssetEmptyRecoveryActions(t *testing.T) {
+	for _, language := range []string{"zh-CN", "en", "ja"} {
+		for _, state := range []string{"search", "filters", "scope", "trash", "empty"} {
+			t.Run(language+"/"+state, func(t *testing.T) {
+				a := assetViewFixture()
+				a.Texts.Language, a.Preferences.Language = language, language
+				a.Query.Scope = "favorites"
+				snapshot := a.Snapshot
+				snapshot.Assets[0].Favorite = true
+				a.applySnapshot(snapshot)
+				action := ""
+				switch state {
+				case "search":
+					a.Query.Search = "nothing matched"
+					a.Query.Extensions = []string{"png"}
+					action = "clear_search"
+				case "filters":
+					a.Query.ColorFamilies, a.Query.TagIDs, a.Query.Extensions = []string{"red"}, []string{"missing"}, []string{"png"}
+					action = "clear_filters"
+				case "scope":
+					a.Query.Scope = "folder"
+					a.Query.FolderID = "empty"
+				case "trash":
+					a.Query.Scope = "trash"
+				case "empty":
+					a.applySnapshot(model.Snapshot{})
+				}
+				a.Refine()
+				var measured float32
+				tt := ui.NewTester(func(c *ui.Context) {
+					a.applyTheme(c)
+					if action != "" {
+						measured, _ = c.MeasureText(0, ui.Span{Text: a.T(action), Font: c.Theme().Font, Size: fontBody, Weight: 400, Lang: language})
+					}
+					a.assetArea(c)
+				}, 560, 600)
+				tt.SetLocale(a.Texts.Locale())
+				if action == "" {
+					if tt.HasText(a.T("clear_search")) || tt.HasText(a.T("clear_filters")) || tt.HasText(a.T("import")) != (state == "empty") {
+						t.Fatal("普通范围、回收站或空库出现错误恢复动作")
+					}
+					return
+				}
+				label := a.T(action)
+				box, ok := tt.Find(label)
+				if !ok || box.W+1 < measured || box.X < space24 || box.X+box.W > 560-space24 || box.Y+box.H > 600 {
+					t.Fatalf("恢复按钮文字截断或越界：%s %+v，文字宽%v", label, box, measured)
+				}
+				other := "clear_search"
+				if action == other {
+					other = "clear_filters"
+				}
+				if tt.HasText(a.T(other)) || tt.HasText(a.T("import")) {
+					t.Fatal("空态应只有一个恢复动作")
+				}
+				if err := tt.Click(label); err != nil {
+					t.Fatal(err)
+				}
+				if a.Query.Scope != "favorites" {
+					t.Fatal("恢复动作改变了当前范围")
+				}
+				if state == "search" {
+					if a.Query.Search != "" || len(a.Query.Extensions) != 1 || !tt.HasText(a.T("clear_filters")) {
+						t.Fatal("清空搜索没有保留原筛选或重新筛选")
+					}
+				} else if len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions) != 0 || len(a.Visible) != 1 || !tt.HasText(snapshot.Assets[0].Name) {
+					t.Fatal("清除筛选没有清空三类条件并恢复当前范围的素材")
+				}
+			})
+		}
+	}
+}
+
+func TestAssetRecoveryScreenshots(t *testing.T) {
+	if os.Getenv("MOMENTO_ASSET_RECOVERY_SCREENSHOTS") != "1" {
+		t.Skip("设置 MOMENTO_ASSET_RECOVERY_SCREENSHOTS=1 生成恢复空态截图")
+	}
+	dir := "/tmp/momento-polish/shots3/assets-fix"
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	fixture := newScreenshotFixture(t)
+	for _, theme := range []string{"light", "dark"} {
+		t.Run(theme, func(t *testing.T) {
+			a := fixture.app(t, "search-empty", "zh-CN", theme)
+			tt := ui.NewTester(a.View, 1100, 640)
+			tt.SetLocale(a.Texts.Locale())
+			tt.SetTitleBar(ui.TitleBar{Height: MainToolbarHeight, Left: 80, Bottom: 37})
+			tt.SetWindowActive(true)
+			tt.Advance(time.Second)
+			writeScreenshot(t, filepath.Join(dir, theme+".png"), tt)
+		})
+	}
+}

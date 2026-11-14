@@ -101,7 +101,8 @@ func (a *App) assetArea(c *ui.Context) {
 	if len(a.Visible) == 0 {
 		p := paletteFor(c.Theme())
 		icon, title, hint := "photos", a.T("scope_empty"), a.T("scope_empty_hint")
-		emptyLibrary := len(a.Snapshot.Assets) == 0 && a.Query.Scope != "trash" && a.Query.Search == ""
+		hasFilters := len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions) > 0
+		emptyLibrary := len(a.Snapshot.Assets) == 0 && a.Query.Scope != "trash" && a.Query.Search == "" && !hasFilters
 		switch {
 		case a.Query.Search != "":
 			icon, title, hint = "search", a.T("search_empty", a.Query.Search), a.T("search_empty_hint")
@@ -116,8 +117,21 @@ func (a *App) assetArea(c *ui.Context) {
 				Center().Children(func() { appIcon(c, icon).Size(space24, space24) })
 			ui.Text(c.Key("empty-title"), title).FontSize(16).FontWeight(600).TextColor(p.Text).TextAlign(ui.Center)
 			ui.Text(c.Key("empty-hint"), hint).FontSize(fontBody).TextColor(p.TextSecondary).TextAlign(ui.Center)
-			if emptyLibrary && primaryButton(c, a.T("import"), false).Clicked() {
-				a.ChooseImport(false)
+			switch {
+			case a.Query.Search != "":
+				if primaryButton(c, a.T("clear_search"), false).Clicked() {
+					a.Query.Search = ""
+					a.Refine()
+				}
+			case hasFilters:
+				if primaryButton(c, a.T("clear_filters"), false).Clicked() {
+					a.Query.ColorFamilies, a.Query.TagIDs, a.Query.Extensions = nil, nil, nil
+					a.Refine()
+				}
+			case emptyLibrary:
+				if primaryButton(c, a.T("import"), false).Clicked() {
+					a.ChooseImport(false)
+				}
 			}
 		})
 	}
@@ -409,7 +423,7 @@ func (a *App) importProgress(c *ui.Context) {
 			ui.Spacer(c)
 			ui.Text(c, fmt.Sprintf("%d / %d", p.Processed, p.Total)).Font(monoFont(c)).FontSize(fontNumber).TextColor(colors.TextSecondary)
 		})
-		ui.Text(c, a.T("import_counts", p.Imported, p.Skipped)).Font(monoFont(c)).FontSize(fontNumber).TextColor(colors.TextSecondary)
+		ui.Text(c, a.T("import_counts", p.Imported, p.Skipped)).FontSize(fontBody).TextColor(colors.TextSecondary)
 		ui.Text(c, filepath.Base(p.CurrentFile)).SingleLine().FontSize(fontSecondary).TextColor(colors.TextSecondary)
 		progress := float64(0)
 		if p.Total > 0 {

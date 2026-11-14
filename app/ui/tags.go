@@ -51,7 +51,7 @@ func (a *App) tags(c *ui.Context) {
 					})
 				}
 			})
-			ui.Text(c, a.T("tag_total", formatTagCount(len(tags)))).ContentTransition(ui.ContentTransition{Numeric: true, Animation: &motionSpring}).Font(monoFont(c)).FontSize(fontNumber).TextColor(p.TextSecondary)
+			ui.Text(c, a.T("tag_total", formatTagCount(len(tags)))).ContentTransition(ui.ContentTransition{Numeric: true, Animation: &motionSpring}).FontSize(fontSecondary).TextColor(p.TextSecondary)
 		})
 		if len(tags) == 0 {
 			fadeMotion(ui.Column(c.Key("tag-empty"))).MinHeight(220).FillWidth().Center().Gap(space8).Children(func() {
@@ -88,7 +88,7 @@ func (a *App) tags(c *ui.Context) {
 				row.Children(func() {
 					appIcon(c, "tag").Size(18, 18).Shrink(0).TextColor(row.AnimateColor("tag-icon-color", iconColor, motionColor))
 					ui.Text(c, tag.Name).ContentTransition(ui.ContentTransition{Animation: &motionSpring}).FontSize(fontBody).Grow(1).MinWidth(0).SingleLine()
-					ui.Text(c, a.T("tag_asset_count", formatTagCount(counts[tag.ID]))).ContentTransition(ui.ContentTransition{Numeric: true, Animation: &motionSpring}).Font(monoFont(c)).FontSize(fontNumber).TextColor(p.TextSecondary).Shrink(0)
+					ui.Text(c, a.T("tag_asset_count", formatTagCount(counts[tag.ID]))).ContentTransition(ui.ContentTransition{Numeric: true, Animation: &motionSpring}).FontSize(fontSecondary).TextColor(p.TextSecondary).Shrink(0)
 					if inspectorIconButton(c.Key("rename"), a.T("rename_tag")+" "+tag.Name, "edit").Tooltip(a.T("rename_tag")).Disabled(a.Busy).Clicked() {
 						lib := a.Library
 						a.Ask(a.T("rename_tag"), tag.Name, func(name string) {
@@ -97,7 +97,7 @@ func (a *App) tags(c *ui.Context) {
 					}
 					if inspectorIconButton(c.Key("delete"), a.T("delete_tag")+" "+tag.Name, "trash").Tooltip(a.T("delete_tag")).Disabled(a.Busy).Clicked() {
 						lib := a.Library
-						a.Confirm(a.T("delete_tag"), a.T("delete_tag_detail", tag.Name), func() {
+						a.Confirm(a.T("delete_tag"), a.T("delete_tag_detail", tag.Name), a.T("delete"), func() {
 							a.Run("delete_tag", func(ctx context.Context) error { return lib.DeleteTag(ctx, tag.ID) })
 						})
 					}

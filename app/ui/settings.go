@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/Seaony/Momento/app/internal/browser"
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -190,6 +192,20 @@ func settingsButton(c *ui.Context, label string) ui.Element {
 	})
 }
 
+// 保留译文语序，标签用正文，独立版本值用等宽字体。
+func (a *App) settingsVersionText(c *ui.Context) ui.Element {
+	before, after, _ := strings.Cut(a.T("current_version", "\uFFFC"), "\uFFFC")
+	return ui.Row(c).Gap(space8).AlignItems(ui.Center).Children(func() {
+		if label := strings.TrimSpace(before); label != "" {
+			ui.Text(c, label)
+		}
+		ui.Text(c, mygo.App.Version()).Font(monoFont(c)).FontSize(fontNumber)
+		if label := strings.TrimSpace(after); label != "" {
+			ui.Text(c, label)
+		}
+	})
+}
+
 func (a *App) generalSettings(c *ui.Context, update UpdateCheckStatus) {
 	settingsSection(c, "", "", func() {
 		settingsRow(c, func() {
@@ -229,7 +245,7 @@ func (a *App) generalSettings(c *ui.Context, update UpdateCheckStatus) {
 		})
 		settingsSeparator(c)
 		settingsRow(c, func() {
-			ui.Text(c, a.T("current_version", mygo.App.Version())).Font(monoFont(c)).FontSize(fontNumber).Grow(1)
+			a.settingsVersionText(c).Grow(1)
 			a.updateButton(c, update)
 		})
 	})
@@ -275,7 +291,7 @@ func (a *App) extensionSettings(c *ui.Context) {
 			message, color := a.T("extension_disabled"), p.TextSecondary
 			switch a.ExtensionStatus.State {
 			case browser.Running:
-				message, color = a.T("extension_running")+"  "+a.ExtensionStatus.Address, p.Success
+				message, color = a.T("extension_running"), p.Success
 			case browser.PortOccupied:
 				message, color = a.T("extension_port_in_use"), p.Danger
 			case browser.Failed:
@@ -283,7 +299,16 @@ func (a *App) extensionSettings(c *ui.Context) {
 			}
 			ui.Row(c).Gap(space8).AlignItems(ui.Center).Children(func() {
 				ui.Box(c).Size(6, 6).Radius(3).Background(color).Shrink(0)
-				ui.Text(c, message).Font(monoFont(c)).FontSize(fontNumber).SingleLine().Role(ui.RoleStatus)
+				status := message
+				if a.ExtensionStatus.State == browser.Running {
+					status += "  " + a.ExtensionStatus.Address
+				}
+				ui.Row(c).Gap(space8).AlignItems(ui.Center).Role(ui.RoleStatus).Label(status).Children(func() {
+					ui.Text(c, message).FontSize(fontSecondary).SingleLine()
+					if a.ExtensionStatus.State == browser.Running {
+						ui.Text(c, a.ExtensionStatus.Address).Font(monoFont(c)).FontSize(fontNumber).SingleLine()
+					}
+				})
 			})
 		})
 	})
@@ -297,7 +322,7 @@ func (a *App) aboutSettings(c *ui.Context, update UpdateCheckStatus) {
 	ui.Column(c).FillWidth().Center().Gap(space8).Padding(space8, 0, 0, 0).Children(func() {
 		ui.Image(c, appLogo).Size(space64, space64)
 		ui.Text(c, "Momento").FontSize(24).FontWeight(600).TextColor(p.Text)
-		ui.Text(c, a.T("current_version", mygo.App.Version())).Font(monoFont(c)).FontSize(fontNumber).TextColor(p.TextSecondary)
+		a.settingsVersionText(c).FontSize(fontSecondary).TextColor(p.TextSecondary)
 		a.updateMessage(c, update, true)
 		ui.Row(c).Gap(space8).Margin(space12, 0, 0, 0).Children(func() {
 			if update.State == UpdateAvailable {

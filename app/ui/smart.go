@@ -46,7 +46,7 @@ func (a *App) sidebarSmartFolders(c *ui.Context) {
 			a.QuickAccessMenu(m, "smart", folder.ID)
 			m.Separator()
 			if m.Item(a.T("delete_smart_folder")).Disabled(a.Busy).Chosen() {
-				a.Confirm(a.T("delete_smart_folder"), a.T("delete_smart_folder_detail", folder.Name), func() {
+				a.Confirm(a.T("delete_smart_folder"), a.T("delete_smart_folder_detail", folder.Name), a.T("delete"), func() {
 					if a.Query.Scope == "smart" && a.Query.SmartFolderID == folder.ID {
 						a.SetScope("all", "")
 					}

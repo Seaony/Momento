@@ -1,6 +1,9 @@
 package i18n
 
 var messages = map[string][3]string{
+	"clear":                          {"清空", "Clear", "空にする"},
+	"asset_note_placeholder":         {"添加备注", "Add a note", "メモを追加"},
+	"source_url_placeholder":         {"粘贴来源链接", "Paste source link", "参照元のリンクを貼り付け"},
 	"help":                           {"帮助", "Help", "ヘルプ"},
 	"user_guide":                     {"使用说明", "User Guide", "使い方"},
 	"collapse_inspector":             {"收起检查器", "Collapse Inspector", "インスペクタを閉じる"},
@@ -130,7 +133,6 @@ var messages = map[string][3]string{
 	"copy_error":                     {"复制错误", "Copy Error", "エラーをコピー"},
 	"log_directory":                  {"日志目录", "Log Directory", "ログフォルダ"},
 	"cancel":                         {"取消", "Cancel", "キャンセル"},
-	"confirm":                        {"确认", "Confirm", "確認"},
 	"save":                           {"保存", "Save", "保存"},
 	"create":                         {"新建", "Create", "作成"},
 	"close":                          {"关闭", "Close", "閉じる"},
