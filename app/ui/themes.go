@@ -122,6 +122,8 @@ func (a *App) applyTheme(c *ui.Context) {
 	c.SetTheme(theme)
 	if c.Vibrancy() {
 		c.Root().Background(ui.Transparent)
+	} else {
+		c.Root().Background(theme.Background)
 	}
 }
 
@@ -234,8 +236,8 @@ func (a *App) themeSwatches(c *ui.Context, centered bool) {
 					draw := func(box ui.Rect, colors *ui.Theme) {
 						p.Fill(box, colors.Background, 0)
 						p.Fill(ui.Rect{X: box.X, Y: box.Y, W: 16, H: box.H}, colors.Surface, 0)
-						p.Fill(ui.Rect{X: box.X + 21, Y: box.Y + 10, W: max(0, box.W-28), H: 4}, colors.Border, 2)
-						p.Fill(ui.Rect{X: box.X + 21, Y: box.Y + 21, W: max(0, box.W-28), H: 18}, colors.Surface, 3)
+						p.Fill(ui.Rect{X: box.X + 20, Y: box.Y + 8, W: max(0, box.W-28), H: 4}, colors.Border, 2)
+						p.Fill(ui.Rect{X: box.X + 20, Y: box.Y + 20, W: max(0, box.W-28), H: 20}, colors.Surface, radiusSmall)
 					}
 					p.Clip(r, 8, func() {
 						if key == "system" {
@@ -246,7 +248,7 @@ func (a *App) themeSwatches(c *ui.Context, centered bool) {
 						}
 					})
 					p.Stroke(r, theme.Border, 8, 1)
-					p.Stroke(ui.Rect{X: r.X - 3, Y: r.Y - 3, W: r.W + 6, H: r.H + 6}, outline, 11, 2)
+					p.Stroke(ui.Rect{X: r.X - 4, Y: r.Y - 4, W: r.W + 8, H: r.H + 8}, outline, radiusPanel, 2)
 				})
 				ui.Text(c, name).FontSize(12).TextColor(text).SingleLine()
 			})

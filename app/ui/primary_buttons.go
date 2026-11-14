@@ -8,7 +8,7 @@ func primaryButton(c *ui.Context, label string, disabled bool) ui.Element {
 
 // 禁用时保留文字对比，不再把整个橙色按钮混成半透明。
 func primaryButtonState(c *ui.Context, button ui.Element, disabled bool) ui.Element {
-	button.Disabled(disabled).DimDisabled(false)
+	button.Disabled(disabled).DimDisabled(false).Padding(space4, space12).Radius(radiusControl).FontSize(fontBody)
 	theme := c.Theme()
 	background, text := theme.Accent, theme.AccentText
 	if disabled {
@@ -24,7 +24,7 @@ func primaryButtonState(c *ui.Context, button ui.Element, disabled bool) ui.Elem
 }
 
 func secondaryButton(c *ui.Context, label string) ui.Element {
-	button := ui.Button(c, label)
+	button := ui.Button(c, label).Padding(space4, space12).Radius(radiusControl).FontSize(fontBody)
 	theme := c.Theme()
 	background := theme.Surface
 	if button.Pressed() {
