@@ -72,7 +72,7 @@ func (a *App) toolbar(c *ui.Context) {
 			if a.ViewMode == 2 {
 				a.Toolbar.ThumbnailOpen = false
 			}
-			ui.Popover(c.Key("thumbnail-size-popover"), thumbnail, &a.Toolbar.ThumbnailOpen, func() {
+			frostedPopover(c.Key("thumbnail-size-popover"), thumbnail, &a.Toolbar.ThumbnailOpen, func() {
 				ui.Column(c).Gap(10).Children(func() {
 					ui.Text(c, a.T("thumbnail_size")).FontSize(12).Bold()
 					a.thumbnailSizeSlider(c.Key("popover-thumbnail-size"))
@@ -88,7 +88,7 @@ func (a *App) toolbar(c *ui.Context) {
 			a.Toolbar.SortOpen = false
 			a.Toolbar.ThumbnailOpen = false
 		}
-		ui.Popover(c.Key("filters"), filter, &a.Toolbar.FilterOpen, func() { a.filterPanel(c) }).Width(340).MaxHeight(560)
+		frostedPopover(c.Key("filters"), filter, &a.Toolbar.FilterOpen, func() { a.filterPanel(c) }).Width(340).MaxHeight(560)
 		sort := toolbarIconButton(c.Key("sort"), a.T("sort"), "sort").Disabled(a.Query.Scope == "random")
 		if a.Query.Scope == "random" {
 			sort.Tooltip(a.T("random_no_sort"))
@@ -99,7 +99,7 @@ func (a *App) toolbar(c *ui.Context) {
 			a.Toolbar.FilterOpen = false
 			a.Toolbar.ThumbnailOpen = false
 		}
-		ui.Popover(c.Key("sorting"), sort, &a.Toolbar.SortOpen, func() { a.sortPanel(c) }).Width(220)
+		frostedPopover(c.Key("sorting"), sort, &a.Toolbar.SortOpen, func() { a.sortPanel(c) }).Width(220)
 		a.viewSwitcher(c)
 		toolbarIconButton(c.Key("import"), a.T("import"), "import").Disabled(a.Busy).Menu(func(m *ui.Menu) {
 			if m.Item(a.T("import_files")).Chosen() {

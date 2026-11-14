@@ -1,6 +1,8 @@
 package i18n
 
 var messages = map[string][3]string{
+	"organize":                       {"整理", "Organize", "整理"},
+	"smart_empty_action":             {"按规则自动归集", "Organize by rules", "ルールで自動整理"},
 	"welcome":                        {"没有打开的图库", "No library open", "ライブラリが開かれていません"},
 	"welcome_hint":                   {"把灵感收进自己的素材库", "A home for your visual references", "ひらめきを、自分だけのライブラリに"},
 	"new_library":                    {"新建图库", "Create Library", "ライブラリを作成"},

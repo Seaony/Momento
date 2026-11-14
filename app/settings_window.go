@@ -21,7 +21,8 @@ func showSettingsWindow(a *appui.App) {
 		MinWidth: 760, MinHeight: 560, DisableResize: true, DisableMaximize: true, DisableFullScreen: true,
 		TitleBarStyle: mygo.TitleBarHiddenInset, TitleBarHeight: 44,
 		TrafficLightPosition: &mygo.Point{X: 14, Y: 15},
-		BackgroundColor:      "light-dark(#f4f4f5, #27272a)", Content: ui.View(a.SettingsView),
+		Vibrancy:             mygo.VibrancySidebar,
+		BackgroundColor:      "light-dark(#FFFAF5, #211A16)", Content: ui.View(a.SettingsView),
 	})
 	a.ApplyWindowZoom()
 	a.SettingsWindow.OnClosed(func() {

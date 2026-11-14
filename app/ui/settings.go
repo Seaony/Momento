@@ -57,9 +57,15 @@ func (a *App) settingsView(c *ui.Context, update UpdateCheckStatus) {
 	a.SyncMenuFocus(c)
 	a.Settings.Tab = max(0, min(a.Settings.Tab, len(settingsTabs)-1))
 	background := settingsBackground(c)
-	c.Root().Background(background)
+	if c.Vibrancy() {
+		c.Root().Background(ui.Transparent)
+	} else {
+		c.Root().Background(background)
+	}
 	ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
-		ui.Column(c.Key("settings-sidebar")).Width(200).Shrink(0).Background(c.Theme().Surface).BorderWidth(0, 1, 0, 0).BorderColor(c.Theme().Border).Children(func() {
+		side := ui.Column(c.Key("settings-sidebar")).Width(200).Shrink(0).BorderWidth(0, 1, 0, 0).BorderColor(c.Theme().Border)
+		sidebarMaterial(c, side)
+		side.Children(func() {
 			bar := c.TitleBar()
 			if bar.Left > 0 {
 				ui.Box(c.Key("settings-sidebar-titlebar")).Height(max(44, bar.Bottom+8)).FillWidth().Shrink(0).DragWindow()
@@ -89,7 +95,7 @@ func (a *App) settingsView(c *ui.Context, update UpdateCheckStatus) {
 				}
 			})
 		})
-		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
+		ui.Column(c).Grow(1).MinWidth(0).Background(background).Children(func() {
 			bar := c.TitleBar()
 			ui.Row(c.Key("settings-titlebar")).Height(44).Shrink(0).FillWidth().Padding(0, bar.Right+20, 0, 20).Center().DragWindow().Children(func() { ui.Text(c, a.T(settingsTabs[a.Settings.Tab].key)).FontSize(13).Bold().SingleLine() })
 			ui.Scroll(c.Key("settings-content")).TrackScroll(&a.Settings.Scroll).Grow(1).Padding(16, 20, 24, 20).Children(func() {

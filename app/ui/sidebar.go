@@ -30,7 +30,9 @@ func (a *App) sidebar(c *ui.Context) {
 	if a.Index != nil {
 		counts = a.Index.Counts()
 	}
-	ui.Column(c).Fill().Padding(0, 8, 8, 8).Gap(4).Background(c.Theme().Surface).Children(func() {
+	side := ui.Column(c).Fill().Padding(0, 8, 8, 8).Gap(4)
+	sidebarMaterial(c, side)
+	side.Children(func() {
 		if c.TitleBar().Left > 0 {
 			ui.Box(c.Key("sidebar-titlebar")).Height(max(MainToolbarHeight, c.TitleBar().Bottom+8)).FillWidth().Shrink(0).DragWindow()
 			a.sidebarLibrary(c)
@@ -146,7 +148,7 @@ func (a *App) sidebarLibrary(c *ui.Context) {
 	if trigger.Clicked() {
 		a.Sidebar.LibraryOpen = !a.Sidebar.LibraryOpen
 	}
-	ui.Popover(c, trigger, &a.Sidebar.LibraryOpen, func() {
+	frostedPopover(c, trigger, &a.Sidebar.LibraryOpen, func() {
 		_, windowHeight := c.Size()
 		menuHeight := float32(310)
 		if len(a.Recent) > 0 {

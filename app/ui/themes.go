@@ -69,6 +69,9 @@ func warmOverlay(t *ui.Theme, alpha float32) ui.Color {
 func (a *App) applyTheme(c *ui.Context) {
 	c.SetZoom(preferenceZoom(a.Preferences.UIZoom))
 	c.SetTheme(momentoTheme(a.Preferences.Theme, c.Theme().Dark))
+	if c.Vibrancy() {
+		c.Root().Background(ui.Transparent)
+	}
 	if a.Preferences.Language != "system" && a.Preferences.Language != "" {
 		a.Texts.Language = a.Preferences.Language
 	}

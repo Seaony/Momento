@@ -193,7 +193,8 @@ func (a *App) OpenWindow() {
 		Title: "Momento", Width: 1100, Height: 800, MinWidth: 1100, MinHeight: 640, StateKey: "main",
 		TitleBarStyle: mygo.TitleBarHiddenInset, TitleBarHeight: 60,
 		TrafficLightPosition: &mygo.Point{X: 14, Y: 23},
-		BackgroundColor:      "light-dark(#ffffff, #18181b)", Content: ui.View(a.View),
+		Vibrancy:             mygo.VibrancySidebar,
+		BackgroundColor:      "light-dark(#FFFAF5, #211A16)", Content: ui.View(a.View),
 	})
 	a.Thumbnails = newThumbnailCache(func(fn func()) { a.Window.Update(fn) })
 	a.Window.OnFileDrop(func(e *mygo.FileDropEvent) { a.ImportPaths(e.Paths) })
@@ -218,7 +219,7 @@ func (a *App) View(c *ui.Context) {
 	} else {
 		body := func() {
 			ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
-				ui.Column(c).Grow(1).MinWidth(0).Children(func() {
+				ui.Column(c).Grow(1).MinWidth(0).Background(c.Theme().Background).Children(func() {
 					a.toolbar(c)
 					if a.Progress != nil {
 						a.importProgress(c)

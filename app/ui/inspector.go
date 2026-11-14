@@ -244,7 +244,7 @@ func (a *App) inspectorMemberships(c *ui.Context, selected []model.Asset, items 
 			if add.Clicked() {
 				*open = !*open
 			}
-			ui.Popover(c.Key("inspector_"+kind+"_picker"), add, open, func() {
+			frostedPopover(c.Key("inspector_"+kind+"_picker"), add, open, func() {
 				ui.Column(c).Width(244).Gap(8).Children(func() {
 					ui.SearchField(c, search).Label(a.T("search_" + plural)).Placeholder(a.T("search_" + plural))
 					ui.Scroll(c).Height(220).Gap(4).Children(func() {
