@@ -18,12 +18,12 @@ func (a *App) sidebarSmartFolders(c *ui.Context) {
 	if a.sidebarHidden("smart") {
 		return
 	}
-	ui.Row(c).Height(40).Padding(8, 8, 0, 10).Children(func() {
-		ui.Text(c, a.T("smart_folders")).FontSize(12).Bold().TextColor(c.Theme().TextMuted).Grow(1)
-		if sidebarSymbolButton(c, a.T("new_smart_folder")).Disabled(a.Busy).Clicked() {
+	a.sidebarSectionHeader(c, a.T("smart_folders"), a.T("new_smart_folder"), 16, func() { a.EditSmartFolder("") })
+	if len(a.Snapshot.SmartFolders) == 0 {
+		if sidebarEmptyAction(c.Key("smart-empty"), a.T("smart_empty_action"), "smart-folder").Disabled(a.Busy || a.Library == nil).Clicked() {
 			a.EditSmartFolder("")
 		}
-	})
+	}
 	for _, folder := range a.Snapshot.SmartFolders {
 		count := 0
 		if a.Index != nil {
@@ -33,7 +33,7 @@ func (a *App) sidebarSmartFolders(c *ui.Context) {
 		if row.Clicked() {
 			a.BrowseSmartFolder(folder.ID)
 		}
-		row.PopoverMenu(func(m *ui.Menu) {
+		row.ContextMenu(func(m *ui.Menu) {
 			if m.Item(a.T("edit_smart_folder")).Disabled(a.Busy).Chosen() {
 				a.EditSmartFolder(folder.ID)
 			}
@@ -59,24 +59,7 @@ func (a *App) sidebarSmartFolders(c *ui.Context) {
 }
 
 func (a *App) smartSidebarRow(c *ui.Context, label string, count int, selected bool) ui.Element {
-	row := ui.ButtonBase(c).FillWidth().Height(34).Padding(6, 10).Gap(8).Radius(6).Label(label).AccessSelected(selected).Justify(ui.Start)
-	if selected {
-		row.Background(c.Theme().SurfacePressed)
-	} else if row.Hovered() {
-		row.Background(c.Theme().SurfaceHover)
-	}
-	row.Children(func() {
-		ui.Icon(c, toolbarIcons["filter"]).Size(19, 19).Shrink(0)
-		ui.Text(c, label).SingleLine().Grow(1).MinWidth(0)
-		if a.Preferences.SidebarCounts {
-			color := c.Theme().TextMuted
-			if selected {
-				color = c.Theme().Text
-			}
-			ui.Text(c, sidebarCount(count)).FontSize(12).TextColor(color).Shrink(0)
-		}
-	})
-	return row
+	return a.sidebarRow(c, label, "smart-folder", count, selected)
 }
 
 func (a *App) EditSmartFolder(id string) {
@@ -128,12 +111,12 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 	if !state.SmartOpen {
 		return
 	}
-	settingsPanel(c.Key("smart-folder-editor"), &state.SmartOpen, 620, func() {
+	settingsPanel(c.Key("smart-folder-editor"), &state.SmartOpen, 648, func() {
 		title := a.T("smart_folder_create_title")
 		if state.SmartID != "" {
 			title = a.T("smart_folder_edit_title")
 		}
-		ui.Text(c, title).FontSize(20).Bold()
+		ui.Text(c, title).FontSize(20).Bold().TextColor(titleColor(c.Theme()))
 		ui.TextInput(c.Key("smart-name"), &state.SmartName).FillWidth().Label(a.T("smart_folder_name")).Placeholder(a.T("smart_folder_name")).AutoFocus().Disabled(state.Saving)
 		settingsSegments(c.Key("smart-match"), a.T("smart_match"), &state.SmartMatch, a.T("smart_all"), a.T("smart_any")).Disabled(state.Saving)
 		_, height := c.Size()
@@ -141,19 +124,16 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 			remove := -1
 			for i := range state.SmartRules {
 				rule := &state.SmartRules[i]
-				ui.Row(c.Key(i)).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
+				ui.Row(c.Key(i)).FillWidth().Gap(8).Padding(8).Radius(8).Background(c.Theme().Surface).AlignItems(ui.Center).Children(func() {
 					previous := rule.Field
 					smartSelect(c.Key("field"), &rule.Field, smartFields, func(key string) string { return a.T("smart_field_" + key) }).Width(132).Label(a.T("smart_rule_field", i+1)).Disabled(state.Saving)
 					if previous != rule.Field {
 						rule.Operator = smartOperators(rule.Field)[0]
 						rule.Value = ""
 					}
-					smartSelect(c.Key("operator"), &rule.Operator, smartOperators(rule.Field), func(key string) string { return a.T("smart_operator_" + key) }).Width(108).Label(a.T("smart_rule_operator", i+1)).Disabled(state.Saving)
+					smartSelect(c.Key("operator"), &rule.Operator, smartOperators(rule.Field), func(key string) string { return a.T("smart_operator_" + key) }).Width(124).Label(a.T("smart_rule_operator", i+1)).Disabled(state.Saving)
 					a.smartRuleValue(c.Key("value"), rule, i)
-					removeButton := ui.ButtonBase(c.Key("remove")).Label(a.T("remove_smart_rule_number", i+1)).Tooltip(a.T("remove_smart_rule")).Size(28, 28).Radius(6).Disabled(state.Saving || len(state.SmartRules) == 1).Children(func() { ui.Icon(c, sidebarPlus).Size(14, 14).Rotate(45) })
-					if removeButton.Hovered() {
-						removeButton.Background(c.Theme().SurfaceHover)
-					}
+					removeButton := inspectorIconButton(c.Key("remove"), a.T("remove_smart_rule_number", i+1), "close").Tooltip(a.T("remove_smart_rule")).Disabled(state.Saving || len(state.SmartRules) == 1)
 					if removeButton.Clicked() {
 						remove = i
 					}
@@ -204,13 +184,37 @@ func smartOperators(field string) []string {
 func smartSelect(c *ui.Context, value *string, options []string, label func(string) string) ui.Element {
 	names := make([]string, len(options))
 	chosen := ""
-	for i, key := range options {
-		names[i] = label(key)
-		if *value == key {
+	for i, option := range options {
+		names[i] = label(option)
+		if option == *value {
 			chosen = names[i]
 		}
 	}
-	control := ui.Select(c, &chosen, names)
+	selectParts := ui.SelectBase(c, &chosen)
+	control := selectParts.Trigger.Height(32).Padding(4, 10).Gap(8).Radius(8).Border(1, c.Theme().Border).Background(c.Theme().Background).Cursor(ui.CursorPointer)
+	if control.Pressed() {
+		control.Background(c.Theme().SurfacePressed)
+	} else if control.Hovered() {
+		control.Background(c.Theme().SurfaceHover)
+	}
+	control.Children(func() {
+		ui.Text(c, chosen).FontSize(13).SingleLine().Grow(1).MinWidth(0)
+		appIcon(c, "chevron-down").Size(16, 16).Shrink(0)
+	})
+	selectParts.Popup(func(panel ui.Element) {
+		panel.Margin(4, 0, 0, 0).Padding(4).Radius(12).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border)
+		ui.Scroll(c).MaxHeight(280).FillWidth().Gap(4).Children(func() {
+			for i, name := range names {
+				item := selectParts.Item(name).Height(32).FillWidth().Padding(4, 10).Radius(8).Cursor(ui.CursorPointer)
+				if item.Highlighted() {
+					item.Background(c.Theme().Selection)
+				} else if options[i] == *value {
+					item.Background(c.Theme().Surface)
+				}
+				item.Children(func() { ui.Text(c, name).FontSize(13).SingleLine() })
+			}
+		})
+	})
 	if control.Changed() {
 		for i, name := range names {
 			if name == chosen {
@@ -221,6 +225,7 @@ func smartSelect(c *ui.Context, value *string, options []string, label func(stri
 	}
 	return control
 }
+
 func (a *App) smartRuleValue(c *ui.Context, rule *model.SmartRule, index int) {
 	label := a.T("smart_rule_value", index+1)
 	if rule.Field == "tag" {

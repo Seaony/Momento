@@ -112,3 +112,30 @@ func TestTagsFormatCounts(t *testing.T) {
 		}
 	}
 }
+
+func TestTagsLocalizedControlsFit(t *testing.T) {
+	for _, language := range []string{"en", "ja"} {
+		t.Run(language, func(t *testing.T) {
+			a := tagsTestApp(model.Snapshot{Tags: []model.Tag{{ID: "nature", Name: "Landscape"}}})
+			a.Texts.Language = language
+			var searchWidth, actionWidth float32
+			tt := ui.NewTester(func(c *ui.Context) {
+				a.applyTheme(c)
+				ui.Column(c).Fill().Children(func() { a.tags(c) })
+				searchWidth, _ = c.MeasureText(0, ui.Span{Text: a.T("search_tags"), Size: 13, Lang: language})
+				actionWidth, _ = c.MeasureText(0, ui.Span{Text: a.T("new_tag"), Size: 13, Lang: language})
+			}, 584, 640)
+			tt.SetLocale(a.Texts.Locale())
+			tt.Frame()
+			for _, check := range []struct {
+				label string
+				width float32
+			}{{a.T("search_tags"), searchWidth + 44}, {a.T("new_tag"), actionWidth}, {a.T("rename_tag") + " Landscape", 28}, {a.T("delete_tag") + " Landscape", 28}} {
+				bounds, ok := tt.Find(check.label)
+				if !ok || bounds.W+1 < check.width || bounds.X < 0 || bounds.X+bounds.W > 584 || bounds.Y < 0 || bounds.Y+bounds.H > 640 {
+					t.Errorf("标签页控件未完整显示：%s，范围%+v，需要宽度%f", check.label, bounds, check.width)
+				}
+			}
+		})
+	}
+}

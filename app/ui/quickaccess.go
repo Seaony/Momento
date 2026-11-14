@@ -12,7 +12,7 @@ func (a *App) sidebarQuickAccess(c *ui.Context) {
 	if a.sidebarHidden("quick") || len(entries) == 0 {
 		return
 	}
-	ui.Text(c, a.T("quick_access")).FontSize(12).Bold().TextColor(c.Theme().TextMuted).Padding(12, 10, 4, 10)
+	ui.Text(c, a.T("quick_access")).FontSize(11).Bold().LetterSpacing(.88).TextColor(c.Theme().TextMuted).Padding(0, 10).Height(28).Margin(19, 0, 0, 0)
 	a.GBrowsing.QuickList.Key = func(i int) any { return entries[i].ID }
 	a.GBrowsing.QuickList.Label = func(i int) string { name, _, _, _ := a.quickAccessTarget(entries[i]); return name }
 	a.GBrowsing.QuickList.Reorder = func(rows []int, to int) {
@@ -40,7 +40,7 @@ func (a *App) sidebarQuickAccess(c *ui.Context) {
 		if row.Clicked() {
 			a.openQuickAccess(entry)
 		}
-		row.PopoverMenu(func(m *ui.Menu) {
+		row.ContextMenu(func(m *ui.Menu) {
 			if m.Item(a.T("quick_move_up")).Disabled(a.Busy || i == 0).Chosen() {
 				a.moveQuickAccess(entry.ID, i-1)
 			}
@@ -52,7 +52,7 @@ func (a *App) sidebarQuickAccess(c *ui.Context) {
 				a.unpinQuickAccess(entry.ID)
 			}
 		})
-	}).FillWidth().Height(float32(len(entries)) * 34).Shrink(0)
+	}).FillWidth().Height(float32(len(entries)) * 32).Shrink(0)
 }
 
 func (a *App) PinQuickAccess(kind, id string) {

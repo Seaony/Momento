@@ -146,3 +146,22 @@ func TestInspectorMultipleSelectionAndSearch(t *testing.T) {
 		t.Fatalf("标签搜索未筛选: %v", tt.Texts())
 	}
 }
+
+func TestInspectorScrollReachesMemberships(t *testing.T) {
+	asset := model.Asset{ID: "a", Name: "Reference", SourceURL: "https://example.com/reference", EXIF: map[string]string{}}
+	for _, key := range inspectorEXIFKeys {
+		asset.EXIF[key] = "Metadata value"
+	}
+	a := inspectorTestApp(asset)
+	tt := ui.NewTester(func(c *ui.Context) {
+		ui.Column(c).Fill().Children(func() {
+			ui.Box(c).Height(MainToolbarHeight).Shrink(0)
+			a.inspector(c)
+		})
+	}, 280, 640)
+	tt.Scroll(180, 500, 0, 5000)
+	button, ok := tt.Find(a.T("add_folders"))
+	if !ok || button.Y < MainToolbarHeight || button.Y+button.H > 640 {
+		t.Fatalf("滚到底后文件夹操作仍在窗口之外：%+v", button)
+	}
+}

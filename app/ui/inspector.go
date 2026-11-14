@@ -36,20 +36,20 @@ func (a *App) inspector(c *ui.Context) {
 		a.Inspector = inspectorState{LibraryID: a.Library.Manifest.LibraryID}
 	}
 	selected := a.SelectedAssets()
-	ui.Column(c).Fill().Children(func() {
+	ui.Column(c).Grow(1).FillWidth().MinHeight(0).Children(func() {
 		if len(selected) == 0 {
 			a.saveInspectorEdits()
 			a.Inspector.AssetID = ""
 			a.inspectorScope(c)
 			return
 		}
-		ui.Scroll(c.Key("inspector_content")).Grow(1).Padding(16).Gap(18).Children(func() {
+		ui.Scroll(c.Key("inspector_content")).Grow(1).Padding(16).Gap(16).Children(func() {
 			if len(selected) == 1 {
 				a.inspectorAsset(c, selected[0])
 			} else {
 				a.saveInspectorEdits()
 				a.Inspector.AssetID = ""
-				ui.Text(c, a.T("selected_assets", len(selected))).FontSize(18).Bold()
+				ui.Text(c, a.T("selected_assets", len(selected))).FontSize(18).Bold().TextColor(titleColor(c.Theme()))
 			}
 			a.inspectorTags(c, selected)
 			a.inspectorFolders(c, selected)
@@ -79,7 +79,7 @@ func (a *App) inspectorAsset(c *ui.Context, asset model.Asset) {
 		}
 	}
 	preview := ui.Column(c.Key("inspector_preview")).Height(176).Radius(8).
-		Background(c.Theme().Background).Center().Clip().Children(func() {
+		Background(c.Theme().Background).Cursor(ui.CursorPointer).Center().Clip().Children(func() {
 		if bitmap := a.Bitmap(asset); bitmap != nil {
 			ui.Image(c, bitmap).Fill().Fit(ui.Contain).Label(a.T("image_preview"))
 		} else {
@@ -113,7 +113,7 @@ func (a *App) inspectorAsset(c *ui.Context, asset model.Asset) {
 			}
 		})
 	}
-	ui.Column(c).Gap(6).Children(func() {
+	ui.Column(c).Gap(8).Children(func() {
 		ui.Text(c, a.T("title")).FontSize(12).TextColor(c.Theme().TextMuted)
 		input := ui.TextInput(c.Key("asset_title_"+asset.ID), &a.Inspector.Title).
 			Label(a.T("title")).Disabled(a.Busy)
@@ -121,28 +121,28 @@ func (a *App) inspectorAsset(c *ui.Context, asset model.Asset) {
 			a.saveInspectorTitle()
 		}
 	})
-	ui.Column(c).Gap(10).Children(func() {
+	ui.Column(c).Gap(8).Children(func() {
 		a.inspectorDetail(c, "file_type", strings.ToUpper(asset.Extension))
 		a.inspectorDetail(c, "dimensions", fmt.Sprintf("%d × %d", width, height))
 		a.inspectorDetail(c, "file_size", fileSize(asset.Size))
 		a.inspectorDetail(c, "date_added", asset.CreatedAt.Local().Format("2006-01-02 15:04"))
 	})
-	ui.Column(c).Gap(6).Children(func() {
+	ui.Column(c).Gap(8).Children(func() {
 		ui.Text(c, a.T("asset_note")).FontSize(12).TextColor(c.Theme().TextMuted)
 		note := ui.TextArea(c.Key("asset-note-"+asset.ID), &a.Inspector.Note).Label(a.T("asset_note")).Height(88).FillWidth().Disabled(a.Busy)
 		if note.FocusLeft() {
 			a.saveInspectorDetails()
 		}
 	})
-	ui.Column(c).Gap(6).Children(func() {
+	ui.Column(c).Gap(8).Children(func() {
 		ui.Text(c, a.T("source_url")).FontSize(12).TextColor(c.Theme().TextMuted)
-		ui.Row(c).Gap(6).Children(func() {
+		ui.Row(c).Gap(8).Children(func() {
 			source := ui.TextInput(c.Key("asset-source-"+asset.ID), &a.Inspector.SourceURL).Label(a.T("source_url")).Grow(1).MinWidth(0).Disabled(a.Busy)
 			if source.Submitted() || source.FocusLeft() {
 				a.saveInspectorDetails()
 			}
 			if strings.TrimSpace(a.Inspector.SourceURL) != "" {
-				if ui.Button(c.Key("open-source"), "").Label(a.T("open_source_url")).Tooltip(a.T("open_source_url")).Size(28, 28).Padding(0).Children(func() { ui.Image(c, browseLinkIcon).Size(18, 18) }).Clicked() {
+				if inspectorIconButton(c.Key("open-source"), a.T("open_source_url"), "external-link").Clicked() {
 					c.OpenURLThen(strings.TrimSpace(a.Inspector.SourceURL), a.ShowError)
 				}
 			}
@@ -150,9 +150,9 @@ func (a *App) inspectorAsset(c *ui.Context, asset model.Asset) {
 	})
 
 	if hasInspectorEXIF(asset.EXIF) {
-		ui.Column(c).Gap(10).Children(func() {
+		ui.Column(c).Gap(8).Children(func() {
 			ui.Divider(c)
-			ui.Text(c, a.T("exif_metadata")).FontSize(12).Bold()
+			ui.Text(c, a.T("exif_metadata")).FontSize(12).Bold().TextColor(titleColor(c.Theme()))
 			for _, key := range inspectorEXIFKeys {
 				if value := inspectorEXIFValue(asset.EXIF, key); value != "" {
 					if key == "flashFired" && (value == "true" || value == "false") {
@@ -238,16 +238,16 @@ func (a *App) inspectorMemberships(c *ui.Context, selected []model.Asset, items 
 	ui.Column(c.Key("inspector_" + plural)).Gap(8).Children(func() {
 		ui.Divider(c)
 		ui.Row(c).Children(func() {
-			ui.Text(c, a.T(plural)).FontSize(12).Bold()
+			ui.Text(c, a.T(plural)).FontSize(12).Bold().TextColor(titleColor(c.Theme()))
 			ui.Spacer(c)
-			add := ui.Button(c.Key("inspector_add_"+kind), "+").Label(a.T("add_"+plural)).Size(28, 28).Disabled(a.Busy)
+			add := inspectorIconButton(c.Key("inspector_add_"+kind), a.T("add_"+plural), "plus").Disabled(a.Busy)
 			if add.Clicked() {
 				*open = !*open
 			}
 			frostedPopover(c.Key("inspector_"+kind+"_picker"), add, open, func() {
 				ui.Column(c).Width(244).Gap(8).Children(func() {
 					ui.SearchField(c, search).Label(a.T("search_" + plural)).Placeholder(a.T("search_" + plural))
-					ui.Scroll(c).Height(220).Gap(4).Children(func() {
+					ui.Scroll(c).MaxHeight(220).Gap(4).Children(func() {
 						query := strings.ToLower(strings.TrimSpace(*search))
 						for _, item := range items {
 							if query != "" && !strings.Contains(strings.ToLower(item.Label), query) {
@@ -297,12 +297,12 @@ func (a *App) inspectorMemberships(c *ui.Context, selected []model.Asset, items 
 				continue
 			}
 			found = true
-			ui.Row(c.Key("member_" + item.ID)).Gap(4).Children(func() {
+			ui.Row(c.Key("member_" + item.ID)).Gap(8).Children(func() {
 				ui.Text(c, item.Label).FontSize(12).Grow(1).MinWidth(0)
 				if len(selected) > 1 {
 					ui.Textf(c, "%d/%d", count, len(selected)).FontSize(12).TextColor(c.Theme().TextMuted)
 				}
-				if ui.Button(c, "−").Label(a.T("remove_"+kind, item.Name)).Size(28, 28).Disabled(a.Busy).Clicked() {
+				if inspectorIconButton(c, a.T("remove_"+kind, item.Name), "minus").Disabled(a.Busy).Clicked() {
 					set(item.ID, false)
 				}
 			})
@@ -361,8 +361,8 @@ func inspectorFolderPath(folders []model.Folder, id string) string {
 
 func (a *App) inspectorScope(c *ui.Context) {
 	name, count, size := a.scopeSummary()
-	ui.Column(c).FillWidth().Padding(20, 16).Gap(16).Children(func() {
-		ui.Text(c, name).FontSize(18).Bold().FillWidth()
+	ui.Column(c).FillWidth().Padding(16).Gap(16).Children(func() {
+		ui.Text(c, name).FontSize(18).Bold().TextColor(titleColor(c.Theme())).FillWidth()
 		ui.Divider(c)
 		ui.Text(c, a.T("scope_information")).FontSize(12).Bold().TextColor(c.Theme().TextMuted)
 		a.inspectorDetail(c, "scope_asset_count", sidebarCount(count))
@@ -470,3 +470,14 @@ func (a *App) runInspectorEdit(edit inspectorEdit) {
 }
 
 func (a *App) saveInspectorDetails() { a.saveInspectorEdits() }
+
+func inspectorIconButton(c *ui.Context, label, icon string) ui.Element {
+	button := ui.ButtonBase(c).Label(label).Tooltip(label).Size(28, 28).Padding(0).Radius(8).Cursor(ui.CursorPointer)
+	if button.Pressed() {
+		button.Background(warmOverlay(c.Theme(), .11))
+	} else if button.Hovered() {
+		button.Background(warmOverlay(c.Theme(), .06))
+	}
+	button.Children(func() { appIcon(c, icon).Size(20, 20) })
+	return button
+}
