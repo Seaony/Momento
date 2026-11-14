@@ -52,7 +52,7 @@ func (a *App) toolbar(c *ui.Context) {
 	}
 
 	row := ui.Row(c.Key("toolbar")).Height(MainToolbarHeight).Shrink(0).FillWidth().Padding(12, right, 12, left).Gap(4).DragWindow().
-		Material(toolbarMaterial(t)).BorderWidth(0, 0, 1, 0).BorderColor(warmOverlay(t, .09)).Role(ui.RoleToolbar).FocusGroup(ui.Horizontal).Label(a.T("browse_tools"))
+		Material(toolbarMaterial(t)).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Role(ui.RoleToolbar).FocusGroup(ui.Horizontal).Label(a.T("browse_tools"))
 	if bounds := row.LayoutBounds(); bounds.W > 0 {
 		width = bounds.W - left - right
 		compact = width < 720

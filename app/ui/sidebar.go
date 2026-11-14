@@ -193,7 +193,7 @@ func (a *App) sidebarSectionHeader(c *ui.Context, title, action string, top floa
 }
 
 func sidebarEmptyAction(c *ui.Context, label, icon string) ui.Element {
-	row := ui.ButtonBase(c).FillWidth().Height(32).Padding(0, 10).Gap(8).Radius(8).Border(1, warmOverlay(c.Theme(), .24)).BorderStyle(ui.BorderDashed).Cursor(ui.CursorPointer).Label(label).Justify(ui.Start).TextColor(c.Theme().TextMuted)
+	row := ui.ButtonBase(c).FillWidth().Height(32).Padding(0, 10).Gap(8).Radius(8).Border(1, c.Theme().Border).BorderStyle(ui.BorderDashed).Cursor(ui.CursorPointer).Label(label).Justify(ui.Start).TextColor(c.Theme().TextMuted)
 	sidebarControlColors(c, row, true)
 	row.Children(func() {
 		appIcon(c, icon).Size(18, 18).Shrink(0)
@@ -227,7 +227,7 @@ func sidebarRowStyle(c *ui.Context, row ui.Element, selected bool) {
 			background = c.Theme().SurfaceHover
 		}
 		text = titleColor(c.Theme())
-		row.Border(1, warmOverlay(c.Theme(), .13)).Bold()
+		row.Border(1, c.Theme().Border).Bold()
 	}
 	if row.Pressed() {
 		background = warmOverlay(c.Theme(), .11)
@@ -276,7 +276,7 @@ func (a *App) sidebarLibrary(c *ui.Context) {
 	if a.Library != nil {
 		name = a.libraryName()
 	}
-	trigger := ui.ButtonBase(c.Key("library_switcher")).FillWidth().Height(38).Padding(0, 10, 0, 6).Gap(10).Radius(10).Border(1, warmOverlay(c.Theme(), .14)).Background(c.Theme().Background.Alpha(.55)).Cursor(ui.CursorPointer).Label(a.T("library_menu")).Justify(ui.Start).TextColor(c.Theme().TextMuted)
+	trigger := ui.ButtonBase(c.Key("library_switcher")).FillWidth().Height(38).Padding(0, 10, 0, 6).Gap(10).Radius(10).Border(1, c.Theme().Border).Background(c.Theme().Background.Alpha(.55)).Cursor(ui.CursorPointer).Label(a.T("library_menu")).Justify(ui.Start).TextColor(c.Theme().TextMuted)
 	background, text := c.Theme().Background.Alpha(.55), c.Theme().TextMuted
 	if trigger.Pressed() {
 		background, text = c.Theme().SurfacePressed, c.Theme().Text
