@@ -146,13 +146,14 @@ func (animation *previewAnimation) next() (previewPicture, error) {
 }
 
 func previewSymbolButton(c *ui.Context, symbol, label string, size float32, disabled bool) ui.Element {
-	button := ui.ButtonBase(c).Size(size, size).Padding(0).Radius(size / 2).
+	p := paletteFor(c.Theme())
+	button := elevated(ui.ButtonBase(c).Size(size, size).Padding(0).Radius(size/2).Material(panelMaterial(c.Theme())), c.Theme()).
 		Label(label).Tooltip(label).Disabled(disabled).Cursor(ui.CursorPointer)
-	background, text := ui.Transparent, c.Theme().TextMuted
+	background, text := ui.Transparent, p.TextSecondary
 	if button.Pressed() {
-		background, text = warmOverlay(c.Theme(), .11), c.Theme().Text
+		background, text = p.Pressed, p.Text
 	} else if button.Hovered() {
-		background, text = warmOverlay(c.Theme(), .06), c.Theme().Text
+		background, text = p.Hover, p.Text
 	}
 	animateColors(button, background, text)
 	button.Children(func() { appIcon(c, symbol).Size(18, 18) })
@@ -162,8 +163,8 @@ func previewSymbolButton(c *ui.Context, symbol, label string, size float32, disa
 func (w *previewWindow) viewport(c *ui.Context, a *App) {
 	p, asset := &w.picture, w.asset
 	width, height := c.Size()
-	p.viewport = ui.Rect{X: 25, Y: 65, W: width - 50, H: height - 114}
-	viewport := ui.Box(c.Key("preview-image")).Absolute().Left(24).Top(64).Right(24).Bottom(48)
+	p.viewport = ui.Rect{X: space24 + 1, Y: space64 + 1, W: width - 2*(space24+1), H: height - space64 - space48 - 2}
+	viewport := ui.Box(c.Key("preview-image")).Absolute().Left(space24).Top(space64).Right(space24).Bottom(space48)
 	if !p.Open {
 		viewport.PassThrough().AccessHidden(true)
 		return
@@ -213,8 +214,8 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 					bitmap = p.pixelBitmap
 				}
 			}
-			photo := previewPhoto(c.Key(struct{ ID string }{asset.ID}), bitmap, 12, a.Preferences.PreviewChecker, ui.Contain).
-				Absolute().Label(asset.Name).Shadow(0, 12, 32, 0, ui.Hex("#211A16").Alpha(.24))
+			photo := previewPhoto(c.Key(struct{ ID string }{asset.ID}), bitmap, radiusPanel, a.Preferences.PreviewChecker, ui.Contain).
+				Absolute().Label(asset.Name).Shadow(0, space4, space16, 0, paletteFor(c.Theme()).Shadow)
 			zoom := p.Zoom
 			if p.rotationBitmap != nil {
 				zoom = photo.AnimateTo("rotation-scale", p.Zoom, motionSpring)
@@ -269,20 +270,20 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 		}
 	} else if p.errorText != "" {
 		viewport.Center().Children(func() {
-			ui.Column(c).MaxWidth(560).Padding(16).Gap(8).Radius(12).Material(panelMaterial(c.Theme())).Children(func() {
-				ui.Text(c, a.T("preview_failed")).Bold()
-				ui.Text(c, p.errorText).TextColor(c.Theme().TextMuted)
+			ui.Column(c).MaxWidth(560).Padding(space16).Gap(space8).Radius(radiusPanel).Material(panelMaterial(c.Theme())).Children(func() {
+				ui.Text(c, a.T("preview_failed")).FontSize(fontBody).FontWeight(600).TextColor(paletteFor(c.Theme()).Text)
+				ui.Text(c, p.errorText).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary)
 			})
 		})
 	}
 	if p.Loading {
-		ui.Text(c, a.T("preview_loading")).Absolute().Top(64).Left(width/2).TranslatePercent(-50, 0).
-			FontSize(12).Padding(8, 12).Radius(12).Material(panelMaterial(c.Theme())).TextColor(c.Theme().TextMuted)
+		ui.Text(c, a.T("preview_loading")).Absolute().Top(space64).Left(width/2).TranslatePercent(-50, 0).
+			FontSize(fontSecondary).Padding(space8, space12).Radius(radiusPanel).Material(panelMaterial(c.Theme())).TextColor(paletteFor(c.Theme()).TextSecondary)
 	}
 }
 
 func previewPhoto(c *ui.Context, bitmap *ui.Bitmap, radius float32, checker bool, fit ui.Fit) ui.Element {
-	photo := ui.Box(c).Radius(radius).Clip().Role(ui.RoleImage).Background(c.Theme().Surface)
+	photo := ui.Box(c).Radius(radius).Clip().Role(ui.RoleImage).Background(paletteFor(c.Theme()).Subtle)
 	if checker {
 		theme := c.Theme()
 		photo.Draw(func(painter *ui.Painter, r ui.Rect) {
@@ -402,12 +403,13 @@ func drawPreviewChecker(p *ui.Painter, viewport, image ui.Rect, theme *ui.Theme)
 	if right <= left || bottom <= top {
 		return
 	}
-	const size = float32(12)
+	const size = float32(space12)
+	palette := paletteFor(theme)
 	for y := top; y < bottom; y += size {
 		for x := left; x < right; x += size {
-			color := theme.Surface
+			color := palette.Subtle
 			if (int((x-left)/size)+int((y-top)/size))%2 == 1 {
-				color = theme.SurfacePressed
+				color = palette.Hover
 			}
 			p.Fill(ui.Rect{X: x, Y: y, W: min(size, right-x), H: min(size, bottom-y)}, color, 0)
 		}

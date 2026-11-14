@@ -326,9 +326,9 @@ func (w *previewWindow) create(a *App) {
 	w.frame = previewWindowBounds(parent, area, w.asset, a.Preferences.PreviewFit == "fit")
 	w.hostAnimating = true
 	w.window = mygo.NewWindow(mygo.WindowOptions{Title: w.asset.Name, Width: w.frame.Width, Height: w.frame.Height,
-		Hidden: true, Frameless: true, Transparent: true, CornerRadius: 12, SkipTaskbar: true,
+		Hidden: true, Frameless: true, Transparent: true, CornerRadius: radiusPanel, SkipTaskbar: true,
 		DisableResize: true, DisableMaximize: true, DisableMinimize: true, DisableFullScreen: true,
-		Vibrancy: mygo.VibrancyGlass, VibrancyTint: "light-dark(rgba(255,250,245,0.28), rgba(33,26,22,0.35))",
+		Vibrancy: mygo.VibrancyGlass, VibrancyTint: previewGlassTint(),
 		BackgroundColor: "rgba(0,0,0,0)", Content: ui.View(func(c *ui.Context) { w.view(c, a) })})
 	w.window.SetMinimumSize(160, 120)
 	w.window.SetBounds(scaledPreviewBounds(w.frame, .92))
@@ -524,7 +524,7 @@ func (w *previewWindow) view(c *ui.Context, a *App) {
 		w.load(a)
 	}
 	w.animatePicture(c, a)
-	surface := ui.Box(c.Key("preview-window-surface")).Fill().Radius(12).Clip().Material(frostedSurface{tint: c.Theme().Background.Alpha(.72), blur: 24}).Border(1, c.Theme().Border)
+	surface := ui.Box(c.Key("preview-window-surface")).Fill().Radius(radiusPanel).Clip().Material(frostedSurface{tint: paletteFor(c.Theme()).Background.Alpha(.72), blur: space24}).Border(1, paletteFor(c.Theme()).BorderSubtle)
 	if w.pinned {
 		surface.DragWindow()
 	}
@@ -532,7 +532,7 @@ func (w *previewWindow) view(c *ui.Context, a *App) {
 		w.viewport(c, a)
 		w.controls(c, a, surface.Hovered())
 		if w.operationError != "" {
-			ui.Column(c).Absolute().Top(64).Left(16).Right(16).Padding(8).Radius(8).Material(panelMaterial(c.Theme())).Children(func() { ui.Text(c, w.operationError).FontSize(12).TextColor(c.Theme().Danger) })
+			ui.Column(c).Absolute().Top(space64).Left(space16).Right(space16).Padding(space8).Radius(radiusControl).Material(panelMaterial(c.Theme())).Children(func() { ui.Text(c, w.operationError).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).Danger) })
 		}
 
 		elapsed := now.Sub(w.pressedAt)
@@ -549,10 +549,12 @@ func (w *previewWindow) view(c *ui.Context, a *App) {
 				value = 1
 				opacity = 1 - float32(now.Sub(w.pinnedAt))/float32(120*time.Millisecond)
 			}
-			progress := ui.Column(c.Key("preview-hold-progress")).Absolute().Bottom(12).Left(24).Right(24).Gap(8).AlignItems(ui.Center).IgnoreInput(true).Opacity(opacity)
+			progress := ui.Column(c.Key("preview-hold-progress")).Absolute().Bottom(space12).Left(space24).Right(space24).Gap(space8).AlignItems(ui.Center).IgnoreInput(true).Opacity(opacity)
 			progress.Children(func() {
-				ui.Text(c, a.T("preview_hold_to_pin")).FontSize(12).TextColor(c.Theme().TextMuted).SingleLine()
-				ui.Box(c).Width(180).Height(3).Radius(2).Background(c.Theme().Border).Children(func() { ui.Box(c).WidthPercent(value * 100).Height(3).Radius(2).Background(c.Theme().Accent) })
+				ui.Text(c, a.T("preview_hold_to_pin")).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary).SingleLine()
+				ui.Box(c).Width(180).Height(space4).Radius(space4 / 2).Background(paletteFor(c.Theme()).BorderSubtle).Children(func() {
+					ui.Box(c).WidthPercent(value * 100).Height(space4).Radius(space4 / 2).Background(paletteFor(c.Theme()).Accent)
+				})
 			})
 		}
 
@@ -588,40 +590,40 @@ func (w *previewWindow) controls(c *ui.Context, a *App, hovered bool) {
 	_, height := c.Size()
 	p := &w.picture
 	index := slices.IndexFunc(w.items, func(asset model.Asset) bool { return asset.ID == w.asset.ID })
-	right := float32(16)
+	right := float32(space8)
 	if w.pinned {
-		right = 48
+		right = space48
 	}
-	ui.Row(c.Key("preview-controls")).Absolute().Top(12).Left(16).Right(right).Height(40).Padding(4, 8).Gap(4).AlignItems(ui.Center).Radius(20).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border).Children(func() {
-		ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
-			ui.Text(c, w.asset.Name).FontSize(13).Bold().TextColor(titleColor(c.Theme())).SingleLine().Tooltip(w.asset.Name)
+	elevated(ui.Row(c.Key("preview-controls")).Absolute().Top(space12).Left(space8).Right(right).Height(space48).Padding(space4).Gap(space4).AlignItems(ui.Center).Radius(space24).Material(panelMaterial(c.Theme())), c.Theme()).Children(func() {
+		ui.Column(c).Grow(1).MinWidth(0).Gap(space4).Children(func() {
+			ui.Text(c, w.asset.Name).FontSize(fontBody).FontWeight(600).TextColor(paletteFor(c.Theme()).Text).SingleLine().Tooltip(w.asset.Name)
 			iw, ih := assetDisplaySize(w.asset)
-			ui.Textf(c, "%d × %d · %.0f%% · %s", iw, ih, p.Zoom*100, a.T("preview_position", index+1, len(w.items))).FontSize(12).TextColor(c.Theme().TextMuted).SingleLine()
+			ui.Textf(c, "%d × %d · %.0f%% · %s", iw, ih, p.Zoom*100, a.T("preview_position", index+1, len(w.items))).Font(monoFont(c)).FontSize(fontNumber).TextColor(paletteFor(c.Theme()).TextSecondary).SingleLine()
 		})
 		for _, entry := range []struct {
 			name, key string
 			delta     int
 		}{{"rotate-left", "preview_rotate_left", -90}, {"rotate-right", "preview_rotate_right", 90}} {
-			if previewSymbolButton(c.Key(entry.key), entry.name, a.T(entry.key), 32, w.rotating || a.Busy).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border).Clicked() {
+			if previewSymbolButton(c.Key(entry.key), entry.name, a.T(entry.key), space32, w.rotating || a.Busy).Clicked() {
 				a.rotatePreviewWindow(w, entry.delta)
 			}
 		}
 		if !w.picture.Held && !w.closedHeld && !w.pinned {
-			if previewSymbolButton(c.Key("close-preview"), "close", a.T("close_preview"), 32, false).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border).Clicked() {
+			if previewSymbolButton(c.Key("close-preview"), "close", a.T("close_preview"), space32, false).Clicked() {
 				w.close(a, c.Now())
 			}
 		}
 	})
 	if len(w.items) > 1 {
-		if previewSymbolButton(c.Key("previous-preview"), "chevron-left", a.T("previous_asset"), 36, index <= 0).Absolute().Left(16).Top(height/2).TranslatePercent(0, -50).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border).Clicked() {
+		if previewSymbolButton(c.Key("previous-preview"), "chevron-left", a.T("previous_asset"), 36, index <= 0).Absolute().Left(space16).Top(height/2).TranslatePercent(0, -50).Clicked() {
 			w.move(a, -1)
 		}
-		if previewSymbolButton(c.Key("next-preview"), "chevron-right", a.T("next_asset"), 36, index >= len(w.items)-1).Absolute().Right(16).Top(height/2).TranslatePercent(0, -50).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border).Clicked() {
+		if previewSymbolButton(c.Key("next-preview"), "chevron-right", a.T("next_asset"), 36, index >= len(w.items)-1).Absolute().Right(space16).Top(height/2).TranslatePercent(0, -50).Clicked() {
 			w.move(a, 1)
 		}
 	}
 	if w.pinned {
-		close := previewSymbolButton(c.Key("close-pinned-preview"), "close", a.T("close_preview"), 28, false).Absolute().Right(12).Top(12).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border)
+		close := previewSymbolButton(c.Key("close-pinned-preview"), "close", a.T("close_preview"), 28, false).Absolute().Right(space12).Top(space12)
 		visible := hovered
 		close.Opacity(motionTarget(visible)).IgnoreInput(!visible)
 		if close.Clicked() {
