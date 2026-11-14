@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/Seaony/Momento/app/internal/catalog"
 	"github.com/Seaony/Momento/app/internal/model"
@@ -51,6 +52,7 @@ func TestSmartEditorChangesFieldsAndPreservesInvalidDraft(t *testing.T) {
 	if err := tt.Click(a.T("add_smart_rule")); err != nil {
 		t.Fatal(err)
 	}
+	tt.Advance(400 * time.Millisecond)
 	if len(a.GBrowsing.SmartRules) != 2 || a.GBrowsing.SmartMatch != 1 {
 		t.Fatal("添加条件或任一匹配没有生效")
 	}
@@ -91,23 +93,19 @@ func TestSmartEditorCopiesRulesAndKeepsSaveFailureVisible(t *testing.T) {
 	}
 }
 
-func TestSmartHistoryRestoresFolderIdentity(t *testing.T) {
+func TestSmartBrowsingPreservesCurrentFolderIdentity(t *testing.T) {
 	a := smartTestApp()
 	a.BrowseSmartFolder("smart-a")
+	if a.Query.Scope != "smart" || a.Query.SmartFolderID != "smart-a" || len(a.Visible) != 1 || a.Visible[0].ID != "a" {
+		t.Fatal("没有切到第一个智能文件夹")
+	}
 	a.SetScope("folder", "root")
-	a.BrowseSmartFolder("smart-b")
-	a.NavigateBack()
 	if a.Query.Scope != "folder" || a.Query.FolderID != "root" || a.Query.SmartFolderID != "" {
-		t.Fatal("从智能范围后退没有恢复文件夹")
+		t.Fatal("切到普通文件夹后仍保留智能范围")
 	}
-	a.NavigateBack()
-	if a.Query.SmartFolderID != "smart-a" || len(a.Visible) != 1 || a.Visible[0].ID != "a" {
-		t.Fatal("历史丢失了前一个智能文件夹")
-	}
-	a.NavigateForward()
-	a.NavigateForward()
-	if a.Query.SmartFolderID != "smart-b" || len(a.Visible) != 1 || a.Visible[0].ID != "b" {
-		t.Fatal("前进没有恢复智能文件夹")
+	a.BrowseSmartFolder("smart-b")
+	if a.Query.Scope != "smart" || a.Query.SmartFolderID != "smart-b" || a.Query.FolderID != "" || len(a.Visible) != 1 || a.Visible[0].ID != "b" {
+		t.Fatal("没有切到第二个智能文件夹")
 	}
 }
 

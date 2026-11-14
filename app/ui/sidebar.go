@@ -31,70 +31,124 @@ func (a *App) sidebar(c *ui.Context) {
 	if a.Index != nil {
 		counts = a.Index.Counts()
 	}
-	side := ui.Column(c).Fill().Padding(0, 12, 12, 12).Gap(0).FontSize(13)
-	sidebarMaterial(c, side)
-	side.Children(func() {
-		a.sidebarTopBar(c)
-		ui.Scroll(c.Key("sidebar_scopes")).Grow(1).Gap(1).Children(func() {
-			a.sidebarScope(c, "all", "all", "照片", counts.All)
-			if !a.sidebarHidden("recent") && a.Index != nil {
-				a.sidebarScope(c, "recent", "recent", "recent", len(a.Index.Query(catalog.Query{Scope: "recent"})))
-			}
-			if !a.sidebarHidden("favorites") {
-				a.sidebarScope(c, "favorites", "favorites", "喜欢", counts.Favorites)
-			}
-			if !a.sidebarHidden("random") {
-				a.sidebarScope(c, "random", "random_browse", "随机浏览", -1)
-			}
-			a.sidebarQuickAccess(c)
-			organize := ui.ButtonBase(c.Key("organize")).FillWidth().Height(28).Margin(19, 0, 0, 0).Padding(0, 10).Gap(8).Radius(8).Cursor(ui.CursorPointer).Label(a.T("organize")).TextColor(c.Theme().TextMuted).Expanded(!a.Sidebar.OrganizeCollapsed)
-			if organize.Hovered() {
-				organize.Background(warmOverlay(c.Theme(), .06)).TextColor(c.Theme().Text)
-			}
-			organize.Children(func() {
-				ui.Text(c, a.T("organize")).FontSize(11).Bold().LetterSpacing(.88).TextColor(c.Theme().TextMuted).Grow(1)
-				sidebarChevron(c, !a.Sidebar.OrganizeCollapsed).Size(13, 13)
-			})
-			if organize.Clicked() {
-				a.Sidebar.OrganizeCollapsed = !a.Sidebar.OrganizeCollapsed
-			}
-			if !a.Sidebar.OrganizeCollapsed {
-				if !a.sidebarHidden("unfiled") {
-					a.sidebarScope(c, "uncategorized", "uncategorized", "unfiled", counts.Uncategorized)
+	width := a.SidebarWidth
+	if width == 0 {
+		width = 236
+	}
+	ui.Box(c.Key("sidebar-clip")).Fill().ClipX().Children(func() {
+		side := ui.Column(c.Key("sidebar-content")).Width(width).FillHeight().Shrink(0).Padding(0, 12, 12, 12).Gap(0).FontSize(13)
+		sidebarMaterial(c, side)
+		side.Children(func() {
+			a.sidebarTopBar(c)
+			ui.Scroll(c.Key("sidebar_scopes")).Grow(1).Gap(1).Children(func() {
+				a.sidebarScope(c, "all", "all", "照片", counts.All)
+				if !a.sidebarHidden("recent") && a.Index != nil {
+					a.sidebarScope(c, "recent", "recent", "recent", len(a.Index.Query(catalog.Query{Scope: "recent"})))
 				}
-				if !a.sidebarHidden("untagged") {
-					a.sidebarScope(c, "untagged", "untagged", "untagged", counts.Untagged)
+				if !a.sidebarHidden("favorites") {
+					a.sidebarScope(c, "favorites", "favorites", "喜欢", counts.Favorites)
 				}
-				if a.sidebarRow(c.Key("tags_page"), a.T("tag_management"), "标签组", len(a.Snapshot.Tags), a.TagPage).Clicked() {
-					a.ShowTagsPage()
+				if !a.sidebarHidden("random") {
+					a.sidebarScope(c, "random", "random_browse", "随机浏览", -1)
 				}
-			}
-			if !a.sidebarHidden("folders") {
-				a.sidebarSectionHeader(c, a.T("folders"), a.T("new_folder"), 20, func() { a.sidebarCreateFolder("") })
-				if len(a.Snapshot.Folders) == 0 {
-					if sidebarEmptyAction(c.Key("folders-empty"), a.T("new_folder"), "文件夹").Disabled(a.Busy || a.Library == nil).Clicked() {
-						a.sidebarCreateFolder("")
+				a.sidebarQuickAccess(c)
+				organize := ui.ButtonBase(c.Key("organize")).FillWidth().Height(28).Margin(19, 0, 0, 0).Padding(0, 10).Gap(8).Radius(8).Cursor(ui.CursorPointer).Label(a.T("organize")).Expanded(!a.Sidebar.OrganizeCollapsed)
+				sidebarControlColors(c, organize, true)
+				organize.Children(func() {
+					ui.Text(c, a.T("organize")).FontSize(11).Bold().LetterSpacing(.88).Grow(1)
+					sidebarChevron(c, !a.Sidebar.OrganizeCollapsed).Size(14, 14)
+				})
+				if organize.Clicked() {
+					a.Sidebar.OrganizeCollapsed = !a.Sidebar.OrganizeCollapsed
+				}
+				a.sidebarOrganize(c, counts)
+
+				if !a.sidebarHidden("folders") {
+					a.sidebarSectionHeader(c, a.T("folders"), a.T("new_folder"), 20, func() { a.sidebarCreateFolder("") })
+					if len(a.Snapshot.Folders) == 0 {
+						if sidebarEmptyAction(c.Key("folders-empty"), a.T("new_folder"), "文件夹").Disabled(a.Busy || a.Library == nil).Clicked() {
+							a.sidebarCreateFolder("")
+						}
+					} else {
+						a.sidebarFolders(c, counts)
 					}
-				} else {
-					a.sidebarFolders(c, counts)
 				}
-			}
-			a.sidebarSmartFolders(c)
+				a.sidebarSmartFolders(c)
+			})
+			ui.Divider(c).Margin(10, 0)
+			a.sidebarFooter(c, counts.Trash)
 		})
-		ui.Divider(c).Margin(10, 0)
-		trash := a.sidebarScope(c, "trash", "trash", "回收站", counts.Trash)
+	})
+}
+
+func (a *App) sidebarOrganize(c *ui.Context, counts catalog.Counts) {
+	rows := 1
+	if !a.sidebarHidden("unfiled") {
+		rows++
+	}
+	if !a.sidebarHidden("untagged") {
+		rows++
+	}
+	group := ui.Column(c.Key("organize-items")).FillWidth().Shrink(0).Gap(1).ClipY()
+	height := float32(rows*33 - 1)
+	if a.Sidebar.OrganizeCollapsed {
+		height = 0
+	}
+	shown := group.AnimateTo("height", height, motionSpring)
+	group.Height(max(0, shown)).IgnoreInput(a.Sidebar.OrganizeCollapsed).AccessHidden(a.Sidebar.OrganizeCollapsed)
+	if a.Sidebar.OrganizeCollapsed && shown <= 0 {
+		return
+	}
+	group.Children(func() {
+		if !a.sidebarHidden("unfiled") {
+			a.sidebarScope(c, "uncategorized", "uncategorized", "unfiled", counts.Uncategorized)
+		}
+		if !a.sidebarHidden("untagged") {
+			a.sidebarScope(c, "untagged", "untagged", "untagged", counts.Untagged)
+		}
+		if a.sidebarRow(c.Key("tags_page"), a.T("tag_management"), "标签组", len(a.Snapshot.Tags), a.TagPage).Clicked() {
+			a.ShowTagsPage()
+		}
+	})
+}
+
+func (a *App) sidebarFooter(c *ui.Context, trashCount int) {
+	ui.Row(c.Key("sidebar-footer")).FillWidth().Height(32).Gap(2).Shrink(0).Children(func() {
+		selected := !a.TagPage && a.Query.Scope == "trash"
+		trash := ui.ButtonBase(c.Key("scope_trash")).Grow(1).MinWidth(0).Height(32).Padding(0, 8).Gap(6).Radius(8).Cursor(ui.CursorPointer).Label(a.T("trash")).AccessSelected(selected).Border(1, ui.Color{}).Justify(ui.Start)
+		sidebarRowStyle(c, trash, selected)
+		trash.Children(func() {
+			sidebarRowIcon(c, "trash", selected, trash.Hovered()).Size(18, 18).Shrink(0)
+			ui.Text(c, a.T("trash")).SingleLine().MinWidth(0)
+			if trashCount > 0 && a.Preferences.SidebarCounts {
+				ui.Text(c, sidebarCount(trashCount)).FontSize(11.5).Font("monospace").FontFeatures("tnum").FontWeight(400).TextColor(c.Theme().TextMuted).Shrink(0)
+			}
+		})
+		if trash.Clicked() {
+			a.SetScope("trash", "")
+		}
 		trash.ContextMenu(func(m *ui.Menu) {
-			if m.Item(a.T("empty_trash")).Disabled(counts.Trash == 0 || a.Busy).Chosen() {
+			if m.Item(a.T("empty_trash")).Disabled(trashCount == 0 || a.Busy).Chosen() {
 				a.Confirm(a.T("empty_trash"), a.T("empty_trash_detail"), func() {
 					service := a.Assets
 					a.Run("empty_trash", func(ctx context.Context) error { return service.EmptyTrash(ctx) })
 				})
 			}
 		})
-		if a.sidebarRow(c.Key("settings"), a.T("settings"), "设置", -1, false).Clicked() {
+		if sidebarFooterButton(c.Key("settings"), a.T("settings"), "settings").Clicked() {
 			a.ShowSettings()
 		}
+		if sidebarFooterButton(c.Key("help"), a.T("help"), "help").Clicked() {
+			a.OpenHelp()
+		}
 	})
+}
+
+func sidebarFooterButton(c *ui.Context, label, icon string) ui.Element {
+	button := ui.ButtonBase(c).Size(32, 32).Shrink(0).Padding(0).Radius(8).Cursor(ui.CursorPointer).Label(label).Tooltip(label)
+	sidebarControlColors(c, button, true)
+	button.Children(func() { appIcon(c, icon).Size(18, 18) })
+	return button
 }
 
 func (a *App) sidebarTopBar(c *ui.Context) {
@@ -111,11 +165,9 @@ func (a *App) sidebarTopBar(c *ui.Context) {
 			ui.Column(c).Grow(1).MinWidth(0).Children(func() { a.sidebarLibrary(c) })
 		}
 		button := ui.ButtonBase(c.Key("sidebar-toggle")).Size(28, 28).Padding(0).Radius(7).Cursor(ui.CursorPointer).Label(a.T("toggle_sidebar")).Tooltip(a.T("toggle_sidebar")).Children(func() {
-			ui.Image(c, sidebarIcon("sidebar")).Size(20, 20)
+			appIcon(c, "sidebar").Size(18, 18)
 		})
-		if button.Hovered() {
-			button.Background(warmOverlay(c.Theme(), .08))
-		}
+		sidebarControlColors(c, button, true)
 		if button.Clicked() {
 			a.SidebarVisible = !a.SidebarVisible
 		}
@@ -142,11 +194,9 @@ func (a *App) sidebarSectionHeader(c *ui.Context, title, action string, top floa
 
 func sidebarEmptyAction(c *ui.Context, label, icon string) ui.Element {
 	row := ui.ButtonBase(c).FillWidth().Height(32).Padding(0, 10).Gap(8).Radius(8).Border(1, warmOverlay(c.Theme(), .24)).BorderStyle(ui.BorderDashed).Cursor(ui.CursorPointer).Label(label).Justify(ui.Start).TextColor(c.Theme().TextMuted)
-	if row.Hovered() {
-		row.Background(warmOverlay(c.Theme(), .06))
-	}
+	sidebarControlColors(c, row, true)
 	row.Children(func() {
-		ui.Image(c, sidebarIcon(icon)).Size(20, 20).Shrink(0)
+		appIcon(c, icon).Size(18, 18).Shrink(0)
 		ui.Text(c, label).FontSize(13).SingleLine().Grow(1).MinWidth(0)
 	})
 	return row
@@ -154,14 +204,10 @@ func sidebarEmptyAction(c *ui.Context, label, icon string) ui.Element {
 
 func (a *App) sidebarRow(c *ui.Context, label, icon string, count int, selected bool) ui.Element {
 	row := ui.ButtonBase(c).FillWidth().Height(32).Padding(0, 10).Gap(10).Radius(8).Cursor(ui.CursorPointer).Label(label).AccessSelected(selected).Justify(ui.Start).Border(1, ui.Color{})
-	if selected {
-		sidebarSelectedRow(c, row)
-	} else if row.Hovered() {
-		row.Background(warmOverlay(c.Theme(), .06))
-	}
+	sidebarRowStyle(c, row, selected)
 	row.Children(func() {
 		if icon != "" {
-			ui.Image(c, sidebarIcon(icon)).Size(20, 20).Shrink(0)
+			sidebarRowIcon(c, icon, selected, row.Hovered()).Size(18, 18).Shrink(0)
 		}
 		ui.Text(c, label).SingleLine().Grow(1).MinWidth(0)
 		if count >= 0 && a.Preferences.SidebarCounts {
@@ -172,12 +218,48 @@ func (a *App) sidebarRow(c *ui.Context, label, icon string, count int, selected 
 	return row
 }
 
-func sidebarSelectedRow(c *ui.Context, row ui.Element) {
-	color := ui.Hex("#FFFDFA")
-	if c.Theme().Dark {
-		color = c.Theme().SurfaceHover
+func sidebarRowStyle(c *ui.Context, row ui.Element, selected bool) {
+	background := ui.Color{}
+	text := c.Theme().Text
+	if selected {
+		background = ui.Hex("#FFFDFA")
+		if c.Theme().Dark {
+			background = c.Theme().SurfaceHover
+		}
+		text = titleColor(c.Theme())
+		row.Border(1, warmOverlay(c.Theme(), .13)).Bold()
 	}
-	row.Background(color).Border(1, warmOverlay(c.Theme(), .13)).TextColor(titleColor(c.Theme())).Bold()
+	if row.Pressed() {
+		background = warmOverlay(c.Theme(), .11)
+	} else if row.Hovered() && !selected {
+		background = warmOverlay(c.Theme(), .06)
+	}
+	animateColors(row, background, text)
+}
+
+func sidebarControlColors(c *ui.Context, control ui.Element, muted bool) {
+	background := ui.Color{}
+	text := c.Theme().Text
+	if muted {
+		text = c.Theme().TextMuted
+	}
+	if control.Pressed() {
+		background, text = warmOverlay(c.Theme(), .11), c.Theme().Text
+	} else if control.Hovered() {
+		background, text = warmOverlay(c.Theme(), .06), c.Theme().Text
+	}
+	animateColors(control, background, text)
+}
+
+func sidebarRowIcon(c *ui.Context, name string, selected, hovered bool) ui.Element {
+	icon := appIconSelected(c, name, selected)
+	color := c.Theme().TextMuted
+	if selected {
+		color = c.Theme().Accent
+	} else if hovered {
+		color = c.Theme().Text
+	}
+	return icon.TextColor(icon.AnimateColor("ink", color, motionColor))
 }
 
 func (a *App) sidebarScope(c *ui.Context, scope, key, icon string, count int) ui.Element {
@@ -195,9 +277,13 @@ func (a *App) sidebarLibrary(c *ui.Context) {
 		name = a.libraryName()
 	}
 	trigger := ui.ButtonBase(c.Key("library_switcher")).FillWidth().Height(38).Padding(0, 10, 0, 6).Gap(10).Radius(10).Border(1, warmOverlay(c.Theme(), .14)).Background(c.Theme().Background.Alpha(.55)).Cursor(ui.CursorPointer).Label(a.T("library_menu")).Justify(ui.Start).TextColor(c.Theme().TextMuted)
-	if trigger.Hovered() {
-		trigger.Background(c.Theme().SurfaceHover).TextColor(c.Theme().Text)
+	background, text := c.Theme().Background.Alpha(.55), c.Theme().TextMuted
+	if trigger.Pressed() {
+		background, text = c.Theme().SurfacePressed, c.Theme().Text
+	} else if trigger.Hovered() {
+		background, text = c.Theme().SurfaceHover, c.Theme().Text
 	}
+	animateColors(trigger, background, text)
 	trigger.Children(func() {
 		ui.Image(c, appLogo).Size(26, 26).Radius(7).Shrink(0)
 		ui.Text(c, name).TextColor(titleColor(c.Theme())).FontSize(13.5).Bold().Grow(1).MinWidth(0).SingleLine()
@@ -260,7 +346,7 @@ func (a *App) sidebarLibraryAction(c *ui.Context, key string, action func()) {
 func (a *App) sidebarFolders(c *ui.Context, counts catalog.Counts) {
 	children := sidebarFolderChildren(a.Snapshot.Folders)
 	tree := ui.TreeBase(c.Key("folder_tree"))
-	tree.Root.Gap(2).Children(func() {
+	tree.Root.Gap(2).ClipY().Transition(ui.ElementTransition{Animation: &motionSpring, Height: true}).Children(func() {
 		var build func(model.Folder)
 		build = func(folder model.Folder) {
 			open := a.Sidebar.Open[folder.ID]
@@ -275,26 +361,22 @@ func (a *App) sidebarFolders(c *ui.Context, counts catalog.Counts) {
 			c.Key(folder.ID)
 			item := tree.Item(opened)
 			row := item.Row.Height(32).Padding(0, 10).PaddingStart(6+float32(item.Depth())*16).Gap(6).Radius(8).Cursor(ui.CursorPointer).Border(1, ui.Color{}).Label(folder.Name).AccessSelected(!a.TagPage && a.Query.Scope == "folder" && a.Query.FolderID == folder.ID)
-			if !a.TagPage && a.Query.Scope == "folder" && a.Query.FolderID == folder.ID {
-				sidebarSelectedRow(c, row)
-			} else if row.Hovered() {
-				row.Background(warmOverlay(c.Theme(), .06))
-			}
+			row.Transition(ui.ElementTransition{Animation: &motionSpring, Position: true})
+			selected := !a.TagPage && a.Query.Scope == "folder" && a.Query.FolderID == folder.ID
+			sidebarRowStyle(c, row, selected)
 			row.Drag(AssetsDrag{LibraryID: a.libraryID(), FolderID: folder.ID})
 			row.Children(func() {
 				if opened != nil {
 					arrow := ui.ButtonBase(c.Key("disclose")).Size(16, 20).Padding(0).Cursor(ui.CursorPointer).TextColor(c.Theme().TextMuted).Label(a.T("toggle_folder", folder.Name))
-					if arrow.Hovered() {
-						arrow.TextColor(c.Theme().Text)
-					}
-					arrow.Children(func() { sidebarChevron(c, *opened).Size(13, 13) })
+					sidebarControlColors(c, arrow, true)
+					arrow.Children(func() { sidebarChevron(c, *opened).Size(14, 14) })
 					if arrow.Clicked() {
 						*opened = !*opened
 					}
 				} else {
 					ui.Box(c).Size(16, 20)
 				}
-				ui.Image(c, sidebarIcon("文件夹")).Size(20, 20).Shrink(0)
+				sidebarRowIcon(c, "folder", selected, row.Hovered()).Size(18, 18).Shrink(0)
 				ui.Text(c, folder.Name).SingleLine().Grow(1).MinWidth(0)
 				color := c.Theme().TextMuted
 				if a.Preferences.SidebarCounts {
@@ -333,11 +415,14 @@ func (a *App) sidebarFolders(c *ui.Context, counts catalog.Counts) {
 					})
 				}
 			})
-			item.Group(func() {
+			group := item.Group(func() {
 				for _, child := range children[folder.ID] {
 					build(child)
 				}
 			})
+			if group.Valid() {
+				group.ClipY().Transition(ui.ElementTransition{Animation: &motionSpring, Height: true, Enter: &ui.Motion{Collapse: true}, Exit: &ui.Motion{Collapse: true}})
+			}
 		}
 		for _, folder := range children[""] {
 			build(folder)
@@ -411,17 +496,17 @@ func (a *App) sidebarMoveFolder(drag AssetsDrag, targetID string, position folde
 }
 
 func sidebarChevron(c *ui.Context, open bool) ui.Element {
-	arrow := appSymbol(c, "chevron-right").Size(13, 13)
+	arrow := appSymbol(c, "chevron-right").Size(14, 14)
+	angle := float32(0)
 	if open {
-		arrow.Rotate(90)
+		angle = 90
 	}
+	arrow.Rotate(arrow.AnimateTo("rotation", angle, motionSpring))
 	return arrow
 }
 func sidebarSymbolButton(c *ui.Context, label string) ui.Element {
 	button := ui.ButtonBase(c).Size(24, 24).Padding(0).Radius(6).Cursor(ui.CursorPointer).Label(label).Tooltip(label).TextColor(c.Theme().TextMuted).Children(func() { appSymbol(c, "plus").Size(14, 14) })
-	if button.Hovered() {
-		button.Background(warmOverlay(c.Theme(), .08)).TextColor(c.Theme().Text)
-	}
+	sidebarControlColors(c, button, true)
 	return button
 }
 

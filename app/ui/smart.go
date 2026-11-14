@@ -108,9 +108,6 @@ func (a *App) EditSmartFolder(id string) {
 
 func (a *App) smartFolderDialog(c *ui.Context) {
 	state := &a.GBrowsing
-	if !state.SmartOpen {
-		return
-	}
 	settingsPanel(c.Key("smart-folder-editor"), &state.SmartOpen, 648, func() {
 		title := a.T("smart_folder_create_title")
 		if state.SmartID != "" {
@@ -124,7 +121,7 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 			remove := -1
 			for i := range state.SmartRules {
 				rule := &state.SmartRules[i]
-				ui.Row(c.Key(i)).FillWidth().Gap(8).Padding(8).Radius(8).Background(c.Theme().Surface).AlignItems(ui.Center).Children(func() {
+				ui.Row(c.Key(i)).FillWidth().Gap(8).Padding(8).Radius(8).Background(c.Theme().Surface).AlignItems(ui.Center).Transition(ui.ElementTransition{Animation: &motionSpring, Height: true, Enter: &ui.Motion{Collapse: true}, Exit: &ui.Motion{Collapse: true}}).Children(func() {
 					previous := rule.Field
 					smartSelect(c.Key("field"), &rule.Field, smartFields, func(key string) string { return a.T("smart_field_" + key) }).Width(132).Label(a.T("smart_rule_field", i+1)).Disabled(state.Saving)
 					if previous != rule.Field {
@@ -143,14 +140,14 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 				state.SmartRules = slices.Delete(state.SmartRules, remove, remove+1)
 			}
 		})
-		if ui.Button(c.Key("add-rule"), a.T("add_smart_rule")).Disabled(state.Saving).Clicked() {
+		if settingsButton(c.Key("add-rule"), a.T("add_smart_rule")).Height(32).Disabled(state.Saving).Clicked() {
 			state.SmartRules = append(state.SmartRules, model.SmartRule{Field: "name", Operator: "contains"})
 		}
 		if state.SmartError != "" {
 			ui.Text(c, state.SmartError).TextColor(c.Theme().Danger).Role(ui.RoleStatus)
 		}
 		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
-			if ui.Button(c, a.T("cancel")).Disabled(state.Saving).Clicked() {
+			if settingsButton(c, a.T("cancel")).Height(32).Disabled(state.Saving).Clicked() {
 				state.SmartOpen = false
 			}
 			label := a.T("save")
@@ -192,25 +189,29 @@ func smartSelect(c *ui.Context, value *string, options []string, label func(stri
 	}
 	selectParts := ui.SelectBase(c, &chosen)
 	control := selectParts.Trigger.Height(32).Padding(4, 10).Gap(8).Radius(8).Border(1, c.Theme().Border).Background(c.Theme().Background).Cursor(ui.CursorPointer)
+	background := c.Theme().Background
 	if control.Pressed() {
-		control.Background(c.Theme().SurfacePressed)
+		background = c.Theme().SurfacePressed
 	} else if control.Hovered() {
-		control.Background(c.Theme().SurfaceHover)
+		background = c.Theme().SurfaceHover
 	}
+	animateColors(control, background, c.Theme().Text)
 	control.Children(func() {
 		ui.Text(c, chosen).FontSize(13).SingleLine().Grow(1).MinWidth(0)
-		appSymbol(c, "chevron-down").Size(14, 14).TextColor(symbolColor(c.Theme(), control.Hovered())).Shrink(0)
+		sidebarRowIcon(c, "chevron-down", false, control.Hovered()).Size(14, 14).Shrink(0)
 	})
 	selectParts.Popup(func(panel ui.Element) {
-		panel.Margin(4, 0, 0, 0).Padding(4).Radius(12).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border)
+		popupMotion(panel).Margin(4, 0, 0, 0).Padding(4).Radius(12).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border)
 		ui.Scroll(c).MaxHeight(280).FillWidth().Gap(4).Children(func() {
 			for i, name := range names {
 				item := selectParts.Item(name).Height(32).FillWidth().Padding(4, 10).Radius(8).Cursor(ui.CursorPointer)
-				if item.Highlighted() {
-					item.Background(c.Theme().Selection)
+				background := ui.Color{}
+				if item.Highlighted() || item.Hovered() {
+					background = c.Theme().Selection
 				} else if options[i] == *value {
-					item.Background(c.Theme().Surface)
+					background = c.Theme().Surface
 				}
+				animateColors(item, background, c.Theme().Text)
 				item.Children(func() { ui.Text(c, name).FontSize(13).SingleLine() })
 			}
 		})

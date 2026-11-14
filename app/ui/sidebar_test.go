@@ -2,6 +2,7 @@ package ui
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Seaony/Momento/app/internal/catalog"
 	"github.com/Seaony/Momento/app/internal/i18n"
@@ -115,6 +116,7 @@ func TestSidebarScreenshotFolderCounts(t *testing.T) {
 			if err := tt.Click(app.T("toggle_folder", "Design references")); err != nil {
 				t.Fatal(err)
 			}
+			tt.Advance(time.Second)
 			if !tt.HasText("UI layouts") {
 				t.Fatal("展开后没有显示存放其余7张素材的子文件夹")
 			}
