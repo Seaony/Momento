@@ -33,7 +33,7 @@ func sidebarMaterial(c *ui.Context, e ui.Element) {
 		e.Background(c.Theme().Surface)
 		return
 	}
-	tint := ui.RGBA(248, 230, 210, .5)
+	tint := ui.RGBA(255, 246, 238, .86)
 	if c.Theme().Dark {
 		tint = ui.RGBA(44, 35, 30, .78)
 	}
