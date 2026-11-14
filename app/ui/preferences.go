@@ -47,7 +47,13 @@ func NormalizePreferences(p Preferences) Preferences {
 	if !slices.Contains([]string{"system", "zh-CN", "zh-Hans", "zh", "en", "ja"}, p.Language) {
 		p.Language = "system"
 	}
-	if !slices.Contains([]string{"system", "light", "light-gray", "dark-gray", "dark", "navy", "purple"}, p.Theme) {
+	switch p.Theme {
+	case "light-gray":
+		p.Theme = "light"
+	case "dark-gray", "navy", "purple":
+		p.Theme = "dark"
+	}
+	if !slices.Contains(themeKeys, p.Theme) {
 		p.Theme = "system"
 	}
 	if !slices.Contains([]float32{.8, .9, 1, 1.1, 1.25, 1.5}, p.UIZoom) {

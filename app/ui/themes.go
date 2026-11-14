@@ -7,67 +7,63 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-var themeKeys = []string{"system", "light", "light-gray", "dark-gray", "dark", "navy", "purple"}
+var themeKeys = []string{"system", "light", "dark"}
 
-// 系统主题只决定明暗，所有窗口的颜色仍从同一套色板读取。
+// 系统主题只决定明暗，所有窗口共用暖橘品牌色。
 func momentoTheme(key string, systemDark bool) *ui.Theme {
-	if key == "system" || key == "" {
-		if systemDark {
-			key = "dark"
-		} else {
-			key = "light"
-		}
-	}
-	dark := key == "dark-gray" || key == "dark" || key == "navy" || key == "purple"
+	dark := key == "dark" || ((key == "system" || key == "") && systemDark)
 	theme := *ui.LightTheme()
 	if dark {
 		theme = *ui.DarkTheme()
 	}
 	theme.Dark = dark
-	switch key {
-	case "light-gray":
-		theme.Background, theme.Surface = ui.Hex("#E9E9ED"), ui.Hex("#DEDEE5")
-		theme.SurfaceHover, theme.SurfacePressed = ui.Hex("#D4D4DC"), ui.Hex("#C8C8D2")
-		theme.Border, theme.Text, theme.TextMuted = ui.Hex("#B8B8C4"), ui.Hex("#202028"), ui.Hex("#50505C")
-	case "dark-gray":
-		theme.Background, theme.Surface = ui.Hex("#303034"), ui.Hex("#3A3A40")
-		theme.SurfaceHover, theme.SurfacePressed = ui.Hex("#414148"), ui.Hex("#48484F")
-		theme.Border, theme.Text, theme.TextMuted = ui.Hex("#64646E"), ui.Hex("#FAFAFC"), ui.Hex("#C8C8D2")
-	case "dark":
-		theme.Background, theme.Surface = ui.Hex("#18181B"), ui.Hex("#27272A")
-		theme.SurfaceHover, theme.SurfacePressed = ui.Hex("#323236"), ui.Hex("#3C3C41")
-		theme.Border, theme.Text, theme.TextMuted = ui.Hex("#3F3F46"), ui.Hex("#F4F4F5"), ui.Hex("#B4B4BF")
-	case "navy":
-		theme.Background, theme.Surface = ui.Hex("#161E30"), ui.Hex("#222E45")
-		theme.SurfaceHover, theme.SurfacePressed = ui.Hex("#2B3953"), ui.Hex("#34435E")
-		theme.Border, theme.Text, theme.TextMuted = ui.Hex("#465978"), ui.Hex("#F0F5FF"), ui.Hex("#BECCE2")
-	case "purple":
-		theme.Background, theme.Surface = ui.Hex("#251D32"), ui.Hex("#332842")
-		theme.SurfaceHover, theme.SurfacePressed = ui.Hex("#3D314F"), ui.Hex("#473A59")
-		theme.Border, theme.Text, theme.TextMuted = ui.Hex("#615173"), ui.Hex("#F8F2FF"), ui.Hex("#D0BFDF")
-	default:
-		theme.Background, theme.Surface = ui.Hex("#FFFFFF"), ui.Hex("#F4F4F5")
-		theme.SurfaceHover, theme.SurfacePressed = ui.Hex("#E9E9EC"), ui.Hex("#DDDDE1")
-		theme.Border, theme.Text, theme.TextMuted = ui.Hex("#D9D9DE"), ui.Hex("#18181B"), ui.Hex("#5E5E68")
-	}
+	theme.Radius = 8
 	if dark {
-		theme.Accent, theme.AccentHover = ui.Hex("#93C5FD"), ui.Hex("#BFDBFE")
-		theme.AccentPressed, theme.AccentText = ui.Hex("#60A5FA"), ui.Hex("#111827")
-		theme.InactiveAccent = ui.Hex("#B9BECA")
+		theme.Background, theme.Surface = ui.Hex("#211A16"), ui.Hex("#2C231E")
+		theme.SurfaceHover, theme.SurfacePressed = ui.Hex("#382D26"), ui.Hex("#44362D")
+		theme.Text, theme.TextMuted = ui.Hex("#F8EEE5"), ui.Hex("#D0B49F")
+		theme.Border = ui.RGBA(232, 190, 158, .18)
+		theme.Accent, theme.AccentHover = ui.Hex("#FF9A66"), ui.Hex("#FFAC80")
+		theme.AccentPressed, theme.AccentText = ui.Hex("#F48A54"), ui.Hex("#2E1B12")
+		theme.InactiveAccent = ui.Hex("#D5A88D")
 		theme.Danger, theme.Warning, theme.Success = ui.Hex("#FF9B9B"), ui.Hex("#FCD478"), ui.Hex("#88DDA9")
-		theme.Selection, theme.Focus = ui.RGBA(147, 197, 253, .30), ui.Hex("#93C5FD")
-		theme.Inverse, theme.InverseText = theme.Text, theme.Background
-		theme.Scrollbar = ui.RGBA(240, 240, 255, .4)
+		theme.Selection, theme.Focus = ui.RGBA(255, 154, 102, .24), theme.Accent
+		theme.Scrollbar = ui.RGBA(232, 190, 158, .4)
 	} else {
-		theme.Accent, theme.AccentHover = ui.Hex("#1D4ED8"), ui.Hex("#1E40AF")
-		theme.AccentPressed, theme.AccentText = ui.Hex("#1E3A8A"), ui.Hex("#FFFFFF")
-		theme.InactiveAccent = ui.Hex("#5B6170")
+		theme.Background, theme.Surface = ui.Hex("#FFFAF5"), ui.Hex("#FBF0E5")
+		theme.SurfaceHover, theme.SurfacePressed = ui.Hex("#F5EBE0"), ui.Hex("#EEE2D6")
+		theme.Text, theme.TextMuted = ui.Hex("#3A2318"), ui.Hex("#7E5E4C")
+		theme.Border = ui.RGBA(120, 72, 40, .16)
+		theme.Accent, theme.AccentHover = ui.Hex("#F47B45"), ui.Hex("#FA8B59")
+		theme.AccentPressed, theme.AccentText = ui.Hex("#E8733D"), ui.Hex("#3A2318")
+		theme.InactiveAccent = ui.Hex("#DCA180")
 		theme.Danger, theme.Warning, theme.Success = ui.Hex("#B91C1C"), ui.Hex("#8F4500"), ui.Hex("#166534")
-		theme.Selection, theme.Focus = ui.RGBA(29, 78, 216, .22), ui.Hex("#1D4ED8")
-		theme.Inverse, theme.InverseText = theme.Text, theme.Background
-		theme.Scrollbar = ui.RGBA(24, 24, 35, .4)
+		theme.Selection, theme.Focus = ui.RGBA(244, 123, 69, .20), ui.Hex("#D9622C")
+		theme.Scrollbar = ui.RGBA(120, 72, 40, .4)
 	}
+	theme.Inverse, theme.InverseText = theme.Text, theme.Background
 	return &theme
+}
+
+func titleColor(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return ui.Hex("#FFF7EF")
+	}
+	return ui.Hex("#2E1B12")
+}
+
+func linkColor(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return ui.Hex("#FFB48F")
+	}
+	return ui.Hex("#9E3514")
+}
+
+func warmOverlay(t *ui.Theme, alpha float32) ui.Color {
+	if t.Dark {
+		return ui.RGBA(232, 190, 158, alpha)
+	}
+	return ui.RGBA(120, 72, 40, alpha)
 }
 
 func (a *App) applyTheme(c *ui.Context) {
@@ -80,9 +76,9 @@ func (a *App) applyTheme(c *ui.Context) {
 
 func themeSource(key string) mygo.ThemeSource {
 	switch key {
-	case "light", "light-gray":
+	case "light":
 		return mygo.ThemeLight
-	case "dark-gray", "dark", "navy", "purple":
+	case "dark":
 		return mygo.ThemeDark
 	default:
 		return mygo.ThemeSystem
@@ -144,30 +140,15 @@ func themeNameKey(key string) string {
 	switch key {
 	case "light":
 		return "appearance_light"
-	case "light-gray":
-		return "theme_light_gray"
-	case "dark-gray":
-		return "theme_dark_gray"
 	case "dark":
 		return "appearance_dark"
-	case "navy":
-		return "theme_navy"
-	case "purple":
-		return "theme_purple"
 	default:
 		return "follow_system"
 	}
 }
 
 func themeSwatchColor(key string, systemDark bool) ui.Color {
-	switch key {
-	case "navy":
-		return ui.Hex("#2E4B91")
-	case "purple":
-		return ui.Hex("#70449B")
-	default:
-		return momentoTheme(key, systemDark).Background
-	}
+	return momentoTheme(key, systemDark).Background
 }
 
 // 设置和引导共用色块，名称也用于读屏标签和悬停提示。

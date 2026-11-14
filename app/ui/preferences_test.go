@@ -198,7 +198,7 @@ func TestPreferencesMigrateThemeAndPreserveNewChoices(t *testing.T) {
 	if err := json.Unmarshal([]byte(`{"appearance":"light","theme":"purple","trayIcon":false,"dockWhenHidden":false,"previewChecker":false,"selectImported":false,"notify":false,"notifySound":false,"uiZoom":1.5,"shortcuts":{"search":"Alt+F"}}`), &p); err != nil {
 		t.Fatal(err)
 	}
-	if p.Theme != "purple" || p.TrayIcon || !p.DockWhenHidden || p.PreviewChecker || p.SelectImported || p.Notify || p.NotifySound || p.UIZoom != 1.5 || p.Shortcuts["search"] != "Alt+F" {
+	if p.Theme != "dark" || p.TrayIcon || !p.DockWhenHidden || p.PreviewChecker || p.SelectImported || p.Notify || p.NotifySound || p.UIZoom != 1.5 || p.Shortcuts["search"] != "Alt+F" {
 		t.Fatalf("明确设置未保留: %+v", p)
 	}
 }
@@ -225,5 +225,28 @@ func TestChinesePreferenceSurvivesFlushAndLocale(t *testing.T) {
 	p := readTestPreferences(t, a.configDir)
 	if p.Language != "zh-CN" || (i18n.Catalog{Language: p.Language}).Locale() != "zh-Hans" {
 		t.Fatalf("中文选择在保存读回后丢失: %s", p.Language)
+	}
+}
+
+func TestLegacyThemesMigrateToTwoPalettes(t *testing.T) {
+	for old, want := range map[string]string{"light-gray": "light", "dark-gray": "dark", "navy": "dark", "purple": "dark"} {
+		var p Preferences
+		if err := json.Unmarshal([]byte(`{"theme":"`+old+`"}`), &p); err != nil {
+			t.Fatal(err)
+		}
+		if p.Theme != want {
+			t.Errorf("%s 迁移为 %s，预期 %s", old, p.Theme, want)
+		}
+		data, err := json.Marshal(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var saved map[string]any
+		if err := json.Unmarshal(data, &saved); err != nil {
+			t.Fatal(err)
+		}
+		if saved["theme"] != want {
+			t.Errorf("仍在保存旧主题 %s", old)
+		}
 	}
 }

@@ -15,9 +15,9 @@ import (
 // 主题矩阵单独生成，避免拿旧的浅深色截图充当新色板验收。
 func TestThemeScreenshots(t *testing.T) {
 	if os.Getenv("MOMENTO_THEME_SCREENSHOTS") != "1" {
-		t.Skip("设置 MOMENTO_THEME_SCREENSHOTS=1 生成七主题截图")
+		t.Skip("设置 MOMENTO_THEME_SCREENSHOTS=1 生成浅深色主题截图")
 	}
-	dir := "/tmp/momento-eagle/theme"
+	dir := "/tmp/momento-polish/shots/themes"
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func TestThemeScreenshots(t *testing.T) {
 	records := []record{}
 	render := func(t *testing.T, key, state string, zoom float32) {
 		t.Helper()
-		width, height := zoomedWindowSize(1100, 640, zoom, mygo.Rectangle{})
+		width, height := zoomedWindowSize(1440, 900, zoom, mygo.Rectangle{})
 		a := fixture.app(t, "large", "zh-CN", key)
 		a.Preferences = DefaultPreferences()
 		a.Preferences.Theme, a.Preferences.Language, a.Preferences.UIZoom = key, "zh-CN", zoom
@@ -86,13 +86,11 @@ func TestThemeScreenshots(t *testing.T) {
 		writeScreenshot(t, filepath.Join(dir, file), tt)
 		records = append(records, record{file, key, state, width, height, zoom})
 	}
-	for _, key := range themeKeys {
+	for _, key := range []string{"light", "dark"} {
 		for _, state := range []string{"large", "single", "filter", "settings-appearance"} {
 			t.Run(key+"/"+state, func(t *testing.T) { render(t, key, state, 1) })
 		}
 	}
-	render(t, "light", "large", 1.5)
-	render(t, "light", "settings-appearance", 1.5)
 	data, err := json.MarshalIndent(records, "", "  ")
 	if err != nil {
 		t.Fatal(err)
@@ -110,7 +108,7 @@ func TestThemeSwatchScreenshots(t *testing.T) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	for _, background := range []string{"light", "purple"} {
+	for _, background := range []string{"light", "dark"} {
 		a := settingsTestApp("zh-CN", background)
 		tt := ui.NewTester(func(c *ui.Context) {
 			a.applyTheme(c)
