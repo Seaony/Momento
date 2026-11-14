@@ -71,3 +71,34 @@ func TestDialogsExportDefaultsAndErrorCopy(t *testing.T) {
 		t.Fatal("关闭后没有清掉错误")
 	}
 }
+
+func TestConfirmationKeepsDefaultActionAndIgnoresOutsideClick(t *testing.T) {
+	a := &App{}
+	calls := 0
+	a.Confirm("Delete", "Delete these images?", func() { calls++ })
+	tt := ui.NewTester(a.dialogs, 1100, 640)
+	if alert, ok := tt.AccessByRole(ui.RoleAlertDialog, "Delete"); !ok || alert.Description != "Delete these images?" {
+		t.Fatal("确认框没有保留读屏标题和说明")
+	}
+	if !tt.Focused(a.T("confirm")) {
+		t.Fatal("确认操作没有默认键盘焦点")
+	}
+	tt.Key(0, ui.KeyEnter)
+	if a.ConfirmOpen || calls != 1 {
+		t.Fatal("默认确认操作应只执行一次")
+	}
+	tt.Frame()
+	if calls != 1 {
+		t.Fatal("下一帧重复执行确认")
+	}
+	a.Confirm("Delete", "Delete these images?", func() { calls++ })
+	tt.Frame()
+	tt.ClickAt(12, 12)
+	if !a.ConfirmOpen || calls != 1 {
+		t.Fatal("点击遮罩不应取消或执行确认")
+	}
+	tt.Key(0, ui.KeyEscape)
+	if a.ConfirmOpen || calls != 1 {
+		t.Fatal("Escape 应取消确认")
+	}
+}

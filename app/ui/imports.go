@@ -255,8 +255,10 @@ func (a *App) extensionImportPicker(c *ui.Context) {
 	}
 	open := true
 	ui.DialogBase(c.Key("extension-import-picker"), &open, func(backdrop, panel ui.Element) {
-		panel.Width(420).Padding(24).Gap(16).Background(c.Theme().Surface).Radius(12).Label(a.T("extension_picker_title"))
-		ui.Text(c, a.T("extension_picker_title")).Bold()
+		backdrop.Material(frostedSurface{tint: ui.Hex("#211A16").Alpha(.42), blur: 12})
+		panel.Width(420).MaxWidthPercent(92).MaxHeightPercent(92).Padding(24).Gap(12).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border).Radius(12).Label(a.T("extension_picker_title"))
+		dialogHeading(c, "import", a.T("extension_picker_title"))
+		ui.Text(c, a.T("folders")).Bold()
 		choices := a.importFolderChoices()
 		label := choices[0].Label
 		for _, choice := range choices {
@@ -272,7 +274,8 @@ func (a *App) extensionImportPicker(c *ui.Context) {
 				}
 			}
 		})
-		ui.Scroll(c).MaxHeight(240).FillWidth().Children(func() {
+		ui.Text(c, a.T("tags")).Bold()
+		ui.Scroll(c).MaxHeight(240).FillWidth().Gap(8).Children(func() {
 			for _, tag := range a.Snapshot.Tags {
 				selected := a.Import.PickerTags[tag.ID]
 				if ui.Checkbox(c.Key(tag.ID), &selected, tag.Name).Changed() {

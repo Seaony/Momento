@@ -85,23 +85,26 @@ func (a *App) ShowPasswordSettings(mode string) {
 
 func (a *App) lockScreen(c *ui.Context) {
 	ui.Column(c).Fill().Padding(max(MainToolbarHeight, c.TitleBar().Bottom+16), 24, 24, 24).
-		Center().Gap(16).Background(c.Theme().Background).DragWindow().Children(func() {
-		ui.Image(c, appLogo).Size(96, 96).Fit(ui.Contain)
-		ui.Text(c, a.T("password_locked")).FontSize(24).Bold()
-		ui.Column(c).Width(320).Gap(12).Children(func() {
-			input := ui.TextInput(c.Key([2]any{"unlock-password", a.Lock.EditorSession}), &a.Lock.Password).
-				Password().AutoFocus().Label(a.T("password_enter")).Placeholder(a.T("password_enter")).FillWidth().
-				Disabled(a.PasswordOperationPending() || a.passwordCooldown() > 0)
-			a.passwordFeedback(c)
-			label := a.T("password_unlock")
-			if a.Lock.Busy {
-				label = a.T("password_verifying")
-			}
-			ready := !a.PasswordOperationPending() && a.passwordCooldown() == 0 && a.Lock.Password != ""
-			button := ui.PrimaryButton(c.Key("unlock"), label).FillWidth().Disabled(!ready)
-			if ready && (button.Clicked() || input.Submitted()) {
-				a.unlockPassword()
-			}
+		Center().Material(frostedSurface{tint: c.Theme().Background.Alpha(.78), blur: 28}).DragWindow().Children(func() {
+		ui.Column(c).Width(400).MaxWidthPercent(100).Padding(24).Center().Gap(16).Radius(12).
+			Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border).Children(func() {
+			ui.Image(c, appLogo).Size(80, 80).Fit(ui.Contain)
+			ui.Text(c, a.T("password_locked")).FontSize(24).Bold().TextColor(titleColor(c.Theme()))
+			ui.Column(c).FillWidth().Gap(12).Children(func() {
+				input := ui.TextInput(c.Key([2]any{"unlock-password", a.Lock.EditorSession}), &a.Lock.Password).
+					Password().AutoFocus().Label(a.T("password_enter")).Placeholder(a.T("password_enter")).FillWidth().
+					Disabled(a.PasswordOperationPending() || a.passwordCooldown() > 0)
+				a.passwordFeedback(c)
+				label := a.T("password_unlock")
+				if a.Lock.Busy {
+					label = a.T("password_verifying")
+				}
+				ready := !a.PasswordOperationPending() && a.passwordCooldown() == 0 && a.Lock.Password != ""
+				button := ui.PrimaryButton(c.Key("unlock"), label).FillWidth().Disabled(!ready)
+				if ready && (button.Clicked() || input.Submitted()) {
+					a.unlockPassword()
+				}
+			})
 		})
 	})
 }
@@ -112,14 +115,14 @@ func (a *App) passwordSettingsDialog(c *ui.Context) {
 	}
 	ui.Overlay(c, func() {
 		back := ui.Column(c.Key("password-settings-backdrop")).Absolute().Left(0).Top(0).Right(0).Bottom(0).
-			Center().Background(ui.RGBA(0, 0, 0, 0.42)).Modal()
+			Center().Material(frostedSurface{tint: ui.Hex("#211A16").Alpha(.42), blur: 12}).Modal()
 		back.Children(func() {
 			title := a.T("password_dialog_" + a.Lock.Mode)
 			panel := ui.Column(c.Key("password-settings")).Width(420).MaxWidthPercent(92).MaxHeightPercent(92).
-				Padding(24).Gap(12).Radius(12).Background(c.Theme().Background).Border(1, c.Theme().Border).
+				Padding(24).Gap(12).Radius(12).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border).
 				Role(ui.RoleDialog).Label(title)
 			panel.Children(func() {
-				ui.Text(c, title).FontSize(20).Bold()
+				dialogHeading(c, "lock", title)
 				var submit bool
 				if a.Lock.Mode != "enable" {
 					ui.Text(c, a.T("password_current")).Bold()

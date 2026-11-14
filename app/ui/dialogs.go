@@ -35,19 +35,67 @@ func (a *App) dialogs(c *ui.Context) {
 	a.newLibraryDialog(c)
 	a.exportDialog(c)
 	a.promptDialog(c)
-	if ui.AlertDialog(c.Key("confirmation"), &a.ConfirmOpen, a.ConfirmTitle, a.ConfirmDetail, a.T("cancel"), a.T("confirm")) == 1 {
+	a.confirmationDialog(c)
+	a.errorDialog(c)
+}
+
+func dialogHeading(c *ui.Context, icon, title string) {
+	ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
+		appIcon(c, icon).Size(24, 24)
+		ui.Text(c, title).FontSize(20).Bold().TextColor(titleColor(c.Theme())).Grow(1)
+	})
+}
+
+func (a *App) confirmationDialog(c *ui.Context) {
+	if !a.ConfirmOpen {
+		return
+	}
+	confirmed := false
+	ui.Overlay(c.Key("confirmation"), func() {
+		backdrop := ui.Column(c).Absolute().Left(0).Top(0).Right(0).Bottom(0).Center().
+			Material(frostedSurface{tint: ui.Hex("#211A16").Alpha(.42), blur: 12}).Modal()
+		if backdrop.OverlayShortcut(0, ui.KeyEscape) {
+			a.ConfirmOpen = false
+		}
+		backdrop.Children(func() {
+			ui.Column(c).Width(420).MaxWidthPercent(92).Padding(24).Gap(12).Radius(12).
+				Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border).
+				Role(ui.RoleAlertDialog).Label(a.ConfirmTitle).Description(a.ConfirmDetail).Children(func() {
+				dialogHeading(c, "warning", a.ConfirmTitle)
+				if a.ConfirmDetail != "" {
+					ui.Text(c, a.ConfirmDetail).FillWidth().TextColor(c.Theme().TextMuted)
+				}
+				ui.Row(c).FillWidth().Wrap().Justify(ui.End).Gap(8).Margin(8, 0, 0, 0).Children(func() {
+					if ui.Button(c, a.T("cancel")).Clicked() {
+						a.ConfirmOpen = false
+					}
+					confirm := ui.PrimaryButton(c, a.T("confirm")).AutoFocus().TextColor(c.Theme().InverseText)
+					color := c.Theme().Danger
+					if confirm.Pressed() {
+						color = color.Mix(c.Theme().Text, .15)
+					} else if confirm.Hovered() {
+						color = color.Mix(c.Theme().Text, .08)
+					}
+					if confirm.Background(color).Clicked() {
+						a.ConfirmOpen = false
+						confirmed = true
+					}
+				})
+			})
+		})
+	})
+	if confirmed {
 		action := a.ConfirmAction
 		a.ConfirmAction = nil
 		if action != nil {
 			action()
 		}
 	}
-	a.errorDialog(c)
 }
 
 func (a *App) newLibraryDialog(c *ui.Context) {
 	settingsPanel(c.Key("new-library"), &a.NewLibraryOpen, 460, func() {
-		ui.Text(c, a.T("new_library")).FontSize(20).Bold()
+		dialogHeading(c, "create-library", a.T("new_library"))
 		ui.Text(c, a.T("new_library_detail")).TextColor(c.Theme().TextMuted)
 		ui.Text(c, a.T("library_name")).Bold().Margin(4, 0, 0, 0)
 		name := ui.TextInput(c.Key("library-name"), &a.Dialog.NewName).Label(a.T("library_name")).AutoFocus().FillWidth().Disabled(a.Busy || a.Dialog.Picking)
@@ -108,7 +156,7 @@ func libraryPackageName(name string) string {
 
 func (a *App) exportDialog(c *ui.Context) {
 	settingsPanel(c.Key("export"), &a.ExportOpen, 420, func() {
-		ui.Text(c, a.T("export")).FontSize(20).Bold()
+		dialogHeading(c, "export", a.T("export"))
 		ui.Text(c, a.T("export_count", a.Selected.Len())).TextColor(c.Theme().TextMuted)
 		for _, asset := range a.SelectedAssets() {
 			if asset.Rotation != 0 {
@@ -188,7 +236,7 @@ func exportDialogFileName(asset model.Asset, format model.ExportFormat) string {
 
 func (a *App) promptDialog(c *ui.Context) {
 	settingsPanel(c.Key("text-prompt"), &a.PromptOpen, 420, func() {
-		ui.Text(c, a.PromptTitle).FontSize(20).Bold()
+		ui.Text(c, a.PromptTitle).FontSize(20).Bold().TextColor(titleColor(c.Theme()))
 		input := ui.TextInput(c.Key("prompt-value"), &a.PromptValue).Label(a.PromptTitle).AutoFocus().FillWidth()
 		ui.Row(c).Gap(8).Justify(ui.End).Margin(8, 0, 0, 0).Children(func() {
 			if ui.Button(c, a.T("cancel")).Clicked() {
@@ -212,7 +260,7 @@ func (a *App) promptDialog(c *ui.Context) {
 func (a *App) errorDialog(c *ui.Context) {
 	open := a.Error != ""
 	settingsPanel(c.Key("error"), &open, 500, func() {
-		ui.Text(c, a.T("operation_failed")).FontSize(20).Bold()
+		dialogHeading(c, "warning", a.T("operation_failed"))
 		ui.Scroll(c).MaxHeight(180).Children(func() {
 			ui.Text(c, a.Error).Selectable().TextColor(c.Theme().Danger)
 		})

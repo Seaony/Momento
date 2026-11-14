@@ -163,29 +163,29 @@ func (a *App) preview(c *ui.Context) {
 	a.animatePreview(c)
 	width, height := c.Size()
 	ui.DialogBase(c.Key("original-preview"), &p.Open, func(backdrop, panel ui.Element) {
-		backdrop.Background(ui.RGBA(0, 0, 0, .78))
-		panel.Column().Size(width*.86, height*.86).Padding(12).Gap(12).Background(c.Theme().Background).Radius(12).
+		backdrop.Material(frostedSurface{tint: c.Theme().Background.Alpha(.72), blur: 18})
+		panel.Column().Size(width*.86, height*.86).Padding(12).Gap(12).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border).Radius(12).
 			Label(a.T("preview_original")).TabStop(false).AutoFocus()
-		ui.Row(c).FillWidth().Gap(12).Children(func() {
-			ui.Text(c, asset.Name).Bold().Grow(1).SingleLine()
-			if ui.Button(c.Key("preview-rotate-left"), a.T("preview_rotate_left")).Disabled(a.Busy).Clicked() {
+		ui.Row(c).FillWidth().Gap(8).Padding(4, 8).Radius(8).Material(toolbarMaterial(c.Theme())).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, asset.Name).Bold().TextColor(titleColor(c.Theme())).Grow(1).SingleLine().Tooltip(asset.Name)
+			if previewIconButton(c.Key("preview-rotate-left"), "rotate-left", a.T("preview_rotate_left"), a.Busy).Clicked() {
 				a.RotatePreview(-90)
 			}
-			if ui.Button(c.Key("preview-rotate-right"), a.T("preview_rotate_right")).Disabled(a.Busy).Clicked() {
+			if previewIconButton(c.Key("preview-rotate-right"), "rotate-right", a.T("preview_rotate_right"), a.Busy).Clicked() {
 				a.RotatePreview(90)
 			}
-			ui.Textf(c, "%.0f%%", p.Zoom*100).FontSize(12)
+			ui.Textf(c, "%.0f%%", p.Zoom*100).FontSize(12).Width(56).TextAlign(ui.End).TextColor(c.Theme().TextMuted)
 			ui.Text(c, a.T("preview_position", index+1, len(p.navigation))).FontSize(12).TextColor(c.Theme().TextMuted)
-			if ui.Button(c.Key("close-preview"), "×").Label(a.T("close_preview")).Size(40, 40).Clicked() {
+			if previewIconButton(c.Key("close-preview"), "close", a.T("close_preview"), false).Clicked() {
 				a.ClosePreview()
 			}
 		})
-		ui.Row(c).FillWidth().Grow(1).MinHeight(0).Gap(8).Children(func() {
-			if ui.Button(c.Key("previous-preview"), "‹").Label(a.T("previous_asset")).Width(40).Height(48).Disabled(index == 0).Clicked() {
+		ui.Row(c).FillWidth().Grow(1).MinHeight(0).Gap(12).AlignItems(ui.Center).Children(func() {
+			if previewIconButton(c.Key("previous-preview"), "chevron-left", a.T("previous_asset"), index == 0).Clicked() {
 				a.movePreview(-1)
 			}
 			a.previewViewport(c, asset)
-			if ui.Button(c.Key("next-preview"), "›").Label(a.T("next_asset")).Width(40).Height(48).Disabled(index == len(p.navigation)-1).Clicked() {
+			if previewIconButton(c.Key("next-preview"), "chevron-right", a.T("next_asset"), index == len(p.navigation)-1).Clicked() {
 				a.movePreview(1)
 			}
 		})
@@ -213,9 +213,21 @@ func (a *App) preview(c *ui.Context) {
 	}
 }
 
+func previewIconButton(c *ui.Context, icon, label string, disabled bool) ui.Element {
+	button := ui.ButtonBase(c).Size(32, 32).Padding(0).Radius(8).Label(label).Tooltip(label).
+		Disabled(disabled).Cursor(ui.CursorPointer)
+	if button.Pressed() {
+		button.Background(warmOverlay(c.Theme(), .11))
+	} else if button.Hovered() {
+		button.Background(warmOverlay(c.Theme(), .06))
+	}
+	button.Children(func() { appIcon(c, icon).Size(20, 20) })
+	return button
+}
+
 func (a *App) previewViewport(c *ui.Context, asset model.Asset) {
 	p := &a.Preview
-	viewport := ui.Box(c.Key("preview-image")).Grow(1).FillHeight().MinWidth(0).MinHeight(0).Clip().Label(asset.Name).
+	viewport := ui.Box(c.Key("preview-image")).Grow(1).FillHeight().MinWidth(0).MinHeight(0).Radius(4).Clip().Label(asset.Name).
 		Background(c.Theme().Surface).HandleInput(a.previewInput)
 	bounds := viewport.LayoutBounds()
 	if bounds.W > 0 && bounds.H > 0 {
