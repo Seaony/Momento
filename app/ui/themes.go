@@ -108,10 +108,6 @@ func linkColor(t *ui.Theme) ui.Color {
 	return paletteFor(t).Link
 }
 
-func warmOverlay(t *ui.Theme, alpha float32) ui.Color {
-	return paletteFor(t).TextSecondary.Alpha(alpha)
-}
-
 func (a *App) applyTheme(c *ui.Context) {
 	c.SetZoom(preferenceZoom(a.Preferences.UIZoom))
 	if a.Preferences.Language != "system" && a.Preferences.Language != "" {

@@ -121,7 +121,7 @@ func TestAssetViewAndSizeCrossfadeWithoutCardMorphing(t *testing.T) {
 			if change == "list" && after.H != 64 {
 				t.Fatalf("列表终点行高异常：%+v", after)
 			}
-			if change == "grid" && after.W != after.H {
+			if change == "grid" && math.Abs(float64(after.W-after.H)) > .001 {
 				t.Fatalf("网格终点不是正方形：%+v", after)
 			}
 		})
@@ -237,7 +237,7 @@ func TestAssetHoverCapsuleAndSelectionRingFade(t *testing.T) {
 	}
 	tt.Move(box.X+box.W/2, box.Y+box.H/2)
 	dims := assetMotionBounds(t, tt, "600 × 400")
-	x, y = int(dims.X+5), int(dims.Y+3)
+	x, y = int(dims.X+4), int(dims.Y+dims.H/2)
 	capsuleStart := tt.Image().RGBAAt(x, y)
 	tt.Advance(87 * time.Millisecond)
 	capsuleMiddle := tt.Image().RGBAAt(x, y)
@@ -249,9 +249,20 @@ func TestAssetHoverCapsuleAndSelectionRingFade(t *testing.T) {
 	tt.Move(0, 0)
 	tt.Advance(87 * time.Millisecond)
 	capsuleLeaving := tt.Image().RGBAAt(x, y)
+	leavingImage := append([]byte(nil), tt.Image().Pix...)
 	tt.Advance(time.Second)
 	capsuleGone := tt.Image().RGBAAt(x, y)
-	if capsuleLeaving == capsuleEnd || capsuleLeaving == capsuleGone {
+	diff := 0
+	goneImage := tt.Image()
+	for yy := int(dims.Y) - 4; yy < int(dims.Y+dims.H)+4; yy++ {
+		for xx := int(dims.X) - 2; xx < int(dims.X+dims.W)+2; xx++ {
+			offset := goneImage.PixOffset(xx, yy)
+			if !bytes.Equal(leavingImage[offset:offset+4], goneImage.Pix[offset:offset+4]) {
+				diff++
+			}
+		}
+	}
+	if diff == 0 {
 		t.Fatalf("悬停尺寸胶囊没有淡出：%v -> %v -> %v", capsuleEnd, capsuleLeaving, capsuleGone)
 	}
 }

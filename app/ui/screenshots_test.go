@@ -391,10 +391,9 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 		}
 	case "empty":
 		expect(a.T("drop_images"))
-		expect(a.T("install_extension"))
+		expect(a.T("import"))
 	case "single", "grid-selected", "list-selected", "masonry-hover", "grid-hover", "list-hover":
 		expect(a.T("title"))
-		expect(a.T("file_type"))
 		selected := a.SelectedAssets()[0]
 		expect(strings.ToUpper(selected.Extension))
 		for _, color := range selected.Colors {

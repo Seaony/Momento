@@ -24,12 +24,12 @@ func (a *App) assetArea(c *ui.Context) {
 	a.hovered = ""
 	scroll := ui.Scroll(c.Key("assets")).Grow(1).FillWidth().TrackScroll(&a.scroll)
 	inset := scroll.AnimateTo("header-inset", a.contentTopInset(), motionSpring)
-	scroll.Padding(inset+16, 16, 16).ScrollbarInsets(inset, 0, 0)
+	scroll.Padding(inset+space16, space16, space16).ScrollbarInsets(inset, 0, 0)
 	box := scroll.Bounds()
-	width, height := box.W-32, box.H
+	width, height := box.W-2*space16, box.H
 	if width <= 0 {
 		width, height = c.Size()
-		width -= 32 + a.SidebarShownWidth() + a.InspectorShownWidth()
+		width -= 2*space16 + a.SidebarShownWidth() + a.InspectorShownWidth()
 		if a.chromeLayoutReady {
 			width--
 		}
@@ -37,7 +37,7 @@ func (a *App) assetArea(c *ui.Context) {
 	if height <= 0 {
 		height = 640
 	}
-	viewportTop := a.scroll.Y - inset - 16
+	viewportTop := a.scroll.Y - inset - space16
 	top, bottom := max(0, viewportTop-height), viewportTop+2*height
 	state := ui.Local(scroll, "asset-layout", func() assetLayoutState { return assetLayoutState{} })
 	var items []MasonryItem
@@ -99,24 +99,25 @@ func (a *App) assetArea(c *ui.Context) {
 	}
 	a.assetPreviewShortcut(c, scroll)
 	if len(a.Visible) == 0 {
-		fadeMotion(ui.Column(c.Key("asset-empty")).Absolute().Top(inset).Left(24).Right(24).Bottom(24).
-			Center().Gap(12).PassThrough()).Children(func() {
-			if a.Query.Search != "" {
-				ui.Text(c, a.T("search_empty", a.Query.Search)).FontSize(20).Bold()
-				ui.Text(c, a.T("result_count", "0")).TextColor(c.Theme().TextMuted)
-			} else if len(a.Snapshot.Assets) > 0 {
-				ui.Text(c, a.T("scope_empty")).FontSize(20).Bold()
-			} else {
-				ui.Text(c, a.T("drop_images")).FontSize(22).Bold()
-				ui.Text(c, a.T("drop_images_hint")).TextColor(c.Theme().TextMuted)
-				ui.Row(c).Gap(8).Children(func() {
-					if primaryButton(c, a.T("import"), false).Clicked() {
-						a.ChooseImport(false)
-					}
-					if secondaryButton(c, a.T("install_extension")).Clicked() {
-						c.OpenURL("https://github.com/Seaony/Momento-Chomre-Extension/releases/latest")
-					}
-				})
+		p := paletteFor(c.Theme())
+		icon, title, hint := "photos", a.T("scope_empty"), a.T("scope_empty_hint")
+		emptyLibrary := len(a.Snapshot.Assets) == 0 && a.Query.Scope != "trash" && a.Query.Search == ""
+		switch {
+		case a.Query.Search != "":
+			icon, title, hint = "search", a.T("search_empty", a.Query.Search), a.T("search_empty_hint")
+		case a.Query.Scope == "trash":
+			icon, title, hint = "trash", a.T("trash_empty_title"), a.T("trash_empty_hint")
+		case emptyLibrary:
+			title, hint = a.T("drop_images"), a.T("drop_images_hint")
+		}
+		fadeMotion(ui.Column(c.Key("asset-empty")).Absolute().Top(inset).Left(space24).Right(space24).Bottom(space24).
+			Center().Gap(space12).PassThrough()).Children(func() {
+			ui.Box(c.Key("empty-icon")).Size(space48, space48).Radius(space24).Background(p.Subtle).TextColor(p.TextSecondary).
+				Center().Children(func() { appIcon(c, icon).Size(space24, space24) })
+			ui.Text(c.Key("empty-title"), title).FontSize(16).FontWeight(600).TextColor(p.Text).TextAlign(ui.Center)
+			ui.Text(c.Key("empty-hint"), hint).FontSize(fontBody).TextColor(p.TextSecondary).TextAlign(ui.Center)
+			if emptyLibrary && primaryButton(c, a.T("import"), false).Clicked() {
+				a.ChooseImport(false)
 			}
 		})
 	}
@@ -192,16 +193,17 @@ func (a *App) selectAsset(id string, index int, mods ui.Modifiers) {
 }
 
 func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, frameWidth float32) {
+	p := paletteFor(c.Theme())
 	width, height := assetDisplaySize(asset)
 	selected := a.Selected.Has(asset.ID)
 	var card ui.Element
 	if list {
-		card = ui.Row(c.Key(asset.ID)).Fill().Gap(16).Padding(8, 10).Radius(8).
-			BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border)
+		card = ui.Row(c.Key(asset.ID)).Fill().Gap(space16).Padding(space8, space12).Radius(radiusCard).
+			BorderWidth(0, 0, 1, 0).BorderColor(p.BorderSubtle)
 	} else {
-		card = ui.Column(c.Key(asset.ID)).Fill().Radius(8).FocusRing(false)
+		card = ui.Column(c.Key(asset.ID)).Fill().Radius(radiusCard).FocusRing(false).Shadow(0, 1, 2, 0, p.Shadow)
 		if a.ViewMode == 1 {
-			card.Radius(10).Background(c.Theme().Surface)
+			card.Background(p.Raised)
 		}
 	}
 	card.Label(asset.Name).Focusable().AccessSelected(selected).Cursor(ui.CursorPointer)
@@ -215,97 +217,101 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 	}
 	background := ui.Transparent
 	if a.ViewMode == 1 && !list {
-		background = c.Theme().Surface
+		background = p.Raised
 	}
 	if list {
 		switch {
 		case selected && hovered:
-			background = c.Theme().Accent.Alpha(.18)
+			background = p.Hover
 		case selected:
-			background = c.Theme().Accent.Alpha(.12)
+			background = p.Selected
 		case card.Pressed():
-			background = warmOverlay(c.Theme(), .11)
+			background = p.Pressed
 		case hovered:
-			background = warmOverlay(c.Theme(), .06)
+			background = p.Hover
 		}
 	}
-	animateColors(card, background, c.Theme().Text)
+	animateColors(card, background, p.Text)
+	pose := ui.Pose{}
+	if hovered {
+		pose.Y = -2
+	}
+	card.AnimatePose(pose, motionSpring)
 	card.Children(func() {
 		if revealFocus {
 			// 把页头遮住的高度算进定位目标，键盘聚焦时图片仍露在页头下方。
-			ui.Box(c.Key("focus-reveal")).Absolute().Top(-a.contentTopInset() - 8).Left(0).Right(0).Bottom(0).
+			ui.Box(c.Key("focus-reveal")).Absolute().Top(-a.contentTopInset() - space8).Left(0).Right(0).Bottom(0).
 				PassThrough().ScrollIntoView()
 		}
 		thumb := a.Bitmap(asset)
 		if list {
 			if thumb != nil {
-				ui.Image(c.Key("thumbnail"), thumb).Size(48, 48).Fit(ui.Cover).Radius(6)
+				ui.Image(c.Key("thumbnail"), thumb).Size(space48, space48).Fit(ui.Cover).Radius(radiusCard).Shadow(0, 1, 2, 0, p.Shadow)
 			} else {
-				ui.Box(c).Size(48, 48).Radius(6).Background(c.Theme().Surface)
+				ui.Box(c).Size(space48, space48).Radius(radiusCard).Background(p.Subtle).Shadow(0, 1, 2, 0, p.Shadow)
 			}
-			ui.Column(c.Key("list-meta")).Grow(1).MinWidth(0).Gap(4).Children(func() {
-				ui.Text(c, asset.Name).FontSize(13).Bold().SingleLine()
-				ui.Text(c, fmt.Sprintf("%d × %d · %s", width, height, fileSize(asset.Size))).FontSize(12).TextColor(c.Theme().TextMuted)
+			ui.Column(c.Key("list-meta")).Grow(1).MinWidth(0).Gap(space4).Children(func() {
+				ui.Text(c, asset.Name).FontSize(fontBody).FontWeight(600).SingleLine()
+				ui.Text(c.Key("list-values"), fmt.Sprintf("%d × %d · %s", width, height, fileSize(asset.Size))).Font(monoFont(c)).FontSize(fontNumber).TextColor(p.TextSecondary).SingleLine()
 			})
-			ui.Text(c.Key("list-extension"), strings.ToUpper(asset.Extension)).FontSize(12).TextColor(c.Theme().TextMuted).Margin(0, 36, 0, 0)
+			ui.Text(c.Key("list-extension"), strings.ToUpper(asset.Extension)).FontSize(fontSecondary).TextColor(p.TextSecondary).Margin(0, space40, 0, 0)
 		} else {
-			radius := float32(8)
+			radius := float32(radiusCard)
 			if a.ViewMode == 1 {
-				radius = 10
-				ui.Box(c.Key("grid-image")).Fill().Padding(16).Center().Children(func() {
+				ui.Box(c.Key("grid-image")).Fill().Padding(space16).Center().Children(func() {
 					if thumb != nil {
 						w, h := thumb.Size()
-						scale := max(0, frameWidth-32) / max(float32(w), float32(h))
-						ui.Image(c.Key("thumbnail"), thumb).Size(float32(w)*scale, float32(h)*scale).Fit(ui.Contain).Radius(4)
+						scale := max(0, frameWidth-2*space16) / max(float32(w), float32(h))
+						ui.Image(c.Key("thumbnail"), thumb).Size(float32(w)*scale, float32(h)*scale).Fit(ui.Contain).Radius(radiusCard).Shadow(0, 1, 2, 0, p.Shadow)
 					}
 				})
 			} else if thumb != nil {
 				ui.Image(c.Key("thumbnail"), thumb).Fill().Fit(ui.Cover).Radius(radius)
 			} else {
-				ui.Box(c).Fill().Radius(radius).Background(c.Theme().Surface)
+				ui.Box(c).Fill().Radius(radius).Background(p.Subtle)
 			}
-			shade := ui.Box(c.Key("hover-shade")).Absolute().Left(0).Top(0).Right(0).Bottom(0).Radius(radius).PassThrough()
-			darkness := ui.Transparent
+
+			visibility := float32(0)
 			if hovered {
-				darkness = ui.RGBA(58, 35, 24, .07)
+				visibility = 1
 			}
-			if card.Pressed() {
-				darkness = ui.RGBA(58, 35, 24, .11)
+			alpha := card.AnimateTo("dimensions-opacity", visibility, motionColor)
+			if hovered || alpha > 0 {
+				ui.Text(c.Key("dimensions"), fmt.Sprintf("%d × %d", width, height)).Absolute().Bottom(space8).Right(space8).
+					Padding(space4, space8).Radius(radiusControl).Font(monoFont(c)).FontSize(fontNumber).Material(panelMaterial(c.Theme())).
+					TextColor(p.Text).Opacity(alpha).PassThrough()
 			}
-			shade.Background(shade.AnimateColor("shade", darkness, motionColor))
-			if hovered {
-				fadeMotion(ui.Text(c.Key("dimensions"), fmt.Sprintf("%d × %d", width, height)).Absolute().Bottom(6).Right(6).
-					Padding(3, 6).Radius(8).FontSize(12).Material(panelMaterial(c.Theme())).
-					TextColor(c.Theme().Text).PassThrough())
-			}
-			if selected || focused {
-				// 外圈不占图片空间，描边与图片之间留 2px。
-				fadeMotion(ui.Box(c.Key("selection-ring")).Absolute().Left(-4).Top(-4).Right(-4).Bottom(-4).Radius(radius+4).
-					Border(2, c.Theme().Accent).PassThrough())
+		}
+		if selected || focused {
+			// 图片外圈留 2px；列表描边放在行内，避免盖住相邻行。
+			ring := fadeMotion(ui.Box(c.Key("selection-ring")).Absolute().Left(-space4).Top(-space4).Right(-space4).Bottom(-space4).
+				Radius(radiusPanel).Border(2, p.Accent).PassThrough())
+			if list {
+				ring.Left(2).Top(2).Right(2).Bottom(2).Radius(radiusCard)
 			}
 		}
 		if hovered || asset.Favorite {
-			button := ui.Button(c.Key("favorite"), "").Label(a.T("favorite")).Absolute().Top(6).Right(6).Size(28, 28).Padding(0).Radius(8).BorderWidth(0).Material(panelMaterial(c.Theme())).Cursor(ui.CursorPointer).Children(func() { appIcon(c, "heart").Size(18, 18) })
+			button := ui.Button(c.Key("favorite"), "").Label(a.T("favorite")).Absolute().Top(space8).Right(space8).Size(28, 28).Padding(0).Radius(radiusControl).BorderWidth(0).Material(panelMaterial(c.Theme())).Cursor(ui.CursorPointer).Children(func() { appIcon(c, "heart").Size(18, 18) })
 			if list {
-				button.Top(18)
+				button.Top(space16)
 			}
 			favoriteFocused := button.FocusVisible()
 			wasFavoriteFocused := ui.Local(button, "keyboard-focus", func() bool { return false })
 			if favoriteFocused && !*wasFavoriteFocused {
-				ui.Box(c.Key("favorite-focus-reveal")).Absolute().Top(-a.contentTopInset() - 8).Left(0).Right(0).Bottom(0).
+				ui.Box(c.Key("favorite-focus-reveal")).Absolute().Top(-a.contentTopInset() - space8).Left(0).Right(0).Bottom(0).
 					PassThrough().ScrollIntoView()
 			}
 			*wasFavoriteFocused = favoriteFocused
 			fadeMotion(button)
-			ink, tint, border := c.Theme().TextMuted, c.Theme().Background.Alpha(.94), ui.Transparent
+			ink, tint, border := p.TextSecondary, p.Raised.Alpha(.94), ui.Transparent
 			if button.Hovered() {
-				ink, tint = c.Theme().Text, c.Theme().SurfaceHover.Alpha(.94)
+				ink, tint = p.Text, p.Hover.Alpha(.94)
 			}
 			if button.Pressed() {
-				tint = c.Theme().SurfacePressed.Alpha(.94)
+				tint = p.Pressed.Alpha(.94)
 			}
 			if asset.Favorite {
-				border = c.Theme().Accent
+				border = p.Border
 			}
 			button.Material(frostedSurface{tint: button.AnimateColor("favorite-tint", tint, motionColor), blur: 22}).
 				TextColor(button.AnimateColor("favorite-ink", ink, motionColor)).
@@ -393,17 +399,18 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 
 func (a *App) importProgress(c *ui.Context) {
 	p := a.Progress
+	colors := paletteFor(c.Theme())
 	if p == nil {
 		return
 	}
-	ui.Column(c.Key("import-progress")).Transition(ui.ElementTransition{Animation: &motionSpring, Height: true, Enter: &ui.Motion{Y: -10, Collapse: true}, Exit: &ui.Motion{Y: -10, Collapse: true}}).Height(importProgressHeight).Shrink(0).Padding(12, 16).Gap(6).Material(toolbarMaterial(c.Theme())).Children(func() {
+	ui.Column(c.Key("import-progress")).Transition(ui.ElementTransition{Animation: &motionSpring, Height: true, Enter: &ui.Motion{Y: -10, Collapse: true}, Exit: &ui.Motion{Y: -10, Collapse: true}}).Height(importProgressHeight).Shrink(0).Padding(space12, space16).Gap(space4).Material(toolbarMaterial(c.Theme())).Children(func() {
 		ui.Row(c).Children(func() {
-			ui.Text(c, a.T("import_stage_"+p.Stage)).Bold()
+			ui.Text(c, a.T("import_stage_"+p.Stage)).FontSize(fontBody).FontWeight(600).TextColor(colors.Text)
 			ui.Spacer(c)
-			ui.Text(c, fmt.Sprintf("%d / %d", p.Processed, p.Total))
+			ui.Text(c, fmt.Sprintf("%d / %d", p.Processed, p.Total)).Font(monoFont(c)).FontSize(fontNumber).TextColor(colors.TextSecondary)
 		})
-		ui.Text(c, a.T("import_counts", p.Imported, p.Skipped)).FontSize(12)
-		ui.Text(c, filepath.Base(p.CurrentFile)).SingleLine().FontSize(12).TextColor(c.Theme().TextMuted)
+		ui.Text(c, a.T("import_counts", p.Imported, p.Skipped)).Font(monoFont(c)).FontSize(fontNumber).TextColor(colors.TextSecondary)
+		ui.Text(c, filepath.Base(p.CurrentFile)).SingleLine().FontSize(fontSecondary).TextColor(colors.TextSecondary)
 		progress := float64(0)
 		if p.Total > 0 {
 			progress = float64(p.Processed) / float64(p.Total)

@@ -4,7 +4,7 @@ import "math"
 
 // 规则网格和列表只计算可见窗口，卡片与瀑布流共用同一个画布和身份。
 func (a *App) assetRows(width, top, bottom float32) ([]MasonryItem, float32, int) {
-	columns, gap, rowHeight := 1, float32(0), float32(64)
+	columns, gap, rowHeight := 1, float32(0), float32(space64)
 	if a.ViewMode == 1 {
 		gap = masonryGap
 		columns = max(1, int((width+gap)/(160*a.thumbnailScale()+gap)))

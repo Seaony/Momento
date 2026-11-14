@@ -7,7 +7,7 @@ import (
 
 const (
 	masonryMinWidth       float32 = 164
-	masonryGap            float32 = 10
+	masonryGap            float32 = space12
 	masonryMinHeight      float32 = 132
 	masonryMaxHeight      float32 = 278
 	masonryFallbackHeight float32 = 214
