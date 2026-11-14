@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -931,5 +932,34 @@ func (a *App) InvalidateWindows() {
 	}
 	if a.SettingsWindow != nil {
 		a.SettingsWindow.Invalidate()
+	}
+}
+
+func (a *App) InspectorAvailable() bool { return a.Selected.Len() > 0 && !a.TagPage }
+
+func (a *App) RevealInspector() {
+	if a.InspectorAvailable() {
+		a.InspectorVisible = true
+	}
+}
+
+func (a *App) CollapseInspector() { a.InspectorVisible = false }
+
+func (a *App) ToggleInspector() {
+	if a.InspectorAvailable() {
+		a.InspectorVisible = !a.InspectorVisible
+	}
+}
+
+func (a *App) HelpURL() string {
+	if strings.HasPrefix(a.Texts.Locale(), "zh") {
+		return "https://github.com/Seaony/Momento/blob/master/README.zh-CN.md"
+	}
+	return "https://github.com/Seaony/Momento#readme"
+}
+
+func (a *App) OpenHelp() {
+	if err := mygo.Shell.OpenExternal(a.HelpURL()); err != nil {
+		a.ShowError(err)
 	}
 }
