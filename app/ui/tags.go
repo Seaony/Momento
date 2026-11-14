@@ -56,7 +56,7 @@ func (a *App) tags(c *ui.Context) {
 					if ui.SearchField(c.Key("tag-search"), &a.Tags.Search).Label(a.T("search_tags")).Placeholder(a.T("search_tags")).Grow(1).MinWidth(0).Changed() {
 						searchChanged = true
 					}
-					if ui.PrimaryButton(c.Key("new-tag"), a.T("new_tag")).Radius(8).Disabled(a.Busy).Clicked() {
+					if primaryButton(c.Key("new-tag"), a.T("new_tag"), a.Busy).Radius(8).Clicked() {
 						lib := a.Library
 						a.Ask(a.T("new_tag"), "", func(name string) {
 							a.Run("create_tag", func(ctx context.Context) error {

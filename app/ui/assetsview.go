@@ -31,7 +31,7 @@ func (a *App) assetArea(c *ui.Context) {
 				ui.Text(c, a.T("drop_images")).FontSize(22).Bold()
 				ui.Text(c, a.T("drop_images_hint")).TextColor(c.Theme().TextMuted)
 				ui.Row(c).Gap(8).Children(func() {
-					if ui.PrimaryButton(c, a.T("import")).Clicked() {
+					if primaryButton(c, a.T("import"), false).Clicked() {
 						a.ChooseImport(false)
 					}
 					if ui.Button(c, a.T("install_extension")).Clicked() {

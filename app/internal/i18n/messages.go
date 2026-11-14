@@ -117,7 +117,7 @@ var messages = map[string][3]string{
 	"language_english":               {"English", "English", "English"},
 	"language_chinese":               {"简体中文", "简体中文", "简体中文"},
 	"appearance":                     {"外观", "Appearance", "外観"},
-	"appearance_system":              {"跟随系统", "System", "システムに合わせる"},
+	"appearance_system":              {"跟随系统", "System", "システム"},
 	"appearance_light":               {"浅色", "Light", "ライト"},
 	"appearance_dark":                {"深色", "Dark", "ダーク"},
 	"version":                        {"版本", "Version", "バージョン"},

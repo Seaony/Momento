@@ -157,7 +157,7 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 			if state.Saving {
 				label = a.T("smart_saving")
 			}
-			if ui.PrimaryButton(c, label).Disabled(state.Saving || a.Busy).Clicked() {
+			if primaryButton(c, label, state.Saving || a.Busy).Clicked() {
 				a.saveSmartFolder()
 			}
 		})

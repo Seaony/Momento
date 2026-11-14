@@ -147,12 +147,8 @@ func themeNameKey(key string) string {
 	case "dark":
 		return "appearance_dark"
 	default:
-		return "follow_system"
+		return "appearance_system"
 	}
-}
-
-func themeSwatchColor(key string, systemDark bool) ui.Color {
-	return momentoTheme(key, systemDark).Background
 }
 
 // 设置和引导共用色块，名称也用于读屏标签和悬停提示。
@@ -166,39 +162,50 @@ func (a *App) ThemeSwatchesCentered(c *ui.Context) {
 
 func (a *App) themeSwatches(c *ui.Context, centered bool) {
 	theme := c.Theme()
-	column := ui.Column(c).Gap(8)
+	row := ui.Row(c).Gap(12).AlignItems(ui.Center)
 	if centered {
-		column.AlignItems(ui.Center)
+		row.Justify(ui.Center)
 	}
-	column.Children(func() {
-		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
-			for _, key := range themeKeys {
-				selected := a.Preferences.Theme == key || (a.Preferences.Theme == "" && key == "system")
-				name := a.T(themeNameKey(key))
-				button := ui.ButtonBase(c.Key(key)).Size(28, 28).Padding(0).Radius(14).Label(name).Tooltip(name).AccessSelected(selected)
-				hovered := button.Hovered()
-				color := themeSwatchColor(key, theme.Dark)
-				button.Draw(func(p *ui.Painter, r ui.Rect) {
-					p.Clip(r, 14, func() {
-						p.Fill(r, color, 14)
+	row.Children(func() {
+		for _, key := range themeKeys {
+			selected := a.Preferences.Theme == key || (a.Preferences.Theme == "" && key == "system")
+			name := a.T(themeNameKey(key))
+			button := ui.ButtonBase(c.Key(key)).Width(92).Padding(4).Column().Gap(8).AlignItems(ui.Center).Radius(8).Cursor(ui.CursorPointer).Label(name).Tooltip(name).AccessSelected(selected)
+			hovered := button.Hovered()
+			button.Children(func() {
+				ui.Box(c).Size(76, 48).Radius(8).Draw(func(p *ui.Painter, r ui.Rect) {
+					palette := momentoTheme(key, theme.Dark)
+					draw := func(box ui.Rect, colors *ui.Theme) {
+						p.Fill(box, colors.Background, 0)
+						p.Fill(ui.Rect{X: box.X, Y: box.Y, W: 16, H: box.H}, colors.Surface, 0)
+						p.Fill(ui.Rect{X: box.X + 21, Y: box.Y + 10, W: max(0, box.W-28), H: 4}, colors.Border, 2)
+						p.Fill(ui.Rect{X: box.X + 21, Y: box.Y + 21, W: max(0, box.W-28), H: 18}, colors.Surface, 3)
+					}
+					p.Clip(r, 8, func() {
 						if key == "system" {
-							p.Fill(ui.Rect{X: r.X, Y: r.Y, W: r.W / 2, H: r.H}, momentoTheme("light", false).Background, 0)
-							p.Fill(ui.Rect{X: r.X + r.W/2, Y: r.Y, W: r.W / 2, H: r.H}, momentoTheme("dark", true).Background, 0)
+							p.Clip(ui.Rect{X: r.X, Y: r.Y, W: r.W / 2, H: r.H}, 0, func() { draw(r, momentoTheme("light", false)) })
+							p.Clip(ui.Rect{X: r.X + r.W/2, Y: r.Y, W: r.W / 2, H: r.H}, 0, func() { draw(r, momentoTheme("dark", true)) })
+						} else {
+							draw(r, palette)
 						}
 					})
-					p.Stroke(r, theme.Border, 14, 1)
+					p.Stroke(r, theme.Border, 8, 1)
 					if selected {
-						p.Stroke(ui.Rect{X: r.X - 3, Y: r.Y - 3, W: r.W + 6, H: r.H + 6}, theme.Accent, 17, 2)
+						p.Stroke(ui.Rect{X: r.X - 3, Y: r.Y - 3, W: r.W + 6, H: r.H + 6}, theme.Accent, 11, 2)
 					} else if hovered {
-						p.Stroke(ui.Rect{X: r.X - 2, Y: r.Y - 2, W: r.W + 4, H: r.H + 4}, theme.AccentHover, 16, 1)
+						p.Stroke(ui.Rect{X: r.X - 2, Y: r.Y - 2, W: r.W + 4, H: r.H + 4}, theme.Focus, 10, 1)
 					}
 				})
-				if button.Clicked() {
-					a.Preferences.Theme = key
-					a.SavePreferences()
+				color := theme.TextMuted
+				if selected || hovered {
+					color = theme.Text
 				}
+				ui.Text(c, name).FontSize(12).TextColor(color).SingleLine()
+			})
+			if button.Clicked() {
+				a.Preferences.Theme = key
+				a.SavePreferences()
 			}
-		})
-		ui.Text(c, a.T(themeNameKey(a.Preferences.Theme))).FontSize(12).TextColor(c.Theme().TextMuted).SingleLine()
+		}
 	})
 }

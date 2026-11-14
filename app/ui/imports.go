@@ -287,7 +287,7 @@ func (a *App) extensionImportPicker(c *ui.Context) {
 			if ui.Button(c, a.T("cancel")).Clicked() {
 				open = false
 			}
-			if ui.PrimaryButton(c, a.T("import")).Clicked() {
+			if primaryButton(c, a.T("import"), false).Clicked() {
 				choice := importChoice{FolderID: a.Import.PickerFolder}
 				for id, selected := range a.Import.PickerTags {
 					if selected {

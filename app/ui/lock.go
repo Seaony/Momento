@@ -100,7 +100,7 @@ func (a *App) lockScreen(c *ui.Context) {
 					label = a.T("password_verifying")
 				}
 				ready := !a.PasswordOperationPending() && a.passwordCooldown() == 0 && a.Lock.Password != ""
-				button := ui.PrimaryButton(c.Key("unlock"), label).FillWidth().Disabled(!ready)
+				button := primaryButton(c.Key("unlock"), label, !ready).FillWidth()
 				if ready && (button.Clicked() || input.Submitted()) {
 					a.unlockPassword()
 				}
@@ -156,7 +156,7 @@ func (a *App) passwordSettingsDialog(c *ui.Context) {
 					if a.Lock.Busy {
 						label = a.T("password_verifying")
 					}
-					button := ui.PrimaryButton(c.Key("password-save"), label).Disabled(!ready)
+					button := primaryButton(c.Key("password-save"), label, !ready)
 					if ready && (button.Clicked() || submit) {
 						a.submitPasswordSettings()
 					}

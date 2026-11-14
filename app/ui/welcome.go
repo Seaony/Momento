@@ -48,7 +48,7 @@ func (a *App) welcomeContent(c *ui.Context, onboarding bool) {
 		ui.Text(c, a.T(title)).FontSize(24).Bold().TextColor(titleColor(c.Theme())).FillWidth().TextAlign(ui.Center)
 		ui.Text(c, a.T("welcome_hint")).TextColor(c.Theme().TextMuted).FillWidth().TextAlign(ui.Center)
 		ui.Row(c).Gap(12).Margin(8, 0).Children(func() {
-			if ui.PrimaryButton(c, a.T("new_library")).Clicked() {
+			if primaryButton(c, a.T("new_library"), false).Clicked() {
 				a.ShowNewLibrary()
 			}
 			if ui.Button(c, a.T("open_library")).Clicked() {
@@ -95,7 +95,7 @@ func (a *App) onboarding(c *ui.Context) {
 				ui.Image(c, appLogo).Size(96, 96).Fit(ui.Contain)
 				ui.Text(c, a.T("onboarding_extension")).FontSize(24).Bold().TextColor(titleColor(c.Theme()))
 				ui.Text(c, a.T("onboarding_extension_hint")).MaxWidth(560).TextAlign(ui.Center).TextColor(c.Theme().TextMuted)
-				if ui.PrimaryButton(c, a.T("onboarding_get_extension")).Margin(12, 0, 0, 0).Clicked() {
+				if primaryButton(c, a.T("onboarding_get_extension"), false).Margin(12, 0, 0, 0).Clicked() {
 					c.OpenURLThen(browserExtensionURL, a.ShowError)
 				}
 			case 2:
@@ -112,7 +112,7 @@ func (a *App) onboarding(c *ui.Context) {
 			if ui.Button(c, a.T("onboarding_previous")).Disabled(step == 0).Clicked() {
 				a.Welcome.Step--
 			}
-			if step < 2 && ui.PrimaryButton(c, a.T("onboarding_next")).Clicked() {
+			if step < 2 && primaryButton(c, a.T("onboarding_next"), false).Clicked() {
 				a.Welcome.Step++
 			}
 		})

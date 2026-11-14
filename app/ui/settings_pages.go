@@ -30,22 +30,10 @@ func (a *App) switchSetting(c *ui.Context, key string, value *bool, disabled boo
 func settingsSegments(c *ui.Context, label string, selected *int, labels ...string) ui.Element {
 	theme := c.Theme()
 	parts := ui.SegmentedBase(c, selected, len(labels))
-	parts.Track.AlignItems(ui.Stretch).Padding(4).Gap(4).Radius(8).Background(theme.Background).Border(1, theme.Border).Label(label).Children(func() {
+	parts.Track.AlignItems(ui.Stretch).Padding(4).Gap(4).Radius(8).Background(warmOverlay(theme, .04)).Border(1, theme.Border).Label(label).Children(func() {
 		for i, text := range labels {
-			segment := parts.Segment(i).MinHeight(28).Padding(4, 12).Radius(4).Cursor(ui.CursorPointer).Label(text).TextColor(theme.Text)
-			if i == *selected {
-				color := theme.Surface
-				if segment.Pressed() {
-					color = theme.SurfacePressed
-				} else if segment.Hovered() {
-					color = theme.SurfaceHover
-				}
-				segment.Background(color).Border(1, theme.Accent).TextColor(titleColor(theme))
-			} else if segment.Pressed() {
-				segment.Background(warmOverlay(theme, .11))
-			} else if segment.Hovered() {
-				segment.Background(warmOverlay(theme, .08))
-			}
+			segment := parts.Segment(i).MinHeight(28).Padding(4, 12).Radius(4).Cursor(ui.CursorPointer).Label(text)
+			styleSegment(c, segment, i == *selected)
 			segment.Children(func() { ui.Text(c, text).SingleLine() })
 		}
 	})

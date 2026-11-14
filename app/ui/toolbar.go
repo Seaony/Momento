@@ -165,7 +165,7 @@ func (a *App) toolbar(c *ui.Context) {
 			}
 			a.ShowPreview(id, false)
 		}
-		button := toolbarButton(c.Key("import"), a.T("import")).Background(t.Accent).TextColor(t.AccentText).Disabled(a.Busy)
+		button := primaryButtonState(c, toolbarButton(c.Key("import"), a.T("import")).Background(t.Accent).TextColor(t.AccentText), a.Busy)
 		if button.Pressed() {
 			button.Background(t.AccentPressed)
 		} else if button.Hovered() {
@@ -255,11 +255,7 @@ func (a *App) viewSwitcher(c *ui.Context) {
 	seg.Track.Gap(2).Padding(2).Radius(8).Background(warmOverlay(t, .04)).Border(1, t.Border).Height(34).Shrink(0).Label(a.T("view_mode")).Children(func() {
 		for i, item := range []struct{ ID, Label string }{{"masonry", "view_masonry"}, {"grid", "view_grid"}, {"list", "view_list"}} {
 			part := seg.Segment(i).Size(28, 28).Padding(0).Center().Radius(4).Cursor(ui.CursorPointer).Label(a.T(item.Label)).Tooltip(a.T(item.Label))
-			if a.ViewMode == i {
-				part.Background(t.Background).Border(1, t.Border)
-			} else if part.Hovered() {
-				part.Background(warmOverlay(t, .08))
-			}
+			styleSegment(c, part, a.ViewMode == i)
 			part.Children(func() { appIcon(c, item.ID).Size(20, 20) })
 		}
 	})

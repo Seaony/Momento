@@ -281,7 +281,7 @@ func (a *App) aboutSettings(c *ui.Context, update UpdateCheckStatus) {
 		a.updateMessage(c, update, true)
 		ui.Row(c).Gap(8).Margin(12, 0, 0, 0).Children(func() {
 			if update.State == UpdateAvailable {
-				if ui.PrimaryButton(c, a.T("update_to_version", update.Version)).Height(28).Radius(8).Clicked() {
+				if primaryButton(c, a.T("update_to_version", update.Version), false).Height(28).Radius(8).Clicked() {
 					ShowAvailableUpdate()
 				}
 			} else {
@@ -303,7 +303,7 @@ func (a *App) updateButton(c *ui.Context, update UpdateCheckStatus) {
 		CheckForUpdates()
 	}
 	if update.State == UpdateAvailable {
-		if ui.PrimaryButton(c, a.T("update")).Height(28).Radius(8).Clicked() {
+		if primaryButton(c, a.T("update"), false).Height(28).Radius(8).Clicked() {
 			ShowAvailableUpdate()
 		}
 	}

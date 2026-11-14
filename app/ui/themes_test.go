@@ -99,6 +99,9 @@ func TestThemeSwatchesSelectAndExposeNames(t *testing.T) {
 		tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.ThemeSwatches(c) }, 300, 100)
 		for _, key := range themeKeys {
 			name := a.T(themeNameKey(key))
+			if !tt.HasText(name) {
+				t.Fatalf("%s 选项缺少自己的名称 %s", lang, name)
+			}
 			if strings.HasPrefix(name, "⟦") {
 				t.Fatalf("%s/%s 缺少翻译", lang, key)
 			}
@@ -140,5 +143,28 @@ func TestZoomUsesLogicalMinimumAndScreenWorkArea(t *testing.T) {
 	tt.Frame()
 	if zoom != .8 {
 		t.Fatal("缩放修改没有即时生效")
+	}
+}
+
+func TestThemeChoiceLabelsFitThreeLanguages(t *testing.T) {
+	for _, lang := range []string{"zh-CN", "en", "ja"} {
+		a := &App{Preferences: DefaultPreferences(), Texts: i18n.Catalog{Language: lang}}
+		a.Preferences.Language = lang
+		widths := map[string]float32{}
+		tt := ui.NewTester(func(c *ui.Context) {
+			a.applyTheme(c)
+			a.ThemeSwatches(c)
+			for _, key := range themeKeys {
+				name := a.T(themeNameKey(key))
+				widths[name], _ = c.MeasureText(0, ui.Span{Text: name, Size: 12})
+			}
+		}, 300, 110)
+		for _, key := range themeKeys {
+			name := a.T(themeNameKey(key))
+			option, ok := tt.AccessByRole(ui.RoleButton, name)
+			if !ok || !tt.HasText(name) || widths[name] > option.Bounds.W-8 || option.Bounds.X+option.Bounds.W > 300 {
+				t.Fatalf("%s主题名称被截断或没有显示：%s", lang, name)
+			}
+		}
 	}
 }

@@ -69,7 +69,7 @@ func (a *App) confirmationDialog(c *ui.Context) {
 					if ui.Button(c, a.T("cancel")).Clicked() {
 						a.ConfirmOpen = false
 					}
-					confirm := ui.PrimaryButton(c, a.T("confirm")).AutoFocus().TextColor(c.Theme().InverseText)
+					confirm := primaryButton(c, a.T("confirm"), false).AutoFocus().TextColor(c.Theme().InverseText)
 					color := c.Theme().Danger
 					if confirm.Pressed() {
 						color = color.Mix(c.Theme().Text, .15)
@@ -113,7 +113,7 @@ func (a *App) newLibraryDialog(c *ui.Context) {
 				a.NewLibraryOpen = false
 			}
 			ready := !a.Busy && !a.Dialog.Picking && strings.TrimSpace(a.Dialog.NewName) != "" && a.Dialog.NewPath != ""
-			create := ui.PrimaryButton(c, a.T("create_library")).Disabled(!ready)
+			create := primaryButton(c, a.T("create_library"), !ready)
 			if ready && (create.Clicked() || name.Submitted()) {
 				a.CreateLibraryAt(a.Dialog.NewPath, strings.TrimSpace(a.Dialog.NewName))
 			}
@@ -181,7 +181,7 @@ func (a *App) exportDialog(c *ui.Context) {
 			if ui.Button(c, a.T("cancel")).Disabled(a.Dialog.Picking).Clicked() {
 				a.ExportOpen = false
 			}
-			if ui.PrimaryButton(c, a.T("export")).Disabled(a.Busy || a.Dialog.Picking || a.Selected.Len() == 0).Clicked() {
+			if primaryButton(c, a.T("export"), a.Busy || a.Dialog.Picking || a.Selected.Len() == 0).Clicked() {
 				a.pickExportDestination()
 			}
 		})
@@ -244,7 +244,7 @@ func (a *App) promptDialog(c *ui.Context) {
 				a.PromptSubmit = nil
 			}
 			ready := strings.TrimSpace(a.PromptValue) != ""
-			submit := ui.PrimaryButton(c, a.T("save")).Disabled(!ready)
+			submit := primaryButton(c, a.T("save"), !ready)
 			if ready && (submit.Clicked() || input.Submitted()) {
 				a.PromptOpen = false
 				callback := a.PromptSubmit
@@ -277,7 +277,7 @@ func (a *App) errorDialog(c *ui.Context) {
 					}
 				})
 			}
-			if ui.PrimaryButton(c, a.T("close")).Clicked() {
+			if primaryButton(c, a.T("close"), false).Clicked() {
 				open = false
 			}
 		})
