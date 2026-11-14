@@ -18,6 +18,7 @@ func momentoTheme(key string, systemDark bool) *ui.Theme {
 	}
 	theme.Dark = dark
 	theme.Radius = 8
+	theme.FontSize = 13
 	if dark {
 		theme.Background, theme.Surface = ui.Hex("#211A16"), ui.Hex("#2C231E")
 		theme.SurfaceHover, theme.SurfacePressed = ui.Hex("#382D26"), ui.Hex("#44362D")

@@ -8,19 +8,19 @@ import (
 )
 
 func TestMasonryDimensionsAndShortestColumn(t *testing.T) {
-	layout := NewMasonry([]float32{1, 2, 0.5, 1, 1}, 508)
+	layout := NewMasonry([]float32{1, 2, 0.5, 1, 1}, 512)
 	want := []MasonryItem{
 		{Index: 0, X: 0, Y: 0, Width: 164, Height: 164},
-		{Index: 1, X: 172, Y: 0, Width: 164, Height: 132},
-		{Index: 2, X: 344, Y: 0, Width: 164, Height: 278},
-		{Index: 3, X: 172, Y: 140, Width: 164, Height: 164},
-		{Index: 4, X: 0, Y: 172, Width: 164, Height: 164},
+		{Index: 1, X: 174, Y: 0, Width: 164, Height: 132},
+		{Index: 2, X: 348, Y: 0, Width: 164, Height: 278},
+		{Index: 3, X: 174, Y: 142, Width: 164, Height: 164},
+		{Index: 4, X: 0, Y: 174, Width: 164, Height: 164},
 	}
 	if got := layout.Visible(0, layout.Height()); !slices.Equal(got, want) {
 		t.Fatalf("布局为 %+v，期望 %+v", got, want)
 	}
-	if layout.Height() != 336 {
-		t.Fatalf("内容高度 %v，期望 336", layout.Height())
+	if layout.Height() != 338 {
+		t.Fatalf("内容高度 %v，期望 338", layout.Height())
 	}
 }
 
@@ -66,9 +66,9 @@ func TestMasonryVisibleIntersectionBoundaries(t *testing.T) {
 		ids         []int
 	}{
 		{0, 164, []int{0}},
-		{164, 172, nil},
-		{163, 173, []int{0, 1}},
-		{172, 336, []int{1}},
+		{164, 174, nil},
+		{163, 175, []int{0, 1}},
+		{174, 338, []int{1}},
 		{-100, 1, []int{0}},
 		{0, 0, nil},
 		{300, 100, nil},

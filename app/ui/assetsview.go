@@ -10,9 +10,18 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
+const importProgressHeight float32 = 120
+
+func (a *App) contentTopInset() float32 {
+	if a.Progress != nil {
+		return MainToolbarHeight + importProgressHeight
+	}
+	return MainToolbarHeight
+}
+
 func (a *App) assetArea(c *ui.Context) {
 	if len(a.Visible) == 0 {
-		ui.Column(c).Grow(1).FillWidth().Center().Gap(14).Children(func() {
+		ui.Column(c).Grow(1).FillWidth().Padding(a.contentTopInset(), 24, 24).Center().Gap(12).Children(func() {
 			if a.Query.Search != "" {
 				ui.Text(c, a.T("search_empty", a.Query.Search)).FontSize(20).Bold()
 				ui.Text(c, a.T("result_count", "0")).TextColor(c.Theme().TextMuted)
@@ -42,13 +51,13 @@ func (a *App) assetArea(c *ui.Context) {
 		a.list.Selection = nil
 		a.list.Selected = nil
 		a.list.Label = func(i int) string { return a.Visible[i].Name }
-		list := ui.List(c.Key("list"), &a.list, len(a.Visible), func(i int) { a.assetCard(c, a.Visible[i], i, true) }).Grow(1).Gap(0)
+		list := ui.List(c.Key("list"), &a.list, len(a.Visible), func(i int) { a.assetCard(c, a.Visible[i], i, true) }).Grow(1).Gap(0).Padding(a.contentTopInset()+8, 16, 16).ScrollbarInsets(a.contentTopInset(), 0, 0)
 		if list.Submitted() && a.selectedIndex >= 0 && a.selectedIndex < len(a.Visible) {
 			a.ActivateAsset(a.Visible[a.selectedIndex].ID, false)
 		}
 		a.assetPreviewShortcut(c, list)
 	default:
-		scroll := ui.Scroll(c.Key("masonry")).Grow(1).FillWidth().TrackScroll(&a.scroll).Padding(16)
+		scroll := ui.Scroll(c.Key("masonry")).Grow(1).FillWidth().TrackScroll(&a.scroll).Padding(a.contentTopInset()+16, 16, 16).ScrollbarInsets(a.contentTopInset(), 0, 0)
 		box := scroll.Bounds()
 		w, h := box.W-32, box.H
 		if w <= 0 {
@@ -58,9 +67,9 @@ func (a *App) assetArea(c *ui.Context) {
 				w -= a.SidebarWidth + 1
 			}
 			if a.InspectorVisible {
-				w -= 281
+				w -= 280
 			}
-			h = ch - 64
+			h = ch
 		}
 		if a.layout == nil || a.layoutVersion != a.visibleVersion || a.layoutWidth != w {
 			ratios := make([]float32, len(a.Visible))
@@ -77,7 +86,7 @@ func (a *App) assetArea(c *ui.Context) {
 		if h <= 0 {
 			h = 640
 		}
-		top, bottom := max(0, a.scroll.Y-h), a.scroll.Y+2*h
+		top, bottom := max(0, a.scroll.Y-a.contentTopInset()-16-h), a.scroll.Y-a.contentTopInset()-16+2*h
 		scroll.Children(func() {
 			ui.Box(c).Height(a.layout.Height()).FillWidth().Shrink(0).Children(func() {
 				for _, item := range a.layout.Visible(top, bottom) {
@@ -118,12 +127,19 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool) 
 	selected := a.Selected.Has(asset.ID)
 	var card ui.Element
 	if list {
-		card = ui.Row(c.Key(asset.ID)).Height(96).FillWidth().Gap(14).Padding(8, 16).
+		card = ui.Row(c.Key(asset.ID)).Height(64).FillWidth().Gap(16).Padding(8, 10).Radius(8).
 			BorderWidth(0, 0, 1, 0).BorderColor(c.Theme().Border)
 	} else {
-		card = ui.Column(c.Key(asset.ID)).Fill().Radius(6).FocusRing(false)
+		card = ui.Column(c.Key(asset.ID)).Fill().Radius(8).FocusRing(false)
+		if a.ViewMode == 1 {
+			card.Radius(10).Background(c.Theme().Surface)
+		}
 	}
-	card.Label(asset.Name).Focusable().AccessSelected(selected)
+	card.Label(asset.Name).Focusable().AccessSelected(selected).Cursor(ui.CursorPointer)
+	focused := card.FocusVisible()
+	wasFocused := ui.Local(card, "keyboard-focus", func() bool { return false })
+	revealFocus := focused && !*wasFocused
+	*wasFocused = focused
 	hovered := card.Hovered()
 	if hovered {
 		a.hovered = asset.ID
@@ -135,43 +151,68 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool) 
 		case selected:
 			card.Background(c.Theme().Accent.Alpha(0.12))
 		case hovered:
-			card.Background(c.Theme().SurfaceHover)
+			card.Background(warmOverlay(c.Theme(), .06))
 		}
 	}
 	card.Children(func() {
+		if revealFocus {
+			// 把页头遮住的高度算进定位目标，键盘聚焦时图片仍露在页头下方。
+			ui.Box(c.Key("focus-reveal")).Absolute().Top(-a.contentTopInset() - 8).Left(0).Right(0).Bottom(0).
+				PassThrough().ScrollIntoView()
+		}
 		thumb := a.Bitmap(asset)
 		if list {
 			if thumb != nil {
-				ui.Image(c, thumb).Size(78, 78).Fit(ui.Cover).Radius(4)
+				ui.Image(c, thumb).Size(48, 48).Fit(ui.Cover).Radius(6)
 			} else {
-				ui.Box(c).Size(78, 78).Radius(4).Background(c.Theme().Surface)
+				ui.Box(c).Size(48, 48).Radius(6).Background(c.Theme().Surface)
 			}
-			ui.Column(c).Grow(1).Gap(6).Children(func() {
-				ui.Text(c, asset.Name).Bold().SingleLine()
+			ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
+				ui.Text(c, asset.Name).FontSize(13).Bold().SingleLine()
 				ui.Text(c, fmt.Sprintf("%d × %d · %s", width, height, fileSize(asset.Size))).FontSize(12).TextColor(c.Theme().TextMuted)
 			})
-			ui.Text(c, strings.ToUpper(asset.Extension)).FontSize(12).TextColor(c.Theme().TextMuted)
+			ui.Text(c, strings.ToUpper(asset.Extension)).FontSize(12).TextColor(c.Theme().TextMuted).Margin(0, 36, 0, 0)
 		} else {
-			if thumb != nil {
-				ui.Image(c, thumb).Fill().Fit(ui.Cover).Radius(6)
+			radius := float32(8)
+			if a.ViewMode == 1 {
+				radius = 10
+				ui.Box(c).Fill().Padding(16).Children(func() {
+					if thumb != nil {
+						ui.Image(c, thumb).Fill().Fit(ui.Contain).Radius(4)
+					}
+				})
+			} else if thumb != nil {
+				ui.Image(c, thumb).Fill().Fit(ui.Cover).Radius(radius)
 			} else {
-				ui.Box(c).Fill().Radius(6).Background(c.Theme().Surface)
+				ui.Box(c).Fill().Radius(radius).Background(c.Theme().Surface)
 			}
 			if hovered {
-				ui.Box(c).Absolute().Left(0).Top(0).Right(0).Bottom(0).Radius(6).
-					Background(ui.RGBA(255, 255, 255, 0.07)).PassThrough()
+				ui.Box(c).Absolute().Left(0).Top(0).Right(0).Bottom(0).Radius(radius).
+					Background(ui.RGBA(58, 35, 24, .07)).PassThrough()
+				ui.Text(c, fmt.Sprintf("%d × %d", width, height)).Absolute().Bottom(6).Right(6).
+					Padding(3, 6).Radius(8).FontSize(12).Material(panelMaterial(c.Theme())).
+					TextColor(c.Theme().Text).PassThrough()
 			}
-			ui.Text(c, fmt.Sprintf("%d × %d", width, height)).Absolute().Bottom(6).Right(6).Padding(3, 5).Radius(4).FontSize(11).Background(ui.RGBA(0, 0, 0, 0.65)).TextColor(ui.RGB(255, 255, 255)).PassThrough()
-			if selected || card.FocusVisible() {
+			if selected || focused {
 				// 外圈不占图片空间，描边与图片之间留 2px。
-				ui.Box(c).Absolute().Left(-4).Top(-4).Right(-4).Bottom(-4).Radius(10).
+				ui.Box(c).Absolute().Left(-4).Top(-4).Right(-4).Bottom(-4).Radius(radius+4).
 					Border(2, c.Theme().Accent).PassThrough()
 			}
 		}
 		if hovered || asset.Favorite {
-			button := ui.Button(c.Key("favorite"), "").Label(a.T("favorite")).Absolute().Top(6).Right(6).Size(28, 28).Padding(0).Children(func() { appIcon(c, "heart").Size(18, 18) })
+			button := ui.Button(c.Key("favorite"), "").Label(a.T("favorite")).Absolute().Top(6).Right(6).Size(28, 28).Padding(0).Radius(8).BorderWidth(0).Material(panelMaterial(c.Theme())).Cursor(ui.CursorPointer).Children(func() { appIcon(c, "heart").Size(18, 18) })
+			if list {
+				button.Top(18)
+			}
+			favoriteFocused := button.FocusVisible()
+			wasFavoriteFocused := ui.Local(button, "keyboard-focus", func() bool { return false })
+			if favoriteFocused && !*wasFavoriteFocused {
+				ui.Box(c.Key("favorite-focus-reveal")).Absolute().Top(-a.contentTopInset() - 8).Left(0).Right(0).Bottom(0).
+					PassThrough().ScrollIntoView()
+			}
+			*wasFavoriteFocused = favoriteFocused
 			if asset.Favorite {
-				button.Background(c.Theme().Accent)
+				button.Border(1, c.Theme().Accent)
 			}
 			if button.Clicked() {
 				a.SetFavorite([]string{asset.ID}, !asset.Favorite)
@@ -253,7 +294,7 @@ func (a *App) importProgress(c *ui.Context) {
 	if p == nil {
 		return
 	}
-	ui.Column(c).Padding(12, 16).Gap(6).Background(c.Theme().Surface).Children(func() {
+	ui.Column(c).Height(importProgressHeight).Shrink(0).Padding(12, 16).Gap(6).Material(toolbarMaterial(c.Theme())).Children(func() {
 		ui.Row(c).Children(func() {
 			ui.Text(c, a.T("import_stage_"+p.Stage)).Bold()
 			ui.Spacer(c)

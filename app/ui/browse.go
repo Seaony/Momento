@@ -209,48 +209,55 @@ func (a *App) ActivateAsset(id string, space bool) {
 	a.ShowPreview(id, space)
 }
 
-func (a *App) scopeSummary() (string, int, int64) {
-	name := a.T("all")
-	query := catalog.Query{Scope: a.Query.Scope, FolderID: a.Query.FolderID, SmartFolderID: a.Query.SmartFolderID}
-	if query.Scope == "random" {
-		query.Scope = "all"
-		name = a.T("random_browse")
-	} else if a.TagPage {
-		query.Scope = "all"
-		name = a.T("tag_management")
-	} else if query.Scope == "tag" {
-		query.Scope = "all"
-		query.TagIDs = []string{a.Browse.TagID}
+func (a *App) scopeName() string {
+	if a.TagPage {
+		return a.T("tag_management")
+	}
+	switch a.Query.Scope {
+	case "random":
+		return a.T("random_browse")
+	case "tag":
 		for _, tag := range a.Snapshot.Tags {
 			if tag.ID == a.Browse.TagID {
-				name = tag.Name
-				break
+				return tag.Name
 			}
 		}
-	} else if query.Scope == "smart" {
+	case "smart":
 		for _, folder := range a.Snapshot.SmartFolders {
-			if folder.ID == query.SmartFolderID {
-				name = folder.Name
-				break
+			if folder.ID == a.Query.SmartFolderID {
+				return folder.Name
 			}
 		}
-	} else if query.Scope == "folder" {
+	case "folder":
 		for _, folder := range a.Snapshot.Folders {
-			if folder.ID == query.FolderID {
-				name = folder.Name
-				break
+			if folder.ID == a.Query.FolderID {
+				return folder.Name
 			}
 		}
-	} else if query.Scope != "" && query.Scope != "all" {
-		name = a.T(query.Scope)
+	case "", "all":
+		return a.T("all")
+	default:
+		return a.T(a.Query.Scope)
+	}
+	return a.T("all")
+}
+
+func (a *App) scopeSummary() (string, int, int64) {
+	query := catalog.Query{Scope: a.Query.Scope, FolderID: a.Query.FolderID, SmartFolderID: a.Query.SmartFolderID}
+	if a.TagPage || query.Scope == "random" {
+		query.Scope = "all"
+	}
+	if query.Scope == "tag" {
+		query.Scope = "all"
+		query.TagIDs = []string{a.Browse.TagID}
 	}
 	if a.Index == nil {
-		return name, 0, 0
+		return a.scopeName(), 0, 0
 	}
 	assets := a.Index.Query(query)
 	var size int64
 	for _, asset := range assets {
 		size += asset.Size
 	}
-	return name, len(assets), size
+	return a.scopeName(), len(assets), size
 }

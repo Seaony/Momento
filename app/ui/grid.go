@@ -11,14 +11,15 @@ func (a *App) assetGrid(c *ui.Context) {
 			width -= a.SidebarWidth + 1
 		}
 		if a.InspectorVisible {
-			width -= 281
+			width -= 280
 		}
 	}
 	scale := a.thumbnailScale()
-	columns := max(1, int((width+8)/(160*scale+8)))
+	columns := max(1, int((width+masonryGap)/(160*scale+masonryGap)))
 	rows := (len(a.Visible) + columns - 1) / columns
+	rowHeight := (width - float32(columns-1)*masonryGap) / float32(columns)
 	list := ui.List(c.Key("grid"), &a.grid, rows, func(row int) {
-		ui.Row(c).FillWidth().Height(190 * scale).Gap(8).AlignItems(ui.Stretch).Children(func() {
+		ui.Row(c).FillWidth().Height(rowHeight).Gap(masonryGap).AlignItems(ui.Stretch).Children(func() {
 			for column := range columns {
 				index := row*columns + column
 				cell := ui.Column(c).Grow(1).Basis(0).MinWidth(0)
@@ -27,6 +28,6 @@ func (a *App) assetGrid(c *ui.Context) {
 				}
 			}
 		})
-	}).Grow(1).Gap(8).Padding(16)
+	}).Grow(1).Gap(masonryGap).Padding(a.contentTopInset()+16, 16, 16).ScrollbarInsets(a.contentTopInset(), 0, 0)
 	a.assetPreviewShortcut(c, list)
 }

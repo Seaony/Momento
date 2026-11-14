@@ -105,7 +105,7 @@ func (d *desktopIntegration) refreshShortcuts() {
 		err := registerGlobalShortcut(accelerator, func() {
 			a.ShowMainWindow()
 			if action == "show_search" && !a.IsLocked() {
-				a.Search.Focus()
+				a.FocusSearch()
 			}
 		})
 		if err != nil {

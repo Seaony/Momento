@@ -220,15 +220,17 @@ func (a *App) View(c *ui.Context) {
 		body := func() {
 			ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
 				ui.Column(c).Grow(1).MinWidth(0).Background(c.Theme().Background).Children(func() {
-					a.toolbar(c)
-					if a.Progress != nil {
-						a.importProgress(c)
-					}
 					if a.TagPage {
 						a.tags(c)
 					} else {
 						a.assetArea(c)
 					}
+					ui.Column(c.Key("main-header")).Absolute().Top(0).Left(0).Right(0).Children(func() {
+						a.toolbar(c)
+						if a.Progress != nil {
+							a.importProgress(c)
+						}
+					})
 				})
 				if a.InspectorVisible {
 					ui.Column(c).Width(280).Shrink(0).Background(c.Theme().Surface).BorderWidth(0, 0, 0, 1).BorderColor(c.Theme().Border).Children(func() {
@@ -721,7 +723,7 @@ func (a *App) shortcuts(c *ui.Context) {
 		case "settings":
 			a.ShowSettings()
 		case "search":
-			a.Search.Focus()
+			a.FocusSearch()
 		case "filter":
 			a.ToggleFilter()
 		case "sort":

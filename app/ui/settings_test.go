@@ -177,11 +177,11 @@ func TestSettingsShortcutConflictDoesNotSave(t *testing.T) {
 	if !a.SetShortcut("search", "") || a.Shortcut("search") != "" {
 		t.Fatal("清除快捷键未保存")
 	}
-	if !a.SetShortcut("search", recordedAccelerator(ui.InputEvent{Key: ui.KeyF, Mods: ui.Cmd})) || len(a.Preferences.Shortcuts) != 0 {
+	if !a.SetShortcut("search", recordedAccelerator(ui.InputEvent{Key: ui.KeyK, Mods: ui.Cmd})) || len(a.Preferences.Shortcuts) != 0 {
 		t.Fatal("录制默认按键不应保留覆盖项")
 	}
 	a.ResetShortcuts("view")
-	if a.Shortcut("search") != "CmdOrCtrl+F" || len(a.Preferences.Shortcuts) != 0 {
+	if a.Shortcut("search") != "CmdOrCtrl+K" || len(a.Preferences.Shortcuts) != 0 {
 		t.Fatal("恢复默认未清除覆盖项")
 	}
 }
@@ -424,7 +424,7 @@ func TestSettingsZoomMenuScreenshots(t *testing.T) {
 
 func TestSettingsShortcutResetRejectsCrossGroupConflictsAtomically(t *testing.T) {
 	a := settingsTestApp("en", "light")
-	for _, change := range [][2]string{{"search", "Alt+G"}, {"import", "CmdOrCtrl+F"}, {"filter", "Alt+H"}} {
+	for _, change := range [][2]string{{"search", "Alt+G"}, {"import", "CmdOrCtrl+K"}, {"filter", "Alt+H"}} {
 		if !a.SetShortcut(change[0], change[1]) {
 			t.Fatalf("复现准备失败:%s", change[0])
 		}
@@ -437,7 +437,7 @@ func TestSettingsShortcutResetRejectsCrossGroupConflictsAtomically(t *testing.T)
 	if !maps.Equal(before, a.Preferences.Shortcuts) || saved != 0 {
 		t.Fatal("冲突的整组恢复被保存或部分应用")
 	}
-	if a.Shortcut("search") != "Alt+G" || a.Shortcut("filter") != "Alt+H" || a.Shortcut("import") != "CmdOrCtrl+F" {
+	if a.Shortcut("search") != "Alt+G" || a.Shortcut("filter") != "Alt+H" || a.Shortcut("import") != "CmdOrCtrl+K" {
 		t.Fatal("冲突改坏了原来的快捷键")
 	}
 	if a.Settings.ShortcutErrors["search"] != a.T("shortcut_conflict", a.T("import")) {
@@ -472,7 +472,7 @@ func TestSettingsShortcutResetConflictScreenshots(t *testing.T) {
 			a := settingsTestApp(language, theme)
 			a.Settings.Tab = SettingsShortcuts
 			a.Settings.ShortcutSearch = a.T("search")
-			if !a.SetShortcut("search", "Alt+G") || !a.SetShortcut("import", "CmdOrCtrl+F") {
+			if !a.SetShortcut("search", "Alt+G") || !a.SetShortcut("import", "CmdOrCtrl+K") {
 				t.Fatal("无法准备恢复冲突")
 			}
 			a.ResetShortcuts("view")

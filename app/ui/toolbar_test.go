@@ -12,7 +12,7 @@ import (
 )
 
 func toolbarTestApp() *App {
-	a := &App{Preferences: DefaultPreferences(), Texts: i18n.Catalog{Language: "en"}, Query: catalog.Query{Sort: "added", Descending: true}, SidebarVisible: true, InspectorVisible: true}
+	a := &App{Preferences: DefaultPreferences(), Texts: i18n.Catalog{Language: "en"}, Query: catalog.Query{Sort: "added", Descending: true}, SidebarVisible: true, InspectorVisible: true, SidebarWidth: 236}
 	a.Snapshot = model.Snapshot{
 		Assets: []model.Asset{
 			{ID: "a", Name: "Alpine", Extension: "jpg", Colors: []model.Color{{Family: "red"}}, CreatedAt: time.Unix(1, 0), TagIDs: []string{"ref"}},
@@ -26,7 +26,19 @@ func toolbarTestApp() *App {
 }
 
 func toolbarTester(a *App) *ui.Tester {
-	return ui.NewTester(func(c *ui.Context) { ui.Column(c).Fill().Children(func() { a.toolbar(c); ui.Spacer(c) }) }, 584, 640)
+	tt := ui.NewTester(func(c *ui.Context) {
+		ui.Row(c).Fill().Children(func() {
+			if a.SidebarVisible {
+				ui.Box(c).Width(a.SidebarWidth + 1).Shrink(0)
+			}
+			ui.Column(c).Grow(1).FillHeight().MinWidth(0).Children(func() { a.toolbar(c); ui.Spacer(c) })
+			if a.InspectorVisible {
+				ui.Box(c).Width(280).Shrink(0)
+			}
+		})
+	}, 1500, 640)
+	tt.Frame()
+	return tt
 }
 
 func toolbarClick(t *testing.T, tt *ui.Tester, label string) {
@@ -52,9 +64,11 @@ func TestToolbarSearchAndViewSelection(t *testing.T) {
 	if a.ViewMode != 2 {
 		t.Fatalf("列表视图：%d", a.ViewMode)
 	}
+	a.SidebarVisible = false
+	tt.Frame()
 	toolbarClick(t, tt, a.T("toggle_sidebar"))
 	toolbarClick(t, tt, a.T("toggle_inspector"))
-	if a.SidebarVisible || a.InspectorVisible {
+	if !a.SidebarVisible || a.InspectorVisible {
 		t.Fatal("折叠按钮未切换状态")
 	}
 }
@@ -90,6 +104,9 @@ func TestToolbarIconTooltips(t *testing.T) {
 			t.Run(language+"/"+key, func(t *testing.T) {
 				a := toolbarTestApp()
 				a.Texts.Language = language
+				if key == "toggle_sidebar" {
+					a.SidebarVisible = false
+				}
 				tt := toolbarTester(a)
 				label := a.T(key)
 				box, ok := tt.Find(label)
@@ -217,7 +234,7 @@ func TestNarrowToolbarKeepsThumbnailPopover(t *testing.T) {
 	tt := ui.NewTester(func(c *ui.Context) {
 		ui.Row(c).Fill().Children(func() {
 			ui.Box(c).Width(236)
-			ui.Column(c).Grow(1).MinWidth(0).Children(func() { a.toolbar(c); ui.Spacer(c) })
+			ui.Column(c).Grow(1).FillHeight().MinWidth(0).Children(func() { a.toolbar(c); ui.Spacer(c) })
 			ui.Box(c).Width(280)
 		})
 	}, 1100, 640)
@@ -268,6 +285,7 @@ func TestNarrowToolbarKeepsThumbnailPopover(t *testing.T) {
 	}
 	a.ViewMode = 0
 	tt.SetSize(1500, 640)
+	tt.Frame()
 	if _, ok := tt.AccessByRole(ui.RoleButton, a.T("thumbnail_size")); ok {
 		t.Fatal("宽窗口仍只显示缩略图入口")
 	}

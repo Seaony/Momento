@@ -25,7 +25,7 @@ func panelMaterial(t *ui.Theme) ui.Material {
 }
 
 func toolbarMaterial(t *ui.Theme) ui.Material {
-	return frostedSurface{tint: t.Background.Alpha(.86), blur: 22}
+	return frostedSurface{tint: t.Background.Alpha(.92), blur: 22}
 }
 
 func sidebarMaterial(c *ui.Context, e ui.Element) {

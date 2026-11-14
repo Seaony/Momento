@@ -1,6 +1,7 @@
 package i18n
 
 var messages = map[string][3]string{
+	"clear_search":                   {"清空搜索", "Clear Search", "検索をクリア"},
 	"organize":                       {"整理", "Organize", "整理"},
 	"smart_empty_action":             {"按规则自动归集", "Organize by rules", "ルールで自動整理"},
 	"welcome":                        {"没有打开的图库", "No library open", "ライブラリが開かれていません"},

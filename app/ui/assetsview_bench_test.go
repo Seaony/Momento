@@ -94,7 +94,8 @@ func newAssetsViewPerformanceFixture(tb testing.TB, height, selected int) assets
 func (f *assetsViewPerformanceFixture) preload(y float32) {
 	a := f.app
 	h := float32(f.height)
-	items := a.layout.Visible(max(0, y-h), y+2*h)
+	top := y - a.contentTopInset() - 16
+	items := a.layout.Visible(max(0, top-h), top+2*h)
 	a.Thumbnails.mu.Lock()
 	defer a.Thumbnails.mu.Unlock()
 	for _, item := range items {

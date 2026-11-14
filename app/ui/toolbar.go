@@ -13,6 +13,8 @@ type toolbarState struct {
 	FilterOpen    bool
 	ThumbnailOpen bool
 	SortOpen      bool
+	ViewOpen      bool
+	SearchOpen    bool
 	TagSearch     string
 }
 
@@ -25,6 +27,13 @@ var toolbarFamilies = []struct{ ID, Hex string }{
 	{"beige", "#C8BA96"}, {"white", "#FFFFFF"}, {"gray", "#939393"}, {"black", "#252525"},
 }
 
+// 所有搜索入口都先展开窄栏里的输入框，再请求聚焦。
+func (a *App) FocusSearch() {
+	a.Toolbar.SearchOpen = true
+	a.Search.Focus()
+	a.InvalidateWindows()
+}
+
 func (a *App) toolbar(c *ui.Context) {
 	t := c.Theme()
 	bar := c.TitleBar()
@@ -35,31 +44,64 @@ func (a *App) toolbar(c *ui.Context) {
 	if !a.InspectorVisible {
 		right += bar.Right
 	}
-	ui.Row(c.Key("toolbar")).Height(MainToolbarHeight).Shrink(0).FillWidth().Padding(12, right, 12, left).Gap(6).DragWindow().
-		Background(t.Background).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Role(ui.RoleToolbar).FocusGroup(ui.Horizontal).Label(a.T("browse_tools")).Children(func() {
-		if toolbarIconButton(c.Key("toggle-sidebar"), a.T("toggle_sidebar"), "sidebar").Clicked() {
-			a.SidebarVisible = !a.SidebarVisible
+	width := a.toolbarWidth(c) - left - right
+	compact := width < 720
+	hint := displayShortcut(a.Shortcut("search"))
+	if !a.Preview.Open && a.ActionShortcut(c, "search") {
+		a.FocusSearch()
+	}
+
+	row := ui.Row(c.Key("toolbar")).Height(MainToolbarHeight).Shrink(0).FillWidth().Padding(12, right, 12, left).Gap(4).DragWindow().
+		Material(toolbarMaterial(t)).BorderWidth(0, 0, 1, 0).BorderColor(warmOverlay(t, .09)).Role(ui.RoleToolbar).FocusGroup(ui.Horizontal).Label(a.T("browse_tools"))
+	if bounds := row.LayoutBounds(); bounds.W > 0 {
+		width = bounds.W - left - right
+		compact = width < 720
+	}
+	row.Children(func() {
+		if !a.SidebarVisible && toolbarIconButton(c.Key("toggle-sidebar"), a.T("toggle_sidebar"), "sidebar").Clicked() {
+			a.SidebarVisible = true
 		}
-		if ui.Button(c.Key("history-back"), "").Label(a.T("navigate_back")).Tooltip(a.T("navigate_back")).Size(24, 34).Padding(0).Disabled(!a.CanNavigateBack()).Children(func() { ui.Icon(c, sidebarArrow).Rotate(180).Size(14, 14) }).Clicked() {
-			a.NavigateBack()
-		}
-		if ui.Button(c.Key("history-forward"), "").Label(a.T("navigate_forward")).Tooltip(a.T("navigate_forward")).Size(24, 34).Padding(0).Disabled(!a.CanNavigateForward()).Children(func() { ui.Icon(c, sidebarArrow).Size(14, 14) }).Clicked() {
-			a.NavigateForward()
-		}
-		search := ui.SearchField(c.Key("asset-search"), &a.Query.Search).Bind(&a.Search).Placeholder(a.T("search_assets")).Label(a.T("search_assets")).Grow(1).MinWidth(96).Height(34)
-		if search.Changed() {
-			a.Refine()
-		}
-		if strings.TrimSpace(a.Query.Search) != "" {
-			count := toolbarNumber(len(a.Visible))
-			label := a.T("result_count", count)
-			text := label
-			if a.toolbarWidth(c) < 760 {
-				text = count
+		ui.Row(c.Key("history")).Gap(0).Shrink(0).Children(func() {
+			if toolbarIconButton(c.Key("history-back"), a.T("navigate_back"), "back").Width(26).Disabled(!a.CanNavigateBack()).Clicked() {
+				a.NavigateBack()
 			}
-			ui.Text(c, text).Label(label).Tooltip(label).SingleLine().Shrink(0).FontSize(12).TextColor(t.TextMuted).Role(ui.RoleStatus)
+			if toolbarIconButton(c.Key("history-forward"), a.T("navigate_forward"), "forward").Width(26).Disabled(!a.CanNavigateForward()).Clicked() {
+				a.NavigateForward()
+			}
+		})
+		titleWidth := float32(160)
+		if compact {
+			titleWidth = 76
 		}
-		if a.toolbarWidth(c) >= 760 {
+		name := a.scopeName()
+		count := len(a.Visible)
+		if a.TagPage {
+			count = len(a.Snapshot.Tags)
+		}
+		location := ui.Row(c.Key("location")).Width(titleWidth).MinWidth(0).Gap(8).Padding(0, 4)
+		if !compact {
+			location.Grow(1)
+		}
+		location.Children(func() {
+			ui.Text(c.Key("location-title"), name).FontSize(22).Bold().TextColor(titleColor(t)).SingleLine().Shrink(1).MinWidth(0).Tooltip(name)
+			label := a.T("result_count", toolbarNumber(count))
+			counter := ui.Text(c.Key("location-count"), toolbarNumber(count)).FontSize(12).TextColor(t.TextMuted).SingleLine().Shrink(0)
+			if strings.TrimSpace(a.Query.Search) != "" {
+				counter.Label(label).Tooltip(label).Role(ui.RoleStatus)
+			}
+		})
+		if width < 540 {
+			search := toolbarIconButton(c.Key("compact-search"), a.T("search_assets"), "search")
+			if search.Clicked() {
+				a.Toolbar.SearchOpen = !a.Toolbar.SearchOpen
+				a.Search.Focus()
+			}
+			frostedPopover(c.Key("search-popover"), search, &a.Toolbar.SearchOpen, func() { a.toolbarSearch(c, true, hint) }).Width(320)
+		} else {
+			a.Toolbar.SearchOpen = false
+			a.toolbarSearch(c, !compact, hint)
+		}
+		if width >= 920 {
 			a.Toolbar.ThumbnailOpen = false
 			a.thumbnailSizeSlider(c.Key("inline-thumbnail-size"))
 		} else {
@@ -68,6 +110,7 @@ func (a *App) toolbar(c *ui.Context) {
 				a.Toolbar.ThumbnailOpen = !a.Toolbar.ThumbnailOpen
 				a.Toolbar.FilterOpen = false
 				a.Toolbar.SortOpen = false
+				a.Toolbar.ViewOpen = false
 			}
 			if a.ViewMode == 2 {
 				a.Toolbar.ThumbnailOpen = false
@@ -77,7 +120,7 @@ func (a *App) toolbar(c *ui.Context) {
 					ui.Text(c, a.T("thumbnail_size")).FontSize(12).Bold()
 					a.thumbnailSizeSlider(c.Key("popover-thumbnail-size"))
 				})
-			}).Width(152)
+			}).Width(160)
 		}
 		filter := toolbarIconButton(c.Key("filter"), a.T("filter"), "filter")
 		if len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions) > 0 {
@@ -87,6 +130,7 @@ func (a *App) toolbar(c *ui.Context) {
 			a.Toolbar.FilterOpen = !a.Toolbar.FilterOpen
 			a.Toolbar.SortOpen = false
 			a.Toolbar.ThumbnailOpen = false
+			a.Toolbar.ViewOpen = false
 		}
 		frostedPopover(c.Key("filters"), filter, &a.Toolbar.FilterOpen, func() { a.filterPanel(c) }).Width(340).MaxHeight(560)
 		sort := toolbarIconButton(c.Key("sort"), a.T("sort"), "sort").Disabled(a.Query.Scope == "random")
@@ -98,10 +142,45 @@ func (a *App) toolbar(c *ui.Context) {
 			a.Toolbar.SortOpen = !a.Toolbar.SortOpen
 			a.Toolbar.FilterOpen = false
 			a.Toolbar.ThumbnailOpen = false
+			a.Toolbar.ViewOpen = false
 		}
 		frostedPopover(c.Key("sorting"), sort, &a.Toolbar.SortOpen, func() { a.sortPanel(c) }).Width(220)
-		a.viewSwitcher(c)
-		toolbarIconButton(c.Key("import"), a.T("import"), "import").Disabled(a.Busy).Menu(func(m *ui.Menu) {
+		if compact {
+			view := toolbarIconButton(c.Key("view-menu"), a.T("view_mode"), []string{"masonry", "grid", "list"}[a.ViewMode])
+			if view.Clicked() {
+				a.Toolbar.ViewOpen = !a.Toolbar.ViewOpen
+				a.Toolbar.FilterOpen = false
+				a.Toolbar.SortOpen = false
+				a.Toolbar.ThumbnailOpen = false
+			}
+			frostedPopover(c.Key("view-popover"), view, &a.Toolbar.ViewOpen, func() { a.viewSwitcher(c) }).Width(120)
+		} else {
+			a.Toolbar.ViewOpen = false
+			a.viewSwitcher(c)
+		}
+		if toolbarIconButton(c.Key("preview"), a.T("preview"), "slideshow").Disabled(len(a.Visible) == 0 || a.TagPage).Clicked() {
+			id := a.Visible[0].ID
+			if selected := a.SelectedAssets(); len(selected) > 0 {
+				id = selected[0].ID
+			}
+			a.ShowPreview(id, false)
+		}
+		button := toolbarButton(c.Key("import"), a.T("import")).Background(t.Accent).TextColor(t.AccentText).Disabled(a.Busy)
+		if button.Pressed() {
+			button.Background(t.AccentPressed)
+		} else if button.Hovered() {
+			button.Background(t.AccentHover)
+		}
+		button.Children(func() {
+			appIcon(c, "import").Size(20, 20)
+			if width >= 660 {
+				ui.Text(c, a.T("import")).SingleLine().Bold()
+			}
+		})
+		if width >= 660 {
+			button.Width(96).Padding(0, 10).Gap(6)
+		}
+		button.Menu(func(m *ui.Menu) {
 			if m.Item(a.T("import_files")).Chosen() {
 				a.ChooseImport(false)
 			}
@@ -110,7 +189,8 @@ func (a *App) toolbar(c *ui.Context) {
 			}
 		})
 		if version := AvailableUpdateVersion(); version != "" {
-			if ui.PrimaryButton(c.Key("available-update"), a.T("update")).Height(34).Shrink(0).Tooltip(a.T("update_to_version", version)).Clicked() {
+			update := toolbarIconButton(c.Key("available-update"), a.T("update"), "import").Tooltip(a.T("update_to_version", version)).Background(t.Selection)
+			if update.Clicked() {
 				ShowAvailableUpdate()
 			}
 		}
@@ -120,18 +200,55 @@ func (a *App) toolbar(c *ui.Context) {
 	})
 }
 
+func toolbarButton(c *ui.Context, label string) ui.Element {
+	t := c.Theme()
+	button := ui.ButtonBase(c).Label(label).Tooltip(label).Size(32, 34).Shrink(0).Padding(0).Radius(8).Cursor(ui.CursorPointer)
+	if button.Pressed() {
+		button.Background(warmOverlay(t, .11))
+	} else if button.Hovered() {
+		button.Background(warmOverlay(t, .08))
+	}
+	return button
+}
+
 func toolbarIconButton(c *ui.Context, label, name string) ui.Element {
-	return ui.Button(c, "").Label(label).Tooltip(label).Size(32, 34).Padding(0).Radius(8).Children(func() { appIcon(c, name).Size(20, 20) })
+	return toolbarButton(c, label).Children(func() { appIcon(c, name).Size(20, 20) })
+}
+
+func (a *App) toolbarSearch(c *ui.Context, full bool, hint string) {
+	t := c.Theme()
+	field := ui.Row(c.Key("asset-search-field")).Height(34).Grow(1).MinWidth(166).MaxWidth(300).Gap(6).Padding(0, 8).Radius(8).Background(t.Surface.Alpha(.65)).Border(1, t.Border)
+	field.Children(func() {
+		appIcon(c, "search").Size(20, 20).Shrink(0)
+		input := ui.TextInputBase(c.Key("asset-search"), &a.Query.Search).Bind(&a.Search).Search().Placeholder(a.T("search_assets")).Label(a.T("search_assets")).Tooltip(a.T("search_assets")).Grow(1).MinWidth(0).FillHeight().FocusRing(false)
+		if input.Changed() {
+			a.Refine()
+		}
+		if a.Query.Search != "" {
+			if toolbarIconButton(c.Key("clear-search"), a.T("clear_search"), "close").Size(20, 24).Clicked() {
+				a.Query.Search = ""
+				a.Refine()
+				a.Search.Focus()
+			}
+		} else if full && hint != "" {
+			ui.Text(c, hint).FontSize(11).TextColor(t.TextMuted).SingleLine().Shrink(0).Padding(1, 5).Radius(4).Border(1, t.Border)
+		}
+	})
+	if field.FocusWithin() {
+		field.Border(1, t.Focus)
+	}
 }
 
 func (a *App) viewSwitcher(c *ui.Context) {
 	t := c.Theme()
 	seg := ui.SegmentedBase(c.Key("view-mode"), &a.ViewMode, 3)
-	seg.Track.Gap(0).Padding(2).Radius(8).Background(t.Surface).Height(34).Label(a.T("view_mode")).Children(func() {
+	seg.Track.Gap(2).Padding(2).Radius(8).Background(warmOverlay(t, .04)).Border(1, t.Border).Height(34).Shrink(0).Label(a.T("view_mode")).Children(func() {
 		for i, item := range []struct{ ID, Label string }{{"masonry", "view_masonry"}, {"grid", "view_grid"}, {"list", "view_list"}} {
-			part := seg.Segment(i).Size(28, 30).Padding(0).Center().Radius(6).Label(a.T(item.Label)).Tooltip(a.T(item.Label))
+			part := seg.Segment(i).Size(28, 28).Padding(0).Center().Radius(4).Cursor(ui.CursorPointer).Label(a.T(item.Label)).Tooltip(a.T(item.Label))
 			if a.ViewMode == i {
 				part.Background(t.Background).Border(1, t.Border)
+			} else if part.Hovered() {
+				part.Background(warmOverlay(t, .08))
 			}
 			part.Children(func() { appIcon(c, item.ID).Size(20, 20) })
 		}
@@ -171,11 +288,7 @@ func (a *App) filterPanel(c *ui.Context) {
 							swatch := ui.Hex(family.Hex)
 							ui.Box(c).Size(22, 22).Radius(11).Background(swatch).Border(1, c.Theme().Border).Center().Children(func() {
 								if chosen {
-									checkColor := ui.RGB(255, 255, 255)
-									if 299*int(swatch.R)+587*int(swatch.G)+114*int(swatch.B) > 150000 {
-										checkColor = ui.RGB(17, 24, 39)
-									}
-									ui.Icon(c, toolbarColorCheck).Size(14, 14).TextColor(checkColor).PassThrough()
+									ui.Image(c, toolbarColorCheck).Size(14, 14).PassThrough()
 								}
 							})
 						})
@@ -304,7 +417,7 @@ func (a *App) toolbarWidth(c *ui.Context) float32 {
 			width -= a.SidebarWidth + 1
 		}
 		if a.InspectorVisible {
-			width -= 281
+			width -= 280
 		}
 	}
 	return width
@@ -313,14 +426,14 @@ func (a *App) toolbarWidth(c *ui.Context) float32 {
 func (a *App) thumbnailSizeSlider(c *ui.Context) {
 	ui.Row(c.Key("thumbnail-size-control")).Width(120).Shrink(0).Gap(4).AlignItems(ui.Center).Children(func() {
 		disabled := a.ViewMode == 2
-		if ui.Button(c.Key("thumbnail-smaller"), "−").Label(a.T("thumbnail_smaller")).Tooltip(a.T("thumbnail_smaller")).Size(20, 28).Padding(0).Disabled(disabled || a.thumbnailScale() <= .5).Clicked() {
+		if toolbarIconButton(c.Key("thumbnail-smaller"), a.T("thumbnail_smaller"), "thumbnail-size").Size(24, 28).Disabled(disabled || a.thumbnailScale() <= .5).Clicked() {
 			a.ChangeThumbnailSize(-.1)
 		}
 		size := float64(a.thumbnailScale())
 		if ui.Slider(c.Key("thumbnail-size"), &size, .5, 2).Label(a.T("thumbnail_size")).Tooltip(a.T("thumbnail_size")).Grow(1).MinWidth(0).Basis(0).Disabled(disabled).Changed() {
 			a.SetThumbnailSize(float32(size))
 		}
-		if ui.Button(c.Key("thumbnail-larger"), "+").Label(a.T("thumbnail_larger")).Tooltip(a.T("thumbnail_larger")).Size(20, 28).Padding(0).Disabled(disabled || a.thumbnailScale() >= 2).Clicked() {
+		if toolbarIconButton(c.Key("thumbnail-larger"), a.T("thumbnail_larger"), "thumbnail-size").Size(28, 28).Disabled(disabled || a.thumbnailScale() >= 2).Clicked() {
 			a.ChangeThumbnailSize(.1)
 		}
 	})
