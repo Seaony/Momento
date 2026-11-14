@@ -92,8 +92,10 @@ func TestSidebarPreferencesHideCountsAndItems(t *testing.T) {
 			t.Fatalf("固定项消失：%s", key)
 		}
 	}
-	if tt.HasText("2") || tt.HasText("1") {
-		t.Fatal("侧栏仍显示数量")
+	for _, text := range tt.Texts() {
+		if text == "2" || text == "1" {
+			t.Fatal("侧栏行仍显示数量")
+		}
 	}
 }
 

@@ -12,7 +12,7 @@ func (a *App) sidebarQuickAccess(c *ui.Context) {
 	if a.sidebarHidden("quick") || len(entries) == 0 {
 		return
 	}
-	ui.Text(c, a.T("quick_access")).FontSize(11).Bold().LetterSpacing(.88).TextColor(c.Theme().TextMuted).Padding(0, 10).Height(28).Margin(19, 0, 0, 0)
+	ui.Text(c, a.T("quick_access")).FontSize(fontGroup).FontWeight(600).LetterSpacing(.88).TextColor(paletteFor(c.Theme()).TextSecondary).Padding(0, space12).Height(28).Margin(space20, 0, 0, 0)
 	a.GBrowsing.QuickList.Key = func(i int) any { return entries[i].ID }
 	a.GBrowsing.QuickList.Label = func(i int) string { name, _, _, _ := a.quickAccessTarget(entries[i]); return name }
 	a.GBrowsing.QuickList.Reorder = func(rows []int, to int) {

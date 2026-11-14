@@ -292,7 +292,7 @@ func TestSmartEditorLocalizedTextFits(t *testing.T) {
 						{a.T("error_smart_rule"), a.T("error_smart_rule"), 13, 400, 0},
 					}
 					for i, rule := range a.GBrowsing.SmartRules {
-						checks = append(checks, textCheck{a.T("smart_rule_field", i+1), a.T("smart_field_" + rule.Field), 13, 400, 44}, textCheck{a.T("smart_rule_operator", i+1), a.T("smart_operator_" + rule.Operator), 13, 400, 44})
+						checks = append(checks, textCheck{a.T("smart_rule_field", i+1), a.T("smart_field_" + rule.Field), 13, 400, 48}, textCheck{a.T("smart_rule_operator", i+1), a.T("smart_operator_" + rule.Operator), 13, 400, 48})
 					}
 					measured := make([]ui.Rect, len(checks))
 					tt := ui.NewTester(func(c *ui.Context) {

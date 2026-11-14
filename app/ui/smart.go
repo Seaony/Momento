@@ -117,13 +117,13 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 		ui.TextInput(c.Key("smart-name"), &state.SmartName).FillWidth().Label(a.T("smart_folder_name")).Placeholder(a.T("smart_folder_name")).AutoFocus().Disabled(state.Saving)
 		settingsSegments(c.Key("smart-match"), a.T("smart_match"), &state.SmartMatch, a.T("smart_all"), a.T("smart_any")).Disabled(state.Saving)
 		_, height := c.Size()
-		ui.Scroll(c.Key("smart-rules")).TrackScroll(&state.RulesScroll).MaxHeight(max(120, min(280, height-310))).FillWidth().Gap(8).Children(func() {
+		ui.Scroll(c.Key("smart-rules")).TrackScroll(&state.RulesScroll).MaxHeight(max(120, min(280, height-312))).FillWidth().Gap(space8).Children(func() {
 			remove := -1
 			for i := range state.SmartRules {
 				rule := &state.SmartRules[i]
-				ui.Row(c.Key(i)).FillWidth().Gap(8).Padding(8).Radius(8).Background(c.Theme().Surface).AlignItems(ui.Center).Transition(ui.ElementTransition{Animation: &motionSpring, Height: true, Enter: &ui.Motion{Collapse: true}, Exit: &ui.Motion{Collapse: true}}).Children(func() {
+				ui.Row(c.Key(i)).FillWidth().Gap(space8).Padding(space8).Radius(radiusControl).Background(paletteFor(c.Theme()).Subtle).AlignItems(ui.Center).Transition(ui.ElementTransition{Animation: &motionSpring, Height: true, Enter: &ui.Motion{Collapse: true}, Exit: &ui.Motion{Collapse: true}}).Children(func() {
 					previous := rule.Field
-					smartSelect(c.Key("field"), &rule.Field, smartFields, func(key string) string { return a.T("smart_field_" + key) }).Width(132).Label(a.T("smart_rule_field", i+1)).Disabled(state.Saving)
+					smartSelect(c.Key("field"), &rule.Field, smartFields, func(key string) string { return a.T("smart_field_" + key) }).Width(144).Label(a.T("smart_rule_field", i+1)).Disabled(state.Saving)
 					if previous != rule.Field {
 						rule.Operator = smartOperators(rule.Field)[0]
 						rule.Value = ""
@@ -144,9 +144,9 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 			state.SmartRules = append(state.SmartRules, model.SmartRule{Field: "name", Operator: "contains"})
 		}
 		if state.SmartError != "" {
-			ui.Text(c, state.SmartError).TextColor(c.Theme().Danger).Role(ui.RoleStatus)
+			ui.Text(c, state.SmartError).TextColor(paletteFor(c.Theme()).Danger).Role(ui.RoleStatus)
 		}
-		ui.Row(c).FillWidth().Justify(ui.End).Gap(8).Children(func() {
+		ui.Row(c).FillWidth().Justify(ui.End).Gap(space8).Children(func() {
 			if settingsButton(c, a.T("cancel")).Height(32).Disabled(state.Saving).Clicked() {
 				state.SmartOpen = false
 			}
@@ -188,31 +188,32 @@ func smartSelect(c *ui.Context, value *string, options []string, label func(stri
 		}
 	}
 	selectParts := ui.SelectBase(c, &chosen)
-	control := selectParts.Trigger.Height(32).Padding(4, 10).Gap(8).Radius(8).Border(1, c.Theme().Border).Background(c.Theme().Background).Cursor(ui.CursorPointer)
-	background := c.Theme().Background
+	control := selectParts.Trigger.Height(32).Padding(space4, space12).Gap(space8).Radius(radiusControl).Border(1, paletteFor(c.Theme()).Border).Background(paletteFor(c.Theme()).Raised).Cursor(ui.CursorPointer)
+	background := paletteFor(c.Theme()).Raised
 	if control.Pressed() {
-		background = c.Theme().SurfacePressed
+		background = paletteFor(c.Theme()).Pressed
 	} else if control.Hovered() {
-		background = c.Theme().SurfaceHover
+		background = paletteFor(c.Theme()).Hover
 	}
-	animateColors(control, background, c.Theme().Text)
+	animateColors(control, background, paletteFor(c.Theme()).Text)
 	control.Children(func() {
-		ui.Text(c, chosen).FontSize(13).SingleLine().Grow(1).MinWidth(0)
+		ui.Text(c, chosen).FontSize(fontBody).SingleLine().Grow(1).MinWidth(0)
 		sidebarRowIcon(c, "chevron-down", false, control.Hovered()).Size(14, 14).Shrink(0)
 	})
 	selectParts.Popup(func(panel ui.Element) {
-		popupMotion(panel).Margin(4, 0, 0, 0).Padding(4).Radius(12).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border)
-		ui.Scroll(c).MaxHeight(280).FillWidth().Gap(4).Children(func() {
+		elevated(popupMotion(panel), c.Theme()).Margin(space4, 0, 0, 0).Padding(space4).Radius(radiusPanel).Material(panelMaterial(c.Theme())).Border(1, paletteFor(c.Theme()).BorderSubtle)
+		ui.Scroll(c).MaxHeight(280).FillWidth().Gap(space4).Children(func() {
 			for i, name := range names {
-				item := selectParts.Item(name).Height(32).FillWidth().Padding(4, 10).Radius(8).Cursor(ui.CursorPointer)
+				item := selectParts.Item(name).Height(32).FillWidth().Padding(space4, space12).Radius(radiusControl).Cursor(ui.CursorPointer)
 				background := ui.Color{}
 				if item.Highlighted() || item.Hovered() {
-					background = c.Theme().Selection
+					background = paletteFor(c.Theme()).Hover
 				} else if options[i] == *value {
-					background = c.Theme().Surface
+					background = paletteFor(c.Theme()).Selected
+					elevated(item, c.Theme())
 				}
-				animateColors(item, background, c.Theme().Text)
-				item.Children(func() { ui.Text(c, name).FontSize(13).SingleLine() })
+				animateColors(item, background, paletteFor(c.Theme()).Text)
+				item.Children(func() { ui.Text(c, name).FontSize(fontBody).SingleLine() })
 			}
 		})
 	})
@@ -231,7 +232,7 @@ func (a *App) smartRuleValue(c *ui.Context, rule *model.SmartRule, index int) {
 	label := a.T("smart_rule_value", index+1)
 	if rule.Field == "tag" {
 		if len(a.Snapshot.Tags) == 0 {
-			ui.Text(c, a.T("no_tags")).FontSize(12).TextColor(c.Theme().TextMuted).Grow(1).MinWidth(0)
+			ui.Text(c, a.T("no_tags")).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary).Grow(1).MinWidth(0)
 			return
 		}
 		ids := make([]string, 0, len(a.Snapshot.Tags))
@@ -261,9 +262,12 @@ func (a *App) smartRuleValue(c *ui.Context, rule *model.SmartRule, index int) {
 	case "size":
 		unit = a.T("smart_megabytes")
 	}
-	ui.TextInput(c, &rule.Value).Grow(1).MinWidth(0).Label(label).Placeholder(placeholder).Disabled(a.GBrowsing.Saving)
+	input := ui.TextInput(c, &rule.Value).Grow(1).MinWidth(0).Label(label).Placeholder(placeholder).Disabled(a.GBrowsing.Saving)
+	if rule.Field == "added" || rule.Field == "width" || rule.Field == "height" || rule.Field == "size" {
+		input.Font(monoFont(c))
+	}
 	if unit != "" {
-		ui.Text(c, unit).FontSize(12).TextColor(c.Theme().TextMuted).Shrink(0)
+		ui.Text(c, unit).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary).Shrink(0)
 	}
 }
 func (a *App) smartDraft() (model.SmartFolder, error) {
