@@ -84,16 +84,17 @@ func (a *App) ShowPasswordSettings(mode string) {
 }
 
 func (a *App) lockScreen(c *ui.Context) {
-	backdrop := ui.Column(c.Key("lock-screen")).Fill().Padding(max(MainToolbarHeight, c.TitleBar().Bottom+16), 24, 24, 24).
+	backdrop := ui.Column(c.Key("lock-screen")).Fill().Padding(max(MainToolbarHeight, c.TitleBar().Bottom+space16), space24, space24, space24).
 		Center().Material(frostedSurface{tint: c.Theme().Background.Alpha(.78), blur: 28}).DragWindow()
 	backdrop.Children(func() {
-		panel := ui.Column(c.Key("unlock-panel")).Width(400).MaxWidthPercent(100).Padding(24).Center().Gap(16).Radius(12).
-			Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border)
+		panel := ui.Column(c.Key("unlock-panel")).Width(400).MaxWidthPercent(100).Padding(space24).Center().Gap(space16).Radius(radiusPanel).
+			Material(panelMaterial(c.Theme()))
+		elevated(panel, c.Theme())
 		dialogMotion(backdrop, panel)
 		panel.Children(func() {
 			ui.Image(c, appLogo).Size(80, 80).Fit(ui.Contain)
-			ui.Text(c, a.T("password_locked")).FontSize(24).Bold().TextColor(titleColor(c.Theme()))
-			ui.Column(c).FillWidth().Gap(12).Children(func() {
+			ui.Text(c, a.T("password_locked")).FontSize(16).FontWeight(600).TextColor(paletteFor(c.Theme()).Text)
+			ui.Column(c).FillWidth().Gap(space12).Children(func() {
 				input := ui.TextInput(c.Key([2]any{"unlock-password", a.Lock.EditorSession}), &a.Lock.Password).
 					Password().AutoFocus().Label(a.T("password_enter")).Placeholder(a.T("password_enter")).FillWidth().
 					Disabled(a.PasswordOperationPending() || a.passwordCooldown() > 0)
@@ -118,34 +119,35 @@ func (a *App) passwordSettingsDialog(c *ui.Context) {
 	}
 	ui.Overlay(c, func() {
 		back := ui.Column(c.Key("password-settings-backdrop")).Absolute().Left(0).Top(0).Right(0).Bottom(0).
-			Center().Material(frostedSurface{tint: ui.Hex("#211A16").Alpha(.42), blur: 12}).Modal()
+			Center().Material(frostedSurface{tint: paletteFor(c.Theme()).Scrim, blur: 12}).Modal()
 		back.Children(func() {
 			title := a.T("password_dialog_" + a.Lock.Mode)
 			panel := ui.Column(c.Key("password-settings")).Width(420).MaxWidthPercent(92).MaxHeightPercent(92).
-				Padding(24).Gap(12).Radius(12).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border).
+				Padding(space24).Gap(space12).Radius(radiusPanel).Material(panelMaterial(c.Theme())).
 				Role(ui.RoleDialog).Label(title)
+			elevated(panel, c.Theme())
 			dialogMotion(back, panel)
 			panel.Children(func() {
 				dialogHeading(c, "lock", title)
 				var submit bool
 				if a.Lock.Mode != "enable" {
-					ui.Text(c, a.T("password_current")).Bold()
+					ui.Text(c, a.T("password_current")).FontWeight(600)
 					input := ui.TextInput(c.Key([2]any{"current-password", a.Lock.EditorSession}), &a.Lock.CurrentPassword).
 						Password().Label(a.T("password_current")).FillWidth().Disabled(a.PasswordOperationPending())
 					submit = input.Submitted()
 				}
 				if a.Lock.Mode != "disable" {
-					ui.Text(c, a.T("password_new")).Bold()
+					ui.Text(c, a.T("password_new")).FontWeight(600)
 					ui.TextInput(c.Key([2]any{"new-password", a.Lock.EditorSession}), &a.Lock.NewPassword).
 						Password().Label(a.T("password_new")).FillWidth().Disabled(a.PasswordOperationPending())
-					ui.Text(c, a.T("password_confirm")).Bold()
+					ui.Text(c, a.T("password_confirm")).FontWeight(600)
 					input := ui.TextInput(c.Key([2]any{"confirm-password", a.Lock.EditorSession}), &a.Lock.ConfirmPassword).
 						Password().Label(a.T("password_confirm")).FillWidth().Disabled(a.PasswordOperationPending())
 					submit = submit || input.Submitted()
-					ui.Text(c, a.T("password_minimum")).FontSize(12).TextColor(c.Theme().TextMuted)
+					ui.Text(c, a.T("password_minimum")).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary)
 				}
 				a.passwordFeedback(c)
-				ui.Row(c).Gap(8).Justify(ui.End).Margin(4, 0, 0, 0).Children(func() {
+				ui.Row(c).Gap(space8).Justify(ui.End).Margin(space4, 0, 0, 0).Children(func() {
 					if settingsButton(c, a.T("cancel")).Disabled(a.PasswordOperationPending()).Clicked() {
 						a.closePasswordDialog()
 					}
@@ -176,14 +178,14 @@ func (a *App) passwordSettingsDialog(c *ui.Context) {
 func (a *App) passwordFeedback(c *ui.Context) {
 	if remaining := a.passwordCooldown(); remaining > 0 {
 		seconds := int((remaining + time.Second - 1) / time.Second)
-		ui.Text(c, a.T("password_cooldown", seconds)).TextColor(c.Theme().Danger)
+		ui.Text(c, a.T("password_cooldown", seconds)).Font(monoFont(c)).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).Danger)
 		c.After(time.Second)
 	} else if a.Lock.ErrorKey != "" && a.Lock.ErrorKey != "password_cooldown" {
 		text := a.T(a.Lock.ErrorKey)
 		if a.Lock.ErrorKey == "password_save_failed" {
 			text = a.T(a.Lock.ErrorKey, a.Lock.Detail)
 		}
-		ui.Text(c, text).TextColor(c.Theme().Danger)
+		ui.Text(c, text).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).Danger)
 	}
 }
 

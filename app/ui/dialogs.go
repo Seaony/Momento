@@ -40,9 +40,9 @@ func (a *App) dialogs(c *ui.Context) {
 }
 
 func dialogHeading(c *ui.Context, icon, title string) {
-	ui.Row(c).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
-		appIcon(c, icon).Size(18, 18).TextColor(c.Theme().TextMuted)
-		ui.Text(c, title).FontSize(20).Bold().TextColor(titleColor(c.Theme())).Grow(1)
+	ui.Row(c).FillWidth().Gap(space8).AlignItems(ui.Center).Children(func() {
+		appIcon(c, icon).Size(18, 18).TextColor(paletteFor(c.Theme()).TextSecondary)
+		ui.Text(c, title).FontSize(16).FontWeight(600).TextColor(paletteFor(c.Theme()).Text).Grow(1)
 	})
 }
 
@@ -53,26 +53,27 @@ func (a *App) confirmationDialog(c *ui.Context) {
 	confirmed := false
 	ui.Overlay(c.Key("confirmation"), func() {
 		backdrop := ui.Column(c).Absolute().Left(0).Top(0).Right(0).Bottom(0).Center().
-			Material(frostedSurface{tint: ui.Hex("#211A16").Alpha(.42), blur: 12}).Modal()
+			Material(frostedSurface{tint: paletteFor(c.Theme()).Scrim, blur: 12}).Modal()
 		if backdrop.OverlayShortcut(0, ui.KeyEscape) {
 			a.ConfirmOpen = false
 		}
 		backdrop.Children(func() {
-			panel := ui.Column(c).Width(420).MaxWidthPercent(92).Padding(24).Gap(12).Radius(12).
-				Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border).
+			panel := ui.Column(c).Width(420).MaxWidthPercent(92).Padding(space24).Gap(space12).Radius(radiusPanel).
+				Material(panelMaterial(c.Theme())).
 				Role(ui.RoleAlertDialog).Label(a.ConfirmTitle).Description(a.ConfirmDetail)
+			elevated(panel, c.Theme())
 			dialogMotion(backdrop, panel)
 			panel.Children(func() {
 				dialogHeading(c, "warning", a.ConfirmTitle)
 				if a.ConfirmDetail != "" {
-					ui.Text(c, a.ConfirmDetail).FillWidth().TextColor(c.Theme().TextMuted)
+					ui.Text(c, a.ConfirmDetail).FillWidth().TextColor(paletteFor(c.Theme()).TextSecondary)
 				}
-				ui.Row(c).FillWidth().Wrap().Justify(ui.End).Gap(8).Margin(8, 0, 0, 0).Children(func() {
+				ui.Row(c).FillWidth().Wrap().Justify(ui.End).Gap(space8).Margin(space8, 0, 0, 0).Children(func() {
 					if settingsButton(c, a.T("cancel")).Clicked() {
 						a.ConfirmOpen = false
 					}
 					confirm := primaryButton(c, a.T("confirm"), false).AutoFocus().TextColor(c.Theme().InverseText)
-					color := c.Theme().Danger
+					color := paletteFor(c.Theme()).Danger
 					if confirm.Pressed() {
 						color = color.Mix(c.Theme().Text, .15)
 					} else if confirm.Hovered() {
@@ -98,19 +99,19 @@ func (a *App) confirmationDialog(c *ui.Context) {
 func (a *App) newLibraryDialog(c *ui.Context) {
 	settingsPanel(c.Key("new-library"), &a.NewLibraryOpen, 460, func() {
 		dialogHeading(c, "create-library", a.T("new_library"))
-		ui.Text(c, a.T("new_library_detail")).TextColor(c.Theme().TextMuted)
-		ui.Text(c, a.T("library_name")).Bold().Margin(4, 0, 0, 0)
+		ui.Text(c, a.T("new_library_detail")).TextColor(paletteFor(c.Theme()).TextSecondary)
+		ui.Text(c, a.T("library_name")).FontWeight(600).Margin(space4, 0, 0, 0)
 		name := ui.TextInput(c.Key("library-name"), &a.Dialog.NewName).Label(a.T("library_name")).AutoFocus().FillWidth().Disabled(a.Busy || a.Dialog.Picking)
-		ui.Text(c, a.T("location")).Bold().Margin(4, 0, 0, 0)
+		ui.Text(c, a.T("location")).FontWeight(600).Margin(space4, 0, 0, 0)
 		location := a.Dialog.NewPath
 		if location == "" {
 			location = a.T("choose_library_location")
 		}
-		ui.Text(c, location).FontSize(12).TextColor(c.Theme().TextMuted).SingleLine().Tooltip(location)
+		ui.Text(c, location).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary).SingleLine().Tooltip(location)
 		if settingsButton(c, a.T("choose_location")).FillWidth().Disabled(a.Busy || a.Dialog.Picking || strings.TrimSpace(a.Dialog.NewName) == "").Clicked() {
 			a.pickLibraryLocation()
 		}
-		ui.Row(c).Gap(8).Justify(ui.End).Margin(8, 0, 0, 0).Children(func() {
+		ui.Row(c).Gap(space8).Justify(ui.End).Margin(space8, 0, 0, 0).Children(func() {
 			if settingsButton(c, a.T("cancel")).Disabled(a.Busy || a.Dialog.Picking).Clicked() {
 				a.NewLibraryOpen = false
 			}
@@ -159,27 +160,27 @@ func libraryPackageName(name string) string {
 func (a *App) exportDialog(c *ui.Context) {
 	settingsPanel(c.Key("export"), &a.ExportOpen, 420, func() {
 		dialogHeading(c, "export", a.T("export"))
-		ui.Text(c, a.T("export_count", a.Selected.Len())).TextColor(c.Theme().TextMuted)
+		ui.Text(c, a.T("export_count", a.Selected.Len())).Font(monoFont(c)).FontSize(fontNumber).TextColor(paletteFor(c.Theme()).TextSecondary)
 		for _, asset := range a.SelectedAssets() {
 			if asset.Rotation != 0 {
-				ui.Text(c, a.T("export_rotation_metadata_hint")).FontSize(12).TextColor(c.Theme().TextMuted)
+				ui.Text(c, a.T("export_rotation_metadata_hint")).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary)
 				break
 			}
 		}
-		ui.Text(c, a.T("export_format")).Bold().Margin(4, 0, 0, 0)
+		ui.Text(c, a.T("export_format")).FontWeight(600).Margin(space4, 0, 0, 0)
 		ui.RadioGroup(c, func() {
 			animatedRadio(c, &a.Dialog.Format, model.ExportOriginal, a.T("export_original"))
 			animatedRadio(c, &a.Dialog.Format, model.ExportJPEG, a.T("export_jpeg"))
 			animatedRadio(c, &a.Dialog.Format, model.ExportPNG, a.T("export_png"))
 		}).Label(a.T("export_format")).Disabled(a.Dialog.Picking)
 		if a.Dialog.Format == model.ExportJPEG {
-			fadeMotion(ui.Row(c.Key("jpeg-quality-title")).Margin(4, 0, 0, 0)).Children(func() {
-				ui.Text(c, a.T("jpeg_quality")).Bold().Grow(1)
-				ui.Text(c, fmt.Sprintf("%.0f%%", a.Dialog.Quality*100)).TextColor(c.Theme().TextMuted)
+			fadeMotion(ui.Row(c.Key("jpeg-quality-title")).Margin(space4, 0, 0, 0)).Children(func() {
+				ui.Text(c, a.T("jpeg_quality")).FontWeight(600).Grow(1)
+				ui.Text(c, fmt.Sprintf("%.0f%%", a.Dialog.Quality*100)).Font(monoFont(c)).FontSize(fontNumber).TextColor(paletteFor(c.Theme()).TextSecondary)
 			})
 			fadeMotion(ui.Slider(c.Key("jpeg-quality"), &a.Dialog.Quality, 0.01, 1).Label(a.T("jpeg_quality")).FillWidth()).Disabled(a.Dialog.Picking)
 		}
-		ui.Row(c).Gap(8).Justify(ui.End).Margin(8, 0, 0, 0).Children(func() {
+		ui.Row(c).Gap(space8).Justify(ui.End).Margin(space8, 0, 0, 0).Children(func() {
 			if settingsButton(c, a.T("cancel")).Disabled(a.Dialog.Picking).Clicked() {
 				a.ExportOpen = false
 			}
@@ -238,9 +239,9 @@ func exportDialogFileName(asset model.Asset, format model.ExportFormat) string {
 
 func (a *App) promptDialog(c *ui.Context) {
 	settingsPanel(c.Key("text-prompt"), &a.PromptOpen, 420, func() {
-		ui.Text(c, a.PromptTitle).FontSize(20).Bold().TextColor(titleColor(c.Theme()))
+		ui.Text(c, a.PromptTitle).FontSize(16).FontWeight(600).TextColor(paletteFor(c.Theme()).Text)
 		input := ui.TextInput(c.Key("prompt-value"), &a.PromptValue).Label(a.PromptTitle).AutoFocus().FillWidth()
-		ui.Row(c).Gap(8).Justify(ui.End).Margin(8, 0, 0, 0).Children(func() {
+		ui.Row(c).Gap(space8).Justify(ui.End).Margin(space8, 0, 0, 0).Children(func() {
 			if settingsButton(c, a.T("cancel")).Clicked() {
 				a.PromptOpen = false
 				a.PromptSubmit = nil
@@ -264,11 +265,11 @@ func (a *App) errorDialog(c *ui.Context) {
 	settingsPanel(c.Key("error"), &open, 500, func() {
 		dialogHeading(c, "warning", a.T("operation_failed"))
 		ui.Scroll(c).MaxHeight(180).Children(func() {
-			ui.Text(c, a.Error).Selectable().TextColor(c.Theme().Danger)
+			ui.Text(c, a.Error).Selectable().TextColor(paletteFor(c.Theme()).Danger)
 		})
-		ui.Text(c, a.T("log_location")).Bold().Margin(4, 0, 0, 0)
-		ui.Text(c, logging.Directory()).FontSize(12).TextColor(c.Theme().TextMuted).Selectable()
-		ui.Row(c).Gap(8).Justify(ui.End).Margin(8, 0, 0, 0).Children(func() {
+		ui.Text(c, a.T("log_location")).FontWeight(600).Margin(space4, 0, 0, 0)
+		ui.Text(c, logging.Directory()).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary).Selectable()
+		ui.Row(c).Gap(space8).Justify(ui.End).Margin(space8, 0, 0, 0).Children(func() {
 			if settingsButton(c, a.T("copy_error")).Clicked() {
 				details := a.Error + "\n" + a.T("log_location") + ": " + logging.Directory()
 				c.WriteClipboardThen(details, func(err error) {
