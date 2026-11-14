@@ -264,7 +264,7 @@ func displayShortcut(value string) string {
 }
 
 func (a *App) shortcutsSettings(c *ui.Context) {
-	ui.SearchField(c.Key("shortcut-search"), &a.Settings.ShortcutSearch).Label(a.T("shortcut_search")).Placeholder(a.T("shortcut_search")).FillWidth()
+	ui.SearchField(c.Key("shortcut-search"), &a.Settings.ShortcutSearch).Label(a.T("shortcut_search")).Placeholder(a.T("shortcut_search")).Height(32).Radius(8).FillWidth()
 	for _, group := range []string{"global", "file", "edit", "view", "preview"} {
 		definitions := []ShortcutDefinition{}
 		for _, definition := range ShortcutDefinitions {
@@ -278,7 +278,7 @@ func (a *App) shortcutsSettings(c *ui.Context) {
 		ui.Column(c.Key(group)).FillWidth().Gap(8).Children(func() {
 			ui.Row(c).FillWidth().Padding(0, 4).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, a.T("shortcut_group_"+group)+fmt.Sprintf(" (%d)", len(definitions))).FontSize(12).Bold().TextColor(c.Theme().TextMuted).Grow(1)
-				if ui.Button(c, a.T("restore_defaults")).Height(24).FontSize(12).Clicked() {
+				if settingsButton(c, a.T("restore_defaults")).Clicked() {
 					a.ResetShortcuts(group)
 				}
 			})
@@ -305,7 +305,7 @@ func (a *App) shortcutRow(c *ui.Context, definition ShortcutDefinition) {
 		if recording {
 			label = a.T("shortcut_recording")
 		}
-		button := ui.Button(c.Key("record"), label).MinWidth(132).Height(28).Label(a.T("shortcut_binding", a.T(definition.Key)))
+		button := settingsButton(c.Key("record"), label).MinWidth(132).Border(1, c.Theme().Border).Label(a.T("shortcut_binding", a.T(definition.Key)))
 		if recording {
 			button.Border(1, c.Theme().Accent).Focus().HandleInput(func(event ui.InputEvent) bool {
 				if event.Kind != ui.InputKeyDown {
