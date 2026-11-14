@@ -199,7 +199,7 @@ func (a *App) OpenWindow() {
 		TitleBarStyle: mygo.TitleBarHiddenInset, TitleBarHeight: 60,
 		TrafficLightPosition: &mygo.Point{X: 14, Y: 23},
 		Vibrancy:             mygo.VibrancySidebar,
-		BackgroundColor:      "light-dark(#FFFAF5, #211A16)", Content: ui.View(a.View),
+		BackgroundColor:      WindowBackgroundColor(), Content: ui.View(a.View),
 	})
 	a.Thumbnails = newThumbnailCache(func(fn func()) { a.Window.Update(fn) })
 	a.Window.OnFileDrop(func(e *mygo.FileDropEvent) { a.ImportPaths(e.Paths) })

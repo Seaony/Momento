@@ -22,7 +22,7 @@ func showSettingsWindow(a *appui.App) {
 		TitleBarStyle: mygo.TitleBarHiddenInset, TitleBarHeight: 44,
 		TrafficLightPosition: &mygo.Point{X: 14, Y: 15},
 		Vibrancy:             mygo.VibrancySidebar,
-		BackgroundColor:      "light-dark(#FFFAF5, #211A16)", Content: ui.View(a.SettingsView),
+		BackgroundColor:      appui.WindowBackgroundColor(), Content: ui.View(a.SettingsView),
 	})
 	a.ApplyWindowZoom()
 	a.SettingsWindow.OnClosed(func() {

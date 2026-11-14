@@ -25,6 +25,21 @@ func themeContrast(a, b ui.Color) float64 {
 	return (max(x, y) + .05) / (min(x, y) + .05)
 }
 
+func TestDesignPaletteLabelsAndOpaqueBorders(t *testing.T) {
+	for _, p := range []*designPalette{&lightPalette, &darkPalette} {
+		for _, line := range []ui.Color{p.Border, p.BorderSubtle} {
+			if line.A != 255 {
+				t.Fatal("边线叠到系统材质上会变色")
+			}
+		}
+		for _, background := range []ui.Color{p.Background, p.Sidebar, p.Raised, p.Subtle} {
+			if contrast := themeContrast(p.TextTertiary, background); contrast < 4.5 {
+				t.Errorf("三级标签在表面上的对比度 %.2f < 4.5", contrast)
+			}
+		}
+	}
+}
+
 func TestThemeTextContrast(t *testing.T) {
 	for _, key := range themeKeys {
 		for _, dark := range []bool{false, true} {

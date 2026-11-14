@@ -242,6 +242,8 @@ var messages = map[string][3]string{
 	"exif_flash_false":               {"未闪光", "Did not fire", "発光なし"},
 	"move_to_root":                   {"移到文件夹最外层", "Move to Root", "最上位に移動"},
 	"library_menu":                   {"图库菜单", "Library Menu", "ライブラリメニュー"},
+	"library_image_count":            {"%s 张图片", "%s images", "画像 %s 枚"},
+	"library_image_count_one":        {"1 张图片", "1 image", "画像 1 枚"},
 	"toggle_folder":                  {"展开或收起「%s」", "Expand or collapse “%s”", "「%s」を展開／折りたたむ"},
 	"invalid_import_url":             {"导入链接无效", "Invalid import link", "読み込みリンクが無効です"},
 	"menu_file":                      {"文件", "File", "ファイル"},

@@ -9,6 +9,11 @@ import (
 var motionSpring = ui.Animation{Spring: ui.SpringOptions{Duration: 250 * time.Millisecond, Bounce: .04}}
 var motionColor = ui.Animation{Duration: 120 * time.Millisecond}
 
+func elevated(e ui.Element, t *ui.Theme) ui.Element {
+	p := paletteFor(t)
+	return e.Border(1, p.BorderSubtle).Shadow(0, 1, 2, 0, p.Shadow)
+}
+
 type paneWidthMotion struct {
 	target    float32
 	changedAt time.Time
