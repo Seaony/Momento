@@ -28,10 +28,16 @@ func TestMotionColorUsesIntermediateFrames(t *testing.T) {
 	}
 }
 
-func TestPhosphorFoundationHasBothWeights(t *testing.T) {
-	for name, regular := range phosphorRegular {
-		if regular == nil || phosphorFill[name] == nil {
-			t.Fatalf("%s 缺少Regular或Fill", name)
+// 侧栏、设置导航会显示选中态，它们用到的图标都要有填充版。
+func TestIconFoundationHasBothWeights(t *testing.T) {
+	for name, regular := range iconRegular {
+		if regular == nil {
+			t.Fatalf("%s 缺少线性版", name)
+		}
+	}
+	for _, name := range []string{"images", "clock-counter-clockwise", "heart", "shuffle", "tray", "tag-simple", "tag", "folder", "folder-simple-star", "trash", "gear-six", "palette", "mouse-simple", "keyboard", "bell", "lock-simple", "globe", "info"} {
+		if iconFill[name] == nil {
+			t.Fatalf("%s 缺少填充版", name)
 		}
 	}
 }

@@ -66,12 +66,10 @@ var appIconAliases = map[string]string{
 	"arrow-right":        "caret-right",
 	"add":                "plus",
 	"close":              "x",
-	"rotate-left":        "arrow-counter-clockwise",
-	"rotate-right":       "arrow-clockwise",
 	"restore":            "arrow-counter-clockwise",
 }
 
-func phosphorName(name string) string {
+func iconName(name string) string {
 	if canonical, ok := appIconAliases[name]; ok {
 		return canonical
 	}
@@ -79,21 +77,21 @@ func phosphorName(name string) string {
 }
 
 func appIcon(c *ui.Context, name string) ui.Element {
-	return phosphorIcon(c, phosphorName(name), false)
+	return svgIcon(c, iconName(name), false)
 }
 
 func appIconSelected(c *ui.Context, name string, selected bool) ui.Element {
-	return phosphorIcon(c, phosphorName(name), selected)
+	return svgIcon(c, iconName(name), selected)
 }
 
 var toolbarIcons = map[string]*ui.SVG{
-	"thumbnail-size": phosphorRegular["frame-corners"],
-	"filter":         phosphorRegular["funnel-simple"],
-	"sidebar":        phosphorRegular["sidebar-simple"],
-	"inspector":      phosphorRegular["sidebar-simple"],
-	"import":         phosphorRegular["download-simple"],
-	"sort":           phosphorRegular["sort-ascending"],
-	"masonry":        phosphorRegular["squares-four"],
-	"grid":           phosphorRegular["grid-four"],
-	"list":           phosphorRegular["list"],
+	"thumbnail-size": iconRegular["frame-corners"],
+	"filter":         iconRegular["funnel-simple"],
+	"sidebar":        iconRegular["sidebar-simple"],
+	"inspector":      iconRegular["sidebar-simple"],
+	"import":         iconRegular["download-simple"],
+	"sort":           iconRegular["sort-ascending"],
+	"masonry":        iconRegular["squares-four"],
+	"grid":           iconRegular["grid-four"],
+	"list":           iconRegular["list"],
 }

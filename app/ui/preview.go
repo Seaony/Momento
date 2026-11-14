@@ -31,8 +31,6 @@ type previewState struct {
 	animation                       *previewAnimation
 	animationLoading                bool
 	nextFrameAt, wheelAt            time.Time
-	rotationBitmap, rotationPixels  *ui.Bitmap
-	rotationFrom, rotationTo        float32
 	slideDirection                  float32
 	slideFrames                     int
 }
@@ -53,15 +51,6 @@ func (p *previewState) target(root, id string, rotation int) {
 	}
 	if p.targetRoot == root && p.targetID == id && p.targetRotation == rotation {
 		return
-	}
-	if root != "" && p.targetID == id && p.targetRotation != rotation {
-		p.rotationBitmap, p.rotationPixels = p.Bitmap, p.pixelBitmap
-		p.rotationFrom = p.rotationTo
-		delta := (rotation-p.targetRotation+540)%360 - 180
-		p.rotationTo += float32(delta)
-	} else {
-		p.rotationBitmap, p.rotationPixels = nil, nil
-		p.rotationFrom, p.rotationTo = 0, 0
 	}
 	p.Generation++
 	p.targetRoot, p.targetID, p.targetRotation = root, id, rotation
@@ -145,27 +134,13 @@ func (animation *previewAnimation) next() (previewPicture, error) {
 	return previewPicture{smooth, pixelated, &previewAnimation{animation.decoder, frame.Duration, animation.rotation}}, nil
 }
 
-func previewSymbolButton(c *ui.Context, symbol, label string, size float32, disabled bool) ui.Element {
-	p := paletteFor(c.Theme())
-	button := elevated(ui.ButtonBase(c).Size(size, size).Padding(0).Radius(size/2).Material(panelMaterial(c.Theme())), c.Theme()).
-		Label(label).Tooltip(label).Disabled(disabled).Cursor(ui.CursorPointer)
-	background, text := ui.Transparent, p.TextSecondary
-	if button.Pressed() {
-		background, text = p.Pressed, p.Text
-	} else if button.Hovered() {
-		background, text = p.Hover, p.Text
-	}
-	animateColors(button, background, text)
-	button.Children(func() { appIcon(c, symbol).Size(18, 18) })
-	return button
-}
-
+// 图片放在图片卡里，四周留 previewPadding；可缩放、拖动，翻页时左右滑入。
 func (w *previewWindow) viewport(c *ui.Context, a *App) {
 	p, asset := &w.picture, w.asset
 	width, height := c.Size()
-	side := previewImageSide(width, height, asset, len(w.items) > 1)
-	p.viewport = ui.Rect{X: side, Y: previewImageTop, W: width - 2*side, H: height - previewImageTop - previewImageBottom}
-	viewport := ui.Box(c.Key("preview-image")).Absolute().Left(side - previewWindowBorder).Top(previewImageTop - previewWindowBorder).Right(side - previewWindowBorder).Bottom(previewImageBottom - previewWindowBorder)
+	inset := float32(previewPadding)
+	p.viewport = ui.Rect{X: inset, Y: inset, W: width - 2*inset, H: height - 2*inset}
+	viewport := ui.Box(c.Key("preview-image")).Absolute().Left(inset - 1).Top(inset - 1).Right(inset - 1).Bottom(inset - 1)
 	if !p.Open {
 		viewport.PassThrough().AccessHidden(true)
 		return
@@ -174,28 +149,17 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 	if p.slideDirection != 0 {
 		viewport.ChildExit(ui.Motion{X: -64 * p.slideDirection, Scale: .98})
 	}
-	bitmap, bitmapTurn := p.Bitmap, p.rotationTo
-	if p.rotationBitmap != nil {
-		bitmap, bitmapTurn = p.rotationBitmap, p.rotationFrom
-	}
+	bitmap := p.Bitmap
 	if bitmap == nil && p.errorText == "" {
 		bitmap = w.placeholder
 	}
 	if bitmap != nil {
 		bw, bh := bitmap.Size()
-		if p.Bitmap == nil && p.rotationBitmap == nil && asset.Width > 0 && asset.Height > 0 {
+		if p.Bitmap == nil && asset.Width > 0 && asset.Height > 0 {
 			bw, bh = assetDisplaySize(asset)
 		}
-		fitWidth, fitHeight := bw, bh
-		if p.rotationBitmap != nil {
-			if p.Bitmap != nil {
-				fitWidth, fitHeight = p.Bitmap.Size()
-			} else if int(p.rotationTo-p.rotationFrom)%180 != 0 {
-				fitWidth, fitHeight = fitHeight, fitWidth
-			}
-		}
 		oldFit := p.fitZoom
-		p.fitZoom = min(2, previewFitZoom(float32(fitWidth), float32(fitHeight), p.viewport.W, p.viewport.H))
+		p.fitZoom = min(2, previewFitZoom(float32(bw), float32(bh), p.viewport.W, p.viewport.H))
 		if !p.initialized {
 			p.fitMode = w.pinned || a.Preferences.PreviewFit == "fit"
 			p.Zoom = p.fitZoom
@@ -208,37 +172,16 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 		}
 		p.clampPan()
 		viewport.Children(func() {
-			if a.Preferences.PreviewPixelated {
-				if p.rotationPixels != nil {
-					bitmap = p.rotationPixels
-				} else if p.pixelBitmap != nil {
-					bitmap = p.pixelBitmap
-				}
+			if a.Preferences.PreviewPixelated && p.pixelBitmap != nil {
+				bitmap = p.pixelBitmap
 			}
-			photo := previewPhoto(c.Key(struct{ ID string }{asset.ID}), bitmap, radiusPanel, a.Preferences.PreviewChecker, ui.Contain).
-				Absolute().Label(asset.Name).Shadow(0, space4, space16, 0, paletteFor(c.Theme()).Shadow)
-			zoom := p.Zoom
-			if p.rotationBitmap != nil {
-				zoom = photo.AnimateTo("rotation-scale", p.Zoom, motionSpring)
-			} else {
-				photo.Jump("rotation-scale", p.Zoom)
-			}
-			turn := photo.AnimateTo("rotation", p.rotationTo, motionSpring)
-			if p.rotationBitmap != nil {
-				angle := float64(turn-bitmapTurn) * math.Pi / 180
-				cosine, sine := float32(math.Abs(math.Cos(angle))), float32(math.Abs(math.Sin(angle)))
-				rotatedWidth := float32(bw)*cosine + float32(bh)*sine
-				rotatedHeight := float32(bw)*sine + float32(bh)*cosine
-				zoom = min(zoom, previewFitZoom(rotatedWidth, rotatedHeight, p.viewport.W, p.viewport.H))
-			}
-			photoWidth, photoHeight := float32(bw)*zoom, float32(bh)*zoom
+			photo := previewPhoto(c.Key(struct{ ID string }{asset.ID}), bitmap, radiusSmall, a.Preferences.PreviewChecker, ui.Contain).
+				Absolute().Label(asset.Name)
+			photoWidth, photoHeight := float32(bw)*p.Zoom, float32(bh)*p.Zoom
 			photo.Left((p.viewport.W-photoWidth)/2+p.Pan.X).Top((p.viewport.H-photoHeight)/2+p.Pan.Y).Size(photoWidth, photoHeight)
-			photo.Rotate(turn - bitmapTurn)
 			transition := ui.ElementTransition{Animation: &motionSpring, Colors: true, ScaleContent: true,
-				Enter: &ui.Motion{Scale: .94}, Exit: &ui.Motion{Scale: .94}}
-			if p.slideDirection == 0 {
-				transition.Enter = &ui.Motion{Opacity: 1}
-			} else {
+				Enter: &ui.Motion{Opacity: 1}, Exit: &ui.Motion{Scale: .94}}
+			if p.slideDirection != 0 {
 				transition.Enter = &ui.Motion{X: 64 * p.slideDirection, Scale: .98}
 				transition.Exit = &ui.Motion{X: -64 * p.slideDirection, Scale: .98}
 				p.slideFrames++
@@ -248,10 +191,6 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 				}
 			}
 			photo.Transition(transition)
-			if p.rotationBitmap != nil && p.Bitmap != nil && photo.Settled("rotation") && photo.Settled("rotation-scale") {
-				p.rotationBitmap, p.rotationPixels = nil, nil
-				c.Invalidate()
-			}
 		})
 		if p.canPan() {
 			viewport.Cursor(ui.CursorGrab)
@@ -271,15 +210,15 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 		}
 	} else if p.errorText != "" {
 		viewport.Center().Children(func() {
-			ui.Column(c).MaxWidth(560).Padding(space16).Gap(space8).Radius(radiusPanel).Material(panelMaterial(c.Theme())).Children(func() {
+			ui.Column(c).MaxWidth(previewInfoMaxWidth).Padding(space16).Gap(space8).Children(func() {
 				ui.Text(c, a.T("preview_failed")).FontSize(fontBody).FontWeight(600).TextColor(paletteFor(c.Theme()).Text)
 				ui.Text(c, p.errorText).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary)
 			})
 		})
 	}
-	if p.Loading {
-		ui.Text(c, a.T("preview_loading")).Absolute().Top(previewImageTop-previewWindowBorder).Left(width/2).TranslatePercent(-50, 0).
-			FontSize(fontSecondary).Padding(space8, space12).Radius(radiusPanel).Material(panelMaterial(c.Theme())).TextColor(paletteFor(c.Theme()).TextSecondary)
+	if p.Loading && bitmap == nil {
+		ui.Text(c, a.T("preview_loading")).Absolute().Top(height/2).Left(width/2).TranslatePercent(-50, -50).
+			FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary)
 	}
 }
 
@@ -472,7 +411,6 @@ func (w *previewWindow) animatePicture(c *ui.Context, a *App) {
 			if err != nil {
 				p.animation = nil
 				p.errorText = a.Texts.Error(err)
-				w.operationError = p.errorText
 				return
 			}
 			p.Bitmap, p.pixelBitmap, p.animation = picture.bitmap, picture.pixelBitmap, picture.animation

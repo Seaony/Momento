@@ -256,7 +256,7 @@ func (a *App) extensionImportPicker(c *ui.Context) {
 	open := true
 	ui.DialogBase(c.Key("extension-import-picker"), &open, func(backdrop, panel ui.Element) {
 		backdrop.Material(frostedSurface{tint: paletteFor(c.Theme()).Scrim, blur: 12})
-		panel.Width(420).MaxWidthPercent(92).MaxHeightPercent(92).Padding(space24).Gap(space12).Material(panelMaterial(c.Theme())).Radius(radiusPanel).Label(a.T("extension_picker_title"))
+		panel.Width(panelDialog).MaxWidthPercent(92).MaxHeightPercent(92).Padding(space24).Gap(space12).Material(panelMaterial(c.Theme())).Radius(radiusPanel).Label(a.T("extension_picker_title"))
 		elevated(panel, c.Theme())
 		dialogMotion(backdrop, panel)
 		dialogHeading(c, "import", a.T("extension_picker_title"))

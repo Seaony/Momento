@@ -84,9 +84,9 @@ func (a *App) noticeViewport(c *ui.Context) {
 					}
 				})
 				if notice.Action != "" {
-					parts.ActionButton().Padding(4, 8).Children(func() { ui.Text(c, notice.Action) })
+					parts.ActionButton().Padding(space4, space8).Children(func() { ui.Text(c, notice.Action) })
 				}
-				close := parts.CloseButton().Label(a.T("close")).Tooltip(a.T("close")).Size(24, 24).Radius(6).Center()
+				close := parts.CloseButton().Label(a.T("close")).Tooltip(a.T("close")).Size(space24, space24).Radius(radiusCard).Center()
 				background, text := ui.Transparent, c.Theme().TextMuted
 				if close.Hovered() {
 					background, text = c.Theme().SurfaceHover, c.Theme().Text

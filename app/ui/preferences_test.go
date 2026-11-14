@@ -271,3 +271,22 @@ func TestLegacyInspectorPreferenceIsIgnored(t *testing.T) {
 		}
 	}
 }
+
+func TestSmartFoldersPreferenceDefaultsOff(t *testing.T) {
+	if DefaultPreferences().SmartFolders {
+		t.Fatal("智能文件夹应默认关闭")
+	}
+	var p Preferences
+	if err := json.Unmarshal([]byte(`{"theme":"dark","sidebarHidden":["recent"]}`), &p); err != nil {
+		t.Fatal(err)
+	}
+	if p.SmartFolders {
+		t.Fatal("旧偏好缺少字段时智能文件夹应为关闭")
+	}
+	if err := json.Unmarshal([]byte(`{"smartFolders":true}`), &p); err != nil {
+		t.Fatal(err)
+	}
+	if !p.SmartFolders {
+		t.Fatal("打开的智能文件夹开关没有读回")
+	}
+}

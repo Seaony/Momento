@@ -14,8 +14,24 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
+// 智能文件夹总开关；关闭只隐藏入口，数据保留，重新打开后原样回来。
+func (a *App) SetSmartFoldersEnabled(enabled bool) {
+	a.Preferences.SmartFolders = enabled
+	if !enabled {
+		// 正在看智能文件夹就回到全部；在标签页时保持标签页不动。
+		if a.Query.Scope == "smart" {
+			a.navigateScope("all", "", a.TagPage)
+		}
+		// 保存中的表单等它自己结束，其余直接收起。
+		if !a.GBrowsing.Saving {
+			a.GBrowsing.SmartOpen = false
+		}
+	}
+	a.SavePreferences()
+}
+
 func (a *App) sidebarSmartFolders(c *ui.Context) {
-	if a.sidebarHidden("smart") {
+	if !a.Preferences.SmartFolders {
 		return
 	}
 	a.sidebarSectionHeader(c, a.T("smart_folders"), a.T("new_smart_folder"), 16, func() { a.EditSmartFolder("") })
@@ -113,8 +129,8 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 		if state.SmartID != "" {
 			title = a.T("smart_folder_edit_title")
 		}
-		ui.Text(c, title).FontSize(20).Bold().TextColor(titleColor(c.Theme()))
-		ui.TextInput(c.Key("smart-name"), &state.SmartName).FillWidth().Label(a.T("smart_folder_name")).Placeholder(a.T("smart_folder_name")).AutoFocus().Disabled(state.Saving)
+		ui.Text(c, title).FontSize(fontHeading).Bold().TextColor(titleColor(c.Theme()))
+		fieldStyle(c, ui.TextInput(c.Key("smart-name"), &state.SmartName).FillWidth().Label(a.T("smart_folder_name")).Placeholder(a.T("smart_folder_name")).AutoFocus().Disabled(state.Saving))
 		settingsSegments(c.Key("smart-match"), a.T("smart_match"), &state.SmartMatch, a.T("smart_all"), a.T("smart_any")).Disabled(state.Saving)
 		_, height := c.Size()
 		ui.Scroll(c.Key("smart-rules")).TrackScroll(&state.RulesScroll).MaxHeight(max(120, min(280, height-312))).FillWidth().Gap(space8).Children(func() {
@@ -140,14 +156,14 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 				state.SmartRules = slices.Delete(state.SmartRules, remove, remove+1)
 			}
 		})
-		if settingsButton(c.Key("add-rule"), a.T("add_smart_rule")).Height(32).Disabled(state.Saving).Clicked() {
+		if settingsButton(c.Key("add-rule"), a.T("add_smart_rule")).Height(controlHeight).Disabled(state.Saving).Clicked() {
 			state.SmartRules = append(state.SmartRules, model.SmartRule{Field: "name", Operator: "contains"})
 		}
 		if state.SmartError != "" {
 			ui.Text(c, state.SmartError).TextColor(paletteFor(c.Theme()).Danger).Role(ui.RoleStatus)
 		}
 		ui.Row(c).FillWidth().Justify(ui.End).Gap(space8).Children(func() {
-			if settingsButton(c, a.T("cancel")).Height(32).Disabled(state.Saving).Clicked() {
+			if settingsButton(c, a.T("cancel")).Height(controlHeight).Disabled(state.Saving).Clicked() {
 				state.SmartOpen = false
 			}
 			label := a.T("save")
@@ -188,23 +204,16 @@ func smartSelect(c *ui.Context, value *string, options []string, label func(stri
 		}
 	}
 	selectParts := ui.SelectBase(c, &chosen)
-	control := selectParts.Trigger.Height(32).Padding(space4, space12).Gap(space8).Radius(radiusControl).Border(1, paletteFor(c.Theme()).Border).Background(paletteFor(c.Theme()).Raised).Cursor(ui.CursorPointer)
-	background := paletteFor(c.Theme()).Raised
-	if control.Pressed() {
-		background = paletteFor(c.Theme()).Pressed
-	} else if control.Hovered() {
-		background = paletteFor(c.Theme()).Hover
-	}
-	animateColors(control, background, paletteFor(c.Theme()).Text)
+	control := menuFieldStyle(c, selectParts.Trigger.Height(controlHeight).Padding(space4, space12).Gap(space8).Cursor(ui.CursorPointer))
 	control.Children(func() {
 		ui.Text(c, chosen).FontSize(fontBody).SingleLine().Grow(1).MinWidth(0)
-		sidebarRowIcon(c, "chevron-down", false, control.Hovered()).Size(14, 14).Shrink(0)
+		sidebarRowIcon(c, "chevron-down", false, control.Hovered()).Size(iconSmall, iconSmall).Shrink(0)
 	})
 	selectParts.Popup(func(panel ui.Element) {
 		elevated(popupMotion(panel), c.Theme()).Margin(space4, 0, 0, 0).Padding(space4).Radius(radiusPanel).Material(panelMaterial(c.Theme())).Border(1, paletteFor(c.Theme()).BorderSubtle)
 		ui.Scroll(c).MaxHeight(280).FillWidth().Gap(space4).Children(func() {
 			for i, name := range names {
-				item := selectParts.Item(name).Height(32).FillWidth().Padding(space4, space12).Radius(radiusControl).Cursor(ui.CursorPointer)
+				item := selectParts.Item(name).Height(controlHeight).FillWidth().Padding(space4, space12).Radius(radiusControl).Cursor(ui.CursorPointer)
 				background := ui.Color{}
 				if item.Highlighted() || item.Hovered() {
 					background = paletteFor(c.Theme()).Hover
@@ -262,7 +271,7 @@ func (a *App) smartRuleValue(c *ui.Context, rule *model.SmartRule, index int) {
 	case "size":
 		unit = a.T("smart_megabytes")
 	}
-	input := ui.TextInput(c, &rule.Value).Grow(1).MinWidth(0).Label(label).Placeholder(placeholder).Disabled(a.GBrowsing.Saving)
+	input := fieldStyle(c, ui.TextInput(c, &rule.Value).Grow(1).MinWidth(0).Label(label).Placeholder(placeholder).Disabled(a.GBrowsing.Saving))
 	if rule.Field == "added" || rule.Field == "width" || rule.Field == "height" || rule.Field == "size" {
 		input.Font(monoFont(c))
 	}
@@ -347,6 +356,9 @@ func (a *App) finishSmartFolderSave(generation uint64, id string, snapshot model
 	a.applySnapshot(snapshot)
 	a.GBrowsing.SmartOpen = false
 	a.GBrowsing.SmartError = ""
-	a.BrowseSmartFolder(id)
+	// 保存期间开关被关掉时，不再跳进已隐藏的智能文件夹。
+	if a.Preferences.SmartFolders {
+		a.BrowseSmartFolder(id)
+	}
 	a.drainPending()
 }

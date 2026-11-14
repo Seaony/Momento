@@ -38,7 +38,9 @@ func (a *App) tags(c *ui.Context) {
 	scroll.Children(func() {
 		ui.Column(c.Key("tag-header")).Height(space64+space12).Shrink(0).FillWidth().Gap(space12).Padding(0, 0, space16, 0).Children(func() {
 			ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(space12).Children(func() {
-				if ui.SearchField(c.Key("tag-search"), &a.Tags.Search).Label(a.T("search_tags")).Placeholder(a.T("search_tags")).Background(p.Raised).Border(1, p.Border).Radius(radiusControl).Grow(1).MinWidth(0).Changed() {
+				search := ui.SearchField(c.Key("tag-search"), &a.Tags.Search).Label(a.T("search_tags")).Placeholder(a.T("search_tags")).Grow(1).MinWidth(0)
+				fieldStyle(c, search)
+				if search.Changed() {
 					searchChanged = true
 				}
 				if primaryButton(c.Key("new-tag"), a.T("new_tag"), a.Busy).Radius(radiusControl).Clicked() {
@@ -57,7 +59,7 @@ func (a *App) tags(c *ui.Context) {
 			fadeMotion(ui.Column(c.Key("tag-empty"))).MinHeight(220).FillWidth().Center().Gap(space8).Children(func() {
 				ui.Column(c).Size(space64, space64).Radius(space32).Background(p.Subtle).Center().Margin(0, 0, space8, 0).Children(func() { appIcon(c, "tag").Size(space32, space32).TextColor(p.TextSecondary) })
 				if search == "" {
-					ui.Text(c, a.T("no_tags")).FontSize(16).FontWeight(600).TextColor(p.Text)
+					ui.Text(c, a.T("no_tags")).FontSize(fontTitle).FontWeight(600).TextColor(p.Text)
 					ui.Text(c, a.T("no_tags_hint")).FontSize(fontBody).TextColor(p.TextSecondary)
 				} else {
 					ui.Text(c, a.T("no_tag_results", strings.TrimSpace(a.Tags.Search))).FontSize(fontBody)
@@ -86,7 +88,7 @@ func (a *App) tags(c *ui.Context) {
 					layoutMotion(row)
 				}
 				row.Children(func() {
-					appIcon(c, "tag").Size(18, 18).Shrink(0).TextColor(row.AnimateColor("tag-icon-color", iconColor, motionColor))
+					appIcon(c, "tag").Size(iconSize, iconSize).Shrink(0).TextColor(row.AnimateColor("tag-icon-color", iconColor, motionColor))
 					ui.Text(c, tag.Name).ContentTransition(ui.ContentTransition{Animation: &motionSpring}).FontSize(fontBody).Grow(1).MinWidth(0).SingleLine()
 					ui.Text(c, a.T("tag_asset_count", formatTagCount(counts[tag.ID]))).ContentTransition(ui.ContentTransition{Numeric: true, Animation: &motionSpring}).FontSize(fontSecondary).TextColor(p.TextSecondary).Shrink(0)
 					if inspectorIconButton(c.Key("rename"), a.T("rename_tag")+" "+tag.Name, "edit").Tooltip(a.T("rename_tag")).Disabled(a.Busy).Clicked() {

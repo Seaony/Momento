@@ -2,11 +2,7 @@ package ui
 
 import (
 	"bytes"
-	"context"
-	"path/filepath"
 
-	"github.com/Seaony/Momento/app/internal/assets"
-	"github.com/Seaony/Momento/app/internal/library"
 	"image"
 	"image/color"
 	"testing"
@@ -103,11 +99,11 @@ func TestPreviewSelectionOnlyFollowsTemporaryWindow(t *testing.T) {
 	if !temporary.closing || first.closing {
 		t.Fatal("清除选择没有只关闭暂态窗口")
 	}
-	first.focused = true
+	first.imageFocused = true
 	if !a.PreviewOpen() || a.PreviewAssetID() != "one" {
 		t.Fatal("焦点固定窗口不是菜单目标")
 	}
-	first.focused = false
+	first.imageFocused = false
 	if a.PreviewOpen() {
 		t.Fatal("后台固定窗口屏蔽了主窗口快捷键")
 	}
@@ -133,9 +129,12 @@ func TestPreviewWindowBoundsAndCloseAreContinuous(t *testing.T) {
 	parent := mygo.Rectangle{X: 100, Y: 100, Width: 1200, Height: 800}
 	area := mygo.Rectangle{Width: 1440, Height: 900}
 	for _, asset := range []model.Asset{{Width: 4000, Height: 3000}, {Width: 100, Height: 80}, {Width: 200, Height: 4000}} {
-		r := previewWindowBounds(parent, area, asset, true, true)
-		if r.Width > 960 || r.Height > 640 || r.X < area.X || r.Y < area.Y || r.X+r.Width > area.Width || r.Y+r.Height > area.Height {
-			t.Fatalf("窗口越界：%+v", r)
+		r, info := previewLayout(parent, area, asset, true)
+		if r.Width > 960 || r.Height+previewInfoGap+info.Height > 640 || r.X < area.X || r.Y < area.Y || info.X+info.Width > area.Width || info.Y+info.Height > area.Height {
+			t.Fatalf("窗口越界：%+v %+v", r, info)
+		}
+		if info.Y != r.Y+r.Height+previewInfoGap || info.X+info.Width/2 != r.X+r.Width/2 && info.X+info.Width/2+1 != r.X+r.Width/2 && info.X+info.Width/2 != r.X+r.Width/2+1 {
+			t.Fatalf("信息卡没有在图片正下方居中：%+v %+v", r, info)
 		}
 	}
 	a := readyPreviewApp()
@@ -271,7 +270,7 @@ func TestPreviewFocusedTemporaryWindowEscapeAndCloseShortcut(t *testing.T) {
 	}{{0, ui.KeyEscape}, {ui.Cmd, ui.KeyW}, {0, ui.KeySpace}} {
 		a := previewFixture(288, 192)
 		w := a.Preview.active
-		w.focused = true
+		w.imageFocused = true
 		tt := ui.NewTester(func(c *ui.Context) { w.view(c, a) }, 400, 300)
 		tt.Key(key.mods, key.key)
 		if !w.disposed || a.PreviewOpen() {
@@ -312,53 +311,6 @@ func TestPreviewReducedMotionStillTimesTheHold(t *testing.T) {
 	}
 }
 
-func TestPreviewRotationUsesItsOwnLibrary(t *testing.T) {
-	ctx := context.Background()
-	source := writeDirectionalPreview(t, false)
-	roots := []string{filepath.Join(t.TempDir(), "first.momento"), filepath.Join(t.TempDir(), "second.momento")}
-	var libraries []*library.Library
-	var asset model.Asset
-	for _, root := range roots {
-		lib, err := library.Create(ctx, root, "图片")
-		if err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() {
-			if err := lib.Close(); err != nil {
-				t.Error(err)
-			}
-		})
-		libraries = append(libraries, lib)
-		if _, err := assets.New(root, lib.DB).Import(ctx, model.ImportRequest{Paths: []string{source}}, nil); err != nil {
-			t.Fatal(err)
-		}
-		snapshot, err := lib.Snapshot(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if asset.ID != "" && asset.ID != snapshot.Assets[0].ID {
-			t.Fatal("相同图片应有相同素材身份")
-		}
-		asset = snapshot.Assets[0]
-	}
-	if _, err := rotatePreviewAsset(ctx, roots[0], asset, 90); err != nil {
-		t.Fatal(err)
-	}
-	for i, lib := range libraries {
-		snapshot, err := lib.Snapshot(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		expected := 90
-		if i == 1 {
-			expected = 0
-		}
-		if snapshot.Assets[0].Rotation != expected {
-			t.Fatal("固定窗口旋转写到了另一个图库的同名素材")
-		}
-	}
-}
-
 func TestPreviewHoldHintFitsEnglishAndJapanese(t *testing.T) {
 	for _, language := range []string{"en", "ja"} {
 		a := previewFixture(64, 48)
@@ -369,17 +321,17 @@ func TestPreviewHoldHintFitsEnglishAndJapanese(t *testing.T) {
 		w.pressedAt = time.Now().Add(-time.Second)
 		var textWidth float32
 		tt := ui.NewTester(func(c *ui.Context) {
-			w.view(c, a)
-			textWidth, _ = c.MeasureText(0, ui.Span{Text: a.T("preview_hold_to_pin"), Size: 12})
-		}, 300, 220)
-		if textWidth > 250 {
-			t.Fatalf("%s固定提示宽%.1f，超过可用250", language, textWidth)
+			w.infoView(c, a)
+			textWidth, _ = c.MeasureText(0, ui.Span{Text: a.T("preview_hold_to_pin"), Size: fontSecondary})
+		}, previewInfoMinWidth, previewInfoHeight)
+		if available := float32(previewInfoMinWidth - 2*previewInfoSide); textWidth > available {
+			t.Fatalf("%s固定提示宽%.1f，超过信息卡可用%.1f", language, textWidth, available)
 		}
 		if !tt.HasText(a.T("preview_hold_to_pin")) {
 			t.Fatal("缺少固定提示三语文案")
 		}
 		for _, element := range tt.AccessAll() {
-			if element.Bounds.W > 0 && element.Bounds.H > 0 && (element.Bounds.X < 0 || element.Bounds.Y < 0 || element.Bounds.X+element.Bounds.W > 300.1 || element.Bounds.Y+element.Bounds.H > 220.1) {
+			if element.Bounds.W > 0 && element.Bounds.H > 0 && (element.Bounds.X < 0 || element.Bounds.Y < 0 || element.Bounds.X+element.Bounds.W > previewInfoMinWidth+.1 || element.Bounds.Y+element.Bounds.H > previewInfoHeight+.1) {
 				t.Fatalf("元素超出窗口：%+v", element)
 			}
 		}
@@ -530,7 +482,7 @@ func TestPreviewSpaceWithoutTargetDoesNotKeepOldHoldStart(t *testing.T) {
 func TestPreviewFocusedWindowShortcutsWithoutElementFocus(t *testing.T) {
 	a := previewFixture(288, 192)
 	w := a.Preview.active
-	w.focused = true
+	w.imageFocused = true
 	bitmap, pixels := w.picture.Bitmap, w.picture.pixelBitmap
 	w.items = append(w.items, model.Asset{ID: "two", Name: "第二张", Width: 288, Height: 192})
 	tt := ui.NewTester(func(c *ui.Context) { w.view(c, a) }, 600, 400)

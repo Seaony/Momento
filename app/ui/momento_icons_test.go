@@ -12,17 +12,17 @@ import (
 )
 
 func TestMomentoIconsRenderAtApplicationSizes(t *testing.T) {
-	for name, regular := range phosphorRegular {
-		fill := phosphorFill[name]
-		if regular == nil || fill == nil {
-			t.Fatalf("图标 %s 缺少 Regular 或 Fill", name)
+	for name, regular := range iconRegular {
+		if regular == nil {
+			t.Fatalf("图标 %s 缺少 Regular", name)
 		}
+		_, hasFill := iconFill[name]
 		for _, size := range []int{18, 16, 14} {
 			t.Run(fmt.Sprintf("%s/%d", name, size), func(t *testing.T) {
 				render := func(filled bool, ink ui.Color) []byte {
 					tt := ui.NewTester(func(c *ui.Context) {
 						ui.Box(c).Fill().TextColor(ink).Children(func() {
-							phosphorIcon(c, name, filled).Size(float32(size), float32(size))
+							svgIcon(c, name, filled).Size(float32(size), float32(size))
 						})
 					}, 24, 24)
 					tt.Frame()
@@ -31,6 +31,9 @@ func TestMomentoIconsRenderAtApplicationSizes(t *testing.T) {
 				red, blue := render(false, ui.Hex("#D9622C")), render(false, ui.Hex("#7E5E4C"))
 				if bytes.Equal(red, blue) {
 					t.Fatal("Regular 未显示，或不随父控件颜色变化")
+				}
+				if !hasFill {
+					return
 				}
 				filled := render(true, ui.Hex("#D9622C"))
 				if bytes.Equal(red, filled) {
@@ -43,7 +46,7 @@ func TestMomentoIconsRenderAtApplicationSizes(t *testing.T) {
 		}
 	}
 	for name, canonical := range appIconAliases {
-		if phosphorRegular[canonical] == nil || phosphorFill[canonical] == nil {
+		if iconRegular[canonical] == nil {
 			t.Errorf("图标语义 %s 指向不存在的 %s", name, canonical)
 		}
 	}
@@ -51,14 +54,14 @@ func TestMomentoIconsRenderAtApplicationSizes(t *testing.T) {
 
 func TestMomentoIconScreenshots(t *testing.T) {
 	if os.Getenv("MOMENTO_ICON_SCREENSHOTS") != "1" {
-		t.Skip("设置 MOMENTO_ICON_SCREENSHOTS=1 生成 Phosphor 图标总览")
+		t.Skip("设置 MOMENTO_ICON_SCREENSHOTS=1 生成图标总览")
 	}
 	const dir = "/tmp/momento-polish/shots2/icons"
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	names := make([]string, 0, len(phosphorRegular))
-	for name := range phosphorRegular {
+	names := make([]string, 0, len(iconRegular))
+	for name := range iconRegular {
 		names = append(names, name)
 	}
 	slices.Sort(names)
@@ -68,7 +71,7 @@ func TestMomentoIconScreenshots(t *testing.T) {
 			tt := ui.NewTester(func(c *ui.Context) {
 				c.SetTheme(momentoTheme(appearance, false))
 				ui.Column(c).Fill().Background(c.Theme().Background).Padding(24).Gap(20).Children(func() {
-					ui.Text(c, "Momento · Phosphor 图标").FontSize(20).Bold().TextColor(titleColor(c.Theme()))
+					ui.Text(c, "Momento · Solar 图标").FontSize(20).Bold().TextColor(titleColor(c.Theme()))
 					ui.Text(c, "每项 Regular 18 / 16 / 14px · 侧栏当前行额外显示主题色 Fill 18px").FontSize(12).TextColor(c.Theme().TextMuted)
 					for start := 0; start < len(names); start += 6 {
 						ui.Row(c).Gap(16).TextColor(c.Theme().TextMuted).Children(func() {
@@ -76,10 +79,10 @@ func TestMomentoIconScreenshots(t *testing.T) {
 								ui.Column(c).Width(170).Gap(8).Children(func() {
 									ui.Row(c).Height(24).Gap(12).AlignItems(ui.Center).Children(func() {
 										for _, size := range []float32{18, 16, 14} {
-											phosphorIcon(c, name, false).Size(size, size)
+											svgIcon(c, name, false).Size(size, size)
 										}
 										if selected[name] {
-											phosphorIcon(c, name, true).Size(18, 18).TextColor(c.Theme().Accent)
+											svgIcon(c, name, true).Size(18, 18).TextColor(c.Theme().Accent)
 										}
 									})
 									ui.Text(c, name).FontSize(11).SingleLine()

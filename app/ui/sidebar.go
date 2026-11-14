@@ -20,6 +20,7 @@ type sidebarState struct {
 	LibraryOpen       bool
 	OrganizeCollapsed bool
 	RecentList        ui.ListState
+	LibraryMore       map[string]*bool // 每个最近图库行尾「…」菜单的开关，按路径区分
 	Open              map[string]*bool
 }
 
@@ -265,91 +266,6 @@ func (a *App) sidebarScope(c *ui.Context, scope, key, icon string, count int) ui
 		a.SetScope(scope, "")
 	}
 	return row
-}
-
-func (a *App) sidebarLibrary(c *ui.Context) {
-	name := a.T("open_library")
-	if a.Library != nil {
-		name = a.libraryName()
-	}
-	p := paletteFor(c.Theme())
-	count := 0
-	if a.Index != nil {
-		count = a.Index.Counts().All
-	}
-	countLabel := a.T("library_image_count", sidebarCount(count))
-	if count == 1 {
-		countLabel = a.T("library_image_count_one")
-	}
-	trigger := ui.ButtonBase(c.Key("library_switcher")).FillWidth().Height(space48 + space8).Padding(space8).Gap(space8).Radius(radiusControl).Cursor(ui.CursorPointer).Label(a.T("library_menu")).Justify(ui.Start)
-	elevated(trigger, c.Theme())
-	background, text := p.Raised, p.TextSecondary
-	if trigger.Pressed() {
-		background, text = p.Pressed, p.Text
-	} else if trigger.Hovered() {
-		background, text = p.Hover, p.Text
-	}
-	animateColors(trigger, background, text)
-	trigger.Children(func() {
-		ui.Image(c, appLogo).Size(space24+space4, space24+space4).Radius(radiusCard).Shrink(0)
-		ui.Column(c).Grow(1).MinWidth(0).Gap(0).Children(func() {
-			ui.Text(c, name).TextColor(p.Text).FontSize(fontBody).FontWeight(600).SingleLine().FillWidth().MinWidth(0)
-			ui.Text(c, countLabel).TextColor(p.TextSecondary).FontSize(fontSecondary).SingleLine().FillWidth().MinWidth(0)
-		})
-		appSymbol(c, "chevrons-up-down").Size(14, 14).Shrink(0)
-	})
-	if trigger.Clicked() {
-		a.Sidebar.LibraryOpen = !a.Sidebar.LibraryOpen
-	}
-	frostedPopover(c, trigger, &a.Sidebar.LibraryOpen, func() {
-		_, windowHeight := c.Size()
-		menuHeight := float32(310)
-		if len(a.Recent) > 0 {
-			menuHeight += float32(min(10, len(a.Recent))*32 + 32)
-		}
-		ui.Scroll(c.Key("library_menu_scroll")).Width(284).Height(min(menuHeight, max(200, windowHeight-100))).Gap(space4).Children(func() {
-			if len(a.Recent) > 0 {
-				ui.Text(c, a.T("recent_libraries")).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary).Padding(space4, space8)
-				a.Sidebar.RecentList.Key = func(i int) any { return a.Recent[i].Path }
-				a.Sidebar.RecentList.Reorder = func(rows []int, to int) {
-					paths := make([]string, len(a.Recent))
-					for i, r := range a.Recent {
-						paths[i] = r.Path
-					}
-					a.ReorderRecent(sidebarReorderPaths(paths, rows, to))
-				}
-				ui.List(c.Key("recent_libraries"), &a.Sidebar.RecentList, len(a.Recent), func(i int) {
-					recent := a.Recent[i]
-					selected := a.Library != nil && a.Library.Root == recent.Path
-					if a.sidebarRow(c, recent.DisplayName, "照片", -1, selected).Clicked() {
-						a.Sidebar.LibraryOpen = false
-						a.OpenLibrary(recent.Path)
-					}
-				}).Height(float32(min(10, len(a.Recent)) * 32)).MaxHeight(320)
-				ui.Divider(c).Margin(space4, 0)
-			}
-			a.sidebarLibraryAction(c, "new_library", func() { a.ShowNewLibrary() })
-			a.sidebarLibraryAction(c, "open_library", func() { a.ChooseOpenLibrary() })
-			a.sidebarLibraryAction(c, "import_library", a.ChooseImportLibrary)
-			a.sidebarLibraryAction(c, "export_library", a.ChooseExportLibrary)
-			ui.Divider(c).Margin(space4, 0)
-			a.sidebarLibraryAction(c, "rename_library", func() { a.Ask(a.T("rename_library"), name, a.RenameLibrary) })
-			a.sidebarLibraryAction(c, "reveal_library", a.RevealLibrary)
-			a.sidebarLibraryAction(c, "clear_library_cache", a.ClearLibraryCache)
-			a.sidebarLibraryAction(c, "delete_library", a.DeleteLibrary)
-		})
-	})
-}
-
-func (a *App) sidebarLibraryAction(c *ui.Context, key string, action func()) {
-	row := a.sidebarRow(c.Key(key), a.T(key), "", -1, false).Disabled(a.Busy)
-	if key == "delete_library" {
-		row.TextColor(paletteFor(c.Theme()).Danger)
-	}
-	if row.Clicked() {
-		a.Sidebar.LibraryOpen = false
-		action()
-	}
 }
 
 func (a *App) sidebarFolders(c *ui.Context, counts catalog.Counts) {

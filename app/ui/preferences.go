@@ -19,6 +19,8 @@ func DefaultPreferences() Preferences {
 		AutoImport: map[string][]AutoImportRule{}, Shortcuts: map[string]string{},
 		Notify: true, NotifyEvents: []string{"extension", "auto-import", "duplicate"}, NotifySound: true, ThumbnailSize: 1,
 		Sort: "added", SortDescending: true, SidebarVisible: true, SidebarWidth: 236,
+		// 智能文件夹默认关闭，用户在设置 → 侧栏里手动打开。
+		SmartFolders: false,
 	}
 }
 
@@ -80,6 +82,7 @@ func NormalizePreferences(p Preferences) Preferences {
 	if p.PreviewFit != "fit" {
 		p.PreviewFit = "smart"
 	}
+	// "smart" 只为兼容旧数据保留；智能文件夹是否显示只看 SmartFolders。
 	hidden := make([]string, 0, len(p.SidebarHidden))
 	for _, key := range p.SidebarHidden {
 		if slices.Contains([]string{"favorites", "unfiled", "untagged", "random", "folders", "recent", "quick", "smart"}, key) && !slices.Contains(hidden, key) {

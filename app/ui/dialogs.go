@@ -41,8 +41,8 @@ func (a *App) dialogs(c *ui.Context) {
 
 func dialogHeading(c *ui.Context, icon, title string) {
 	ui.Row(c).FillWidth().Gap(space8).AlignItems(ui.Center).Children(func() {
-		appIcon(c, icon).Size(18, 18).TextColor(paletteFor(c.Theme()).TextSecondary)
-		ui.Text(c, title).FontSize(16).FontWeight(600).TextColor(paletteFor(c.Theme()).Text).Grow(1)
+		appIcon(c, icon).Size(iconSize, iconSize).TextColor(paletteFor(c.Theme()).TextSecondary)
+		ui.Text(c, title).FontSize(fontTitle).FontWeight(600).TextColor(paletteFor(c.Theme()).Text).Grow(1)
 	})
 }
 
@@ -58,7 +58,7 @@ func (a *App) confirmationDialog(c *ui.Context) {
 			a.ConfirmOpen = false
 		}
 		backdrop.Children(func() {
-			panel := ui.Column(c).Width(420).MaxWidthPercent(92).Padding(space24).Gap(space12).Radius(radiusPanel).
+			panel := ui.Column(c).Width(panelDialog).MaxWidthPercent(92).Padding(space24).Gap(space12).Radius(radiusPanel).
 				Material(panelMaterial(c.Theme())).
 				Role(ui.RoleAlertDialog).Label(a.ConfirmTitle).Description(a.ConfirmDetail)
 			elevated(panel, c.Theme())
@@ -101,7 +101,7 @@ func (a *App) newLibraryDialog(c *ui.Context) {
 		dialogHeading(c, "create-library", a.T("new_library"))
 		ui.Text(c, a.T("new_library_detail")).TextColor(paletteFor(c.Theme()).TextSecondary)
 		ui.Text(c, a.T("library_name")).FontWeight(600).Margin(space4, 0, 0, 0)
-		name := ui.TextInput(c.Key("library-name"), &a.Dialog.NewName).Label(a.T("library_name")).AutoFocus().FillWidth().Disabled(a.Busy || a.Dialog.Picking)
+		name := fieldStyle(c, ui.TextInput(c.Key("library-name"), &a.Dialog.NewName).Label(a.T("library_name")).AutoFocus().FillWidth().Disabled(a.Busy || a.Dialog.Picking))
 		ui.Text(c, a.T("location")).FontWeight(600).Margin(space4, 0, 0, 0)
 		location := a.Dialog.NewPath
 		if location == "" {
@@ -239,8 +239,8 @@ func exportDialogFileName(asset model.Asset, format model.ExportFormat) string {
 
 func (a *App) promptDialog(c *ui.Context) {
 	settingsPanel(c.Key("text-prompt"), &a.PromptOpen, 420, func() {
-		ui.Text(c, a.PromptTitle).FontSize(16).FontWeight(600).TextColor(paletteFor(c.Theme()).Text)
-		input := ui.TextInput(c.Key("prompt-value"), &a.PromptValue).Label(a.PromptTitle).AutoFocus().FillWidth()
+		ui.Text(c, a.PromptTitle).FontSize(fontTitle).FontWeight(600).TextColor(paletteFor(c.Theme()).Text)
+		input := fieldStyle(c, ui.TextInput(c.Key("prompt-value"), &a.PromptValue).Label(a.PromptTitle).AutoFocus().FillWidth())
 		ui.Row(c).Gap(space8).Justify(ui.End).Margin(space8, 0, 0, 0).Children(func() {
 			if settingsButton(c, a.T("cancel")).Clicked() {
 				a.PromptOpen = false

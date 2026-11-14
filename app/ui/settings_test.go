@@ -334,7 +334,7 @@ func TestSettingsNotificationsDisabledKeepChoices(t *testing.T) {
 }
 
 func TestSettingsSidebarBrowsingSectionsCanBeHidden(t *testing.T) {
-	for _, item := range []struct{ key, label string }{{"recent", "recent"}, {"quick", "quick_access"}, {"smart", "smart_folders"}} {
+	for _, item := range []struct{ key, label string }{{"recent", "recent"}, {"quick", "quick_access"}} {
 		t.Run(item.key, func(t *testing.T) {
 			a := settingsTestApp("en", "light")
 			a.Settings.Tab = SettingsSidebar
@@ -528,5 +528,30 @@ func TestSettingsPreviewTransparencyOrderAndSelection(t *testing.T) {
 		if !a.Preferences.PreviewChecker {
 			t.Fatal("点击棋盘格没有保存")
 		}
+	}
+}
+
+func TestSettingsSidebarSmartFoldersSwitch(t *testing.T) {
+	a := settingsTestApp("zh-CN", "light")
+	a.Settings.Tab = SettingsSidebar
+	tt := ui.NewTester(func(c *ui.Context) { a.settingsView(c, UpdateCheckStatus{}) }, 760, 560)
+	control, ok := tt.AccessByRole(ui.RoleSwitch, a.T("smart_folders_enabled"))
+	if !ok || control.Checked || control.Disabled {
+		t.Fatal("智能文件夹开关应存在且默认关闭")
+	}
+	if !tt.HasText(a.T("smart_folders_enabled_hint")) {
+		t.Fatal("智能文件夹开关缺少说明")
+	}
+	if _, ok := tt.AccessByRole(ui.RoleCheckBox, a.T("smart_folders")); ok {
+		t.Fatal("侧栏显示里不应再有智能文件夹复选框")
+	}
+	tt.ClickAt(control.Bounds.X+control.Bounds.W/2, control.Bounds.Y+control.Bounds.H/2)
+	if !a.Preferences.SmartFolders {
+		t.Fatal("打开智能文件夹开关没有保存")
+	}
+	tt.Frame()
+	tt.ClickAt(control.Bounds.X+control.Bounds.W/2, control.Bounds.Y+control.Bounds.H/2)
+	if a.Preferences.SmartFolders {
+		t.Fatal("关闭智能文件夹开关没有保存")
 	}
 }

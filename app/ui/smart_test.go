@@ -13,6 +13,7 @@ import (
 func smartTestApp() *App {
 	a := sidebarTestApp()
 	a.Preferences.Language = "en"
+	a.Preferences.SmartFolders = true
 	a.Snapshot.Tags = []model.Tag{{ID: "tag-a", Name: "Reference"}}
 	a.Snapshot.Assets[0].TagIDs = []string{"tag-a"}
 	a.Snapshot.SmartFolders = []model.SmartFolder{
@@ -158,7 +159,8 @@ func TestSmartSidebarOpensEditorAndHiddenGroupsDisappear(t *testing.T) {
 	if !a.GBrowsing.SmartOpen || a.GBrowsing.SmartID != "" {
 		t.Fatal("智能分组没有打开新建表单")
 	}
-	a.Preferences.SidebarHidden = []string{"smart", "quick"}
+	a.Preferences.SmartFolders = false
+	a.Preferences.SidebarHidden = []string{"quick"}
 	tt.Frame()
 	if tt.HasText(a.T("smart_folders")) || tt.HasText("Landscape Rules") {
 		t.Fatal("隐藏智能分组后仍显示")
@@ -340,6 +342,86 @@ func TestQuickAccessLocalizedHeadingFits(t *testing.T) {
 					t.Fatal("没有固定项时仍显示本地化分组标题")
 				}
 			})
+		}
+	}
+}
+
+func TestSmartFoldersSwitchHidesEntriesAndKeepsData(t *testing.T) {
+	a := smartTestApp()
+	a.Preferences.SmartFolders = false
+	full := ui.NewTester(a.sidebar, 236, 800)
+	if full.HasText(a.T("smart_folders")) || full.HasText("Landscape Rules") || full.HasText("Portrait Rules") {
+		t.Fatal("关闭智能文件夹后完整侧栏仍有智能文件夹")
+	}
+	sidebar := ui.NewTester(a.sidebarSmartFolders, 236, 320)
+	if sidebar.HasText(a.T("smart_folders")) || sidebar.HasText("Landscape Rules") || sidebar.HasText(a.T("smart_empty_action")) {
+		t.Fatal("关闭智能文件夹后侧栏仍显示分组")
+	}
+	quick := ui.NewTester(a.sidebarQuickAccess, 236, 320)
+	if quick.HasText("Landscape Rules") || !quick.HasText("Reference") || !quick.HasText("Design references") {
+		t.Fatal("关闭智能文件夹后快速访问应只隐藏智能文件夹固定项")
+	}
+	a.SetSmartFoldersEnabled(true)
+	sidebar.Frame()
+	quick.Frame()
+	if !sidebar.HasText(a.T("smart_folders")) || !sidebar.HasText("Landscape Rules") || !sidebar.HasText("Portrait Rules") || !quick.HasText("Landscape Rules") {
+		t.Fatal("重新打开后智能文件夹和固定项没有回来")
+	}
+	if len(a.Snapshot.SmartFolders) != 2 || len(a.Snapshot.QuickAccess) != 3 {
+		t.Fatal("开关不应改动智能文件夹数据")
+	}
+}
+
+func TestSmartFoldersSwitchOffLeavesSmartScope(t *testing.T) {
+	a := smartTestApp()
+	menuChanges := 0
+	a.MenuChanged = func() { menuChanges++ }
+	a.BrowseSmartFolder("smart-a")
+	a.EditSmartFolder("smart-a")
+	menuChanges = 0
+	a.SetSmartFoldersEnabled(false)
+	if a.Query.Scope != "all" || a.Query.SmartFolderID != "" || a.TagPage {
+		t.Fatalf("关闭时正在浏览智能文件夹应回到全部：%+v", a.Query)
+	}
+	if len(a.Visible) != 2 {
+		t.Fatalf("回到全部后可见素材数错误：%d", len(a.Visible))
+	}
+	if a.GBrowsing.SmartOpen {
+		t.Fatal("关闭后智能文件夹编辑表单仍打开")
+	}
+	if menuChanges == 0 {
+		t.Fatal("切换开关后没有刷新主菜单")
+	}
+	a.SetSmartFoldersEnabled(true)
+	a.SetScope("folder", "root")
+	a.SetSmartFoldersEnabled(false)
+	if a.Query.Scope != "folder" || a.Query.FolderID != "root" {
+		t.Fatal("不在智能文件夹时关闭开关不应改变当前位置")
+	}
+}
+
+func TestQuickAccessMoveSkipsHiddenSmartEntries(t *testing.T) {
+	all := []model.QuickAccess{{ID: "folder"}, {ID: "smart", Kind: "smart"}, {ID: "tag"}, {ID: "smart-2", Kind: "smart"}, {ID: "folder-2"}}
+	visible := []model.QuickAccess{all[0], all[2], all[4]}
+	for _, test := range []struct {
+		name     string
+		from, to int
+		want     int
+	}{
+		{"标签上移到最前", 1, 0, 0},
+		{"文件夹下移一位", 0, 1, 3},
+		{"最后一项移到中间", 2, 1, 2},
+		{"第一项移到最后", 0, 2, 4},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := quickAccessMoveIndex(all, visible, test.from, test.to); got != test.want {
+				t.Fatalf("目标位置 %d，期望 %d", got, test.want)
+			}
+		})
+	}
+	for to := range all[1:] {
+		if got := quickAccessMoveIndex(all, all, 1, to); got != to {
+			t.Fatalf("全部可见时位置应不变：%d → %d", to, got)
 		}
 	}
 }

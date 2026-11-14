@@ -7,42 +7,39 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Seaony/Momento/app/internal/catalog"
-	"github.com/Seaony/Momento/app/internal/model"
 	"github.com/egoist/mygo/ui"
 )
 
-func TestSidebarLibraryCountLocalizedTextFits(t *testing.T) {
+// 切换器宽度随名称变化，长名称在侧栏内省略，上下箭头不被挤出去。
+func TestSidebarLibraryTriggerFitsSidebar(t *testing.T) {
 	for _, language := range []string{"en", "ja"} {
-		for _, count := range []int{0, 1, 12000} {
-			for _, sidebarWidth := range []int{196, 236} {
-				t.Run(fmt.Sprintf("%s/%d/%d", language, count, sidebarWidth), func(t *testing.T) {
-					a := sidebarTestApp()
-					a.Preferences.Language = language
-					a.Texts.Language = language
-					assets := make([]model.Asset, count)
-					for i := range assets {
-						assets[i].ID = fmt.Sprint(i)
-					}
-					a.Index = catalog.New(model.Snapshot{Assets: assets})
-					label := a.T("library_image_count", sidebarCount(count))
-					if count == 1 {
-						label = a.T("library_image_count_one")
-					}
-					var textWidth float32
-					tt := ui.NewTester(func(c *ui.Context) {
-						a.applyTheme(c)
-						a.sidebarLibrary(c)
-						textWidth, _ = c.MeasureText(0, ui.Span{Text: label, Font: c.Theme().Font, Size: fontSecondary, Lang: language})
-					}, sidebarWidth-space24, 80)
-					tt.SetLocale(a.Texts.Locale())
-					bounds, ok := tt.Find(label)
-					if !ok || bounds.W < textWidth || bounds.H > space24 {
-						t.Fatalf("图库图片数被截断或换行：%s，边界%+v，需要宽度%.2f", label, bounds, textWidth)
-					}
-				})
-			}
+		for _, sidebarWidth := range []int{196, 236} {
+			t.Run(fmt.Sprintf("%s/%d", language, sidebarWidth), func(t *testing.T) {
+				a := sidebarTestApp()
+				a.Preferences.Language = language
+				a.Texts.Language = language
+				a.Library.Manifest.DisplayName = "Brand Moodboard Archive for the Spring Campaign"
+				width := float32(sidebarWidth - space24)
+				tt := ui.NewTester(func(c *ui.Context) {
+					a.applyTheme(c)
+					ui.Column(c).Width(width).Children(func() { a.sidebarLibrary(c) })
+				}, int(width), 80)
+				tt.SetLocale(a.Texts.Locale())
+				trigger, ok := tt.Find(a.T("library_menu"))
+				if !ok || trigger.X+trigger.W > width || trigger.H != controlSmall {
+					t.Fatalf("切换器超出侧栏或高度不对：%+v，可用宽度%.0f", trigger, width)
+				}
+			})
 		}
+	}
+	a := sidebarTestApp()
+	a.Library.Manifest.DisplayName = "Art"
+	tt := ui.NewTester(func(c *ui.Context) {
+		a.applyTheme(c)
+		ui.Column(c).Width(212).Children(func() { a.sidebarLibrary(c) })
+	}, 212, 80)
+	if trigger, ok := tt.Find(a.T("library_menu")); !ok || trigger.W >= 212/2 {
+		t.Fatalf("短名称时切换器应随内容收窄：%+v", trigger)
 	}
 }
 

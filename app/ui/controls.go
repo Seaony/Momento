@@ -42,7 +42,7 @@ func slidingSegmentTrack(c *ui.Context, track ui.Element, items []ui.Element, se
 func settingsCheckbox(c *ui.Context, checked *bool, label string) ui.Element {
 	theme := c.Theme()
 	palette := paletteFor(theme)
-	row := ui.CheckboxBase(c, checked).Label(label).Gap(8).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+	row := ui.CheckboxBase(c, checked).Label(label).Gap(space8).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	row.Children(func() {
 		background, border := palette.Raised, palette.Border
 		if *checked {
@@ -50,16 +50,16 @@ func settingsCheckbox(c *ui.Context, checked *bool, label string) ui.Element {
 		} else if row.Hovered() {
 			border = theme.Focus
 		}
-		box := ui.Box(c.Key("checkbox-face")).Size(16, 16).Radius(4).Shrink(0).Center()
+		box := ui.Box(c.Key("checkbox-face")).Size(checkSize, checkSize).Radius(radiusSmall).Shrink(0).Center()
 		box.Border(1, box.AnimateColor("border", border, motionColor))
 		animateColors(box, background, theme.AccentText)
 		box.Children(func() {
-			mark := appSymbol(c, "check").Size(14, 14)
+			mark := appSymbol(c, "check").Size(iconSmall, iconSmall)
 			fade := motionColor
 			fade.NonMotion = true
 			mark.Opacity(mark.AnimateTo("checked", motionTarget(*checked), fade))
 		})
-		ui.Text(c, label).FontSize(13)
+		ui.Text(c, label).FontSize(fontBody)
 	})
 	return row
 }
@@ -67,7 +67,7 @@ func settingsCheckbox(c *ui.Context, checked *bool, label string) ui.Element {
 func animatedRadio[T comparable](c *ui.Context, selected *T, value T, label string) ui.Element {
 	theme := c.Theme()
 	palette := paletteFor(theme)
-	row := ui.RadioBase(c, selected, value).Label(label).Gap(8).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+	row := ui.RadioBase(c, selected, value).Label(label).Gap(space8).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	row.Children(func() {
 		on := *selected == value
 		background, border := palette.Raised, palette.Border
@@ -76,7 +76,7 @@ func animatedRadio[T comparable](c *ui.Context, selected *T, value T, label stri
 		} else if row.Hovered() {
 			border = theme.Focus
 		}
-		face := ui.Box(c.Key("radio-face")).Size(16, 16).Radius(8).Center().Shrink(0)
+		face := ui.Box(c.Key("radio-face")).Size(checkSize, checkSize).Radius(checkSize / 2).Center().Shrink(0)
 		face.Border(1, face.AnimateColor("border", border, motionColor))
 		animateColors(face, background, theme.Text)
 		face.Children(func() {
@@ -85,7 +85,7 @@ func animatedRadio[T comparable](c *ui.Context, selected *T, value T, label stri
 			fade.NonMotion = true
 			dot.Opacity(dot.AnimateTo("checked", motionTarget(on), fade))
 		})
-		ui.Text(c, label).FontSize(13)
+		ui.Text(c, label).FontSize(fontBody)
 	})
 	return row
 }
@@ -102,4 +102,32 @@ func animatedToggle(c *ui.Context, on *bool, label string) ui.Element {
 	}
 	animateColors(button, background, theme.Text)
 	return button.Children(func() { ui.Text(c, label).SingleLine() })
+}
+
+// 表单控件统一外观：浅底 + 浅边框；悬停底色加深一点，聚焦变浮起面并换焦点色边框。
+func fieldStyle(c *ui.Context, field ui.Element) ui.Element {
+	p := paletteFor(c.Theme())
+	background, border := p.Field, p.BorderSubtle
+	if field.FocusWithin() {
+		background, border = p.Raised, p.Focus
+	} else if field.Hovered() {
+		background = p.FieldHover
+	}
+	field.Radius(radiusControl).FocusRing(false)
+	field.Background(field.AnimateColor("field-background", background, motionColor))
+	return field.Border(1, field.AnimateColor("field-border", border, motionColor))
+}
+
+// 菜单按钮（下拉选择）和输入框同一套浅底浅边框。
+func menuFieldStyle(c *ui.Context, button ui.Element) ui.Element {
+	p := paletteFor(c.Theme())
+	background := p.Field
+	if button.Pressed() {
+		background = p.Pressed
+	} else if button.Hovered() {
+		background = p.FieldHover
+	}
+	button.Radius(radiusControl).Border(1, p.BorderSubtle)
+	animateColors(button, background, p.Text)
+	return button
 }

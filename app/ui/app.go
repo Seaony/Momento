@@ -65,6 +65,7 @@ type Preferences struct {
 	SortDescending          bool                        `json:"sortDescending"`
 	SidebarVisible          bool                        `json:"sidebarVisible"`
 	SidebarWidth            float32                     `json:"sidebarWidth"`
+	SmartFolders            bool                        `json:"smartFolders"`
 }
 
 type App struct {

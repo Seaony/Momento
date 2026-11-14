@@ -74,6 +74,8 @@ func previewTestView(a *App) func(*ui.Context) {
 		ui.Box(c).Fill().TabStop(true).AutoFocus().ObserveInput(a.ObservePreviewInput).Children(func() {
 			if w := a.Preview.active; w != nil {
 				w.view(c, a)
+				// 测试里把信息卡叠在底部，同一个 Tester 里能点到翻页和关闭。
+				ui.Box(c.Key("test-preview-info")).Absolute().Left(0).Right(0).Bottom(0).Height(previewInfoHeight).Children(func() { w.infoView(c, a) })
 			}
 		})
 		a.ReconcilePreviewKeys(c)

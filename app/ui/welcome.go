@@ -40,7 +40,7 @@ func (a *App) welcome(c *ui.Context) {
 
 func (a *App) welcomeContent(c *ui.Context, onboarding bool) {
 	p := paletteFor(c.Theme())
-	ui.Column(c).Width(560).MaxWidthPercent(100).AlignItems(ui.Center).Gap(space16).Children(func() {
+	ui.Column(c).Width(panelWide).MaxWidthPercent(100).AlignItems(ui.Center).Gap(space16).Children(func() {
 		ui.Box(c).Size(space64, space64).Radius(space32).Background(p.Subtle).Center().Children(func() {
 			appIcon(c, "library").Size(space32, space32).TextColor(p.TextSecondary)
 		})
@@ -48,7 +48,7 @@ func (a *App) welcomeContent(c *ui.Context, onboarding bool) {
 		if onboarding {
 			title = "onboarding_library"
 		}
-		ui.Text(c, a.T(title)).FontSize(16).FontWeight(600).TextColor(paletteFor(c.Theme()).Text).FillWidth().TextAlign(ui.Center)
+		ui.Text(c, a.T(title)).FontSize(fontTitle).FontWeight(600).TextColor(paletteFor(c.Theme()).Text).FillWidth().TextAlign(ui.Center)
 		ui.Text(c, a.T("welcome_hint")).TextColor(paletteFor(c.Theme()).TextSecondary).FillWidth().TextAlign(ui.Center)
 		ui.Row(c).Gap(space12).Margin(space8, 0).Children(func() {
 			if primaryButton(c, a.T("new_library"), false).Clicked() {
@@ -59,9 +59,9 @@ func (a *App) welcomeContent(c *ui.Context, onboarding bool) {
 			}
 		})
 		if len(a.Recent) > 0 {
-			ui.Scroll(c).Width(360).MaxWidthPercent(100).MaxHeight(192).Gap(space8).Children(func() {
+			ui.Scroll(c).Width(panelNarrow).MaxWidthPercent(100).MaxHeight(192).Gap(space8).Children(func() {
 				for _, recent := range a.Recent {
-					button := ui.ButtonBase(c.Key(recent.Path)).FillWidth().Height(40).Padding(space8, space12).Gap(space8).
+					button := ui.ButtonBase(c.Key(recent.Path)).FillWidth().Height(space40).Padding(space8, space12).Gap(space8).
 						Radius(radiusControl).Label(recent.DisplayName).Tooltip(recent.DisplayName).Cursor(ui.CursorPointer)
 					elevated(button, c.Theme())
 					background, text := p.Raised, p.TextSecondary
@@ -72,7 +72,7 @@ func (a *App) welcomeContent(c *ui.Context, onboarding bool) {
 					}
 					animateColors(button, background, text)
 					button.Children(func() {
-						appIcon(c, "library").Size(18, 18)
+						appIcon(c, "library").Size(iconSize, iconSize)
 						ui.Text(c, recent.DisplayName).Grow(1).SingleLine()
 					})
 					if button.Clicked() {
@@ -98,13 +98,13 @@ func (a *App) onboarding(c *ui.Context) {
 				switch step {
 				case 0:
 					ui.Image(c, appLogo).Size(96, 96).Fit(ui.Contain)
-					ui.Text(c, a.T("onboarding_theme")).FontSize(16).FontWeight(600).TextColor(paletteFor(c.Theme()).Text)
-					ui.Text(c, a.T("onboarding_theme_hint")).MaxWidth(560).TextAlign(ui.Center).TextColor(paletteFor(c.Theme()).TextSecondary).Margin(0, 0, space8, 0)
+					ui.Text(c, a.T("onboarding_theme")).FontSize(fontTitle).FontWeight(600).TextColor(paletteFor(c.Theme()).Text)
+					ui.Text(c, a.T("onboarding_theme_hint")).MaxWidth(panelWide).TextAlign(ui.Center).TextColor(paletteFor(c.Theme()).TextSecondary).Margin(0, 0, space8, 0)
 					a.ThemeSwatchesCentered(c)
 				case 1:
 					ui.Image(c, appLogo).Size(96, 96).Fit(ui.Contain)
-					ui.Text(c, a.T("onboarding_extension")).FontSize(16).FontWeight(600).TextColor(paletteFor(c.Theme()).Text)
-					ui.Text(c, a.T("onboarding_extension_hint")).MaxWidth(560).TextAlign(ui.Center).TextColor(paletteFor(c.Theme()).TextSecondary)
+					ui.Text(c, a.T("onboarding_extension")).FontSize(fontTitle).FontWeight(600).TextColor(paletteFor(c.Theme()).Text)
+					ui.Text(c, a.T("onboarding_extension_hint")).MaxWidth(panelWide).TextAlign(ui.Center).TextColor(paletteFor(c.Theme()).TextSecondary)
 					if primaryButton(c, a.T("onboarding_get_extension"), false).Margin(space12, 0, 0, 0).Clicked() {
 						c.OpenURLThen(browserExtensionURL, a.ShowError)
 					}

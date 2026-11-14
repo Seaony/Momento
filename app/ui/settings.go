@@ -73,14 +73,14 @@ func (a *App) settingsView(c *ui.Context, update UpdateCheckStatus) {
 			if bar.Left > 0 {
 				ui.Box(c.Key("settings-sidebar-titlebar")).Height(max(44, bar.Bottom+space8)).FillWidth().Shrink(0).DragWindow()
 			} else {
-				ui.Row(c.Key("settings-sidebar-titlebar")).Height(44).FillWidth().Padding(0, space16).DragWindow().Children(func() { ui.Text(c, a.T("settings")).Bold() })
+				ui.Row(c.Key("settings-sidebar-titlebar")).Height(rowHeight).FillWidth().Padding(0, space16).DragWindow().Children(func() { ui.Text(c, a.T("settings")).Bold() })
 			}
 			ui.Scroll(c.Key("settings-navigation")).Grow(1).Padding(space8).Gap(space4).Children(func() {
 				for i, tab := range settingsTabs {
 					if i == 3 || i == 7 || i == 9 {
 						ui.Divider(c).Margin(space4, space8)
 					}
-					row := ui.ButtonBase(c.Key(tab.key)).FillWidth().Height(32).Padding(space4, space8).Gap(space8).Radius(radiusControl).Cursor(ui.CursorPointer).Label(a.T(tab.key)).Role(ui.RoleTab).AccessSelected(a.Settings.Tab == i).Justify(ui.Start)
+					row := ui.ButtonBase(c.Key(tab.key)).FillWidth().Height(controlHeight).Padding(space4, space8).Gap(space8).Radius(radiusControl).Cursor(ui.CursorPointer).Label(a.T(tab.key)).Role(ui.RoleTab).AccessSelected(a.Settings.Tab == i).Justify(ui.Start)
 					background, text := ui.Transparent, p.TextSecondary
 					if i == a.Settings.Tab {
 						background, text = p.Raised, p.Text
@@ -98,7 +98,7 @@ func (a *App) settingsView(c *ui.Context, update UpdateCheckStatus) {
 						Transition(ui.ElementTransition{Animation: &motionColor, Shadows: true})
 					animateColors(row, background, text)
 					row.Children(func() {
-						sidebarRowIcon(c, tab.icon, a.Settings.Tab == i, row.Hovered()).Size(18, 18).Shrink(0)
+						sidebarRowIcon(c, tab.icon, a.Settings.Tab == i, row.Hovered()).Size(iconSize, iconSize).Shrink(0)
 						label := ui.Text(c, a.T(tab.key)).FontSize(fontBody).SingleLine().Grow(1).MinWidth(0)
 						if i == a.Settings.Tab {
 							label.FontWeight(600)
@@ -114,7 +114,7 @@ func (a *App) settingsView(c *ui.Context, update UpdateCheckStatus) {
 		})
 		ui.Column(c).Grow(1).MinWidth(0).Background(background).Children(func() {
 			bar := c.TitleBar()
-			ui.Row(c.Key("settings-titlebar")).Height(44).Shrink(0).FillWidth().Padding(0, bar.Right+space24, 0, space24).Center().DragWindow().Children(func() {
+			ui.Row(c.Key("settings-titlebar")).Height(rowHeight).Shrink(0).FillWidth().Padding(0, bar.Right+space24, 0, space24).Center().DragWindow().Children(func() {
 				ui.Text(c, a.T(settingsTabs[a.Settings.Tab].key)).FontSize(fontBody).FontWeight(600).TextColor(p.Text).SingleLine()
 			})
 			ui.Scroll(c.Key("settings-content")).TrackScroll(&a.Settings.Scroll).Grow(1).Padding(space16, space24, space24, space24).Children(func() {
@@ -174,16 +174,9 @@ func settingsSeparator(c *ui.Context) { ui.Divider(c).Margin(0, space16) }
 
 func settingsMenuButton(c *ui.Context, label string) ui.Element {
 	p := paletteFor(c.Theme())
-	button := ui.ButtonBase(c).Height(28).Padding(0, space8).Gap(space8).Radius(radiusControl).Shrink(0).
+	button := ui.ButtonBase(c).Height(controlSmall).Padding(0, space8).Gap(space8).Shrink(0).
 		TextColor(p.Text).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(label)
-	background := p.Subtle
-	if button.Pressed() {
-		background = p.Pressed
-	} else if button.Hovered() {
-		background = p.Hover
-	}
-	animateColors(button, background, p.Text)
-	return button
+	return menuFieldStyle(c, button)
 }
 
 func settingsButton(c *ui.Context, label string) ui.Element {
@@ -263,7 +256,7 @@ func (a *App) languageMenu(c *ui.Context) {
 	trigger := settingsMenuButton(c, a.T("language"))
 	trigger.Children(func() {
 		ui.Text(c, labels[selected]).SingleLine()
-		symbol := appSymbol(c, "chevrons-up-down").Size(15, 15).Shrink(0)
+		symbol := appSymbol(c, "chevrons-up-down").Size(iconSmall, iconSmall).Shrink(0)
 		symbol.TextColor(symbol.AnimateColor("symbol-color", symbolColor(c.Theme(), trigger.Hovered()), motionColor))
 	}).Menu(func(m *ui.Menu) {
 		for i, label := range labels {
@@ -321,12 +314,12 @@ func (a *App) aboutSettings(c *ui.Context, update UpdateCheckStatus) {
 	p := paletteFor(c.Theme())
 	ui.Column(c).FillWidth().Center().Gap(space8).Padding(space8, 0, 0, 0).Children(func() {
 		ui.Image(c, appLogo).Size(space64, space64)
-		ui.Text(c, "Momento").FontSize(24).FontWeight(600).TextColor(p.Text)
+		ui.Text(c, "Momento").FontSize(fontDisplay).FontWeight(600).TextColor(p.Text)
 		a.settingsVersionText(c).FontSize(fontSecondary).TextColor(p.TextSecondary)
 		a.updateMessage(c, update, true)
 		ui.Row(c).Gap(space8).Margin(space12, 0, 0, 0).Children(func() {
 			if update.State == UpdateAvailable {
-				if primaryButton(c, a.T("update_to_version", update.Version), false).Height(28).Radius(radiusControl).Clicked() {
+				if primaryButton(c, a.T("update_to_version", update.Version), false).Height(controlSmall).Radius(radiusControl).Clicked() {
 					ShowAvailableUpdate()
 				}
 			} else {
@@ -348,7 +341,7 @@ func (a *App) updateButton(c *ui.Context, update UpdateCheckStatus) {
 		CheckForUpdates()
 	}
 	if update.State == UpdateAvailable {
-		if primaryButton(c, a.T("update"), false).Height(28).Radius(radiusControl).Clicked() {
+		if primaryButton(c, a.T("update"), false).Height(controlSmall).Radius(radiusControl).Clicked() {
 			ShowAvailableUpdate()
 		}
 	}

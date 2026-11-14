@@ -44,6 +44,7 @@ func TestSidebarOrganizeGroupKeepsBrowsingState(t *testing.T) {
 
 func TestSidebarEmptyFolderActions(t *testing.T) {
 	a := sidebarTestApp()
+	a.Preferences.SmartFolders = true
 	a.Snapshot.Folders = nil
 	tt := ui.NewTester(a.sidebar, 236, 640)
 	if !tt.HasText(a.T("new_folder")) || !tt.HasText(a.T("smart_empty_action")) {
@@ -154,6 +155,8 @@ func TestSidebarPolishScreenshots(t *testing.T) {
 			t.Run(appearance+"/"+state, func(t *testing.T) {
 				a := fixture.app(t, "small", "zh-CN", appearance)
 				a.Library.Manifest.DisplayName = "灵感素材库"
+				// 智能文件夹默认关闭，截图要覆盖它的分组和表单。
+				a.Preferences.SmartFolders = true
 				if state == "populated" || state == "collapsed" {
 					a.Snapshot.Folders = []model.Folder{{ID: "design", Name: "设计参考"}, {ID: "ui", Name: "界面细节", ParentID: "design"}}
 					a.Snapshot.SmartFolders = []model.SmartFolder{{ID: "large", Name: "高清图片", Match: "all", Rules: []model.SmartRule{{Field: "width", Operator: "gte", Value: "1920"}}}}

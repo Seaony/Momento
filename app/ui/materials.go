@@ -21,11 +21,11 @@ func (m frostedSurface) PaintMaterial(p *ui.Painter, r ui.Rect, radii [4]float32
 }
 
 func panelMaterial(t *ui.Theme) ui.Material {
-	return frostedSurface{tint: paletteFor(t).Raised.Alpha(.94), blur: 22}
+	return frostedSurface{tint: paletteFor(t).Raised.Alpha(materialPanelAlpha), blur: space24}
 }
 
 func toolbarMaterial(t *ui.Theme) ui.Material {
-	return frostedSurface{tint: t.Background.Alpha(.92), blur: 22}
+	return frostedSurface{tint: t.Background.Alpha(materialPanelAlpha), blur: space24}
 }
 
 func sidebarMaterial(c *ui.Context, e ui.Element) {
@@ -34,9 +34,9 @@ func sidebarMaterial(c *ui.Context, e ui.Element) {
 		e.Background(p.Sidebar)
 		return
 	}
-	tint := p.Sidebar.Alpha(.99)
+	tint := p.Sidebar.Alpha(materialSidebarAlpha)
 	if c.Theme().Dark {
-		tint = p.Sidebar.Alpha(.86)
+		tint = p.Sidebar.Alpha(materialSidebarDark)
 	}
 	e.Background(tint)
 }

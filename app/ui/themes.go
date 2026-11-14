@@ -14,8 +14,10 @@ type designPalette struct {
 	Background, Sidebar, Raised, Subtle, Hover, Pressed, Selected ui.Color
 	BorderSubtle, Border, Text, TextSecondary, TextTertiary       ui.Color
 	SegmentSelected                                               ui.Color
-	Accent, AccentHover, AccentPressed, OnAccent, Focus, Link     ui.Color
-	Danger, Warning, Success, Shadow, Scrim                       ui.Color
+	// 表单控件：Field 浅底 + BorderSubtle 浅边框一起表现层次，聚焦时换成浮起面 + 焦点色。
+	Field, FieldHover                                         ui.Color
+	Accent, AccentHover, AccentPressed, OnAccent, Focus, Link ui.Color
+	Danger, Warning, Success, Shadow, Scrim                   ui.Color
 }
 
 var lightPalette = designPalette{
@@ -24,22 +26,25 @@ var lightPalette = designPalette{
 	BorderSubtle: ui.Hex("#F3E3D6"), Border: ui.Hex("#EAD6C6"),
 	Text: ui.Hex("#2B221D"), TextSecondary: ui.Hex("#6F5F55"), TextTertiary: ui.Hex("#7D6B60"),
 	SegmentSelected: ui.Hex("#FFFFFF"),
-	Accent:          ui.Hex("#F47B45"), AccentHover: ui.Hex("#FA8B59"), AccentPressed: ui.Hex("#E8733D"),
+	Field:           ui.Hex("#FAF3ED"), FieldHover: ui.Hex("#F7EEE6"),
+	Accent: ui.Hex("#F47B45"), AccentHover: ui.Hex("#FA8B59"), AccentPressed: ui.Hex("#E8733D"),
 	OnAccent: ui.Hex("#2B221D"), Focus: ui.Hex("#D9622C"), Link: ui.Hex("#A74320"),
 	Danger: ui.Hex("#B91C1C"), Warning: ui.Hex("#8F4500"), Success: ui.Hex("#166534"),
 	Shadow: ui.RGBA(92, 56, 32, .07), Scrim: ui.RGBA(43, 34, 29, .25),
 }
 
+// 深色以近黑为主，只留一点暖意；橘色只在强调色上出现。
 var darkPalette = designPalette{
-	Background: ui.Hex("#1C1714"), Sidebar: ui.Hex("#231C17"), Raised: ui.Hex("#31271F"),
-	Subtle: ui.Hex("#2A211B"), Hover: ui.Hex("#382B22"), Pressed: ui.Hex("#433126"), Selected: ui.Hex("#31271F"),
-	BorderSubtle: ui.Hex("#3A2D24"), Border: ui.Hex("#4B3A2E"),
-	Text: ui.Hex("#F6EEE7"), TextSecondary: ui.Hex("#CFBCAE"), TextTertiary: ui.Hex("#B29886"),
-	SegmentSelected: ui.Hex("#4D3D31"),
-	Accent:          ui.Hex("#FF9A66"), AccentHover: ui.Hex("#FFAB7E"), AccentPressed: ui.Hex("#F48A54"),
+	Background: ui.Hex("#111010"), Sidebar: ui.Hex("#171615"), Raised: ui.Hex("#201E1D"),
+	Subtle: ui.Hex("#1A1918"), Hover: ui.Hex("#262422"), Pressed: ui.Hex("#2E2B29"), Selected: ui.Hex("#232120"),
+	BorderSubtle: ui.Hex("#252321"), Border: ui.Hex("#322F2D"),
+	Text: ui.Hex("#F4F0ED"), TextSecondary: ui.Hex("#B6AEA8"), TextTertiary: ui.Hex("#938A84"),
+	SegmentSelected: ui.Hex("#2F2C2A"),
+	Field:           ui.Hex("#1C1B1A"), FieldHover: ui.Hex("#222020"),
+	Accent: ui.Hex("#FF9A66"), AccentHover: ui.Hex("#FFAB7E"), AccentPressed: ui.Hex("#F48A54"),
 	OnAccent: ui.Hex("#2B221D"), Focus: ui.Hex("#FF9A66"), Link: ui.Hex("#FFB48F"),
 	Danger: ui.Hex("#FF9B9B"), Warning: ui.Hex("#FCD478"), Success: ui.Hex("#88DDA9"),
-	Shadow: ui.RGBA(0, 0, 0, .24), Scrim: ui.RGBA(28, 23, 20, .60),
+	Shadow: ui.RGBA(0, 0, 0, .36), Scrim: ui.RGBA(0, 0, 0, .55),
 }
 
 func paletteFor(t *ui.Theme) *designPalette {
@@ -68,6 +73,28 @@ const (
 	fontSecondary = 12
 	fontGroup     = 11
 	fontNumber    = 12
+	fontTitle     = 16 // 对话框、空状态标题
+	fontHeading   = 20 // 独立窗口大标题
+	fontDisplay   = 24 // 关于页产品名
+
+	iconSize      = 18 // 侧栏、工具栏图标
+	iconMedium    = 16 // 菜单、检查器里的图标
+	iconSmall     = 14 // 箭头、行内小图标
+	iconTiny      = 12 // 药丸里的移除按钮
+	controlHeight = 32 // 按钮、输入框、侧栏行
+	controlSmall  = 28 // 紧凑按钮、图标按钮
+	controlLarge  = 36 // 主要入口按钮
+	checkSize     = 16 // 复选框、单选框
+	rowHeight     = 44 // 设置导航、菜单里的两行项
+
+	panelNarrow = 360 // 弹出层、引导里的窄面板
+	panelDialog = 420 // 对话框
+	panelWide   = 560 // 宽面板、引导页
+
+	materialPanelAlpha   = .88 // 弹出层、菜单、对话框磨砂的着色；再低压在纯黑图片上时次要文字对比度不到 4.5
+	materialSidebarAlpha = .86 // 侧栏系统材质上的着色（浅色）
+	materialSidebarDark  = .70 // 侧栏系统材质上的着色（深色）
+	materialOverlayAlpha = .92 // 压在图片上的小按钮，保证图标看得清
 )
 
 func nativeColorPair(light, dark ui.Color) string {
@@ -91,8 +118,8 @@ func momentoTheme(key string, systemDark bool) *ui.Theme {
 	theme.Dark = dark
 	p := paletteFor(&theme)
 	theme.Radius, theme.FontSize, theme.Spacing, theme.Font = radiusControl, fontBody, space4, uiFont("en")
-	theme.Background, theme.Surface = p.Background, p.Raised
-	theme.SurfaceHover, theme.SurfacePressed = p.Hover, p.Pressed
+	theme.Background, theme.Surface = p.Background, p.Field
+	theme.SurfaceHover, theme.SurfacePressed = p.FieldHover, p.Pressed
 	theme.Text, theme.TextMuted = p.Text, p.TextSecondary
 	theme.Border = p.BorderSubtle
 	theme.Accent, theme.AccentHover, theme.AccentPressed, theme.AccentText = p.Accent, p.AccentHover, p.AccentPressed, p.OnAccent
@@ -210,7 +237,7 @@ func (a *App) ThemeSwatchesCentered(c *ui.Context) {
 
 func (a *App) themeSwatches(c *ui.Context, centered bool) {
 	theme := c.Theme()
-	row := ui.Row(c).Gap(12).AlignItems(ui.Center)
+	row := ui.Row(c).Gap(space12).AlignItems(ui.Center)
 	if centered {
 		row.Justify(ui.Center)
 	}
@@ -218,7 +245,7 @@ func (a *App) themeSwatches(c *ui.Context, centered bool) {
 		for _, key := range themeKeys {
 			selected := a.Preferences.Theme == key || (a.Preferences.Theme == "" && key == "system")
 			name := a.T(themeNameKey(key))
-			button := ui.ButtonBase(c.Key(key)).Width(92).Padding(4).Column().Gap(8).AlignItems(ui.Center).Radius(8).Cursor(ui.CursorPointer).Label(name).Tooltip(name).AccessSelected(selected)
+			button := ui.ButtonBase(c.Key(key)).Width(92).Padding(space4).Column().Gap(space8).AlignItems(ui.Center).Radius(radiusControl).Cursor(ui.CursorPointer).Label(name).Tooltip(name).AccessSelected(selected)
 			hovered := button.Hovered()
 			text := theme.TextMuted
 			outline := ui.Transparent
@@ -230,7 +257,7 @@ func (a *App) themeSwatches(c *ui.Context, centered bool) {
 			text = button.AnimateColor("theme-label", text, motionColor)
 			outline = button.AnimateColor("theme-outline", outline, motionColor)
 			button.Children(func() {
-				ui.Box(c).Size(76, 48).Radius(8).Draw(func(p *ui.Painter, r ui.Rect) {
+				ui.Box(c).Size(76, 48).Radius(radiusControl).Draw(func(p *ui.Painter, r ui.Rect) {
 					palette := momentoTheme(key, theme.Dark)
 					draw := func(box ui.Rect, colors *ui.Theme) {
 						p.Fill(box, colors.Background, 0)
@@ -249,7 +276,7 @@ func (a *App) themeSwatches(c *ui.Context, centered bool) {
 					p.Stroke(r, theme.Border, 8, 1)
 					p.Stroke(ui.Rect{X: r.X - 4, Y: r.Y - 4, W: r.W + 8, H: r.H + 8}, outline, radiusPanel, 2)
 				})
-				ui.Text(c, name).FontSize(12).TextColor(text).SingleLine()
+				ui.Text(c, name).FontSize(fontSecondary).TextColor(text).SingleLine()
 			})
 			if button.Clicked() {
 				a.Preferences.Theme = key

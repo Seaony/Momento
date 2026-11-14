@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -77,34 +76,6 @@ func TestPreviewRotationChangeInvalidatesPendingDecode(t *testing.T) {
 	}
 	if p.targetRotation != 90 {
 		t.Fatal("没有记录当前方向")
-	}
-}
-
-func TestPreviewRotationButtonsDisabledWhileBusy(t *testing.T) {
-	a := previewFixture(288, 192)
-	a.Busy = true
-	tt := ui.NewTester(previewTestView(a), 1100, 640)
-	tt.Advance(5 * time.Millisecond)
-	for _, key := range []string{"preview_rotate_left", "preview_rotate_right"} {
-		label := a.T(key)
-		info, ok := tt.AccessByRole(ui.RoleButton, label)
-		if !ok || !info.Disabled {
-			t.Fatalf("旋转按钮没有按忙碌状态禁用：%s %+v", key, info)
-		}
-		if err := tt.Click(label); err != nil {
-			t.Fatal(err)
-		}
-		if a.Preview.active.picture.targetRotation != 0 || a.Preview.active.picture.Bitmap == nil {
-			t.Fatal("忙碌期间旋转按钮仍然操作了预览")
-		}
-	}
-	a.Busy = false
-	tt.Frame()
-	for _, key := range []string{"preview_rotate_left", "preview_rotate_right"} {
-		info, ok := tt.AccessByRole(ui.RoleButton, a.T(key))
-		if !ok || info.Disabled {
-			t.Fatalf("空闲后旋转按钮没有恢复：%s %+v", key, info)
-		}
 	}
 }
 

@@ -115,7 +115,7 @@ func (a *App) assetArea(c *ui.Context) {
 			Center().Gap(space12).PassThrough()).Children(func() {
 			ui.Box(c.Key("empty-icon")).Size(space48, space48).Radius(space24).Background(p.Subtle).TextColor(p.TextSecondary).
 				Center().Children(func() { appIcon(c, icon).Size(space24, space24) })
-			ui.Text(c.Key("empty-title"), title).FontSize(16).FontWeight(600).TextColor(p.Text).TextAlign(ui.Center)
+			ui.Text(c.Key("empty-title"), title).FontSize(fontTitle).FontWeight(600).TextColor(p.Text).TextAlign(ui.Center)
 			ui.Text(c.Key("empty-hint"), hint).FontSize(fontBody).TextColor(p.TextSecondary).TextAlign(ui.Center)
 			switch {
 			case a.Query.Search != "":
@@ -305,7 +305,7 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 			}
 		}
 		if hovered || asset.Favorite {
-			button := ui.Button(c.Key("favorite"), "").Label(a.T("favorite")).Absolute().Top(space8).Right(space8).Size(28, 28).Padding(0).Radius(radiusControl).BorderWidth(0).Material(panelMaterial(c.Theme())).Cursor(ui.CursorPointer).Children(func() { appIcon(c, "heart").Size(18, 18) })
+			button := ui.Button(c.Key("favorite"), "").Label(a.T("favorite")).Absolute().Top(space8).Right(space8).Size(controlSmall, controlSmall).Padding(0).Radius(radiusControl).BorderWidth(0).Material(panelMaterial(c.Theme())).Cursor(ui.CursorPointer).Children(func() { appIcon(c, "heart").Size(iconSize, iconSize) })
 			if list {
 				button.Top(space16)
 			}
@@ -317,12 +317,12 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 			}
 			*wasFavoriteFocused = favoriteFocused
 			fadeMotion(button)
-			ink, tint, border := p.TextSecondary, p.Raised.Alpha(.94), ui.Transparent
+			ink, tint, border := p.TextSecondary, p.Raised.Alpha(materialOverlayAlpha), ui.Transparent
 			if button.Hovered() {
-				ink, tint = p.Text, p.Hover.Alpha(.94)
+				ink, tint = p.Text, p.Hover.Alpha(materialOverlayAlpha)
 			}
 			if button.Pressed() {
-				tint = p.Pressed.Alpha(.94)
+				tint = p.Pressed.Alpha(materialOverlayAlpha)
 			}
 			if asset.Favorite {
 				border = p.Border

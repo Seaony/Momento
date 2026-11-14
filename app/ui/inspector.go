@@ -115,7 +115,8 @@ func (a *App) inspectorAsset(c *ui.Context, asset model.Asset) {
 	}
 	ui.Column(c.Key("inspector-filename")).Gap(space4).Children(func() {
 		input := ui.TextInput(c.Key("asset_title_"+asset.ID), &a.Inspector.Title).
-			Label(a.T("title")).FontSize(fontBody).FontWeight(600).Background(p.Raised).Border(1, p.Border).Radius(radiusControl).Disabled(a.Busy)
+			Label(a.T("title")).FontSize(fontBody).FontWeight(600).Disabled(a.Busy)
+		fieldStyle(c, input)
 		if input.Submitted() || input.FocusLeft() {
 			a.saveInspectorTitle()
 		}
@@ -126,7 +127,7 @@ func (a *App) inspectorAsset(c *ui.Context, asset model.Asset) {
 			for _, color := range asset.Colors[:min(8, len(asset.Colors))] {
 				hex := color.Hex
 				if ui.Button(c.Key("swatch_"+hex), "").Label(a.T("copy_color", hex)).
-					Grow(1).MinWidth(0).Height(28).Padding(0).Radius(radiusSmall).Background(ui.Hex(hex)).
+					Grow(1).MinWidth(0).Height(controlSmall).Padding(0).Radius(radiusSmall).Background(ui.Hex(hex)).
 					Tooltip(hex).Clicked() {
 					c.WriteClipboardThen(hex, func(err error) {
 						if err != nil {
@@ -166,7 +167,8 @@ func (a *App) inspectorNotes(c *ui.Context, asset model.Asset) {
 	ui.Column(c).Gap(space8).Children(func() {
 		ui.Divider(c.Key("inspector-notes-divider")).Background(p.BorderSubtle)
 		ui.Text(c, a.T("asset_note")).FontSize(fontGroup).FontWeight(600).LetterSpacing(.8).TextColor(p.TextTertiary)
-		note := ui.TextArea(c.Key("asset-note-"+asset.ID), &a.Inspector.Note).Label(a.T("asset_note")).Placeholder(a.T("asset_note_placeholder")).PlaceholderColor(p.TextTertiary).Height(88).Background(p.Raised).Border(1, p.Border).Radius(radiusControl).FillWidth().Disabled(a.Busy)
+		note := ui.TextArea(c.Key("asset-note-"+asset.ID), &a.Inspector.Note).Label(a.T("asset_note")).Placeholder(a.T("asset_note_placeholder")).PlaceholderColor(p.TextTertiary).Height(88).FillWidth().Disabled(a.Busy)
+		fieldStyle(c, note)
 		if note.FocusLeft() {
 			a.saveInspectorDetails()
 		}
@@ -175,7 +177,8 @@ func (a *App) inspectorNotes(c *ui.Context, asset model.Asset) {
 		ui.Text(c, a.T("source_url")).FontSize(fontGroup).FontWeight(600).LetterSpacing(.8).TextColor(p.TextTertiary)
 		ui.Row(c).Gap(space8).Children(func() {
 			ui.Box(c.Key("source-field")).Grow(1).MinWidth(0).Height(space32).Children(func() {
-				source := ui.TextInput(c.Key("asset-source-"+asset.ID), &a.Inspector.SourceURL).Label(a.T("source_url")).Placeholder(a.T("source_url_placeholder")).PlaceholderColor(p.TextTertiary).Background(p.Raised).Border(1, p.Border).Radius(radiusControl).TextColor(p.Link).Fill().Disabled(a.Busy)
+				source := ui.TextInput(c.Key("asset-source-"+asset.ID), &a.Inspector.SourceURL).Label(a.T("source_url")).Placeholder(a.T("source_url_placeholder")).PlaceholderColor(p.TextTertiary).TextColor(p.Link).Fill().Disabled(a.Busy)
+				fieldStyle(c, source)
 				if source.Submitted() || source.FocusLeft() {
 					a.saveInspectorDetails()
 				}
@@ -285,7 +288,7 @@ func (a *App) inspectorMemberships(c *ui.Context, selected []model.Asset, items 
 			}
 			frostedPopover(c.Key("inspector_"+kind+"_picker"), add, open, func() {
 				ui.Column(c).Width(244).Gap(space8).Children(func() {
-					ui.SearchField(c, search).Label(a.T("search_" + plural)).Placeholder(a.T("search_" + plural))
+					fieldStyle(c, ui.SearchField(c, search).Label(a.T("search_"+plural)).Placeholder(a.T("search_"+plural)))
 					ui.Scroll(c).MaxHeight(220).Gap(space4).Children(func() {
 						query := strings.ToLower(strings.TrimSpace(*search))
 						for _, item := range items {
@@ -497,7 +500,7 @@ func (a *App) runInspectorEdit(edit inspectorEdit) {
 func (a *App) saveInspectorDetails() { a.saveInspectorEdits() }
 
 func inspectorIconButton(c *ui.Context, label, icon string) ui.Element {
-	button := ui.ButtonBase(c).Label(label).Tooltip(label).Size(28, 28).Padding(0).Radius(radiusControl).Cursor(ui.CursorPointer)
+	button := ui.ButtonBase(c).Label(label).Tooltip(label).Size(controlSmall, controlSmall).Padding(0).Radius(radiusControl).Cursor(ui.CursorPointer)
 	p := paletteFor(c.Theme())
 	background, text := ui.Transparent, p.TextSecondary
 	if button.Pressed() {
@@ -509,13 +512,13 @@ func inspectorIconButton(c *ui.Context, label, icon string) ui.Element {
 		text = p.Text
 	}
 	animateColors(button, background, text)
-	button.Children(func() { appIcon(c, icon).Size(16, 16) })
+	button.Children(func() { appIcon(c, icon).Size(iconMedium, iconMedium) })
 	return button
 }
 
 func inspectorRemoveButton(c *ui.Context, label string) ui.Element {
 	p := paletteFor(c.Theme())
-	button := ui.ButtonBase(c).Label(label).Tooltip(label).Size(28, 28).Padding(0).Radius(radiusControl).Cursor(ui.CursorPointer)
+	button := ui.ButtonBase(c).Label(label).Tooltip(label).Size(controlSmall, controlSmall).Padding(0).Radius(radiusControl).Cursor(ui.CursorPointer)
 	background, text := ui.Transparent, p.TextTertiary
 	if button.Pressed() {
 		background = p.Pressed

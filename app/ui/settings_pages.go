@@ -28,6 +28,20 @@ func (a *App) switchSetting(c *ui.Context, key string, value *bool, disabled boo
 	})
 }
 
+// 带一行次要说明的开关，返回是否被切换；保存和联动由调用方处理。
+func (a *App) switchSettingHint(c *ui.Context, key, hint string, value *bool) bool {
+	changed := false
+	// 两行文字的行和上面的分段设置一样用 space12 上下留白。
+	ui.Row(c).FillWidth().Padding(space12, space16).Gap(space12).AlignItems(ui.Center).Children(func() {
+		ui.Column(c).Grow(1).MinWidth(0).Gap(space4).Children(func() {
+			ui.Text(c, a.T(key))
+			ui.Text(c, a.T(hint)).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary)
+		})
+		changed = ui.Switch(c.Key(key), value).Label(a.T(key)).Changed()
+	})
+	return changed
+}
+
 func settingsSegments(c *ui.Context, label string, selected *int, labels ...string) ui.Element {
 	theme := c.Theme()
 	p := paletteFor(theme)
@@ -35,7 +49,7 @@ func settingsSegments(c *ui.Context, label string, selected *int, labels ...stri
 	items := make([]ui.Element, len(labels))
 	parts.Track.AlignItems(ui.Stretch).Padding(space4).Gap(space4).Radius(radiusControl).Background(p.Subtle).Border(1, p.BorderSubtle).Label(label).Children(func() {
 		for i, text := range labels {
-			segment := parts.Segment(i).MinHeight(28).Padding(space4, space12).Radius(radiusSmall).Cursor(ui.CursorPointer).Label(text)
+			segment := parts.Segment(i).MinHeight(controlSmall).Padding(space4, space12).Radius(radiusSmall).Cursor(ui.CursorPointer).Label(text)
 			styleSegment(c, segment, i == *selected)
 			items[i] = segment
 			segment.Children(func() { ui.Text(c, text).SingleLine() })
@@ -94,7 +108,7 @@ func (a *App) appearanceSettings(c *ui.Context) {
 			zoom := settingsMenuButton(c.Key("ui-zoom"), a.T("ui_zoom"))
 			zoom.Children(func() {
 				ui.Text(c, label).Font(monoFont(c)).FontSize(fontNumber).SingleLine()
-				symbol := appSymbol(c, "chevrons-up-down").Size(15, 15).Shrink(0)
+				symbol := appSymbol(c, "chevrons-up-down").Size(iconSmall, iconSmall).Shrink(0)
 				symbol.TextColor(symbol.AnimateColor("symbol-color", symbolColor(c.Theme(), zoom.Hovered()), motionColor))
 			}).Menu(func(menu *ui.Menu) {
 				for i, choice := range labels {
@@ -115,6 +129,11 @@ func (a *App) appearanceSettings(c *ui.Context) {
 func (a *App) sidebarSettings(c *ui.Context) {
 	settingsSection(c, "", "", func() {
 		a.stringSetting(c, "folder_double_click", &a.Preferences.FolderDoubleClick, []string{"rename", "expand"}, []string{"rename", "folder_expand"})
+		settingsSeparator(c)
+		enabled := a.Preferences.SmartFolders
+		if a.switchSettingHint(c, "smart_folders_enabled", "smart_folders_enabled_hint", &enabled) {
+			a.SetSmartFoldersEnabled(enabled)
+		}
 	})
 	settingsSection(c, a.T("sidebar_show"), "", func() {
 		items := []struct {
@@ -139,12 +158,14 @@ func (a *App) sidebarSettings(c *ui.Context) {
 		})
 		settingsSeparator(c)
 		ui.Row(c).FillWidth().Padding(space16).Gap(space8).Children(func() {
-			for _, item := range []struct{ key, label string }{{"quick", "quick_access"}, {"smart", "smart_folders"}, {"folders", "folders"}} {
+			// 智能文件夹由上面的开关决定，这里不再重复；空位占住第三列，和上面三列对齐。
+			for _, item := range []struct{ key, label string }{{"quick", "quick_access"}, {"folders", "folders"}} {
 				shown := !slices.Contains(a.Preferences.SidebarHidden, item.key)
 				if settingsCheckbox(c.Key(item.key), &shown, a.T(item.label)).Grow(1).MinWidth(0).Changed() {
 					a.setSidebarShown(item.key, shown)
 				}
 			}
+			ui.Box(c).Grow(1).MinWidth(0)
 		})
 	})
 }
@@ -210,7 +231,7 @@ func (a *App) importSettings(c *ui.Context) {
 			}
 			ui.Column(c.Key(rule.Path)).FillWidth().Children(func() {
 				settingsRow(c, func() {
-					appIcon(c, "folder").Size(18, 18).Shrink(0)
+					appIcon(c, "folder").Size(iconSize, iconSize).Shrink(0)
 					ui.Text(c, rule.Path).SingleLine().Grow(1).MinWidth(0).Tooltip(rule.Path)
 				})
 				settingsRow(c, func() {
@@ -224,7 +245,7 @@ func (a *App) importSettings(c *ui.Context) {
 					target := settingsMenuButton(c, a.T("auto_import_target")).Width(160)
 					target.Children(func() {
 						ui.Text(c, folderName).SingleLine().Grow(1).MinWidth(0)
-						symbol := appSymbol(c, "chevrons-up-down").Size(15, 15).Shrink(0)
+						symbol := appSymbol(c, "chevrons-up-down").Size(iconSmall, iconSmall).Shrink(0)
 						symbol.TextColor(symbol.AnimateColor("symbol-color", symbolColor(c.Theme(), target.Hovered()), motionColor))
 					}).Menu(func(m *ui.Menu) {
 						if m.Item(a.T("auto_import_library_root")).Radio(rule.FolderID == "").Chosen() {
@@ -246,7 +267,7 @@ func (a *App) importSettings(c *ui.Context) {
 						a.Preferences.AutoImport[libraryID] = rules
 						a.SavePreferences()
 					}
-					if settingsButton(c.Key("remove"), a.T("remove")).Height(28).Clicked() {
+					if settingsButton(c.Key("remove"), a.T("remove")).Height(controlSmall).Clicked() {
 						a.Preferences.AutoImport[libraryID] = slices.Delete(slices.Clone(rules), i, i+1)
 						a.SavePreferences()
 					}
@@ -258,7 +279,7 @@ func (a *App) importSettings(c *ui.Context) {
 		}
 		settingsSeparator(c)
 		settingsRow(c, func() {
-			if settingsButton(c, a.T("add_watch_folder")).Height(28).Clicked() {
+			if settingsButton(c, a.T("add_watch_folder")).Height(controlSmall).Clicked() {
 				a.Settings.AutoImportAddError = ""
 				a.chooseAutoImportFolder()
 			}
@@ -350,7 +371,7 @@ func (a *App) passwordSettings(c *ui.Context) {
 		if a.Preferences.PasswordHash != "" {
 			settingsSeparator(c)
 			settingsRow(c, func() {
-				if settingsButton(c, a.T("change_password")).Height(28).Clicked() {
+				if settingsButton(c, a.T("change_password")).Height(controlSmall).Clicked() {
 					a.ShowPasswordSettings("change")
 				}
 			})

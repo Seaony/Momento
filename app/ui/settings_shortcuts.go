@@ -263,7 +263,7 @@ func displayShortcut(value string) string {
 
 func (a *App) shortcutsSettings(c *ui.Context) {
 	p := paletteFor(c.Theme())
-	ui.SearchField(c.Key("shortcut-search"), &a.Settings.ShortcutSearch).Label(a.T("shortcut_search")).Placeholder(a.T("shortcut_search")).Height(32).Radius(radiusControl).FillWidth()
+	fieldStyle(c, ui.SearchField(c.Key("shortcut-search"), &a.Settings.ShortcutSearch).Label(a.T("shortcut_search")).Placeholder(a.T("shortcut_search")).Height(controlHeight).FillWidth())
 	for _, group := range []string{"global", "file", "edit", "view", "preview"} {
 		definitions := []ShortcutDefinition{}
 		for _, definition := range ShortcutDefinitions {
@@ -308,7 +308,7 @@ func (a *App) shortcutRow(c *ui.Context, definition ShortcutDefinition) {
 			label = a.T("shortcut_recording")
 		}
 		button := settingsMenuButton(c.Key("record"), label).Padding(0, space12).Justify(ui.Center).MinWidth(132).
-			Border(1, p.Border).Label(a.T("shortcut_binding", a.T(definition.Key))).Children(func() {
+			Label(a.T("shortcut_binding", a.T(definition.Key))).Children(func() {
 			ui.Text(c, label).FontSize(fontBody).SingleLine()
 		})
 		if recording {
