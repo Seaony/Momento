@@ -15,7 +15,8 @@ import (
 var settingsPlatform = func() string { return runtime.GOOS }
 
 func settingsError(c *ui.Context, text string) {
-	fadeMotion(ui.Text(c, text).FontSize(12).TextColor(c.Theme().Danger).Padding(4, 16, 12, 16)).Role(ui.RoleAlert)
+	p := paletteFor(c.Theme())
+	fadeMotion(ui.Text(c, text).FontSize(fontSecondary).TextColor(p.Danger).Padding(space4, space16, space12, space16)).Role(ui.RoleAlert)
 }
 
 func (a *App) switchSetting(c *ui.Context, key string, value *bool, disabled bool) {
@@ -29,22 +30,23 @@ func (a *App) switchSetting(c *ui.Context, key string, value *bool, disabled boo
 
 func settingsSegments(c *ui.Context, label string, selected *int, labels ...string) ui.Element {
 	theme := c.Theme()
+	p := paletteFor(theme)
 	parts := ui.SegmentedBase(c, selected, len(labels))
 	items := make([]ui.Element, len(labels))
-	parts.Track.AlignItems(ui.Stretch).Padding(4).Gap(4).Radius(8).Background(warmOverlay(theme, .04)).Border(1, theme.Border).Label(label).Children(func() {
+	parts.Track.AlignItems(ui.Stretch).Padding(space4).Gap(space4).Radius(radiusControl).Background(p.Subtle).Border(1, p.BorderSubtle).Label(label).Children(func() {
 		for i, text := range labels {
-			segment := parts.Segment(i).MinHeight(28).Padding(4, 12).Radius(4).Cursor(ui.CursorPointer).Label(text)
+			segment := parts.Segment(i).MinHeight(28).Padding(space4, space12).Radius(radiusSmall).Cursor(ui.CursorPointer).Label(text)
 			styleSegment(c, segment, i == *selected)
 			items[i] = segment
 			segment.Children(func() { ui.Text(c, text).SingleLine() })
 		}
 	})
-	slidingSegmentTrack(c, parts.Track, items, *selected, 4, 4)
+	slidingSegmentTrack(c, parts.Track, items, *selected, space4, space4)
 	return parts.Track.FillEqually()
 }
 
 func (a *App) stringSetting(c *ui.Context, key string, value *string, codes, labels []string) {
-	ui.Column(c.Key(key)).FillWidth().Padding(12, 16).Gap(8).Children(func() {
+	ui.Column(c.Key(key)).FillWidth().Padding(space12, space16).Gap(space8).Children(func() {
 		ui.Text(c, a.T(key))
 		selected := max(0, slices.Index(codes, *value))
 		translated := make([]string, len(labels))
@@ -59,7 +61,7 @@ func (a *App) stringSetting(c *ui.Context, key string, value *string, codes, lab
 }
 
 func (a *App) boolSetting(c *ui.Context, key string, value *bool, firstValue bool, firstKey, secondKey string) {
-	ui.Column(c.Key(key)).FillWidth().Padding(12, 16).Gap(8).Children(func() {
+	ui.Column(c.Key(key)).FillWidth().Padding(space12, space16).Gap(space8).Children(func() {
 		ui.Text(c, a.T(key))
 		selected := 0
 		if *value != firstValue {
@@ -77,7 +79,7 @@ func (a *App) boolSetting(c *ui.Context, key string, value *bool, firstValue boo
 
 func (a *App) appearanceSettings(c *ui.Context) {
 	settingsSection(c, a.T("theme_title"), "", func() {
-		ui.Column(c).FillWidth().Padding(16).Children(func() { a.ThemeSwatches(c) })
+		ui.Column(c).FillWidth().Padding(space16).Children(func() { a.ThemeSwatches(c) })
 		settingsSeparator(c)
 		settingsRow(c, func() {
 			ui.Text(c, a.T("ui_zoom")).Grow(1)
@@ -91,7 +93,7 @@ func (a *App) appearanceSettings(c *ui.Context) {
 			}
 			zoom := settingsMenuButton(c.Key("ui-zoom"), a.T("ui_zoom"))
 			zoom.Children(func() {
-				ui.Text(c, label).SingleLine()
+				ui.Text(c, label).Font(monoFont(c)).FontSize(fontNumber).SingleLine()
 				symbol := appSymbol(c, "chevrons-up-down").Size(15, 15).Shrink(0)
 				symbol.TextColor(symbol.AnimateColor("symbol-color", symbolColor(c.Theme(), zoom.Hovered()), motionColor))
 			}).Menu(func(menu *ui.Menu) {
@@ -119,9 +121,9 @@ func (a *App) sidebarSettings(c *ui.Context) {
 			key, label string
 			fixed      bool
 		}{{"all", "all", true}, {"tags", "tag_management", true}, {"trash", "trash", true}, {"favorites", "favorites", false}, {"unfiled", "uncategorized", false}, {"untagged", "untagged", false}, {"recent", "recent", false}, {"random", "random_browse", false}}
-		ui.Column(c).FillWidth().Padding(16).Gap(12).Children(func() {
+		ui.Column(c).FillWidth().Padding(space16).Gap(space12).Children(func() {
 			for start := 0; start < len(items); start += 3 {
-				ui.Row(c).FillWidth().Gap(8).Children(func() {
+				ui.Row(c).FillWidth().Gap(space8).Children(func() {
 					for i := start; i < min(start+3, len(items)); i++ {
 						item := items[i]
 						shown := !slices.Contains(a.Preferences.SidebarHidden, item.key)
@@ -136,7 +138,7 @@ func (a *App) sidebarSettings(c *ui.Context) {
 			}
 		})
 		settingsSeparator(c)
-		ui.Row(c).FillWidth().Padding(16).Gap(8).Children(func() {
+		ui.Row(c).FillWidth().Padding(space16).Gap(space8).Children(func() {
 			for _, item := range []struct{ key, label string }{{"quick", "quick_access"}, {"smart", "smart_folders"}, {"folders", "folders"}} {
 				shown := !slices.Contains(a.Preferences.SidebarHidden, item.key)
 				if settingsCheckbox(c.Key(item.key), &shown, a.T(item.label)).Grow(1).MinWidth(0).Changed() {
@@ -179,6 +181,7 @@ func (a *App) previewSettings(c *ui.Context) {
 }
 
 func (a *App) importSettings(c *ui.Context) {
+	p := paletteFor(c.Theme())
 	settingsSection(c, "", "", func() {
 		a.switchSetting(c, "select_imported", &a.Preferences.SelectImported, false)
 		settingsSeparator(c)
@@ -192,14 +195,14 @@ func (a *App) importSettings(c *ui.Context) {
 	}
 	settingsSection(c, a.T("auto_import"), footer, func() {
 		if a.Library == nil {
-			settingsRow(c, func() { ui.Text(c, a.T("open_library_first")).TextColor(c.Theme().TextMuted) })
+			settingsRow(c, func() { ui.Text(c, a.T("open_library_first")).TextColor(p.TextSecondary) })
 			settingsRow(c, func() { settingsButton(c, a.T("add_watch_folder")).Disabled(true) })
 			return
 		}
 		libraryID := a.Library.Manifest.LibraryID
 		rules := a.Preferences.AutoImport[libraryID]
 		if len(rules) == 0 {
-			settingsRow(c, func() { ui.Text(c, a.T("auto_import_empty")).TextColor(c.Theme().TextMuted) })
+			settingsRow(c, func() { ui.Text(c, a.T("auto_import_empty")).TextColor(p.TextSecondary) })
 		}
 		for i, rule := range rules {
 			if i > 0 {
@@ -207,7 +210,7 @@ func (a *App) importSettings(c *ui.Context) {
 			}
 			ui.Column(c.Key(rule.Path)).FillWidth().Children(func() {
 				settingsRow(c, func() {
-					appIcon(c, "folder").Size(20, 20).Shrink(0)
+					appIcon(c, "folder").Size(18, 18).Shrink(0)
 					ui.Text(c, rule.Path).SingleLine().Grow(1).MinWidth(0).Tooltip(rule.Path)
 				})
 				settingsRow(c, func() {
@@ -311,7 +314,7 @@ func (a *App) notificationsSettings(c *ui.Context) {
 	settingsSection(c, "", "", func() {
 		a.switchSetting(c, "notifications_enabled", &a.Preferences.Notify, false)
 		settingsSeparator(c)
-		ui.Column(c).FillWidth().Padding(12, 16).Gap(12).Children(func() {
+		ui.Column(c).FillWidth().Padding(space12, space16).Gap(space12).Children(func() {
 			for _, event := range []struct{ key, label string }{{"extension", "notify_extension"}, {"auto-import", "notify_auto_import"}, {"duplicate", "notify_duplicate"}} {
 				checked := slices.Contains(a.Preferences.NotifyEvents, event.key)
 				if settingsCheckbox(c.Key(event.key), &checked, a.T(event.label)).Disabled(!a.Preferences.Notify).Changed() {

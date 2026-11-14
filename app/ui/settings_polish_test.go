@@ -15,7 +15,11 @@ func polishedSettingsTester(a *App, status UpdateCheckStatus, measure map[string
 		c.SetMenuPresentation(ui.PopoverMenus)
 		a.settingsView(c, status)
 		for text := range measure {
-			measure[text], _ = c.MeasureText(0, ui.Span{Text: text, Size: 13})
+			weight := 400
+			if text == a.T(settingsTabs[a.Settings.Tab].key) {
+				weight = 600
+			}
+			measure[text], _ = c.MeasureText(0, ui.Span{Text: text, Font: c.Theme().Font, Size: fontBody, Weight: weight, Lang: c.Locale()})
 		}
 	}, 760, 560)
 	tt.SetDark(a.Preferences.Theme == "dark")

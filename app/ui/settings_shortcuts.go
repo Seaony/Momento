@@ -262,7 +262,8 @@ func displayShortcut(value string) string {
 }
 
 func (a *App) shortcutsSettings(c *ui.Context) {
-	ui.SearchField(c.Key("shortcut-search"), &a.Settings.ShortcutSearch).Label(a.T("shortcut_search")).Placeholder(a.T("shortcut_search")).Height(32).Radius(8).FillWidth()
+	p := paletteFor(c.Theme())
+	ui.SearchField(c.Key("shortcut-search"), &a.Settings.ShortcutSearch).Label(a.T("shortcut_search")).Placeholder(a.T("shortcut_search")).Height(32).Radius(radiusControl).FillWidth()
 	for _, group := range []string{"global", "file", "edit", "view", "preview"} {
 		definitions := []ShortcutDefinition{}
 		for _, definition := range ShortcutDefinitions {
@@ -273,9 +274,11 @@ func (a *App) shortcutsSettings(c *ui.Context) {
 		if len(definitions) == 0 {
 			continue
 		}
-		ui.Column(c.Key(group)).FillWidth().Gap(8).Children(func() {
-			ui.Row(c).FillWidth().Padding(0, 4).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, a.T("shortcut_group_"+group)+fmt.Sprintf(" (%d)", len(definitions))).FontSize(12).Bold().TextColor(c.Theme().TextMuted).Grow(1)
+		ui.Column(c.Key(group)).FillWidth().Gap(space8).Children(func() {
+			ui.Row(c).FillWidth().Padding(0, space4).Gap(space8).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, a.T("shortcut_group_"+group)).FontSize(fontGroup).FontWeight(600).LetterSpacing(.6).TextColor(p.TextSecondary)
+				ui.Text(c, fmt.Sprintf("(%d)", len(definitions))).Font(monoFont(c)).FontSize(fontNumber).TextColor(p.TextSecondary)
+				ui.Box(c).Grow(1)
 				if settingsButton(c, a.T("restore_defaults")).Clicked() {
 					a.ResetShortcuts(group)
 				}
@@ -293,6 +296,7 @@ func (a *App) shortcutsSettings(c *ui.Context) {
 }
 
 func (a *App) shortcutRow(c *ui.Context, definition ShortcutDefinition) {
+	p := paletteFor(c.Theme())
 	settingsRow(c, func() {
 		ui.Text(c, a.T(definition.Key)).Grow(1).MinWidth(0)
 		label := displayShortcut(a.Shortcut(definition.Action))
@@ -303,9 +307,15 @@ func (a *App) shortcutRow(c *ui.Context, definition ShortcutDefinition) {
 		if recording {
 			label = a.T("shortcut_recording")
 		}
-		button := settingsButton(c.Key("record"), label).MinWidth(132).Border(1, c.Theme().Border).Label(a.T("shortcut_binding", a.T(definition.Key)))
+		button := settingsMenuButton(c.Key("record"), label).Padding(0, space12).Justify(ui.Center).MinWidth(132).
+			Border(1, p.Border).Label(a.T("shortcut_binding", a.T(definition.Key))).Children(func() {
+			text := ui.Text(c, label).FontSize(fontBody).SingleLine()
+			if !recording && a.Shortcut(definition.Action) != "" {
+				text.Font(monoFont(c)).FontSize(fontNumber)
+			}
+		})
 		if recording {
-			button.Border(1, c.Theme().Accent).Focus().HandleInput(func(event ui.InputEvent) bool {
+			button.Border(1, p.Accent).Focus().HandleInput(func(event ui.InputEvent) bool {
 				if event.Kind != ui.InputKeyDown {
 					return event.Kind == ui.InputText || event.Kind == ui.InputKeyUp
 				}

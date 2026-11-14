@@ -54,6 +54,7 @@ func (a *App) SettingsView(c *ui.Context)           { a.settingsView(c, UpdateSt
 
 func (a *App) settingsView(c *ui.Context, update UpdateCheckStatus) {
 	a.applyTheme(c)
+	p := paletteFor(c.Theme())
 	a.SyncMenuFocus(c)
 	a.Settings.Tab = max(0, min(a.Settings.Tab, len(settingsTabs)-1))
 	background := settingsBackground(c)
@@ -63,35 +64,42 @@ func (a *App) settingsView(c *ui.Context, update UpdateCheckStatus) {
 		c.Root().Background(background)
 	}
 	ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
-		side := ui.Column(c.Key("settings-sidebar")).Width(200).Shrink(0).BorderWidth(0, 1, 0, 0).BorderColor(c.Theme().Border)
+		side := ui.Column(c.Key("settings-sidebar")).Width(200).Shrink(0).BorderWidth(0, 1, 0, 0).BorderColor(p.BorderSubtle)
 		sidebarMaterial(c, side)
 		side.Children(func() {
 			bar := c.TitleBar()
 			if bar.Left > 0 {
-				ui.Box(c.Key("settings-sidebar-titlebar")).Height(max(44, bar.Bottom+8)).FillWidth().Shrink(0).DragWindow()
+				ui.Box(c.Key("settings-sidebar-titlebar")).Height(max(44, bar.Bottom+space8)).FillWidth().Shrink(0).DragWindow()
 			} else {
-				ui.Row(c.Key("settings-sidebar-titlebar")).Height(44).FillWidth().Padding(0, 16).DragWindow().Children(func() { ui.Text(c, a.T("settings")).Bold() })
+				ui.Row(c.Key("settings-sidebar-titlebar")).Height(44).FillWidth().Padding(0, space16).DragWindow().Children(func() { ui.Text(c, a.T("settings")).Bold() })
 			}
-			ui.Scroll(c.Key("settings-navigation")).Grow(1).Padding(8).Gap(4).Children(func() {
+			ui.Scroll(c.Key("settings-navigation")).Grow(1).Padding(space8).Gap(space4).Children(func() {
 				for i, tab := range settingsTabs {
 					if i == 3 || i == 7 || i == 9 {
-						ui.Divider(c).Margin(4, 8)
+						ui.Divider(c).Margin(space4, space8)
 					}
-					row := ui.ButtonBase(c.Key(tab.key)).FillWidth().Height(32).Padding(4, 8).Gap(10).Radius(8).Cursor(ui.CursorPointer).Label(a.T(tab.key)).Role(ui.RoleTab).AccessSelected(a.Settings.Tab == i).Justify(ui.Start)
-					background, text := ui.Transparent, c.Theme().TextMuted
+					row := ui.ButtonBase(c.Key(tab.key)).FillWidth().Height(32).Padding(space4, space8).Gap(space8).Radius(radiusControl).Cursor(ui.CursorPointer).Label(a.T(tab.key)).Role(ui.RoleTab).AccessSelected(a.Settings.Tab == i).Justify(ui.Start)
+					background, text := ui.Transparent, p.TextSecondary
 					if i == a.Settings.Tab {
-						background, text = c.Theme().Selection, titleColor(c.Theme())
+						background, text = p.Raised, p.Text
+						elevated(row, c.Theme())
 					} else if row.Pressed() {
-						background, text = warmOverlay(c.Theme(), .11), c.Theme().Text
+						background, text = p.Pressed, p.Text
 					} else if row.Hovered() {
-						background, text = warmOverlay(c.Theme(), .08), c.Theme().Text
+						background, text = p.Hover, p.Text
 					}
+					border := ui.Transparent
+					if i == a.Settings.Tab {
+						border = p.BorderSubtle
+					}
+					row.Border(1, row.AnimateColor("selection-border", border, motionColor)).
+						Transition(ui.ElementTransition{Animation: &motionColor, Shadows: true})
 					animateColors(row, background, text)
 					row.Children(func() {
 						sidebarRowIcon(c, tab.icon, a.Settings.Tab == i, row.Hovered()).Size(18, 18).Shrink(0)
-						label := ui.Text(c, a.T(tab.key)).FontSize(13).SingleLine().Grow(1).MinWidth(0)
+						label := ui.Text(c, a.T(tab.key)).FontSize(fontBody).SingleLine().Grow(1).MinWidth(0)
 						if i == a.Settings.Tab {
-							label.Bold()
+							label.FontWeight(600)
 						}
 					})
 					if row.Clicked() {
@@ -104,11 +112,11 @@ func (a *App) settingsView(c *ui.Context, update UpdateCheckStatus) {
 		})
 		ui.Column(c).Grow(1).MinWidth(0).Background(background).Children(func() {
 			bar := c.TitleBar()
-			ui.Row(c.Key("settings-titlebar")).Height(44).Shrink(0).FillWidth().Padding(0, bar.Right+24, 0, 24).Center().DragWindow().Children(func() {
-				ui.Text(c, a.T(settingsTabs[a.Settings.Tab].key)).FontSize(13).Bold().TextColor(titleColor(c.Theme())).SingleLine()
+			ui.Row(c.Key("settings-titlebar")).Height(44).Shrink(0).FillWidth().Padding(0, bar.Right+space24, 0, space24).Center().DragWindow().Children(func() {
+				ui.Text(c, a.T(settingsTabs[a.Settings.Tab].key)).FontSize(fontBody).FontWeight(600).TextColor(p.Text).SingleLine()
 			})
-			ui.Scroll(c.Key("settings-content")).TrackScroll(&a.Settings.Scroll).Grow(1).Padding(16, 24, 24, 24).Children(func() {
-				fadeMotion(ui.Column(c.Key(a.Settings.Tab)).FillWidth().Gap(24)).Children(func() {
+			ui.Scroll(c.Key("settings-content")).TrackScroll(&a.Settings.Scroll).Grow(1).Padding(space16, space24, space24, space24).Children(func() {
+				fadeMotion(ui.Column(c.Key(a.Settings.Tab)).FillWidth().Gap(space24)).Children(func() {
 					switch a.Settings.Tab {
 					case SettingsAppearance:
 						a.appearanceSettings(c)
@@ -141,41 +149,44 @@ func (a *App) settingsView(c *ui.Context, update UpdateCheckStatus) {
 }
 
 func settingsBackground(c *ui.Context) ui.Color {
-	return c.Theme().Background
+	p := paletteFor(c.Theme())
+	return p.Background
 }
 
 func settingsSection(c *ui.Context, title, footer string, content func()) {
-	ui.Column(c).FillWidth().Gap(8).Children(func() {
+	p := paletteFor(c.Theme())
+	ui.Column(c).FillWidth().Gap(space8).Children(func() {
 		if title != "" {
-			ui.Text(c, title).FontSize(12).Bold().TextColor(c.Theme().TextMuted).Padding(0, 4)
+			ui.Text(c, title).FontSize(fontGroup).FontWeight(600).LetterSpacing(.6).TextColor(p.TextSecondary).Padding(0, space4)
 		}
-		ui.Column(c).FillWidth().Radius(12).Background(c.Theme().Surface).Border(1, c.Theme().Border).Children(content)
+		elevated(ui.Column(c).FillWidth().Radius(radiusPanel).Background(p.Raised), c.Theme()).Children(content)
 		if footer != "" {
-			ui.Text(c, footer).FontSize(12).TextColor(c.Theme().TextMuted).Padding(0, 4)
+			ui.Text(c, footer).FontSize(fontSecondary).TextColor(p.TextSecondary).Padding(0, space4)
 		}
 	})
 }
 func settingsRow(c *ui.Context, content func()) {
-	ui.Row(c).MinHeight(44).FillWidth().Padding(8, 16).Gap(12).AlignItems(ui.Center).Children(content)
+	ui.Row(c).MinHeight(space48).FillWidth().Padding(space8, space16).Gap(space12).AlignItems(ui.Center).Children(content)
 }
-func settingsSeparator(c *ui.Context) { ui.Divider(c).Margin(0, 16) }
+func settingsSeparator(c *ui.Context) { ui.Divider(c).Margin(0, space16) }
 
 func settingsMenuButton(c *ui.Context, label string) ui.Element {
-	button := ui.ButtonBase(c).Height(28).Padding(0, 8).Gap(8).Radius(8).Shrink(0).
-		TextColor(c.Theme().Text).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(label)
-	background := warmOverlay(c.Theme(), .06)
+	p := paletteFor(c.Theme())
+	button := ui.ButtonBase(c).Height(28).Padding(0, space8).Gap(space8).Radius(radiusControl).Shrink(0).
+		TextColor(p.Text).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(label)
+	background := p.Subtle
 	if button.Pressed() {
-		background = warmOverlay(c.Theme(), .11)
+		background = p.Pressed
 	} else if button.Hovered() {
-		background = warmOverlay(c.Theme(), .08)
+		background = p.Hover
 	}
-	animateColors(button, background, c.Theme().Text)
+	animateColors(button, background, p.Text)
 	return button
 }
 
 func settingsButton(c *ui.Context, label string) ui.Element {
-	return settingsMenuButton(c, label).Padding(0, 12).Justify(ui.Center).Children(func() {
-		ui.Text(c, label).FontSize(13).SingleLine()
+	return settingsMenuButton(c, label).Padding(0, space12).Justify(ui.Center).Children(func() {
+		ui.Text(c, label).FontSize(fontBody).SingleLine()
 	})
 }
 
@@ -217,7 +228,10 @@ func (a *App) generalSettings(c *ui.Context, update UpdateCheckStatus) {
 			}
 		})
 		settingsSeparator(c)
-		settingsRow(c, func() { ui.Text(c, a.T("current_version", mygo.App.Version())).Grow(1); a.updateButton(c, update) })
+		settingsRow(c, func() {
+			ui.Text(c, a.T("current_version", mygo.App.Version())).Font(monoFont(c)).FontSize(fontNumber).Grow(1)
+			a.updateButton(c, update)
+		})
 	})
 	a.updateMessage(c, update, false)
 }
@@ -246,6 +260,7 @@ func (a *App) languageMenu(c *ui.Context) {
 }
 
 func (a *App) extensionSettings(c *ui.Context) {
+	p := paletteFor(c.Theme())
 	settingsSection(c, "", a.T("extension_local_only"), func() {
 		settingsRow(c, func() {
 			ui.Text(c, a.T("extension_allow")).Grow(1).SingleLine()
@@ -257,35 +272,36 @@ func (a *App) extensionSettings(c *ui.Context) {
 		settingsSeparator(c)
 		settingsRow(c, func() {
 			ui.Text(c, a.T("extension_status")).Grow(1).Shrink(0).SingleLine()
-			message, color := a.T("extension_disabled"), c.Theme().TextMuted
+			message, color := a.T("extension_disabled"), p.TextSecondary
 			switch a.ExtensionStatus.State {
 			case browser.Running:
-				message, color = a.T("extension_running")+"  "+a.ExtensionStatus.Address, c.Theme().Success
+				message, color = a.T("extension_running")+"  "+a.ExtensionStatus.Address, p.Success
 			case browser.PortOccupied:
-				message, color = a.T("extension_port_in_use"), c.Theme().Danger
+				message, color = a.T("extension_port_in_use"), p.Danger
 			case browser.Failed:
-				message, color = a.T("extension_failed"), c.Theme().Danger
+				message, color = a.T("extension_failed"), p.Danger
 			}
-			ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
+			ui.Row(c).Gap(space8).AlignItems(ui.Center).Children(func() {
 				ui.Box(c).Size(6, 6).Radius(3).Background(color).Shrink(0)
-				ui.Text(c, message).FontSize(12).SingleLine().Role(ui.RoleStatus)
+				ui.Text(c, message).Font(monoFont(c)).FontSize(fontNumber).SingleLine().Role(ui.RoleStatus)
 			})
 		})
 	})
 	if (a.ExtensionStatus.State == browser.Failed || a.ExtensionStatus.State == browser.PortOccupied) && a.ExtensionStatus.Err != nil {
-		ui.Text(c, a.T("error_extension_listen", a.Texts.Error(a.ExtensionStatus.Err))).FontSize(12).TextColor(c.Theme().Danger).Padding(0, 4).Role(ui.RoleAlert)
+		ui.Text(c, a.T("error_extension_listen", a.Texts.Error(a.ExtensionStatus.Err))).FontSize(fontSecondary).TextColor(p.Danger).Padding(0, space4).Role(ui.RoleAlert)
 	}
 }
 
 func (a *App) aboutSettings(c *ui.Context, update UpdateCheckStatus) {
-	ui.Column(c).FillWidth().Center().Gap(8).Padding(8, 0, 0, 0).Children(func() {
-		ui.Image(c, appLogo).Size(64, 64)
-		ui.Text(c, "Momento").FontSize(24).Bold().TextColor(titleColor(c.Theme()))
-		ui.Text(c, a.T("current_version", mygo.App.Version())).TextColor(c.Theme().TextMuted)
+	p := paletteFor(c.Theme())
+	ui.Column(c).FillWidth().Center().Gap(space8).Padding(space8, 0, 0, 0).Children(func() {
+		ui.Image(c, appLogo).Size(space64, space64)
+		ui.Text(c, "Momento").FontSize(24).FontWeight(600).TextColor(p.Text)
+		ui.Text(c, a.T("current_version", mygo.App.Version())).Font(monoFont(c)).FontSize(fontNumber).TextColor(p.TextSecondary)
 		a.updateMessage(c, update, true)
-		ui.Row(c).Gap(8).Margin(12, 0, 0, 0).Children(func() {
+		ui.Row(c).Gap(space8).Margin(space12, 0, 0, 0).Children(func() {
 			if update.State == UpdateAvailable {
-				if primaryButton(c, a.T("update_to_version", update.Version), false).Height(28).Radius(8).Clicked() {
+				if primaryButton(c, a.T("update_to_version", update.Version), false).Height(28).Radius(radiusControl).Clicked() {
 					ShowAvailableUpdate()
 				}
 			} else {
@@ -307,15 +323,16 @@ func (a *App) updateButton(c *ui.Context, update UpdateCheckStatus) {
 		CheckForUpdates()
 	}
 	if update.State == UpdateAvailable {
-		if primaryButton(c, a.T("update"), false).Height(28).Radius(8).Clicked() {
+		if primaryButton(c, a.T("update"), false).Height(28).Radius(radiusControl).Clicked() {
 			ShowAvailableUpdate()
 		}
 	}
 }
 
 func (a *App) updateMessage(c *ui.Context, update UpdateCheckStatus, centered bool) {
+	p := paletteFor(c.Theme())
 	text := ""
-	color := c.Theme().TextMuted
+	color := p.TextSecondary
 	switch update.State {
 	case UpdateChecking:
 		text = a.T("updates_checking")
@@ -327,10 +344,10 @@ func (a *App) updateMessage(c *ui.Context, update UpdateCheckStatus, centered bo
 		text = a.T("updates_unconfigured")
 	case UpdateFailed:
 		text = a.T("updates_failed", a.Texts.Error(update.Err))
-		color = c.Theme().Danger
+		color = p.Danger
 	}
 	if text != "" {
-		message := fadeMotion(ui.Text(c, text).FontSize(12).TextColor(color).Padding(0, 4)).Role(ui.RoleStatus)
+		message := fadeMotion(ui.Text(c, text).FontSize(fontSecondary).TextColor(color).Padding(0, space4)).Role(ui.RoleStatus)
 		if centered {
 			message.FillWidth().TextAlign(ui.Center)
 		}
@@ -338,10 +355,12 @@ func (a *App) updateMessage(c *ui.Context, update UpdateCheckStatus, centered bo
 }
 
 func settingsPanel(c *ui.Context, open *bool, width float32, body func()) ui.Element {
+	p := paletteFor(c.Theme())
 	return ui.DialogBase(c, open, func(backdrop, panel ui.Element) {
-		backdrop.Material(frostedSurface{tint: ui.Hex("#211A16").Alpha(.42), blur: 12})
-		panel.Width(width).MaxWidthPercent(92).MaxHeightPercent(92).Padding(24).Gap(12).
-			Radius(12).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border)
+		backdrop.Material(frostedSurface{tint: p.Scrim, blur: 12})
+		panel.Width(width).MaxWidthPercent(92).MaxHeightPercent(92).Padding(space24).Gap(space12).
+			Radius(radiusPanel).Material(panelMaterial(c.Theme()))
+		elevated(panel, c.Theme())
 		dialogMotion(backdrop, panel)
 		body()
 	})
