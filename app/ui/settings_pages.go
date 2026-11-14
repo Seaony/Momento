@@ -98,9 +98,10 @@ func (a *App) appearanceSettings(c *ui.Context) {
 					label = labels[i]
 				}
 			}
-			settingsMenuButton(c.Key("ui-zoom"), a.T("ui_zoom")).Children(func() {
+			zoom := settingsMenuButton(c.Key("ui-zoom"), a.T("ui_zoom"))
+			zoom.Children(func() {
 				ui.Text(c, label).SingleLine()
-				appIcon(c, "chevrons").Size(18, 18).Shrink(0)
+				appSymbol(c, "chevrons-up-down").Size(15, 15).Shrink(0).TextColor(symbolColor(c.Theme(), zoom.Hovered()))
 			}).Menu(func(menu *ui.Menu) {
 				for i, choice := range labels {
 					if menu.Item(choice).Radio(a.Preferences.UIZoom == codes[i]).Chosen() {
@@ -225,9 +226,10 @@ func (a *App) importSettings(c *ui.Context) {
 							folderName = f.Name
 						}
 					}
-					settingsMenuButton(c, a.T("auto_import_target")).Width(160).Children(func() {
+					target := settingsMenuButton(c, a.T("auto_import_target")).Width(160)
+					target.Children(func() {
 						ui.Text(c, folderName).SingleLine().Grow(1).MinWidth(0)
-						appIcon(c, "chevrons").Size(18, 18).Shrink(0)
+						appSymbol(c, "chevrons-up-down").Size(15, 15).Shrink(0).TextColor(symbolColor(c.Theme(), target.Hovered()))
 					}).Menu(func(m *ui.Menu) {
 						if m.Item(a.T("auto_import_library_root")).Radio(rule.FolderID == "").Chosen() {
 							rules[i].FolderID = ""

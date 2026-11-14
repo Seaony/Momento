@@ -199,7 +199,7 @@ func smartSelect(c *ui.Context, value *string, options []string, label func(stri
 	}
 	control.Children(func() {
 		ui.Text(c, chosen).FontSize(13).SingleLine().Grow(1).MinWidth(0)
-		appIcon(c, "chevron-down").Size(16, 16).Shrink(0)
+		appSymbol(c, "chevron-down").Size(14, 14).TextColor(symbolColor(c.Theme(), control.Hovered())).Shrink(0)
 	})
 	selectParts.Popup(func(panel ui.Element) {
 		panel.Margin(4, 0, 0, 0).Padding(4).Radius(12).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border)

@@ -16,9 +16,6 @@ const folderBody = (u) => {
 };
 const tagShape = rp([[4.6, 12.5], [11.4, 4.4], [24.4, 4.4], [26.4, 6.4], [26.4, 18.6], [24.4, 20.6], [11.4, 20.6]], [1.7, 2, 2, 1.8, 1.8, 2, 2]);
 const tagBody = (u) => piece(u, tagShape, false, true) + face(circ(11.3, 12.5, 1.9));
-const arrow = (direction) => direction === 'left'
-  ? mark('M20 12.5H11', 2.2) + `<path d="${rp([[14.4, 7.6], [8.4, 12.5], [14.4, 17.4]], .7)}" ${DEEP}/>`
-  : mark('M11 12.5H20', 2.2) + `<path d="${rp([[16.6, 7.6], [22.6, 12.5], [16.6, 17.4]], .7)}" ${DEEP}/>`;
 const tray = (u, up) => {
   const body = rp([[4, 11.5], [10, 11.5], [11.7, 15.5], [19.3, 15.5], [21, 11.5], [27, 11.5], [27, 22], [4, 22]], [2.5, 1.2, 1.2, 1.2, 1.2, 2.5, 2.8, 2.8]);
   return piece(u, body, false, true) + face(rr(7.2, 17.5, 16.6, 2.7, 1.2)) + (up
@@ -63,14 +60,6 @@ const ICONS = [
   { name: 'grid', svg: (u) => piece(u, rr(4.6, 2.2, 21.8, 20.6, 3), false, true) + [[7.4, 5.2], [17.2, 5.2], [7.4, 14], [17.2, 14]].map(([x,y]) => face(rr(x,y,6.4,5.8,1.4))).join('') },
   { name: 'list', svg: (u) => piece(u, rr(4, 3.3, 23, 18.4, 3), false, true) + [6.2,11.3,16.4].map((y) => face(rr(7,y,17,2.6,1.2))).join('') },
   { name: 'search', svg: (u) => piece(u, rp([[20.4, 15.2], [27.3, 21.2], [24.8, 23.9], [18, 17.7]], 1.6), true, true) + piece(u, circ(12.8, 9.6, 8.4), false, true) + face(circ(12.8, 9.6, 5.5)) },
-  { name: 'back', svg: (u) => badge(u, arrow('left')) },
-  { name: 'forward', svg: (u) => badge(u, arrow('right')) },
-  { name: 'down', svg: (u) => `<g transform="rotate(90 15.5 12.5)">${badge(u, arrow('right'))}</g>` },
-  { name: 'plus', svg: (u) => badge(u, mark('M15.5 7.4V17.6M10.4 12.5H20.6', 2.2)) },
-  { name: 'minus', svg: (u) => badge(u, mark('M10.4 12.5H20.6', 2.2)) },
-  { name: 'close', svg: (u) => badge(u, mark('M11.6 8.6L19.4 16.4M19.4 8.6L11.6 16.4', 2.2)) },
-  { name: 'check', svg: (u) => badge(u, mark('M10 12.6L13.6 16L21.1 8.7', 2.2)) },
-  { name: 'chevrons-up-down', svg: (u) => piece(u, rr(7.4, 1.8, 16.2, 21.4, 4.2), false, true) + face(rr(10.2, 4.6, 10.6, 15.8, 2.4)) + `<path d="${rp([[11.7, 9.8], [15.5, 5.7], [19.3, 9.8]], .6)}" ${DEEP}/><path d="${rp([[11.7, 15.2], [15.5, 19.3], [19.3, 15.2]], .6)}" ${DEEP}/>` },
   { name: 'play', svg: (u) => badge(u, `<path d="${rp([[12, 7.1], [21, 12.5], [12, 17.9]], .9)}" ${DEEP}/>` ) },
   { name: 'pause', svg: (u) => badge(u, `<path d="${rr(10.8, 7.4, 3.3, 10.2, 1.1)}${rr(16.9, 7.4, 3.3, 10.2, 1.1)}" ${DEEP}/>` ) },
   { name: 'lock', svg: (u) => piece(u, rr(9.5, 1.8, 12, 17.2, 5.6), false, true) + face(rr(12.5, 4.8, 6, 10, 2.8)) + piece(u, rr(5.6, 10.2, 19.8, 12.8, 3), true) + dot(15.5, 15, 2) + mark('M15.5 15.8V19.3', 2.2) },
@@ -93,7 +82,5 @@ const ICONS = [
     return piece(u, body, false, true) + face(rr(8,9.3,10.4,6.4,1.8));
   } },
   { name: 'warning', svg: (u) => piece(u, rp([[15.5,1.4],[28,22.2],[3,22.2]],2.2), false, true) + face(rp([[15.5,6.2],[23.6,19.7],[7.4,19.7]],1.2)) + mark('M15.5 9.5V13.6',2.2) + dot(15.5,17,1.4) },
-  { name: 'rotate-right', svg: (u) => badge(u, mark('M20 15.2A5.2 5.2 0 1 1 18.5 8.2',2.2) + `<path d="${rp([[20.3,5.2],[20.3,11.2],[14.3,11.2]],.6)}" ${DEEP}/>` ) },
-  { name: 'rotate-left', svg: (u) => `<g transform="translate(31 0) scale(-1 1)">${badge(u, mark('M20 15.2A5.2 5.2 0 1 1 18.5 8.2',2.2) + `<path d="${rp([[20.3,5.2],[20.3,11.2],[14.3,11.2]],.6)}" ${DEEP}/>` )}</g>` },
 ];
 for (const icon of ICONS) { icon.target = () => ({}); icon.draw = () => {}; }

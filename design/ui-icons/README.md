@@ -1,6 +1,6 @@
 # Momento 功能图标
 
-51 个静态物件图标，全应用使用同一套。主色是 `#F47B45`，内容为 `#FFF6EC` 奶油色；填充按清透色板混入 10% 白色，描边由主色降低饱和度并压暗，落到暖棕。深浅界面共用固定本色，选中只改变行背景和文字。
+41 个静态物件图标，全应用使用同一套。小操作另用 11 个细线符号：无底框、无填充，颜色由父控件控制。主色是 `#F47B45`，内容为 `#FFF6EC` 奶油色；填充按清透色板混入 10% 白色，描边由主色降低饱和度并压暗，落到暖棕。深浅界面共用固定本色，选中只改变行背景和文字。
 
 - `icons.js`：物件与几何定义。
 - `export.mjs`：复用已安装的 Kubai 引擎，导出静态 SVG 并写入三个 Go 图标文件。引擎、展示页和自检脚本只放临时目录，不打包进应用。
@@ -45,14 +45,6 @@ mygo v0.9.0 支持 SVG 渐变和外描边遮罩，忽略 SVG filters。源文件
 | 网格 `grid` | 四格照片板 |
 | 列表 `list` / `menu` | 三层资料架 |
 | 搜索 `search` | 奶油镜面的放大镜 |
-| 后退 `back` / `chevron-left` / `arrow-left` | 向左方向键 |
-| 前进 `forward` / `chevron-right` / `arrow-right` | 向右方向键 |
-| 下拉 `down` / `chevron-down` | 向下方向键 |
-| 新增 `plus` / `add` | 加号按键 |
-| 移除规则 `minus` | 减号按键 |
-| 关闭 `close` | 叉号按键 |
-| 已选 `check` | 勾号按键 |
-| 切换选项 `chevrons-up-down` / `chevrons` | 上下双向按键 |
 | 幻灯片 `play` / `slideshow` | 播放按键 |
 | 暂停 `pause` | 暂停按键 |
 | 密码锁 `lock` / `password` | 有锁孔的挂锁 |
@@ -69,7 +61,23 @@ mygo v0.9.0 支持 SVG 渐变和外描边遮罩，忽略 SVG filters。源文件
 | 新建图库 `create-library` | 带加号的相册 |
 | 安装浏览器扩展 `extension` | 拼图片 |
 | 警告 `warning` | 圆角三角告示牌 |
-| 向左旋转 `rotate-left` / `restore` | 向左转的旋钮 |
-| 向右旋转 `rotate-right` | 向右转的旋钮 |
 
 设置页 `preview` 使用风景照片；侧栏旧中文名称保留映射。内部调用首选 `appIcon(c, name)`；需要裸 SVG 时取 `momentoIcons` 中的标准语义名。
+
+
+## 小操作符号
+
+`app/ui/symbols.go` 保存 11 个 24 网格细线 SVG，描边宽 1.8–2、圆头圆角，继承 `currentColor`。调用 `appSymbol(c, name)`，默认 14px；调用方可按区域改为 16px 或 18px。此入口不设置文字颜色，因此悬停、选中和禁用由父控件统一决定。物件调用 `appIcon`，小操作调用 `appSymbol`，两者不混用。
+
+| 操作 | 符号名 |
+| --- | --- |
+| 后退 / 前进 | `chevron-left` / `chevron-right` |
+| 展开 / 收起 | `chevron-down` / `chevron-up` |
+| 选项切换 | `chevrons-up-down` |
+| 新增 / 移除 | `plus` / `minus` |
+| 关闭 / 已选 | `close` / `check` |
+| 左转 / 右转 | `rotate-left` / `rotate-right` |
+
+`appSymbol` 保留 `back`、`forward`、`chevrons`、`add` 四个别名。`appIcon` 不再映射这些名称，物件源文件与 Go 内嵌表也不再含相应徽章。
+
+在 `app/` 中执行 `MOMENTO_SYMBOL_SCREENSHOTS=1 go test ./ui -run '^TestMomento(SymbolsFollow|SymbolScreenshots)' -count=1` 可验证符号随父控件变色，并生成 `/tmp/momento-polish/shots/symbols/native-light.png`、`native-dark.png` 两张总览。每项展示真实 14/16/18px 和父控件悬停颜色。

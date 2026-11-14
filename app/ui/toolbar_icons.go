@@ -31,14 +31,6 @@ var appIconAliases = map[string]string{
 	"thumbnail":     "thumbnail-size",
 	"slideshow":     "play",
 	"menu":          "list",
-	"add":           "plus",
-	"chevron-left":  "back",
-	"chevron-right": "forward",
-	"arrow-left":    "back",
-	"arrow-right":   "forward",
-	"chevrons":      "chevrons-up-down",
-	"chevron-down":  "down",
-	"restore":       "rotate-left",
 }
 
 func appIcon(c *ui.Context, name string) ui.Element {
@@ -47,5 +39,3 @@ func appIcon(c *ui.Context, name string) ui.Element {
 	}
 	return ui.Image(c, momentoIcons[name]).Size(20, 20)
 }
-
-var toolbarColorCheck = momentoIcons["check"]

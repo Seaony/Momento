@@ -227,9 +227,10 @@ func (a *App) languageMenu(c *ui.Context) {
 			selected = i
 		}
 	}
-	settingsMenuButton(c, a.T("language")).Children(func() {
+	trigger := settingsMenuButton(c, a.T("language"))
+	trigger.Children(func() {
 		ui.Text(c, labels[selected]).SingleLine()
-		appIcon(c, "chevrons").Size(18, 18).Shrink(0)
+		appSymbol(c, "chevrons-up-down").Size(15, 15).Shrink(0).TextColor(symbolColor(c.Theme(), trigger.Hovered()))
 	}).Menu(func(m *ui.Menu) {
 		for i, label := range labels {
 			if m.Item(label).Radio(a.Preferences.Language == codes[i]).Chosen() {

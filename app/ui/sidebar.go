@@ -47,9 +47,9 @@ func (a *App) sidebar(c *ui.Context) {
 				a.sidebarScope(c, "random", "random_browse", "随机浏览", -1)
 			}
 			a.sidebarQuickAccess(c)
-			organize := ui.ButtonBase(c.Key("organize")).FillWidth().Height(28).Margin(19, 0, 0, 0).Padding(0, 10).Gap(8).Radius(8).Cursor(ui.CursorPointer).Label(a.T("organize")).Expanded(!a.Sidebar.OrganizeCollapsed)
+			organize := ui.ButtonBase(c.Key("organize")).FillWidth().Height(28).Margin(19, 0, 0, 0).Padding(0, 10).Gap(8).Radius(8).Cursor(ui.CursorPointer).Label(a.T("organize")).TextColor(c.Theme().TextMuted).Expanded(!a.Sidebar.OrganizeCollapsed)
 			if organize.Hovered() {
-				organize.Background(warmOverlay(c.Theme(), .06))
+				organize.Background(warmOverlay(c.Theme(), .06)).TextColor(c.Theme().Text)
 			}
 			organize.Children(func() {
 				ui.Text(c, a.T("organize")).FontSize(11).Bold().LetterSpacing(.88).TextColor(c.Theme().TextMuted).Grow(1)
@@ -194,14 +194,14 @@ func (a *App) sidebarLibrary(c *ui.Context) {
 	if a.Library != nil {
 		name = a.libraryName()
 	}
-	trigger := ui.ButtonBase(c.Key("library_switcher")).FillWidth().Height(38).Padding(0, 10, 0, 6).Gap(10).Radius(10).Border(1, warmOverlay(c.Theme(), .14)).Background(c.Theme().Background.Alpha(.55)).Cursor(ui.CursorPointer).Label(a.T("library_menu")).Justify(ui.Start)
+	trigger := ui.ButtonBase(c.Key("library_switcher")).FillWidth().Height(38).Padding(0, 10, 0, 6).Gap(10).Radius(10).Border(1, warmOverlay(c.Theme(), .14)).Background(c.Theme().Background.Alpha(.55)).Cursor(ui.CursorPointer).Label(a.T("library_menu")).Justify(ui.Start).TextColor(c.Theme().TextMuted)
 	if trigger.Hovered() {
-		trigger.Background(c.Theme().SurfaceHover)
+		trigger.Background(c.Theme().SurfaceHover).TextColor(c.Theme().Text)
 	}
 	trigger.Children(func() {
 		ui.Image(c, appLogo).Size(26, 26).Radius(7).Shrink(0)
 		ui.Text(c, name).TextColor(titleColor(c.Theme())).FontSize(13.5).Bold().Grow(1).MinWidth(0).SingleLine()
-		ui.Image(c, sidebarIcon("chevrons-up-down")).Size(15, 15).Shrink(0)
+		appSymbol(c, "chevrons-up-down").Size(15, 15).Shrink(0)
 	})
 	if trigger.Clicked() {
 		a.Sidebar.LibraryOpen = !a.Sidebar.LibraryOpen
@@ -283,7 +283,11 @@ func (a *App) sidebarFolders(c *ui.Context, counts catalog.Counts) {
 			row.Drag(AssetsDrag{LibraryID: a.libraryID(), FolderID: folder.ID})
 			row.Children(func() {
 				if opened != nil {
-					arrow := ui.ButtonBase(c.Key("disclose")).Size(16, 20).Padding(0).Cursor(ui.CursorPointer).Label(a.T("toggle_folder", folder.Name)).Children(func() { sidebarChevron(c, *opened).Size(10, 10) })
+					arrow := ui.ButtonBase(c.Key("disclose")).Size(16, 20).Padding(0).Cursor(ui.CursorPointer).TextColor(c.Theme().TextMuted).Label(a.T("toggle_folder", folder.Name))
+					if arrow.Hovered() {
+						arrow.TextColor(c.Theme().Text)
+					}
+					arrow.Children(func() { sidebarChevron(c, *opened).Size(13, 13) })
 					if arrow.Clicked() {
 						*opened = !*opened
 					}
@@ -407,16 +411,16 @@ func (a *App) sidebarMoveFolder(drag AssetsDrag, targetID string, position folde
 }
 
 func sidebarChevron(c *ui.Context, open bool) ui.Element {
-	arrow := appIcon(c, "chevron-right")
+	arrow := appSymbol(c, "chevron-right").Size(13, 13)
 	if open {
 		arrow.Rotate(90)
 	}
 	return arrow
 }
 func sidebarSymbolButton(c *ui.Context, label string) ui.Element {
-	button := ui.ButtonBase(c).Size(24, 24).Padding(0).Radius(6).Cursor(ui.CursorPointer).Label(label).Tooltip(label).Children(func() { ui.Image(c, sidebarIcon("plus")).Size(16, 16) })
+	button := ui.ButtonBase(c).Size(24, 24).Padding(0).Radius(6).Cursor(ui.CursorPointer).Label(label).Tooltip(label).TextColor(c.Theme().TextMuted).Children(func() { appSymbol(c, "plus").Size(14, 14) })
 	if button.Hovered() {
-		button.Background(warmOverlay(c.Theme(), .08))
+		button.Background(warmOverlay(c.Theme(), .08)).TextColor(c.Theme().Text)
 	}
 	return button
 }

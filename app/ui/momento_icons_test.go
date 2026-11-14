@@ -92,3 +92,78 @@ func TestMomentoIconScreenshots(t *testing.T) {
 		})
 	}
 }
+
+func TestMomentoSymbolsFollowParentColor(t *testing.T) {
+	for name, symbol := range momentoSymbols {
+		t.Run(name, func(t *testing.T) {
+			red := symbol.Image(14, 14, color.NRGBA{R: 255, A: 255})
+			blue := symbol.Image(14, 14, color.NRGBA{B: 255, A: 255})
+			if bytes.Equal(red.Pix, blue.Pix) {
+				t.Fatal("符号没有采用 currentColor")
+			}
+			coverage := 0
+			for i := 3; i < len(red.Pix); i += 4 {
+				coverage += int(red.Pix[i])
+			}
+			if coverage < 4*255 || coverage > 60*255 {
+				t.Fatalf("14px符号笔画缺失或包含大面积填充：覆盖量%d", coverage)
+			}
+			images := make([][]byte, 0, 2)
+			for _, ink := range []ui.Color{ui.Hex("#D9622C"), ui.Hex("#7E5E4C")} {
+				tt := ui.NewTester(func(c *ui.Context) {
+					ui.Box(c).Fill().TextColor(ink).Children(func() { appSymbol(c, name) })
+				}, 24, 24)
+				tt.Frame()
+				images = append(images, slices.Clone(tt.Image().Pix))
+			}
+			if bytes.Equal(images[0], images[1]) {
+				t.Fatal("appSymbol 阻止了父控件修改文字颜色")
+			}
+		})
+	}
+	for name, canonical := range appSymbolAliases {
+		if momentoSymbols[canonical] == nil {
+			t.Errorf("符号别名 %s 指向不存在的 %s", name, canonical)
+		}
+	}
+}
+
+func TestMomentoSymbolScreenshots(t *testing.T) {
+	if os.Getenv("MOMENTO_SYMBOL_SCREENSHOTS") != "1" {
+		t.Skip("设置 MOMENTO_SYMBOL_SCREENSHOTS=1 生成小操作符号总览")
+	}
+	const dir = "/tmp/momento-polish/shots/symbols"
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	names := []string{"chevron-left", "chevron-right", "chevron-down", "chevron-up", "chevrons-up-down", "plus", "minus", "close", "check", "rotate-left", "rotate-right"}
+	for _, appearance := range []string{"light", "dark"} {
+		t.Run(appearance, func(t *testing.T) {
+			tt := ui.NewTester(func(c *ui.Context) {
+				c.SetTheme(momentoTheme(appearance, false))
+				ui.Column(c).Fill().Padding(24).Gap(10).Background(c.Theme().Background).Children(func() {
+					ui.Text(c, "Momento · 小操作符号").FontSize(20).Bold().TextColor(titleColor(c.Theme()))
+					ui.Row(c).Gap(24).TextColor(c.Theme().TextMuted).Children(func() {
+						ui.Text(c, "符号").Width(180)
+						ui.Text(c, "14px").Width(72)
+						ui.Text(c, "16px").Width(72)
+						ui.Text(c, "18px").Width(72)
+						ui.Text(c, "父控件悬停颜色").Width(136)
+					})
+					for _, name := range names {
+						ui.Row(c).Height(32).Gap(24).AlignItems(ui.Center).TextColor(c.Theme().TextMuted).Children(func() {
+							ui.Text(c, name).Width(180).FontSize(13)
+							for _, size := range []float32{14, 16, 18} {
+								ui.Box(c).Width(72).Children(func() { appSymbol(c, name).Size(size, size) })
+							}
+							ui.Box(c).Width(136).TextColor(c.Theme().Text).Children(func() { appSymbol(c, name) })
+						})
+					}
+				})
+			}, 740, 570)
+			tt.SetLocale("zh-Hans")
+			tt.Frame()
+			writeScreenshot(t, filepath.Join(dir, "native-"+appearance+".png"), tt)
+		})
+	}
+}

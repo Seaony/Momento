@@ -62,10 +62,10 @@ func (a *App) toolbar(c *ui.Context) {
 			a.SidebarVisible = true
 		}
 		ui.Row(c.Key("history")).Gap(0).Shrink(0).Children(func() {
-			if toolbarIconButton(c.Key("history-back"), a.T("navigate_back"), "back").Width(26).Disabled(!a.CanNavigateBack()).Clicked() {
+			if toolbarIconButton(c.Key("history-back"), a.T("navigate_back"), "chevron-left").Width(26).Disabled(!a.CanNavigateBack()).Clicked() {
 				a.NavigateBack()
 			}
-			if toolbarIconButton(c.Key("history-forward"), a.T("navigate_forward"), "forward").Width(26).Disabled(!a.CanNavigateForward()).Clicked() {
+			if toolbarIconButton(c.Key("history-forward"), a.T("navigate_forward"), "chevron-right").Width(26).Disabled(!a.CanNavigateForward()).Clicked() {
 				a.NavigateForward()
 			}
 		})
@@ -212,7 +212,17 @@ func toolbarButton(c *ui.Context, label string) ui.Element {
 }
 
 func toolbarIconButton(c *ui.Context, label, name string) ui.Element {
-	return toolbarButton(c, label).Children(func() { appIcon(c, name).Size(20, 20) })
+	button := toolbarButton(c, label).TextColor(c.Theme().TextMuted)
+	if button.Hovered() {
+		button.TextColor(c.Theme().Text)
+	}
+	return button.Children(func() {
+		if momentoSymbols[name] != nil {
+			appSymbol(c, name).Size(18, 18)
+		} else {
+			appIcon(c, name).Size(20, 20)
+		}
+	})
 }
 
 func (a *App) toolbarSearch(c *ui.Context, full bool, hint string) {
@@ -288,7 +298,11 @@ func (a *App) filterPanel(c *ui.Context) {
 							swatch := ui.Hex(family.Hex)
 							ui.Box(c).Size(22, 22).Radius(11).Background(swatch).Border(1, c.Theme().Border).Center().Children(func() {
 								if chosen {
-									ui.Image(c, toolbarColorCheck).Size(14, 14).PassThrough()
+									checkColor := ui.Hex("#3A2318")
+									if float32(swatch.R)*.2126+float32(swatch.G)*.7152+float32(swatch.B)*.0722 < 145 {
+										checkColor = ui.Hex("#FFF6EC")
+									}
+									appSymbol(c, "check").Size(14, 14).TextColor(checkColor).PassThrough()
 								}
 							})
 						})
@@ -426,14 +440,14 @@ func (a *App) toolbarWidth(c *ui.Context) float32 {
 func (a *App) thumbnailSizeSlider(c *ui.Context) {
 	ui.Row(c.Key("thumbnail-size-control")).Width(120).Shrink(0).Gap(4).AlignItems(ui.Center).Children(func() {
 		disabled := a.ViewMode == 2
-		if toolbarIconButton(c.Key("thumbnail-smaller"), a.T("thumbnail_smaller"), "thumbnail-size").Size(24, 28).Disabled(disabled || a.thumbnailScale() <= .5).Clicked() {
+		if toolbarIconButton(c.Key("thumbnail-smaller"), a.T("thumbnail_smaller"), "minus").Size(24, 28).Disabled(disabled || a.thumbnailScale() <= .5).Clicked() {
 			a.ChangeThumbnailSize(-.1)
 		}
 		size := float64(a.thumbnailScale())
 		if ui.Slider(c.Key("thumbnail-size"), &size, .5, 2).Label(a.T("thumbnail_size")).Tooltip(a.T("thumbnail_size")).Grow(1).MinWidth(0).Basis(0).Disabled(disabled).Changed() {
 			a.SetThumbnailSize(float32(size))
 		}
-		if toolbarIconButton(c.Key("thumbnail-larger"), a.T("thumbnail_larger"), "thumbnail-size").Size(28, 28).Disabled(disabled || a.thumbnailScale() >= 2).Clicked() {
+		if toolbarIconButton(c.Key("thumbnail-larger"), a.T("thumbnail_larger"), "plus").Size(28, 28).Disabled(disabled || a.thumbnailScale() >= 2).Clicked() {
 			a.ChangeThumbnailSize(.1)
 		}
 	})

@@ -478,6 +478,16 @@ func inspectorIconButton(c *ui.Context, label, icon string) ui.Element {
 	} else if button.Hovered() {
 		button.Background(warmOverlay(c.Theme(), .06))
 	}
-	button.Children(func() { appIcon(c, icon).Size(20, 20) })
+	button.TextColor(c.Theme().TextMuted)
+	if button.Hovered() {
+		button.TextColor(c.Theme().Text)
+	}
+	button.Children(func() {
+		if momentoSymbols[icon] != nil {
+			appSymbol(c, icon).Size(14, 14)
+		} else {
+			appIcon(c, icon).Size(20, 20)
+		}
+	})
 	return button
 }

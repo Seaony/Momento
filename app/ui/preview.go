@@ -168,24 +168,24 @@ func (a *App) preview(c *ui.Context) {
 			Label(a.T("preview_original")).TabStop(false).AutoFocus()
 		ui.Row(c).FillWidth().Gap(8).Padding(4, 8).Radius(8).Material(toolbarMaterial(c.Theme())).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, asset.Name).Bold().TextColor(titleColor(c.Theme())).Grow(1).SingleLine().Tooltip(asset.Name)
-			if previewIconButton(c.Key("preview-rotate-left"), "rotate-left", a.T("preview_rotate_left"), a.Busy).Clicked() {
+			if previewSymbolButton(c.Key("preview-rotate-left"), "rotate-left", a.T("preview_rotate_left"), 32, a.Busy).Clicked() {
 				a.RotatePreview(-90)
 			}
-			if previewIconButton(c.Key("preview-rotate-right"), "rotate-right", a.T("preview_rotate_right"), a.Busy).Clicked() {
+			if previewSymbolButton(c.Key("preview-rotate-right"), "rotate-right", a.T("preview_rotate_right"), 32, a.Busy).Clicked() {
 				a.RotatePreview(90)
 			}
 			ui.Textf(c, "%.0f%%", p.Zoom*100).FontSize(12).Width(56).TextAlign(ui.End).TextColor(c.Theme().TextMuted)
 			ui.Text(c, a.T("preview_position", index+1, len(p.navigation))).FontSize(12).TextColor(c.Theme().TextMuted)
-			if previewIconButton(c.Key("close-preview"), "close", a.T("close_preview"), false).Clicked() {
+			if previewSymbolButton(c.Key("close-preview"), "close", a.T("close_preview"), 32, false).Clicked() {
 				a.ClosePreview()
 			}
 		})
-		ui.Row(c).FillWidth().Grow(1).MinHeight(0).Gap(12).AlignItems(ui.Center).Children(func() {
-			if previewIconButton(c.Key("previous-preview"), "chevron-left", a.T("previous_asset"), index == 0).Clicked() {
+		ui.Row(c).FillWidth().Grow(1).MinHeight(0).Padding(0, 4).Gap(16).AlignItems(ui.Center).Children(func() {
+			if previewSymbolButton(c.Key("previous-preview"), "chevron-left", a.T("previous_asset"), 36, index == 0).Clicked() {
 				a.movePreview(-1)
 			}
 			a.previewViewport(c, asset)
-			if previewIconButton(c.Key("next-preview"), "chevron-right", a.T("next_asset"), index == len(p.navigation)-1).Clicked() {
+			if previewSymbolButton(c.Key("next-preview"), "chevron-right", a.T("next_asset"), 36, index == len(p.navigation)-1).Clicked() {
 				a.movePreview(1)
 			}
 		})
@@ -213,15 +213,13 @@ func (a *App) preview(c *ui.Context) {
 	}
 }
 
-func previewIconButton(c *ui.Context, icon, label string, disabled bool) ui.Element {
-	button := ui.ButtonBase(c).Size(32, 32).Padding(0).Radius(8).Label(label).Tooltip(label).
-		Disabled(disabled).Cursor(ui.CursorPointer)
-	if button.Pressed() {
-		button.Background(warmOverlay(c.Theme(), .11))
-	} else if button.Hovered() {
-		button.Background(warmOverlay(c.Theme(), .06))
+func previewSymbolButton(c *ui.Context, symbol, label string, size float32, disabled bool) ui.Element {
+	button := ui.ButtonBase(c).Size(size, size).Padding(0).Radius(size/2).Material(panelMaterial(c.Theme())).Border(1, c.Theme().Border).
+		TextColor(c.Theme().TextMuted).Label(label).Tooltip(label).Disabled(disabled).Cursor(ui.CursorPointer)
+	if button.Hovered() || button.Pressed() {
+		button.TextColor(c.Theme().Text)
 	}
-	button.Children(func() { appIcon(c, icon).Size(20, 20) })
+	button.Children(func() { appSymbol(c, symbol).Size(18, 18) })
 	return button
 }
 
