@@ -14,7 +14,8 @@ type designPalette struct {
 	Background, Sidebar, Raised, Subtle, Hover, Pressed, Selected ui.Color
 	BorderSubtle, Border, Text, TextSecondary, TextTertiary       ui.Color
 	SegmentSelected                                               ui.Color
-	// 表单控件：Field 浅底 + BorderSubtle 浅边框一起表现层次，聚焦时换成浮起面 + 焦点色。
+	// 表单控件：Field 底 + BorderSubtle 边框一起表现层次，聚焦时换成浮起面 + 焦点色。
+	// 深色下 Field 和视图切换器的轨道同色（Subtle），压在背景上像一道浅槽，不比卡片更亮。
 	Field, FieldHover                                         ui.Color
 	Accent, AccentHover, AccentPressed, OnAccent, Focus, Link ui.Color
 	Danger, Warning, Success, Shadow, Scrim                   ui.Color
@@ -40,9 +41,10 @@ var darkPalette = designPalette{
 	BorderSubtle: ui.Hex("#252321"), Border: ui.Hex("#322F2D"),
 	Text: ui.Hex("#F4F0ED"), TextSecondary: ui.Hex("#B6AEA8"), TextTertiary: ui.Hex("#938A84"),
 	SegmentSelected: ui.Hex("#2F2C2A"),
-	Field:           ui.Hex("#222020"), FieldHover: ui.Hex("#282625"),
-	Accent: ui.Hex("#FF9A66"), AccentHover: ui.Hex("#FFAB7E"), AccentPressed: ui.Hex("#F48A54"),
-	OnAccent: ui.Hex("#2B221D"), Focus: ui.Hex("#FF9A66"), Link: ui.Hex("#FFB48F"),
+	Field:           ui.Hex("#1A1918"), FieldHover: ui.Hex("#201E1D"),
+	// 品牌色和浅色一样用 logo 橘，不另调浅；链接文字仍用浅一些的橘，深底上好读。
+	Accent: ui.Hex("#F47B45"), AccentHover: ui.Hex("#FA8B59"), AccentPressed: ui.Hex("#E8733D"),
+	OnAccent: ui.Hex("#2B221D"), Focus: ui.Hex("#F47B45"), Link: ui.Hex("#FFB48F"),
 	Danger: ui.Hex("#FF9B9B"), Warning: ui.Hex("#FCD478"), Success: ui.Hex("#88DDA9"),
 	Shadow: ui.RGBA(0, 0, 0, .36), Scrim: ui.RGBA(0, 0, 0, .55),
 }
@@ -69,23 +71,26 @@ const (
 	radiusCard    = 6
 	radiusControl = 8
 	radiusPanel   = 12
+	fontLead      = 14 // 预览窗口文件名
 	fontBody      = 13
 	fontSecondary = 12
 	fontGroup     = 11
+	fontCaption   = 10 // 预览窗口尺寸、相机参数
 	fontNumber    = 12
 	fontTitle     = 16 // 对话框、空状态标题
 	fontHeading   = 20 // 独立窗口大标题
 	fontDisplay   = 24 // 关于页产品名
 
-	iconSize      = 18 // 侧栏、工具栏图标
-	iconMedium    = 16 // 菜单、检查器里的图标
-	iconSmall     = 14 // 箭头、行内小图标
-	iconTiny      = 12 // 药丸里的移除按钮
-	controlHeight = 32 // 按钮、输入框
-	controlSmall  = 28 // 紧凑按钮、图标按钮
-	controlLarge  = 36 // 主要入口按钮
-	checkSize     = 16 // 复选框、单选框
-	rowHeight     = 44 // 设置导航、菜单里的两行项
+	iconSize       = 18 // 侧栏、工具栏图标
+	iconMedium     = 16 // 菜单、检查器里的图标
+	iconSmall      = 14 // 箭头、行内小图标
+	iconTiny       = 12 // 药丸里的移除按钮
+	controlHeight  = 32 // 按钮、输入框
+	controlSmall   = 28 // 紧凑按钮、图标按钮
+	controlLarge   = 36 // 主要入口按钮
+	checkSize      = 16 // 复选框、单选框
+	rowHeight      = 44 // 设置导航、菜单里的两行项
+	titleBarHeight = 44 // 设置窗口红绿灯所在的顶栏行；主窗口用 MainToolbarHeight
 
 	// 侧栏照旧版 macOS（git 2a13147^ MomentoSidebarView.swift）抄的规格。
 	sidebarPadding          = 14 // 侧栏左右留白
@@ -100,7 +105,10 @@ const (
 	sidebarIconBox          = 18 // 图标占位宽
 	sidebarIconSize         = iconMedium
 	sidebarIconGap          = 10
-	sidebarWeight           = 500
+	sidebarWeight           = 400 // 常规字重
+	sidebarSelectedWeight   = 500 // 选中行文字重一档
+	sidebarIdleInk          = .6  // 未选中的文字和图标是正文色 60%
+	sidebarCountInk         = .8  // 数量再暗一档：未选中约正文色 48%
 	sidebarCountSize        = fontGroup
 	sidebarCountGap         = 6
 	sidebarBadgeSize        = 8 // 回收站角标
@@ -118,12 +126,13 @@ const (
 	panelNarrow = 360 // 弹出层、引导里的窄面板
 	panelDialog = 420 // 对话框
 	panelWide   = 560 // 宽面板、引导页
-
-	materialPanelAlpha   = .88 // 弹出层、菜单、对话框磨砂的着色；再低压在纯黑图片上时次要文字对比度不到 4.5
-	materialSidebarAlpha = .86 // 侧栏系统材质上的着色（浅色）
-	materialSidebarDark  = .70 // 侧栏系统材质上的着色（深色）
-	materialOverlayAlpha = .92 // 压在图片上的小按钮，保证图标看得清
 )
+
+// 让文字在固定高度里垂直居中。直接给 Text 设 Height 时字会贴在顶部；改用行高撑出高度，
+// 再少 1 点行高、底下补 1 点，抵消基线下的留空（4 倍放大实测：上下留白相差不到 0.5 点）。
+func centeredTextHeight(e ui.Element, height, horizontal float32) ui.Element {
+	return e.FixedLineHeight(height-1).Padding(0, horizontal, 1, horizontal)
+}
 
 func nativeColorPair(light, dark ui.Color) string {
 	return fmt.Sprintf("light-dark(rgba(%d,%d,%d,%.3f), rgba(%d,%d,%d,%.3f))", light.R, light.G, light.B, float64(light.A)/255, dark.R, dark.G, dark.B, float64(dark.A)/255)
@@ -131,9 +140,6 @@ func nativeColorPair(light, dark ui.Color) string {
 
 func WindowBackgroundColor() string {
 	return nativeColorPair(lightPalette.Background, darkPalette.Background)
-}
-func previewGlassTint() string {
-	return nativeColorPair(lightPalette.Sidebar.Alpha(.28), darkPalette.Sidebar.Alpha(.86))
 }
 
 // 系统主题只决定明暗，所有窗口共用暖橘品牌色。
@@ -154,7 +160,11 @@ func momentoTheme(key string, systemDark bool) *ui.Theme {
 	theme.InactiveAccent = p.Accent
 	theme.Danger, theme.Warning, theme.Success = p.Danger, p.Warning, p.Success
 	theme.Selection, theme.Focus, theme.Scrollbar = p.Accent.Alpha(.2), p.Focus, p.TextSecondary.Alpha(.4)
+	// 提示框和浮动通知：浅色是深底浅字；深色不翻成白底（太刺眼），和系统一样用深灰底浅色字。
 	theme.Inverse, theme.InverseText = theme.Text, theme.Background
+	if dark {
+		theme.Inverse, theme.InverseText = p.Pressed, p.Text
+	}
 	return &theme
 }
 
@@ -174,11 +184,7 @@ func (a *App) applyTheme(c *ui.Context) {
 	theme := momentoTheme(a.Preferences.Theme, c.Theme().Dark)
 	theme.Font = uiFont(a.Texts.Locale())
 	c.SetTheme(theme)
-	if c.Vibrancy() {
-		c.Root().Background(ui.Transparent)
-	} else {
-		c.Root().Background(theme.Background)
-	}
+	c.Root().Background(theme.Background)
 }
 
 func themeSource(key string) mygo.ThemeSource {

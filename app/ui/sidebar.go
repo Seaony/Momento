@@ -38,20 +38,17 @@ func (a *App) sidebar(c *ui.Context) {
 	// 结构照旧版 macOS：图库 → 全部 → 分隔线 → 其余入口 → 分隔线 → 文件夹；底部只有三个图标按钮。
 	ui.Box(c.Key("sidebar-clip")).Fill().ClipX().Children(func() {
 		side := ui.Column(c.Key("sidebar-content")).Width(width).FillHeight().Shrink(0).Gap(0).FontSize(fontBody).FontWeight(sidebarWeight)
-		sidebarMaterial(c, side)
+		side.Background(paletteFor(c.Theme()).Sidebar)
 		side.Children(func() {
 			ui.Column(c).FillWidth().Padding(0, sidebarPadding).Shrink(0).Children(func() { a.sidebarTopBar(c) })
 			ui.Scroll(c.Key("sidebar_scopes")).Grow(1).Padding(0, sidebarPadding, sidebarSectionGap, sidebarPadding).Gap(sidebarRowGap).Children(func() {
 				a.sidebarScope(c, "all", "all", "照片", counts.All)
-				sidebarDivider(c, sidebarDividerSpace-sidebarRowGap)
-				if !a.sidebarHidden("recent") && a.Index != nil {
-					a.sidebarScope(c, "recent", "recent", "recent", len(a.Index.Query(catalog.Query{Scope: "recent"})))
-				}
-				if !a.sidebarHidden("favorites") {
-					a.sidebarScope(c, "favorites", "favorites", "喜欢", counts.Favorites)
-				}
 				if !a.sidebarHidden("random") {
 					a.sidebarScope(c, "random", "random_browse", "随机浏览", -1)
+				}
+				sidebarDivider(c, sidebarDividerSpace-sidebarRowGap)
+				if !a.sidebarHidden("favorites") {
+					a.sidebarScope(c, "favorites", "favorites", "喜欢", counts.Favorites)
 				}
 				if !a.sidebarHidden("unfiled") {
 					a.sidebarScope(c, "uncategorized", "uncategorized", "unfiled", counts.Uncategorized)
@@ -96,8 +93,9 @@ func (a *App) sidebarFooter(c *ui.Context, trashCount int) {
 		if trashCount > 0 && a.Preferences.SidebarCounts {
 			// 旧版：回收站数量是右上角的小角标。
 			trash.Children(func() {
-				ui.Text(c, sidebarCount(trashCount)).FontSize(sidebarBadgeSize).FontWeight(700).FontFeatures("tnum").TextColor(paletteFor(c.Theme()).Text).
-					Absolute().Top(-space4).Right(-space4).MinWidth(11).Height(11).Padding(0, 3).Radius(radiusPanel).Background(paletteFor(c.Theme()).Hover).TextAlign(ui.Center).IgnoreInput(true)
+				badge := ui.Text(c, sidebarCount(trashCount)).FontSize(sidebarBadgeSize).FontWeight(700).FontFeatures("tnum").TextColor(paletteFor(c.Theme()).Text).
+					Absolute().Top(-space4).Right(-space4).MinWidth(11).Radius(radiusPanel).Background(paletteFor(c.Theme()).Hover).TextAlign(ui.Center).IgnoreInput(true)
+				centeredTextHeight(badge, 11, 3)
 			})
 		}
 		if trash.Clicked() {
@@ -123,23 +121,21 @@ func (a *App) sidebarFooter(c *ui.Context, trashCount int) {
 func sidebarFooterButton(c *ui.Context, label, icon string, selected bool) ui.Element {
 	p := paletteFor(c.Theme())
 	button := ui.ButtonBase(c).Size(sidebarFooterButtonSize, sidebarFooterButtonSize).Shrink(0).Padding(0).Radius(radiusControl).Cursor(ui.CursorPointer).Label(label).Tooltip(label)
-	background, ink := ui.Transparent, p.TextSecondary
+	background, ink := ui.Transparent, p.Text.Alpha(sidebarIdleInk)
 	if button.Pressed() {
 		background, ink = p.Pressed, p.Text
 	} else if selected || button.Hovered() {
 		background, ink = p.Hover, p.Text
 	}
 	animateColors(button, background, ink)
-	button.Children(func() { appIcon(c, icon).Size(sidebarIconSize, sidebarIconSize) })
+	button.Children(func() { sidebarAppIcon(c, icon, false) })
 	return button
 }
 
 func (a *App) sidebarTopBar(c *ui.Context) {
 	bar := c.TitleBar()
+	// 和工具栏同高：红绿灯、侧栏收起按钮、工具栏控件的中心在同一条线上。
 	height := float32(MainToolbarHeight)
-	if bar.Left > 0 {
-		height = max(height, bar.Bottom+8)
-	}
 	ui.Row(c.Key("sidebar-titlebar")).Height(height).FillWidth().Shrink(0).Gap(space8).DragWindow().Children(func() {
 		if bar.Left > 0 {
 			ui.Box(c).Width(max(0, bar.Left-12)).FillHeight()
@@ -148,7 +144,7 @@ func (a *App) sidebarTopBar(c *ui.Context) {
 			ui.Column(c).Grow(1).MinWidth(0).Children(func() { a.sidebarLibrary(c) })
 		}
 		button := ui.ButtonBase(c.Key("sidebar-toggle")).Size(controlSmall, controlSmall).Padding(0).Radius(radiusCard).Cursor(ui.CursorPointer).Label(a.T("toggle_sidebar")).Tooltip(a.T("toggle_sidebar")).Children(func() {
-			appIcon(c, "sidebar").Size(iconSize, iconSize)
+			sidebarAppIcon(c, "sidebar", false).Size(iconSize, iconSize)
 		})
 		sidebarControlColors(c, button, true)
 		if button.Clicked() {
@@ -166,7 +162,7 @@ func sidebarAddRow(c *ui.Context, label, icon string) ui.Element {
 	p := paletteFor(c.Theme())
 	row := ui.ButtonBase(c).FillWidth().Height(sidebarRowHeight).Shrink(0).Padding(0, sidebarRowPadding).Gap(sidebarIconGap).Radius(sidebarRowRadius).
 		Border(1, p.BorderSubtle).BorderStyle(ui.BorderDashed).Cursor(ui.CursorPointer).Label(label).Justify(ui.Start)
-	background, ink := p.Field, p.Text.Alpha(.72)
+	background, ink := p.Field, p.Text.Alpha(sidebarIdleInk)
 	if row.Pressed() {
 		background, ink = p.Pressed, p.Text
 	} else if row.Hovered() {
@@ -175,7 +171,7 @@ func sidebarAddRow(c *ui.Context, label, icon string) ui.Element {
 	animateColors(row, background, ink)
 	row.Children(func() {
 		ui.Box(c).Size(sidebarIconBox, sidebarIconBox).Shrink(0).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
-			appIcon(c, icon).Size(sidebarIconSize, sidebarIconSize)
+			sidebarAppIcon(c, icon, false)
 		})
 		ui.Text(c, label).SingleLine().Grow(1).MinWidth(0)
 	})
@@ -187,9 +183,7 @@ func (a *App) sidebarRow(c *ui.Context, label, icon string, count int, selected 
 	ink := sidebarRowStyle(c, row, selected)
 	row.Children(func() {
 		if icon != "" {
-			ui.Box(c).Size(sidebarIconBox, sidebarIconBox).Shrink(0).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
-				appIcon(c, icon).Size(sidebarIconSize, sidebarIconSize)
-			})
+			sidebarNavIcon(c, icon, selected)
 		}
 		ui.Text(c, label).SingleLine().Grow(1).MinWidth(0)
 		if a.Preferences.SidebarCounts {
@@ -204,27 +198,45 @@ func sidebarCountText(c *ui.Context, count int, ink ui.Color) {
 	if count <= 0 {
 		return
 	}
-	ui.Text(c, sidebarCount(count)).FontSize(sidebarCountSize).FontWeight(600).FontFeatures("tnum").TextColor(ink.Alpha(.58)).MinWidth(space16).TextAlign(ui.End).Shrink(0)
+	ui.Text(c, sidebarCount(count)).FontSize(sidebarCountSize).FontWeight(600).FontFeatures("tnum").TextColor(ink.Alpha(sidebarCountInk)).MinWidth(space16).TextAlign(ui.End).Shrink(0)
 }
 
 // 旧版的行：平时文字和图标是正文色的 72%，悬停或选中时用正文色并铺一层浅底。返回本行文字色。
 func sidebarRowStyle(c *ui.Context, row ui.Element, selected bool) ui.Color {
 	p := paletteFor(c.Theme())
-	background, ink := ui.Transparent, p.Text.Alpha(.72)
+	background, ink := ui.Transparent, p.Text.Alpha(sidebarIdleInk)
+	// 每行都留一圈透明边框，选中加描边时文字不会被挤动。
+	row.Border(1, ui.Transparent)
+	if selected {
+		// 选中项保留白色浮起底，比旧版的浅灰底更醒目。
+		background, ink = p.Selected, p.Text
+		elevated(row, c.Theme())
+		row.FontWeight(sidebarSelectedWeight)
+	}
 	if row.Pressed() {
 		background, ink = p.Pressed, p.Text
-	} else if selected || row.Hovered() {
+	} else if row.Hovered() && !selected {
 		background, ink = p.Hover, p.Text
 	}
 	animateColors(row, background, ink)
 	return ink
 }
 
+// 侧栏行图标：选中时换填充版并用品牌橘，其余跟随本行文字色。
+func sidebarNavIcon(c *ui.Context, name string, selected bool) {
+	ui.Box(c).Size(sidebarIconBox, sidebarIconBox).Shrink(0).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
+		icon := sidebarAppIcon(c, name, selected)
+		if selected {
+			icon.TextColor(paletteFor(c.Theme()).Accent)
+		}
+	})
+}
+
 func sidebarControlColors(c *ui.Context, control ui.Element, muted bool) {
 	background := ui.Color{}
 	text := paletteFor(c.Theme()).Text
 	if muted {
-		text = paletteFor(c.Theme()).TextSecondary
+		text = paletteFor(c.Theme()).Text.Alpha(sidebarIdleInk)
 	}
 	if control.Pressed() {
 		background, text = paletteFor(c.Theme()).Pressed, paletteFor(c.Theme()).Text
@@ -286,9 +298,7 @@ func (a *App) sidebarFolders(c *ui.Context, counts catalog.Counts) {
 				} else {
 					ui.Box(c).Size(sidebarRowPadding, sidebarRowHeight).Shrink(0)
 				}
-				ui.Box(c).Size(sidebarIconBox, sidebarIconBox).Shrink(0).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
-					appIcon(c, "文件夹").Size(sidebarIconSize, sidebarIconSize)
-				})
+				sidebarNavIcon(c, "文件夹", selected)
 				ui.Text(c, folder.Name).SingleLine().Grow(1).MinWidth(0).Margin(0, 0, 0, sidebarIconGap)
 				if a.Preferences.SidebarCounts {
 					ui.Box(c).Width(sidebarCountGap).Shrink(0)
@@ -408,7 +418,7 @@ func (a *App) sidebarMoveFolder(drag AssetsDrag, targetID string, position folde
 }
 
 func sidebarChevron(c *ui.Context, open bool) ui.Element {
-	arrow := appSymbol(c, "chevron-right").Size(iconSmall, iconSmall)
+	arrow := sidebarAppIcon(c, "chevron-right", false).Size(iconSmall, iconSmall)
 	angle := float32(0)
 	if open {
 		angle = 90

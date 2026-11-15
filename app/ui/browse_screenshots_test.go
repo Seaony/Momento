@@ -43,7 +43,6 @@ func TestBrowseScreenshots(t *testing.T) {
 				case "thumbnail-small":
 					a.SetThumbnailSize(.5)
 				case "thumbnail-large":
-					a.ViewMode = 1
 					a.SetThumbnailSize(2)
 				case "list":
 					a.ViewMode = 2

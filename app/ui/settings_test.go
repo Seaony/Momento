@@ -334,7 +334,7 @@ func TestSettingsNotificationsDisabledKeepChoices(t *testing.T) {
 }
 
 func TestSettingsSidebarBrowsingSectionsCanBeHidden(t *testing.T) {
-	for _, item := range []struct{ key, label string }{{"recent", "recent"}, {"quick", "quick_access"}} {
+	for _, item := range []struct{ key, label string }{{"random", "random_browse"}, {"quick", "quick_access"}} {
 		t.Run(item.key, func(t *testing.T) {
 			a := settingsTestApp("en", "light")
 			a.Settings.Tab = SettingsSidebar

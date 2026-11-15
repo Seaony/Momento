@@ -167,7 +167,7 @@ func (a *App) inspectorNotes(c *ui.Context, asset model.Asset) {
 	ui.Column(c).Gap(space8).Children(func() {
 		ui.Divider(c.Key("inspector-notes-divider")).Background(p.BorderSubtle)
 		ui.Text(c, a.T("asset_note")).FontSize(fontGroup).FontWeight(600).LetterSpacing(.8).TextColor(p.TextTertiary)
-		note := ui.TextArea(c.Key("asset-note-"+asset.ID), &a.Inspector.Note).Label(a.T("asset_note")).Placeholder(a.T("asset_note_placeholder")).PlaceholderColor(p.TextTertiary).Height(88).FillWidth().Disabled(a.Busy)
+		note := ui.TextArea(c.Key("asset-note-"+asset.ID), &a.Inspector.Note).Label(a.T("asset_note")).Placeholder(a.T("asset_note_placeholder")).PlaceholderColor(placeholderColor(c)).Height(88).FillWidth().Disabled(a.Busy)
 		fieldStyle(c, note)
 		if note.FocusLeft() {
 			a.saveInspectorDetails()
@@ -177,7 +177,7 @@ func (a *App) inspectorNotes(c *ui.Context, asset model.Asset) {
 		ui.Text(c, a.T("source_url")).FontSize(fontGroup).FontWeight(600).LetterSpacing(.8).TextColor(p.TextTertiary)
 		ui.Row(c).Gap(space8).Children(func() {
 			ui.Box(c.Key("source-field")).Grow(1).MinWidth(0).Height(space32).Children(func() {
-				source := ui.TextInput(c.Key("asset-source-"+asset.ID), &a.Inspector.SourceURL).Label(a.T("source_url")).Placeholder(a.T("source_url_placeholder")).PlaceholderColor(p.TextTertiary).TextColor(p.Link).Fill().Disabled(a.Busy)
+				source := ui.TextInput(c.Key("asset-source-"+asset.ID), &a.Inspector.SourceURL).Label(a.T("source_url")).Placeholder(a.T("source_url_placeholder")).PlaceholderColor(placeholderColor(c)).TextColor(p.Link).Fill().Disabled(a.Busy)
 				fieldStyle(c, source)
 				if source.Submitted() || source.FocusLeft() {
 					a.saveInspectorDetails()
@@ -186,7 +186,7 @@ func (a *App) inspectorNotes(c *ui.Context, asset model.Asset) {
 					source.TextColor(ui.Transparent).PlaceholderColor(ui.Transparent)
 					text, color := a.Inspector.SourceURL, p.Link
 					if text == "" {
-						text, color = a.T("source_url_placeholder"), p.TextTertiary
+						text, color = a.T("source_url_placeholder"), placeholderColor(c)
 					}
 					ui.Row(c.Key("source-display")).Absolute().Fill().Padding(0, space12).IgnoreInput(true).PassThrough().AccessHidden(true).Children(func() {
 						ui.Text(c, text).FontSize(fontBody).TextColor(color).SingleLine().Grow(1).MinWidth(0)
@@ -286,9 +286,9 @@ func (a *App) inspectorMemberships(c *ui.Context, selected []model.Asset, items 
 			if add.Clicked() {
 				*open = !*open
 			}
-			frostedPopover(c.Key("inspector_"+kind+"_picker"), add, open, func() {
+			floatingPopover(c.Key("inspector_"+kind+"_picker"), add, open, func() {
 				ui.Column(c).Width(244).Gap(space8).Children(func() {
-					fieldStyle(c, ui.SearchField(c, search).Label(a.T("search_"+plural)).Placeholder(a.T("search_"+plural)))
+					searchField(c.Key("picker-search"), search, a.T("search_"+plural), a.T("clear_search"))
 					ui.Scroll(c).MaxHeight(220).Gap(space4).Children(func() {
 						query := strings.ToLower(strings.TrimSpace(*search))
 						for _, item := range items {

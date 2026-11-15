@@ -144,6 +144,11 @@ const (
 	assetColumnsExitDuration  = 60 * time.Millisecond
 )
 
+// 卡片左上角的心和右上角的尺寸角标照旧版：高 16，红心用系统红。
+const assetBadgeHeight = 16
+
+var favoriteRed = ui.Hex("#FF3B30")
+
 type assetModeID struct{ mode int }
 type assetCanvasID struct{ generation uint64 }
 
@@ -216,9 +221,6 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 			BorderWidth(0, 0, 1, 0).BorderColor(p.BorderSubtle)
 	} else {
 		card = ui.Column(c.Key(asset.ID)).Fill().Radius(radiusCard).FocusRing(false).Shadow(0, 1, 2, 0, p.Shadow)
-		if a.ViewMode == 1 {
-			card.Background(p.Raised)
-		}
 	}
 	card.Label(asset.Name).Focusable().AccessSelected(selected).Cursor(ui.CursorPointer)
 	focused := card.FocusVisible()
@@ -230,9 +232,6 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 		a.hovered = asset.ID
 	}
 	background := ui.Transparent
-	if a.ViewMode == 1 && !list {
-		background = p.Raised
-	}
 	if list {
 		switch {
 		case selected && hovered:
@@ -271,30 +270,17 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 			ui.Text(c.Key("list-extension"), strings.ToUpper(asset.Extension)).FontSize(fontSecondary).TextColor(p.TextSecondary).Margin(0, space40, 0, 0)
 		} else {
 			radius := float32(radiusCard)
-			if a.ViewMode == 1 {
-				ui.Box(c.Key("grid-image")).Fill().Padding(space16).Center().Children(func() {
-					if thumb != nil {
-						w, h := thumb.Size()
-						scale := max(0, frameWidth-2*space16) / max(float32(w), float32(h))
-						ui.Image(c.Key("thumbnail"), thumb).Size(float32(w)*scale, float32(h)*scale).Fit(ui.Contain).Radius(radiusCard).Shadow(0, 1, 2, 0, p.Shadow)
-					}
-				})
-			} else if thumb != nil {
+			if thumb != nil {
 				ui.Image(c.Key("thumbnail"), thumb).Fill().Fit(ui.Cover).Radius(radius)
 			} else {
 				ui.Box(c).Fill().Radius(radius).Background(p.Subtle)
 			}
 
-			visibility := float32(0)
-			if hovered {
-				visibility = 1
-			}
-			alpha := card.AnimateTo("dimensions-opacity", visibility, motionColor)
-			if hovered || alpha > 0 {
-				ui.Text(c.Key("dimensions"), fmt.Sprintf("%d × %d", width, height)).Absolute().Bottom(space8).Right(space8).
-					Padding(space4, space8).Radius(radiusControl).FontFeatures("tnum").FontSize(fontNumber).Material(panelMaterial(c.Theme())).
-					TextColor(p.Text).Opacity(alpha).PassThrough()
-			}
+			// 尺寸角标照旧版：常驻右上角，黑色半透明底、白字。
+			badge := ui.Text(c.Key("dimensions"), fmt.Sprintf("%d × %d", width, height)).Absolute().Top(space8).Right(space8).
+				Radius(5).Background(ui.RGBA(0, 0, 0, .34)).
+				FontFeatures("tnum").FontSize(10).FontWeight(500).TextColor(ui.RGBA(255, 255, 255, .82)).PassThrough()
+			centeredTextHeight(badge, assetBadgeHeight, 3)
 		}
 		if selected || focused {
 			// 图片外圈留 2px；列表描边放在行内，避免盖住相邻行。
@@ -305,9 +291,13 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 			}
 		}
 		if hovered || asset.Favorite {
-			button := ui.Button(c.Key("favorite"), "").Label(a.T("favorite")).Absolute().Top(space8).Right(space8).Size(controlSmall, controlSmall).Padding(0).Radius(radiusControl).BorderWidth(0).Material(panelMaterial(c.Theme())).Cursor(ui.CursorPointer).Children(func() { appIcon(c, "heart").Size(iconSize, iconSize) })
+			button := ui.ButtonBase(c.Key("favorite")).Label(a.T("favorite")).Tooltip(a.T("favorite")).Absolute().Cursor(ui.CursorPointer).
+				Justify(ui.Center).AlignItems(ui.Center).Padding(0)
 			if list {
-				button.Top(space16)
+				button.Top(space16).Right(space8).Size(controlSmall, controlSmall).Radius(radiusControl).Background(panelColor(c.Theme()))
+			} else {
+				// 旧版：左上角一颗白色心，不带底；鼠标移到心上才出黑色半透明底，收藏后变成红色实心。
+				button.Top(space8).Left(7).Size(22, assetBadgeHeight).Radius(assetBadgeHeight / 2)
 			}
 			favoriteFocused := button.FocusVisible()
 			wasFavoriteFocused := ui.Local(button, "keyboard-focus", func() bool { return false })
@@ -317,19 +307,24 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 			}
 			*wasFavoriteFocused = favoriteFocused
 			fadeMotion(button)
-			ink, tint, border := p.TextSecondary, p.Raised.Alpha(materialOverlayAlpha), ui.Transparent
-			if button.Hovered() {
-				ink, tint = p.Text, p.Hover.Alpha(materialOverlayAlpha)
+			if list {
+				ink := p.TextSecondary
+				if button.Hovered() || asset.Favorite {
+					ink = p.Text
+				}
+				button.TextColor(button.AnimateColor("favorite-ink", ink, motionColor))
+				button.Children(func() { appIconSelected(c, "heart", asset.Favorite).Size(iconSize, iconSize) })
+			} else {
+				ink, background := ui.RGBA(255, 255, 255, .92), ui.Transparent
+				if asset.Favorite {
+					ink = favoriteRed
+				}
+				if button.Hovered() {
+					background = ui.RGBA(0, 0, 0, .3)
+				}
+				animateColors(button, background, ink)
+				button.Children(func() { appIconSelected(c, "heart", asset.Favorite).Size(14, 14) })
 			}
-			if button.Pressed() {
-				tint = p.Pressed.Alpha(materialOverlayAlpha)
-			}
-			if asset.Favorite {
-				border = p.Border
-			}
-			button.Material(frostedSurface{tint: button.AnimateColor("favorite-tint", tint, motionColor), blur: 22}).
-				TextColor(button.AnimateColor("favorite-ink", ink, motionColor)).
-				Border(1, button.AnimateColor("favorite-border", border, motionColor))
 			if button.Clicked() {
 				a.SetFavorite([]string{asset.ID}, !asset.Favorite)
 			}
@@ -417,7 +412,7 @@ func (a *App) importProgress(c *ui.Context) {
 	if p == nil {
 		return
 	}
-	ui.Column(c.Key("import-progress")).Transition(ui.ElementTransition{Animation: &motionSpring, Height: true, Enter: &ui.Motion{Y: -10, Collapse: true}, Exit: &ui.Motion{Y: -10, Collapse: true}}).Height(importProgressHeight).Shrink(0).Padding(space12, space16).Gap(space4).Material(toolbarMaterial(c.Theme())).Children(func() {
+	ui.Column(c.Key("import-progress")).Transition(ui.ElementTransition{Animation: &motionSpring, Height: true, Enter: &ui.Motion{Y: -10, Collapse: true}, Exit: &ui.Motion{Y: -10, Collapse: true}}).Height(importProgressHeight).Shrink(0).Padding(space12, space16).Gap(space4).Background(toolbarColor(c.Theme())).Children(func() {
 		ui.Row(c).Children(func() {
 			ui.Text(c, a.T("import_stage_"+p.Stage)).FontSize(fontBody).FontWeight(600).TextColor(colors.Text)
 			ui.Spacer(c)

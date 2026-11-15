@@ -150,7 +150,7 @@ func TestPreferencesWriteFailureKeepsPreviousFile(t *testing.T) {
 func TestPreferencesWithoutStorageDoNotQueueWrites(t *testing.T) {
 	a := &App{Preferences: DefaultPreferences()}
 	a.RestoreUIState()
-	a.ViewMode = 1
+	a.ViewMode = 2
 	a.RememberUIState()
 	if err := a.FlushPreferences(); err != nil || a.prefVersion.Load() != 0 {
 		t.Fatalf("离线界面夹具不应向当前目录写文件：%v", err)
@@ -288,5 +288,19 @@ func TestSmartFoldersPreferenceDefaultsOff(t *testing.T) {
 	}
 	if !p.SmartFolders {
 		t.Fatal("打开的智能文件夹开关没有读回")
+	}
+}
+
+// 网格视图已去掉：旧偏好里的网格回到瀑布流，网格的快捷键一起清掉。
+func TestOldGridPreferenceFallsBackToMasonry(t *testing.T) {
+	p := DefaultPreferences()
+	p.ViewMode = 1
+	p.Shortcuts = map[string]string{"view_grid": "CmdOrCtrl+9", "view_list": "CmdOrCtrl+3"}
+	p = NormalizePreferences(p)
+	if p.ViewMode != 0 {
+		t.Fatalf("网格没有回到瀑布流：%d", p.ViewMode)
+	}
+	if _, ok := p.Shortcuts["view_grid"]; ok || p.Shortcuts["view_list"] != "CmdOrCtrl+3" {
+		t.Fatalf("快捷键：%v", p.Shortcuts)
 	}
 }

@@ -19,8 +19,13 @@ type paneWidthMotion struct {
 	changedAt time.Time
 }
 
-func animatePaneWidth(c *ui.Context, e ui.Element, key string, target float32) float32 {
+// instant 为真时（拖动分隔条）直接跳到目标，跟手；展开收起才走弹簧。
+func animatePaneWidth(c *ui.Context, e ui.Element, key string, target float32, instant bool) float32 {
 	state := ui.Local(e, key+"-target", func() paneWidthMotion { return paneWidthMotion{target: target} })
+	if instant {
+		state.target, state.changedAt = target, time.Time{}
+		return e.Jump(key, target)
+	}
 	if state.target != target {
 		state.target, state.changedAt = target, c.Now()
 	}
@@ -73,7 +78,7 @@ func (a *App) noticeViewport(c *ui.Context) {
 		for _, notice := range toasts {
 			parts := ui.ToastBase(c, notice)
 			parts.Root.Row().AlignItems(ui.Center).Gap(space12).Padding(space12, space16).Radius(radiusPanel).
-				MaxWidth(width-48).Material(panelMaterial(c.Theme())).TextColor(c.Theme().Text).
+				MaxWidth(width-48).Background(panelColor(c.Theme())).TextColor(c.Theme().Text).
 				Border(1, paletteFor(c.Theme()).BorderSubtle).Shadow(0, 1, 2, 0, paletteFor(c.Theme()).Shadow).
 				Transition(ui.ElementTransition{Animation: &motionSpring, Position: true, Enter: &ui.Motion{Y: 12}, Exit: &ui.Motion{Y: 12}})
 			parts.Root.Children(func() {

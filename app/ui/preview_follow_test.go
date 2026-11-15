@@ -3,7 +3,6 @@ package ui
 import (
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/Seaony/Momento/app/internal/catalog"
 	"github.com/Seaony/Momento/app/internal/model"
@@ -26,12 +25,8 @@ func TestPreviewFollowsImportSelectionOutsideItsOriginalItems(t *testing.T) {
 	}
 }
 
-func TestPreviewRecentRefreshDoesNotUndoPaging(t *testing.T) {
+func TestPreviewRefreshDoesNotUndoPaging(t *testing.T) {
 	a := sidebarTestApp()
-	for i := range a.Snapshot.Assets {
-		a.Snapshot.Assets[i].LastUsedAt = time.Now().Add(-time.Duration(i) * time.Hour)
-	}
-	a.Query.Scope = "recent"
 	a.applySnapshot(a.Snapshot)
 	if len(a.Visible) < 2 {
 		t.Fatal("缺少翻页样本")
@@ -47,7 +42,7 @@ func TestPreviewRecentRefreshDoesNotUndoPaging(t *testing.T) {
 	a.Index = catalog.New(a.Snapshot)
 	a.refine(false)
 	if w.asset.ID != next || !a.Selected.Has(selected) {
-		t.Fatal("最近使用刷新把预览跳回主窗口原选中项")
+		t.Fatal("列表刷新把预览跳回主窗口原选中项")
 	}
 	a.Selected.Clear()
 	a.Selected.Add(next)

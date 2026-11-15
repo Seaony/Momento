@@ -38,9 +38,9 @@ func (a *App) tags(c *ui.Context) {
 	scroll.Children(func() {
 		ui.Column(c.Key("tag-header")).Height(space64+space12).Shrink(0).FillWidth().Gap(space12).Padding(0, 0, space16, 0).Children(func() {
 			ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(space12).Children(func() {
-				search := ui.SearchField(c.Key("tag-search"), &a.Tags.Search).Label(a.T("search_tags")).Placeholder(a.T("search_tags")).Grow(1).MinWidth(0)
-				fieldStyle(c, search)
-				if search.Changed() {
+				search, changed := searchField(c.Key("tag-search"), &a.Tags.Search, a.T("search_tags"), a.T("clear_search"))
+				search.Grow(1).MinWidth(0)
+				if changed {
 					searchChanged = true
 				}
 				if primaryButton(c.Key("new-tag"), a.T("new_tag"), a.Busy).Radius(radiusControl).Clicked() {

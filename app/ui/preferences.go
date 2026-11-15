@@ -85,7 +85,7 @@ func NormalizePreferences(p Preferences) Preferences {
 	// "smart" 只为兼容旧数据保留；智能文件夹是否显示只看 SmartFolders。
 	hidden := make([]string, 0, len(p.SidebarHidden))
 	for _, key := range p.SidebarHidden {
-		if slices.Contains([]string{"favorites", "unfiled", "untagged", "random", "folders", "recent", "quick", "smart"}, key) && !slices.Contains(hidden, key) {
+		if slices.Contains([]string{"favorites", "unfiled", "untagged", "random", "folders", "quick", "smart"}, key) && !slices.Contains(hidden, key) {
 			hidden = append(hidden, key)
 		}
 	}
@@ -107,9 +107,11 @@ func NormalizePreferences(p Preferences) Preferences {
 		p.ThumbnailSize = 1
 	}
 	p.ThumbnailSize = max(.5, min(2, p.ThumbnailSize))
-	if p.ViewMode < 0 || p.ViewMode > 2 {
+	// 视图只有瀑布流（0）和列表（2）；以前存的网格（1）和异常值都回到瀑布流，网格的快捷键一起清掉。
+	if p.ViewMode != 2 {
 		p.ViewMode = 0
 	}
+	delete(p.Shortcuts, "view_grid")
 	switch p.Sort {
 	case "added", "name", "size":
 	default:

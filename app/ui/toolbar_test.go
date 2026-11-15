@@ -56,13 +56,13 @@ func TestToolbarSearchAndViewSelection(t *testing.T) {
 	if len(a.Visible) != 1 || a.Visible[0].ID != "a" {
 		t.Fatalf("搜索结果：%v", a.Visible)
 	}
-	toolbarClick(t, tt, a.T("view_grid"))
-	if a.ViewMode != 1 {
-		t.Fatalf("网格视图：%d", a.ViewMode)
-	}
 	toolbarClick(t, tt, a.T("view_list"))
 	if a.ViewMode != 2 {
 		t.Fatalf("列表视图：%d", a.ViewMode)
+	}
+	toolbarClick(t, tt, a.T("view_masonry"))
+	if a.ViewMode != 0 {
+		t.Fatalf("瀑布流视图：%d", a.ViewMode)
 	}
 	a.SidebarVisible = false
 	tt.Frame()
@@ -73,7 +73,7 @@ func TestToolbarSearchAndViewSelection(t *testing.T) {
 }
 
 func TestToolbarIconTooltips(t *testing.T) {
-	keys := []string{"toggle_sidebar", "filter", "sort", "view_masonry", "view_grid", "view_list", "import"}
+	keys := []string{"toggle_sidebar", "filter", "sort", "view_masonry", "view_list", "import"}
 	for _, language := range []string{"en", "zh-CN"} {
 		for _, key := range keys {
 			t.Run(language+"/"+key, func(t *testing.T) {
@@ -139,7 +139,7 @@ func TestToolbarFiltersAndRepeatedSort(t *testing.T) {
 	if a.Query.Sort != "name" || a.Query.Descending || a.Visible[0].ID != "a" {
 		t.Fatalf("名称排序：%+v", a.Query)
 	}
-	toolbarClick(t, tt, a.T("sort"))
+	// 弹层不收起，直接再点当前字段反转方向。
 	toolbarClick(t, tt, a.T("sort_name"))
 	if !a.Query.Descending || a.Visible[0].ID != "c" {
 		t.Fatalf("名称反向排序：%+v", a.Query)
@@ -235,9 +235,9 @@ func TestNarrowToolbarKeepsThumbnailPopover(t *testing.T) {
 		t.Fatal("缩略图浮层未打开")
 	}
 	before := a.thumbnailScale()
-	toolbarClick(t, tt, a.T("thumbnail_larger"))
+	tt.ClickAt(slider.Bounds.X+slider.Bounds.W*.9, slider.Bounds.Y+slider.Bounds.H/2)
 	if a.thumbnailScale() <= before {
-		t.Fatal("浮层中的缩略图按钮没有生效")
+		t.Fatal("浮层中的缩略图滑块没有生效")
 	}
 	tt.Key(0, ui.KeyEscape)
 	if a.Toolbar.ThumbnailOpen {

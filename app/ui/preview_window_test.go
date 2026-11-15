@@ -99,11 +99,11 @@ func TestPreviewSelectionOnlyFollowsTemporaryWindow(t *testing.T) {
 	if !temporary.closing || first.closing {
 		t.Fatal("清除选择没有只关闭暂态窗口")
 	}
-	first.imageFocused = true
+	first.hasFocus = true
 	if !a.PreviewOpen() || a.PreviewAssetID() != "one" {
 		t.Fatal("焦点固定窗口不是菜单目标")
 	}
-	first.imageFocused = false
+	first.hasFocus = false
 	if a.PreviewOpen() {
 		t.Fatal("后台固定窗口屏蔽了主窗口快捷键")
 	}
@@ -129,12 +129,13 @@ func TestPreviewWindowBoundsAndCloseAreContinuous(t *testing.T) {
 	parent := mygo.Rectangle{X: 100, Y: 100, Width: 1200, Height: 800}
 	area := mygo.Rectangle{Width: 1440, Height: 900}
 	for _, asset := range []model.Asset{{Width: 4000, Height: 3000}, {Width: 100, Height: 80}, {Width: 200, Height: 4000}} {
-		r, info := previewLayout(parent, area, asset, true)
-		if r.Width > 960 || r.Height+previewInfoGap+info.Height > 640 || r.X < area.X || r.Y < area.Y || info.X+info.Width > area.Width || info.Y+info.Height > area.Height {
-			t.Fatalf("窗口越界：%+v %+v", r, info)
+		r := previewLayout(parent, area, asset, true, "zh-CN", 1)
+		// 图片最多占屏幕可用区域 85% 宽、85% 高，留白和底栏另算。
+		if r.Width-2*previewImageInset > 1224 || r.Height-previewImageInset-previewFooterPoints(asset, r.Width, "zh-CN", 1) > 765 || r.X < area.X || r.Y < area.Y || r.X+r.Width > area.Width || r.Y+r.Height > area.Height {
+			t.Fatalf("窗口越界：%+v", r)
 		}
-		if info.Y != r.Y+r.Height+previewInfoGap || info.X+info.Width/2 != r.X+r.Width/2 && info.X+info.Width/2+1 != r.X+r.Width/2 && info.X+info.Width/2 != r.X+r.Width/2+1 {
-			t.Fatalf("信息卡没有在图片正下方居中：%+v %+v", r, info)
+		if r.X+r.Width/2 < parent.X+parent.Width/2-1 || r.X+r.Width/2 > parent.X+parent.Width/2+1 {
+			t.Fatalf("预览没有在主窗口中央：%+v", r)
 		}
 	}
 	a := readyPreviewApp()
@@ -270,7 +271,7 @@ func TestPreviewFocusedTemporaryWindowEscapeAndCloseShortcut(t *testing.T) {
 	}{{0, ui.KeyEscape}, {ui.Cmd, ui.KeyW}, {0, ui.KeySpace}} {
 		a := previewFixture(288, 192)
 		w := a.Preview.active
-		w.imageFocused = true
+		w.hasFocus = true
 		tt := ui.NewTester(func(c *ui.Context) { w.view(c, a) }, 400, 300)
 		tt.Key(key.mods, key.key)
 		if !w.disposed || a.PreviewOpen() {
@@ -311,29 +312,24 @@ func TestPreviewReducedMotionStillTimesTheHold(t *testing.T) {
 	}
 }
 
-func TestPreviewHoldHintFitsEnglishAndJapanese(t *testing.T) {
-	for _, language := range []string{"en", "ja"} {
-		a := previewFixture(64, 48)
-		a.Texts.Language = language
-		a.Preferences.Language = language
-		w := a.Preview.active
-		w.picture.Held = true
-		w.pressedAt = time.Now().Add(-time.Second)
-		var textWidth float32
-		tt := ui.NewTester(func(c *ui.Context) {
-			w.infoView(c, a)
-			textWidth, _ = c.MeasureText(0, ui.Span{Text: a.T("preview_hold_to_pin"), Size: fontSecondary})
-		}, previewInfoWidth, previewInfoHeight)
-		if available := float32(previewInfoWidth - 2*previewInfoSide); textWidth > available {
-			t.Fatalf("%s固定提示宽%.1f，超过信息卡可用%.1f", language, textWidth, available)
-		}
-		if !tt.HasText(a.T("preview_hold_to_pin")) {
-			t.Fatal("缺少固定提示三语文案")
-		}
-		for _, element := range tt.AccessAll() {
-			if element.Bounds.W > 0 && element.Bounds.H > 0 && (element.Bounds.X < 0 || element.Bounds.Y < 0 || element.Bounds.X+element.Bounds.W > previewInfoWidth+.1 || element.Bounds.Y+element.Bounds.H > previewInfoHeight+.1) {
-				t.Fatalf("元素超出窗口：%+v", element)
-			}
+// 按住空格时不加文字提示，只把关闭按钮换成小圆环；尺寸信息照常显示，元素不超出窗口。
+func TestPreviewHoldShowsOnlyRing(t *testing.T) {
+	a := previewFixture(64, 48)
+	w := a.Preview.active
+	w.picture.Held = true
+	w.pressedAt = time.Now().Add(-time.Second)
+	const width, height = previewMinimumWidth, 240
+	tt := ui.NewTester(func(c *ui.Context) { w.view(c, a) }, width, height)
+	meta, _, _ := previewDetails(w.asset)
+	if !tt.HasText(meta) {
+		t.Fatalf("按住时尺寸信息不见了：%v", tt.Texts())
+	}
+	if _, found := tt.AccessByRole(ui.RoleButton, a.T("close_preview")); found {
+		t.Fatal("按住时关闭按钮没有换成圆环")
+	}
+	for _, element := range tt.AccessAll() {
+		if element.Bounds.W > 0 && element.Bounds.H > 0 && (element.Bounds.X < 0 || element.Bounds.Y < 0 || element.Bounds.X+element.Bounds.W > width+.1 || element.Bounds.Y+element.Bounds.H > height+.1) {
+			t.Fatalf("元素超出窗口：%+v", element)
 		}
 	}
 }
@@ -482,7 +478,7 @@ func TestPreviewSpaceWithoutTargetDoesNotKeepOldHoldStart(t *testing.T) {
 func TestPreviewFocusedWindowShortcutsWithoutElementFocus(t *testing.T) {
 	a := previewFixture(288, 192)
 	w := a.Preview.active
-	w.imageFocused = true
+	w.hasFocus = true
 	bitmap, pixels := w.picture.Bitmap, w.picture.pixelBitmap
 	w.items = append(w.items, model.Asset{ID: "two", Name: "第二张", Width: 288, Height: 192})
 	tt := ui.NewTester(func(c *ui.Context) { w.view(c, a) }, 600, 400)
@@ -511,5 +507,75 @@ func TestPreviewFocusedWindowShortcutsWithoutElementFocus(t *testing.T) {
 	tt.Key(ui.Cmd, ui.Key1)
 	if w.picture.Zoom != 1 || w.picture.fitMode {
 		t.Fatal("独立窗口无元素焦点时不能原始大小")
+	}
+}
+
+func TestPreviewFooterShowsFullNameAndHidesCameraUntilHover(t *testing.T) {
+	asset := model.Asset{Name: "晨雾", Extension: "JPG", Size: 3 << 20, Width: 4000, Height: 3000,
+		EXIF: map[string]string{"cameraMake": "SONY", "cameraModel": "ILCE-7M4", "focalLength": "35", "fNumber": "1.8", "exposureTime": "0.004", "isoSpeedRatings": "100"}}
+	if got := previewFileName(asset); got != "晨雾.jpg" {
+		t.Fatalf("文件名没带扩展名：%q", got)
+	}
+	// 导入只去掉最后一个扩展名，logo.png.png 的名称是 logo.png。
+	if got := previewFileName(model.Asset{Name: "logo.png", Extension: "png"}); got != "logo.png.png" {
+		t.Fatalf("文件名少了扩展名：%q", got)
+	}
+	dimensions, size, camera := previewDetails(asset)
+	if dimensions != "4000 × 3000" || size != "3.0 MB" || camera != "SONY ILCE-7M4 · 35 mm · f/1.8 · 1/250 s · ISO 100" {
+		t.Fatalf("信息行：%q / %q / %q", dimensions, size, camera)
+	}
+	if _, _, camera := previewDetails(model.Asset{EXIF: map[string]string{"cameraMake": "Canon", "cameraModel": "Canon EOS R5"}}); camera != "Canon EOS R5" {
+		t.Fatalf("品牌重复：%q", camera)
+	}
+
+	a := previewFixture(400, 300)
+	w := a.Preview.active
+	w.asset.Name, w.asset.Extension, w.asset.EXIF = asset.Name, asset.Extension, asset.EXIF
+	tt := ui.NewTester(func(c *ui.Context) { w.view(c, a) }, 428, 366)
+	tt.Frame()
+	if !tt.HasText("晨雾.jpg") || tt.HasText(camera) {
+		t.Fatalf("平时应只显示文件名和尺寸：%v", tt.Texts())
+	}
+	tt.Move(100, 366-previewFooterMinimum/2)
+	tt.Advance(100 * time.Millisecond)
+	if !tt.HasText(camera) {
+		t.Fatalf("悬停底栏没有换成相机参数：%v", tt.Texts())
+	}
+}
+
+func TestPreviewLongNameWrapsAndGrowsWindow(t *testing.T) {
+	parent, area := mygo.Rectangle{Width: 1200, Height: 800}, mygo.Rectangle{Width: 1440, Height: 900}
+	short := model.Asset{Name: "a", Extension: "png", Width: 100, Height: 80}
+	long := short
+	long.Name = "一个特别特别长的文件名用来确认预览底栏会把名字完整换行显示而不是截断"
+	s, l := previewLayout(parent, area, short, false, "zh-CN", 1), previewLayout(parent, area, long, false, "zh-CN", 1)
+	if s.Height != previewMinimumHeight+previewImageInset+previewFooterPoints(short, s.Width, "zh-CN", 1) || l.Height <= s.Height || l.Width != s.Width {
+		t.Fatalf("长文件名没有让底栏变高：短 %+v，长 %+v", s, l)
+	}
+}
+
+// 换图后窗口变高：贴着屏幕底边时整体上移；界面放大时按缩放后的宽度换行、按缩放换算高度。
+func TestPreviewResizeStaysOnScreenAndFollowsZoom(t *testing.T) {
+	area := mygo.Rectangle{Y: 25, Width: 1440, Height: 875}
+	r := previewResized(mygo.Rectangle{X: 100, Y: 700, Width: 300, Height: 200}, 30, area)
+	if r.Height != 230 || r.Y+r.Height != area.Y+area.Height {
+		t.Fatalf("变高后超出屏幕：%+v", r)
+	}
+	if r := previewResized(mygo.Rectangle{Y: 100, Height: 200}, 30, area); r.Y != 100 || r.Height != 230 {
+		t.Fatalf("不靠底边时不该移动：%+v", r)
+	}
+	long := model.Asset{Name: "一个比较长的文件名在放大界面后会多换一行", Extension: "png"}
+	normal, zoomed := previewFooterPoints(long, 300, "zh-CN", 1), previewFooterPoints(long, 300, "zh-CN", 1.5)
+	if zoomed < int(float32(normal)*1.5) {
+		t.Fatalf("界面放大后底栏没有按缩放变高：1x %d，1.5x %d", normal, zoomed)
+	}
+}
+
+// 小屏幕上图片也不超过屏幕可用区域的 85%。
+func TestPreviewLayoutRespectsSmallScreen(t *testing.T) {
+	area := mygo.Rectangle{Width: 400, Height: 900}
+	r := previewLayout(mygo.Rectangle{Width: 400, Height: 900}, area, model.Asset{Name: "a", Extension: "png", Width: 4000, Height: 1000}, false, "zh-CN", 1)
+	if image := r.Width - 2*previewImageInset; image > 340 {
+		t.Fatalf("图片宽 %d，超过 400 的 85%%", image)
 	}
 }

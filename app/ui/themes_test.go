@@ -56,7 +56,8 @@ func TestThemeTextContrast(t *testing.T) {
 					t.Errorf("%s %s 文字对比度 %.2f < 4.5", key, name, contrast)
 				}
 			}
-			if contrast := themeContrast(theme.InverseText, theme.Danger); contrast < 4.5 {
+			// 确认对话框的危险按钮文字用 Background 色（见 dialogs.go）。
+			if contrast := themeContrast(paletteFor(theme).Background, theme.Danger); contrast < 4.5 {
 				t.Errorf("%s 危险按钮文字对比度 %.2f < 4.5", key, contrast)
 			}
 			if contrast := themeContrast(theme.InverseText, theme.Inverse); contrast < 4.5 {

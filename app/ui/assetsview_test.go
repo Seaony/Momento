@@ -22,7 +22,7 @@ func assetViewFixture() *App {
 	return a
 }
 func TestAssetSelectionInThreeViews(t *testing.T) {
-	for mode := 0; mode < 3; mode++ {
+	for _, mode := range viewModes {
 		t.Run(fmt.Sprint(mode), func(t *testing.T) {
 			a := assetViewFixture()
 			a.ViewMode = mode
@@ -91,9 +91,9 @@ func TestAppearanceReturnsToSystem(t *testing.T) {
 	}
 }
 
-func TestAssetGridSelectionAfterScrolling(t *testing.T) {
+func TestAssetListSelectionAfterScrolling(t *testing.T) {
 	a := assetViewFixture()
-	a.ViewMode = 1
+	a.ViewMode = 2
 	snapshot := model.Snapshot{}
 	for i := 0; i < 500; i++ {
 		snapshot.Assets = append(snapshot.Assets, model.Asset{ID: fmt.Sprint(i), Name: fmt.Sprintf("Photo %03d", i), Width: 600, Height: 400, Extension: "jpg"})
@@ -109,6 +109,6 @@ func TestAssetGridSelectionAfterScrolling(t *testing.T) {
 		t.Fatal(err)
 	}
 	if a.Selected.Len() != 2 || !a.Selected.Has("0") || !a.Selected.Has("499") {
-		t.Fatal("滚动后网格没有保留加选")
+		t.Fatal("滚动后列表没有保留加选")
 	}
 }

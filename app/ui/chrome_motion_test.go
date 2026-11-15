@@ -38,6 +38,12 @@ func TestChromeWidthsAnimateAndInspectorFollowsSelection(t *testing.T) {
 	}
 	tt.Press(236, 450)
 	tt.Move(300, 450)
+	// 拖动中不推进时间，侧栏也要立刻跟到指针位置，不能被弹簧拖慢。
+	tt.Frame()
+	tt.Frame()
+	if width := a.SidebarShownWidth(); width < 295 || width > 305 {
+		t.Fatalf("拖动分隔线时侧栏没有跟手：%v", width)
+	}
 	tt.Release(300, 450)
 	tt.Advance(time.Second)
 	if a.SidebarWidth < 290 || a.SidebarWidth > 310 {
@@ -92,7 +98,7 @@ func TestChromeMotionScreenshots(t *testing.T) {
 
 func TestAssetDoubleClickSurvivesInspectorOpening(t *testing.T) {
 	fixture := newScreenshotFixture(t)
-	for _, mode := range []int{0, 1, 2} {
+	for _, mode := range viewModes {
 		a := fixture.app(t, "small", "zh-CN", "light")
 		a.ViewMode = mode
 		a.InspectorVisible = false
@@ -149,8 +155,8 @@ func TestThumbnailSizeOnlyPersistsItsPreference(t *testing.T) {
 	reconfigured := 0
 	a.MenuChanged = func() { reconfigured++ }
 	a.PreferencesChanged = func() { reconfigured++ }
-	a.SetThumbnailSize(1.2)
-	if a.Preferences.ThumbnailSize != 1.2 || reconfigured != 0 {
+	a.SetThumbnailSize(1.5)
+	if a.Preferences.ThumbnailSize != 1.5 || reconfigured != 0 {
 		t.Fatalf("调缩略图重新配置了其他服务：%v，%d", a.Preferences.ThumbnailSize, reconfigured)
 	}
 }

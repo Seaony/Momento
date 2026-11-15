@@ -12,7 +12,7 @@ import (
 )
 
 func TestAssetHeaderOverlayKeepsFirstRowVisible(t *testing.T) {
-	for mode := 0; mode < 3; mode++ {
+	for _, mode := range viewModes {
 		for _, importing := range []bool{false, true} {
 			t.Run(fmt.Sprintf("mode-%d/importing-%t", mode, importing), func(t *testing.T) {
 				a := assetViewFixture()
@@ -42,7 +42,7 @@ func TestAssetHeaderOverlayKeepsFirstRowVisible(t *testing.T) {
 }
 
 func TestAssetKeyboardFocusStaysBelowOverlay(t *testing.T) {
-	for mode := 0; mode < 3; mode++ {
+	for _, mode := range viewModes {
 		for _, scale := range []float32{1, 2} {
 			t.Run(fmt.Sprintf("%d/%g", mode, scale), func(t *testing.T) {
 				a := assetViewFixture()
@@ -81,32 +81,36 @@ func TestAssetKeyboardFocusStaysBelowOverlay(t *testing.T) {
 	}
 }
 
-func TestAssetDimensionsOnlyAppearOnHover(t *testing.T) {
+// 照旧版：尺寸角标常驻图片右上角，心在左上角，鼠标移上来才出现。
+func TestAssetDimensionsBadgeAndFavoriteCorners(t *testing.T) {
 	for _, language := range []string{"zh-CN", "en", "ja"} {
 		for mode := 0; mode < 2; mode++ {
 			t.Run(fmt.Sprintf("%s/%d", language, mode), func(t *testing.T) {
 				a := assetViewFixture()
 				a.Texts.Language, a.ViewMode = language, mode
 				tt := ui.NewTester(a.assetArea, 700, 600)
-				if tt.HasText("600 × 400") {
-					t.Fatal("未悬停时仍有尺寸角标")
-				}
 				box, ok := tt.Find(a.Visible[0].Name)
 				if !ok {
 					t.Fatal("没有找到素材")
 				}
-				tt.Move(box.X+box.W/2, box.Y+box.H/2)
-				if !tt.HasText("600 × 400") || tt.Cursor() != ui.CursorPointer {
-					t.Fatal("悬停没有显示尺寸和手型指针")
-				}
 				dims, ok := tt.Find("600 × 400")
-				if !ok || dims.X < box.X || dims.X+dims.W > box.X+box.W || dims.Y < box.Y || dims.Y+dims.H > box.Y+box.H {
-					t.Fatalf("尺寸胶囊超出图片：%+v，图片%+v", dims, box)
+				if !ok {
+					t.Fatal("未悬停时没有尺寸角标")
 				}
-				tt.Move(0, 0)
-				tt.Advance(motionColor.Duration)
-				if tt.HasText("600 × 400") {
-					t.Fatal("移开鼠标后尺寸角标没有隐藏")
+				if dims.X < box.X+box.W/2 || dims.X+dims.W > box.X+box.W || dims.Y < box.Y || dims.Y > box.Y+box.H/4 {
+					t.Fatalf("尺寸角标不在图片右上角：%+v，图片%+v", dims, box)
+				}
+				if _, ok := tt.Find(a.T("favorite")); ok {
+					t.Fatal("未悬停也显示了收藏按钮")
+				}
+				tt.Move(box.X+box.W/2, box.Y+box.H/2)
+				tt.Frame()
+				heart, ok := tt.Find(a.T("favorite"))
+				if !ok || tt.Cursor() != ui.CursorPointer {
+					t.Fatalf("悬停没有显示收藏按钮和手型指针：%v %v", ok, tt.Cursor())
+				}
+				if heart.X > box.X+box.W/4 || heart.Y > box.Y+box.H/4 {
+					t.Fatalf("收藏按钮不在图片左上角：%+v，图片%+v", heart, box)
 				}
 			})
 		}

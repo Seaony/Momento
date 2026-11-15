@@ -18,21 +18,22 @@ func TestToolbarRound3LocalizedTextFits(t *testing.T) {
 				a.Texts.Language = language
 				a.Preferences.Theme = theme
 				a.SidebarVisible, a.InspectorVisible = false, false
-				var importWidth, searchWidth, lineHeight float32
+				var searchWidth, lineHeight float32
 				tt := ui.NewTester(func(c *ui.Context) {
 					a.applyTheme(c)
 					ui.Column(c).Fill().Children(func() { a.toolbar(c); ui.Spacer(c) })
-					importWidth, lineHeight = c.MeasureText(0, ui.Span{Text: a.T("import"), Font: c.Theme().Font, Size: fontBody, Weight: 700, Lang: language})
-					searchWidth, _ = c.MeasureText(0, ui.Span{Text: a.T("search_assets"), Font: c.Theme().Font, Size: fontBody, Lang: language})
+					searchWidth, lineHeight = c.MeasureText(0, ui.Span{Text: a.T("search_assets"), Font: c.Theme().Font, Size: toolbarFont, Lang: language})
 				}, 1100, 640)
 				tt.SetLocale(language)
 				tt.Advance(time.Second)
+				// 导入是图标按钮，只检查它在最右边。
 				button, ok := tt.Access(a.T("import"))
-				if !ok || button.Bounds.W < importWidth+18+space8+2*space12 || button.Bounds.H < lineHeight {
-					t.Fatalf("导入文字被截断或换行：文字%g×%g，按钮%+v", importWidth, lineHeight, button.Bounds)
+				if !ok {
+					t.Fatal("找不到导入按钮")
 				}
+				// 照设计稿搜索框可以缩窄：英文放得下完整提示；日文按钮文字长，提示可以截断，但搜索框不能小于最小宽度、不能换行。
 				input, ok := tt.AccessByRole(ui.RoleTextField, a.T("search_assets"))
-				if !ok || input.Bounds.W < searchWidth || input.Bounds.H < lineHeight {
+				if !ok || input.Bounds.H < lineHeight*.9 || input.Bounds.H > lineHeight*1.5 || (language == "en" && input.Bounds.W < searchWidth) {
 					t.Fatalf("宽工具栏搜索提示被截断或换行：文字%g×%g，输入%+v", searchWidth, lineHeight, input.Bounds)
 				}
 				if button.Bounds.X+button.Bounds.W > 1100-space12 || input.Bounds.X >= button.Bounds.X {
@@ -65,7 +66,7 @@ func TestToolbarRound3Screenshots(t *testing.T) {
 	}
 }
 
-func TestToolbarDisabledImportKeepsRaisedSurface(t *testing.T) {
+func TestToolbarDisabledImportBlocksMenu(t *testing.T) {
 	for _, theme := range []string{"light", "dark"} {
 		t.Run(theme, func(t *testing.T) {
 			a := toolbarTestApp()
@@ -78,11 +79,6 @@ func TestToolbarDisabledImportKeepsRaisedSurface(t *testing.T) {
 				t.Fatal("导入没有保留禁用语义")
 			}
 			r := button.Bounds
-			pixel := tt.Image().RGBAAt(int(r.X+5), int(r.Y+r.H/2))
-			palette := paletteFor(momentoTheme(theme, false))
-			if pixel.R != palette.Raised.R || pixel.G != palette.Raised.G || pixel.B != palette.Raised.B {
-				t.Fatalf("禁用导入底色不一致：%v", pixel)
-			}
 			tt.ClickAt(r.X+r.W/2, r.Y+r.H/2)
 			tt.Key(0, ui.KeyEnter)
 			if len(tt.Menu()) != 0 {

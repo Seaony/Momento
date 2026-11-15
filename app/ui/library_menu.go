@@ -47,7 +47,7 @@ func (a *App) sidebarLibrary(c *ui.Context) {
 	if trigger.Clicked() {
 		a.Sidebar.LibraryOpen = !a.Sidebar.LibraryOpen
 	}
-	frostedPopover(c, trigger, &a.Sidebar.LibraryOpen, func() { a.libraryMenu(c) })
+	floatingPopover(c, trigger, &a.Sidebar.LibraryOpen, func() { a.libraryMenu(c) })
 }
 
 func (a *App) libraryMenu(c *ui.Context) {
@@ -139,7 +139,7 @@ func (a *App) libraryMoreMenu(c *ui.Context, recent library.Recent, current bool
 	animateColors(more, background, text)
 	more.Children(func() { appIcon(c, "more").Size(iconSmall, iconSmall) })
 	menu.Popup(func(panel ui.Element) {
-		elevated(popupMotion(panel), c.Theme()).Material(panelMaterial(c.Theme())).Radius(radiusPanel).Padding(space4).Gap(0)
+		elevated(popupMotion(panel), c.Theme()).Background(panelColor(c.Theme())).Radius(radiusPanel).Padding(space4).Gap(0)
 		choose := func(chosen bool, action func()) {
 			if chosen {
 				a.Sidebar.LibraryOpen = false

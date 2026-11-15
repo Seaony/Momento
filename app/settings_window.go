@@ -20,8 +20,7 @@ func showSettingsWindow(a *appui.App) {
 		Title: a.T("settings"), Width: 760, Height: 560, UseContentSize: true,
 		MinWidth: 760, MinHeight: 560, DisableResize: true, DisableMaximize: true, DisableFullScreen: true,
 		TitleBarStyle: mygo.TitleBarHiddenInset, TitleBarHeight: 44,
-		TrafficLightPosition: &mygo.Point{X: 14, Y: 15},
-		Vibrancy:             mygo.VibrancySidebar,
+		TrafficLightPosition: appui.TrafficLights(),
 		BackgroundColor:      appui.WindowBackgroundColor(), Content: ui.View(a.SettingsView),
 	})
 	a.ApplyWindowZoom()

@@ -85,10 +85,10 @@ func (a *App) ShowPasswordSettings(mode string) {
 
 func (a *App) lockScreen(c *ui.Context) {
 	backdrop := ui.Column(c.Key("lock-screen")).Fill().Padding(max(MainToolbarHeight, c.TitleBar().Bottom+space16), space24, space24, space24).
-		Center().Material(frostedSurface{tint: c.Theme().Background.Alpha(materialPanelAlpha), blur: space32}).DragWindow()
+		Center().Background(c.Theme().Background).DragWindow()
 	backdrop.Children(func() {
 		panel := ui.Column(c.Key("unlock-panel")).Width(panelDialog).MaxWidthPercent(100).Padding(space24).Center().Gap(space16).Radius(radiusPanel).
-			Material(panelMaterial(c.Theme()))
+			Background(panelColor(c.Theme()))
 		elevated(panel, c.Theme())
 		dialogMotion(backdrop, panel)
 		panel.Children(func() {
@@ -96,7 +96,7 @@ func (a *App) lockScreen(c *ui.Context) {
 			ui.Text(c, a.T("password_locked")).FontSize(fontTitle).FontWeight(600).TextColor(paletteFor(c.Theme()).Text)
 			ui.Column(c).FillWidth().Gap(space12).Children(func() {
 				input := fieldStyle(c, ui.TextInput(c.Key([2]any{"unlock-password", a.Lock.EditorSession}), &a.Lock.Password).
-					Password().AutoFocus().Label(a.T("password_enter")).Placeholder(a.T("password_enter")).FillWidth().
+					Password().AutoFocus().Label(a.T("password_enter")).Placeholder(a.T("password_enter")).PlaceholderColor(placeholderColor(c)).FillWidth().
 					Disabled(a.PasswordOperationPending() || a.passwordCooldown() > 0))
 				a.passwordFeedback(c)
 				label := a.T("password_unlock")
@@ -119,11 +119,11 @@ func (a *App) passwordSettingsDialog(c *ui.Context) {
 	}
 	ui.Overlay(c, func() {
 		back := ui.Column(c.Key("password-settings-backdrop")).Absolute().Left(0).Top(0).Right(0).Bottom(0).
-			Center().Material(frostedSurface{tint: paletteFor(c.Theme()).Scrim, blur: 12}).Modal()
+			Center().Background(paletteFor(c.Theme()).Scrim).Modal()
 		back.Children(func() {
 			title := a.T("password_dialog_" + a.Lock.Mode)
 			panel := ui.Column(c.Key("password-settings")).Width(panelDialog).MaxWidthPercent(92).MaxHeightPercent(92).
-				Padding(space24).Gap(space12).Radius(radiusPanel).Material(panelMaterial(c.Theme())).
+				Padding(space24).Gap(space12).Radius(radiusPanel).Background(panelColor(c.Theme())).
 				Role(ui.RoleDialog).Label(title)
 			elevated(panel, c.Theme())
 			dialogMotion(back, panel)

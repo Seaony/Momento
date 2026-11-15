@@ -32,7 +32,7 @@ func NewMasonryScaled(ratios []float32, width, scale float32) *MasonryLayout {
 	scale = max(.5, min(2, scale))
 	minWidth := masonryMinWidth * scale
 	width = max(width, minWidth)
-	count := max(1, int((width+masonryGap)/(minWidth+masonryGap)))
+	count := masonryColumns(width, scale)
 	itemWidth := (width - float32(count-1)*masonryGap) / float32(count)
 	layout := &MasonryLayout{columns: make([][]MasonryItem, count)}
 	heights := make([]float32, count)
@@ -81,3 +81,10 @@ func (m *MasonryLayout) Visible(top, bottom float32) []MasonryItem {
 }
 
 func (m *MasonryLayout) Height() float32 { return m.height }
+
+// 瀑布流在这个宽度和缩略图大小下排几列；工具栏的「几列」也用它。
+func masonryColumns(width, scale float32) int {
+	scale = max(.5, min(2, scale))
+	minWidth := masonryMinWidth * scale
+	return max(1, int((max(width, minWidth)+masonryGap)/(minWidth+masonryGap)))
+}

@@ -35,8 +35,7 @@ var ShortcutDefinitions = []ShortcutDefinition{
 	{"select_all", "select_all", "edit", "CmdOrCtrl+A", false},
 	{"delete", "delete", "edit", "Backspace", false},
 	{"view_masonry", "view_masonry", "view", "CmdOrCtrl+1", false},
-	{"view_grid", "view_grid", "view", "CmdOrCtrl+2", false},
-	{"view_list", "view_list", "view", "CmdOrCtrl+3", false},
+	{"view_list", "view_list", "view", "CmdOrCtrl+2", false},
 	{"search", "search", "view", "CmdOrCtrl+K", false},
 	{"filter", "filter", "view", "CmdOrCtrl+Alt+F", false},
 	{"sort", "sort", "view", "CmdOrCtrl+Alt+S", false},
@@ -263,7 +262,8 @@ func displayShortcut(value string) string {
 
 func (a *App) shortcutsSettings(c *ui.Context) {
 	p := paletteFor(c.Theme())
-	fieldStyle(c, ui.SearchField(c.Key("shortcut-search"), &a.Settings.ShortcutSearch).Label(a.T("shortcut_search")).Placeholder(a.T("shortcut_search")).Height(controlHeight).FillWidth())
+	field, _ := searchField(c.Key("shortcut-search"), &a.Settings.ShortcutSearch, a.T("shortcut_search"), a.T("clear_search"))
+	field.FillWidth()
 	for _, group := range []string{"global", "file", "edit", "view", "preview"} {
 		definitions := []ShortcutDefinition{}
 		for _, definition := range ShortcutDefinitions {

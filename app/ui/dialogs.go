@@ -53,13 +53,13 @@ func (a *App) confirmationDialog(c *ui.Context) {
 	confirmed := false
 	ui.Overlay(c.Key("confirmation"), func() {
 		backdrop := ui.Column(c).Absolute().Left(0).Top(0).Right(0).Bottom(0).Center().
-			Material(frostedSurface{tint: paletteFor(c.Theme()).Scrim, blur: 12}).Modal()
+			Background(paletteFor(c.Theme()).Scrim).Modal()
 		if backdrop.OverlayShortcut(0, ui.KeyEscape) {
 			a.ConfirmOpen = false
 		}
 		backdrop.Children(func() {
 			panel := ui.Column(c).Width(panelDialog).MaxWidthPercent(92).Padding(space24).Gap(space12).Radius(radiusPanel).
-				Material(panelMaterial(c.Theme())).
+				Background(panelColor(c.Theme())).
 				Role(ui.RoleAlertDialog).Label(a.ConfirmTitle).Description(a.ConfirmDetail)
 			elevated(panel, c.Theme())
 			dialogMotion(backdrop, panel)
@@ -72,7 +72,7 @@ func (a *App) confirmationDialog(c *ui.Context) {
 					if settingsButton(c, a.T("cancel")).Clicked() {
 						a.ConfirmOpen = false
 					}
-					confirm := primaryButton(c, a.ConfirmLabel, false).AutoFocus().TextColor(c.Theme().InverseText)
+					confirm := primaryButton(c, a.ConfirmLabel, false).AutoFocus().TextColor(paletteFor(c.Theme()).Background)
 					color := paletteFor(c.Theme()).Danger
 					if confirm.Pressed() {
 						color = color.Mix(c.Theme().Text, .15)

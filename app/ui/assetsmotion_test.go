@@ -57,7 +57,7 @@ func rectDistance(a, b ui.Rect) float64 {
 }
 
 func TestAssetReorderUsesStableIdentityAndIntermediatePosition(t *testing.T) {
-	for mode := 0; mode < 3; mode++ {
+	for _, mode := range viewModes {
 		t.Run(string(rune('0'+mode)), func(t *testing.T) {
 			a := assetsMotionFixture(t)
 			a.ViewMode = mode
@@ -88,7 +88,7 @@ func TestAssetReorderUsesStableIdentityAndIntermediatePosition(t *testing.T) {
 }
 
 func TestAssetViewAndSizeCrossfadeWithoutCardMorphing(t *testing.T) {
-	for _, change := range []string{"list", "grid", "size"} {
+	for _, change := range []string{"list", "size"} {
 		t.Run(change, func(t *testing.T) {
 			a := assetsMotionFixture(t)
 			tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.assetArea(c) }, 700, 600)
@@ -96,8 +96,6 @@ func TestAssetViewAndSizeCrossfadeWithoutCardMorphing(t *testing.T) {
 			switch change {
 			case "list":
 				a.ViewMode = 2
-			case "grid":
-				a.ViewMode = 1
 			case "size":
 				a.Preferences.ThumbnailSize = 1.5
 				a.layout = nil
@@ -121,20 +119,18 @@ func TestAssetViewAndSizeCrossfadeWithoutCardMorphing(t *testing.T) {
 			if change == "list" && after.H != 64 {
 				t.Fatalf("列表终点行高异常：%+v", after)
 			}
-			if change == "grid" && math.Abs(float64(after.W-after.H)) > .001 {
-				t.Fatalf("网格终点不是正方形：%+v", after)
-			}
 		})
 	}
 }
 
+// 缩略图大小只有几档，档距大；窄到 320 宽时 1 和 1.5 两档的列数相同，才能测到「列数不变只改大小」。
 func TestAssetSizeChangeWithinSameColumnsLaysOutImmediately(t *testing.T) {
 	a := assetsMotionFixture(t)
-	tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.assetArea(c) }, 700, 600)
+	tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.assetArea(c) }, 320, 600)
 	tt.Advance(time.Second)
 	before := assetMotionBounds(t, tt, "Photo 1")
 	columns := len(a.layout.columns)
-	a.Preferences.ThumbnailSize = 1.25
+	a.Preferences.ThumbnailSize = 1.5
 	a.layout = nil
 	tt.Frame()
 	start := assetMotionBounds(t, tt, "Photo 1")
@@ -147,7 +143,7 @@ func TestAssetSizeChangeWithinSameColumnsLaysOutImmediately(t *testing.T) {
 }
 
 func TestAssetRemovalAndInsertionFadeOnlyVisibleCards(t *testing.T) {
-	for mode := 0; mode < 3; mode++ {
+	for _, mode := range viewModes {
 		t.Run(fmt.Sprint(mode), func(t *testing.T) {
 			a := assetsMotionFixture(t)
 			a.ViewMode = mode
@@ -334,7 +330,7 @@ func TestAssetSidebarContinuousColumnsSettlesWithoutOldCanvases(t *testing.T) {
 }
 
 func TestAssetBlankClickClearsSelectionAndInspector(t *testing.T) {
-	for mode := 0; mode < 3; mode++ {
+	for _, mode := range viewModes {
 		a := assetViewFixture()
 		a.ViewMode = mode
 		tt := ui.NewTester(a.assetArea, 700, 600)

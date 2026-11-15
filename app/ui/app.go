@@ -195,12 +195,19 @@ func (a *App) ShowSettings() {
 	}
 }
 
+// 设置窗口的红绿灯：顶栏 44 高，按钮高 14，上下各留 15 正好居中。
+func TrafficLights() *mygo.Point { return &mygo.Point{X: 14, Y: 15} }
+
+// 主窗口的红绿灯：中心对齐 52 高工具栏的中线，和搜索框、导入按钮在一条线上。
+func mainTrafficLights() *mygo.Point {
+	return &mygo.Point{X: 14, Y: (MainToolbarHeight - 14) / 2}
+}
+
 func (a *App) OpenWindow() {
 	a.Window = mygo.NewWindow(mygo.WindowOptions{
 		Title: "Momento", Width: 1100, Height: 800, MinWidth: 1100, MinHeight: 640, StateKey: "main",
-		TitleBarStyle: mygo.TitleBarHiddenInset, TitleBarHeight: 60,
-		TrafficLightPosition: &mygo.Point{X: 14, Y: 23},
-		Vibrancy:             mygo.VibrancySidebar,
+		TitleBarStyle: mygo.TitleBarHiddenInset, TitleBarHeight: MainToolbarHeight,
+		TrafficLightPosition: mainTrafficLights(),
 		BackgroundColor:      WindowBackgroundColor(), Content: ui.View(a.View),
 	})
 	a.Thumbnails = newThumbnailCache(func(fn func()) { a.Window.Update(fn) })
@@ -230,7 +237,9 @@ func (a *App) View(c *ui.Context) {
 			a.CollapseInspector()
 		}
 		workspace := ui.Row(c.Key("workspace")).Fill().ObserveInput(a.observeWorkspaceInput).HandleInput(a.activateAssetDoubleClick)
-		if a.chromeLayoutReady && a.SidebarVisible && a.sidebarSplitWidth != a.sidebarShownWidth {
+		// 分隔条被拖动（或用方向键移动）时，Split 改的宽度和上一帧显示的不同；这时栏宽直接跟手，不走弹簧。
+		dragging := a.chromeLayoutReady && a.SidebarVisible && a.sidebarSplitWidth != a.sidebarShownWidth
+		if dragging {
 			a.SidebarWidth = max(196, min(340, a.sidebarSplitWidth))
 		}
 		a.SidebarWidth = max(196, min(340, a.SidebarWidth))
@@ -238,8 +247,8 @@ func (a *App) View(c *ui.Context) {
 		if a.SidebarVisible {
 			sidebarTarget = a.SidebarWidth
 		}
-		a.sidebarShownWidth = animatePaneWidth(c, workspace, "sidebar-width", sidebarTarget)
-		a.inspectorShownWidth = animatePaneWidth(c, workspace, "inspector-width", a.InspectorTargetWidth())
+		a.sidebarShownWidth = animatePaneWidth(c, workspace, "sidebar-width", sidebarTarget, dragging)
+		a.inspectorShownWidth = animatePaneWidth(c, workspace, "inspector-width", a.InspectorTargetWidth(), false)
 		a.chromeLayoutReady = true
 		workspace.Children(func() {
 			body := func() {
@@ -722,7 +731,7 @@ func (a *App) shortcuts(c *ui.Context) {
 	if a.PreviewOpen() {
 		return
 	}
-	for _, action := range []string{"new_library", "open_library", "import", "import_folder", "export", "settings", "search", "filter", "sort", "inspector", "sidebar", "thumbnail_larger", "thumbnail_smaller", "view_masonry", "view_grid", "view_list"} {
+	for _, action := range []string{"new_library", "open_library", "import", "import_folder", "export", "settings", "search", "filter", "sort", "inspector", "sidebar", "thumbnail_larger", "thumbnail_smaller", "view_masonry", "view_list"} {
 		if !a.ActionShortcut(c, action) {
 			continue
 		}
@@ -750,13 +759,11 @@ func (a *App) shortcuts(c *ui.Context) {
 		case "sidebar":
 			a.SidebarVisible = !a.SidebarVisible
 		case "thumbnail_larger":
-			a.ChangeThumbnailSize(.1)
+			a.StepThumbnailSize(1)
 		case "thumbnail_smaller":
-			a.ChangeThumbnailSize(-.1)
+			a.StepThumbnailSize(-1)
 		case "view_masonry":
 			a.ViewMode = 0
-		case "view_grid":
-			a.ViewMode = 1
 		case "view_list":
 			a.ViewMode = 2
 		}

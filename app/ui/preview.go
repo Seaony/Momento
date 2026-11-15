@@ -134,13 +134,14 @@ func (animation *previewAnimation) next() (previewPicture, error) {
 	return previewPicture{smooth, pixelated, &previewAnimation{animation.decoder, frame.Duration, animation.rotation}}, nil
 }
 
-// 图片放在图片卡里，四周留 previewPadding；可缩放、拖动，翻页时左右滑入。
+// 图片占底栏以上、四周留白后的区域，图片和放大后的裁切框都是小圆角；可缩放、拖动，翻页时左右滑入。
 func (w *previewWindow) viewport(c *ui.Context, a *App) {
 	p, asset := &w.picture, w.asset
-	width, height := c.Size()
-	inset := float32(previewPadding)
-	p.viewport = ui.Rect{X: inset, Y: inset, W: width - 2*inset, H: height - 2*inset}
-	viewport := ui.Box(c.Key("preview-image")).Absolute().Left(inset - 1).Top(inset - 1).Right(inset - 1).Bottom(inset - 1)
+	windowWidth, height := c.Size()
+	width := max(0, windowWidth-2*previewImageInset)
+	height = max(0, height-previewImageInset-w.footerHeightFor(windowWidth, a.Texts.Locale()))
+	p.viewport = ui.Rect{X: previewImageInset, Y: previewImageInset, W: width, H: height}
+	viewport := ui.Box(c.Key("preview-image")).Absolute().Left(previewImageInset).Top(previewImageInset).Width(width).Height(height).Radius(previewPhotoRadius).Clip()
 	if !p.Open {
 		viewport.PassThrough().AccessHidden(true)
 		return
@@ -167,8 +168,13 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 				p.Zoom = min(1, p.Zoom)
 			}
 			p.initialized = true
-		} else if oldFit != p.fitZoom && p.fitMode {
-			p.Zoom, p.Pan = p.fitZoom, ui.Point{}
+		} else if oldFit != p.fitZoom {
+			// 窗口从 0.92 放大到原尺寸、或被拖大拖小时，没手动缩放过的图片跟着重新适配，不停在第一帧的大小。
+			if p.fitMode {
+				p.Zoom, p.Pan = p.fitZoom, ui.Point{}
+			} else if p.Zoom == min(1, oldFit) {
+				p.Zoom, p.Pan = min(1, p.fitZoom), ui.Point{}
+			}
 		}
 		p.clampPan()
 		viewport.Children(func() {
@@ -210,7 +216,7 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 		}
 	} else if p.errorText != "" {
 		viewport.Center().Children(func() {
-			ui.Column(c).MaxWidth(previewInfoWidth).Padding(space16).Gap(space8).Children(func() {
+			ui.Column(c).MaxWidth(560).Padding(space16).Gap(space8).Children(func() {
 				ui.Text(c, a.T("preview_failed")).FontSize(fontBody).FontWeight(600).TextColor(paletteFor(c.Theme()).Text)
 				ui.Text(c, p.errorText).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary)
 			})

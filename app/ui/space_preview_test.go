@@ -10,7 +10,7 @@ import (
 )
 
 func TestSpacePreviewPrefersHoverWithoutChangingSelection(t *testing.T) {
-	for _, view := range []int{0, 1, 2} {
+	for _, view := range viewModes {
 		for _, mode := range []string{"hover-only", "selected-and-hover", "selected-only"} {
 			t.Run(string(rune('0'+view))+"/"+mode, func(t *testing.T) {
 				a := sidebarTestApp()
@@ -86,7 +86,7 @@ func TestHoveredSpacePreviewCanPinWithoutSelecting(t *testing.T) {
 }
 
 func TestFocusedAssetPreviewShortcut(t *testing.T) {
-	for _, view := range []int{0, 1, 2} {
+	for _, view := range viewModes {
 		for _, mode := range []string{"preview", "system"} {
 			t.Run(string(rune('0'+view))+"/"+mode, func(t *testing.T) {
 				if mode == "system" && runtime.GOOS != "darwin" {
@@ -129,7 +129,7 @@ func TestFocusedAssetPreviewShortcut(t *testing.T) {
 }
 
 func TestFocusedAssetEnterPreviewShortcut(t *testing.T) {
-	for _, view := range []int{0, 1, 2} {
+	for _, view := range viewModes {
 		t.Run(string(rune('0'+view)), func(t *testing.T) {
 			a := sidebarTestApp()
 			a.ViewMode = view

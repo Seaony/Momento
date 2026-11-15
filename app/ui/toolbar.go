@@ -1,8 +1,11 @@
 package ui
 
 import (
+	"math"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Seaony/Momento/app/internal/model"
 	"github.com/egoist/mygo/ui"
@@ -15,6 +18,9 @@ type toolbarState struct {
 	ViewOpen      bool
 	SearchOpen    bool
 	TagSearch     string
+	Scrub         float32  // 正在拖的刻度尺还没换档的那段位移
+	ScrubBase     float32  // 这次拖动的起点，加上已经换档用掉的位移
+	ScrubOffset   ui.Point // 透明拖动层跟着指针的位移，松手弹回 0
 }
 
 var toolbarFamilies = []struct{ ID, Hex string }{
@@ -37,18 +43,23 @@ func (a *App) toolbar(c *ui.Context) {
 	t := c.Theme()
 	p := paletteFor(t)
 	bar := c.TitleBar()
-	left := space12 + max(float32(0), bar.Left-a.SidebarShownWidth())
-	right := space12 + max(float32(0), bar.Right-a.InspectorShownWidth())
+	// 没有红绿灯时左边留 20；红绿灯压在工具栏上时，从红绿灯右边再留 12。
+	left := float32(space20)
+	if lights := bar.Left - a.SidebarShownWidth(); lights > 0 {
+		left = lights + space12
+	}
+	right := space16 + max(float32(0), bar.Right-a.InspectorShownWidth())
 	width := a.toolbarWidth(c) - left - right
 	hint := displayShortcut(a.Shortcut("search"))
 	if !a.PreviewOpen() && a.ActionShortcut(c, "search") {
 		a.FocusSearch()
 	}
-	row := ui.Row(c.Key("toolbar")).Height(MainToolbarHeight).Shrink(0).FillWidth().Padding(space12, right, space12, left).Gap(space4).DragWindow().
-		Material(toolbarMaterial(t)).BorderWidth(0, 0, 1, 0).BorderColor(p.BorderSubtle).Role(ui.RoleToolbar).FocusGroup(ui.Horizontal).Label(a.T("browse_tools"))
+	row := ui.Row(c.Key("toolbar")).Height(MainToolbarHeight).Shrink(0).FillWidth().Padding(0, right, 0, left).AlignItems(ui.Center).Gap(space12).DragWindow().
+		Background(toolbarColor(t)).BorderWidth(0, 0, 1, 0).BorderColor(p.BorderSubtle).Role(ui.RoleToolbar).FocusGroup(ui.Horizontal).Label(a.T("browse_tools"))
 	if bounds := row.LayoutBounds(); bounds.W > 0 {
 		width = bounds.W - left - right
 	}
+	inlineRuler, labels, title, compactSearch := a.toolbarFit(c, width)
 	row.Children(func() {
 		if !a.SidebarVisible {
 			button := toolbarIconButton(c.Key("toggle-sidebar"), a.T("toggle_sidebar"), "sidebar").
@@ -57,23 +68,31 @@ func (a *App) toolbar(c *ui.Context) {
 				a.SidebarVisible = true
 			}
 		}
-		if width < 500 {
-			search := toolbarIconButton(c.Key("compact-search"), a.T("search_assets"), "search")
+		if title {
+			a.toolbarTitle(c)
+		}
+		if compactSearch {
+			search := toolbarChip(c.Key("compact-search"), a.T("search_assets"), a.Toolbar.SearchOpen)
+			search.Children(func() { toolbarIcon(c, "search") })
 			if search.Clicked() {
 				a.Toolbar.SearchOpen = !a.Toolbar.SearchOpen
 				a.Search.Focus()
 			}
-			frostedPopover(c.Key("search-popover"), search, &a.Toolbar.SearchOpen, func() { a.toolbarSearch(c, hint) }).Width(panelNarrow)
+			floatingPopover(c.Key("search-popover"), search, &a.Toolbar.SearchOpen, func() { a.toolbarSearch(c, hint).Width(panelNarrow - 2*space12) }).Width(panelNarrow)
 		} else {
 			a.Toolbar.SearchOpen = false
-			a.toolbarSearch(c, hint)
+			search := a.toolbarSearch(c, hint)
+			if title {
+				search.Margin(0, 0, 0, space8)
+			}
 		}
 		ui.Spacer(c)
-		if width >= 800 {
+		if inlineRuler {
 			a.Toolbar.ThumbnailOpen = false
-			a.thumbnailSizeSlider(c.Key("inline-thumbnail-size"))
+			a.thumbnailRuler(c.Key("inline-thumbnail-size"))
 		} else {
-			thumbnail := toolbarIconButton(c.Key("thumbnail-size-button"), a.T("thumbnail_size"), "thumbnail-size").Disabled(a.ViewMode == 2)
+			thumbnail := toolbarChip(c.Key("thumbnail-size-button"), a.T("thumbnail_size"), a.Toolbar.ThumbnailOpen).Disabled(a.ViewMode == 2)
+			thumbnail.Children(func() { toolbarIcon(c, "thumbnail-size") })
 			if thumbnail.Clicked() {
 				a.Toolbar.ThumbnailOpen = !a.Toolbar.ThumbnailOpen
 				a.Toolbar.FilterOpen = false
@@ -83,22 +102,43 @@ func (a *App) toolbar(c *ui.Context) {
 			if a.ViewMode == 2 {
 				a.Toolbar.ThumbnailOpen = false
 			}
-			frostedPopover(c.Key("thumbnail-size-popover"), thumbnail, &a.Toolbar.ThumbnailOpen, func() {
+			floatingPopover(c.Key("thumbnail-size-popover"), thumbnail, &a.Toolbar.ThumbnailOpen, func() {
 				ui.Column(c).Gap(space12).Children(func() {
 					ui.Text(c, a.T("thumbnail_size")).FontSize(fontSecondary).Bold()
-					a.thumbnailSizeSlider(c.Key("popover-thumbnail-size"))
+					a.thumbnailRuler(c.Key("popover-thumbnail-size"))
 				})
-			}).Width(160)
+			})
 		}
-		filter := toolbarIconButton(c.Key("filter"), a.T("filter"), "filter", len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions) > 0)
+		toolbarDivider(c)
+		filtering := len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions) > 0
+		filter := toolbarChip(c.Key("filter"), a.T("filter"), filtering || a.Toolbar.FilterOpen)
+		filter.Children(func() {
+			toolbarIcon(c, "filter")
+			if labels {
+				ui.Text(c, a.T("filter")).SingleLine()
+			}
+		})
+		if labels {
+			filter.Padding(0, space12, 0, toolbarChipPadding)
+		}
 		if filter.Clicked() {
 			a.Toolbar.FilterOpen = !a.Toolbar.FilterOpen
 			a.Toolbar.SortOpen = false
 			a.Toolbar.ThumbnailOpen = false
 			a.Toolbar.ViewOpen = false
 		}
-		frostedPopover(c.Key("filters"), filter, &a.Toolbar.FilterOpen, func() { a.filterPanel(c) }).Width(340).MaxHeight(560)
-		sort := toolbarIconButton(c.Key("sort"), a.T("sort"), "sort").Disabled(a.Query.Scope == "random")
+		floatingPopover(c.Key("filters"), filter, &a.Toolbar.FilterOpen, func() { a.filterPanel(c) }).Width(popFilterWidth).Padding(0)
+		sort := toolbarChip(c.Key("sort"), a.T("sort"), a.Toolbar.SortOpen).Disabled(a.Query.Scope == "random")
+		sort.Children(func() {
+			toolbarIcon(c, "sort")
+			if labels {
+				ui.Text(c, a.T("sort")).SingleLine()
+				toolbarCaret(c)
+			}
+		})
+		if labels {
+			sort.Padding(0, toolbarChipPadding-1, 0, toolbarChipPadding)
+		}
 		if a.Query.Scope == "random" {
 			sort.Tooltip(a.T("random_no_sort"))
 			a.Toolbar.SortOpen = false
@@ -109,56 +149,206 @@ func (a *App) toolbar(c *ui.Context) {
 			a.Toolbar.ThumbnailOpen = false
 			a.Toolbar.ViewOpen = false
 		}
-		frostedPopover(c.Key("sorting"), sort, &a.Toolbar.SortOpen, func() { a.sortPanel(c) }).Width(220)
+		floatingPopover(c.Key("sorting"), sort, &a.Toolbar.SortOpen, func() { a.sortPanel(c) }).Width(popSortWidth).Padding(popSortPadding)
 		if width < 360 {
-			view := toolbarIconButton(c.Key("view-menu"), a.T("view_mode"), []string{"masonry", "grid", "list"}[a.ViewMode])
+			icon := "masonry"
+			if a.ViewMode == 2 {
+				icon = "list"
+			}
+			view := toolbarChip(c.Key("view-menu"), a.T("view_mode"), a.Toolbar.ViewOpen)
+			view.Children(func() { toolbarIcon(c, icon) })
 			if view.Clicked() {
 				a.Toolbar.ViewOpen = !a.Toolbar.ViewOpen
 				a.Toolbar.FilterOpen = false
 				a.Toolbar.SortOpen = false
 				a.Toolbar.ThumbnailOpen = false
 			}
-			frostedPopover(c.Key("view-popover"), view, &a.Toolbar.ViewOpen, func() { a.viewSwitcher(c) }).Width(120)
+			floatingPopover(c.Key("view-popover"), view, &a.Toolbar.ViewOpen, func() { a.viewSwitcher(c) })
 		} else {
 			a.Toolbar.ViewOpen = false
 			a.viewSwitcher(c)
 		}
 		if version := AvailableUpdateVersion(); version != "" {
-			update := toolbarIconButton(c.Key("available-update"), a.T("update"), "import", true).Tooltip(a.T("update_to_version", version))
+			update := toolbarChip(c.Key("available-update"), a.T("update"), true).Tooltip(a.T("update_to_version", version))
+			update.Children(func() { toolbarIcon(c, "import") })
 			if update.Clicked() {
 				ShowAvailableUpdate()
 			}
 		}
-		button := ui.ButtonBase(c.Key("import")).Label(a.T("import")).Tooltip(a.T("import")).MinWidth(space32).Height(controlHeight).Shrink(0).Padding(0).Radius(radiusControl).Cursor(ui.CursorPointer).Disabled(a.Busy).DimDisabled(false)
-		background, text := p.Accent, p.OnAccent
-		if a.Busy {
-			background, text = p.Raised, p.TextSecondary
-			button.Border(1, p.BorderSubtle)
-		} else if button.Pressed() {
-			background = p.AccentPressed
-		} else if button.Hovered() {
-			background = p.AccentHover
-		}
-		animateColors(button, background, text)
-		button.Children(func() {
-			appIcon(c, "import")
-			if width >= 660 {
-				ui.Text(c, a.T("import")).FontSize(fontBody).SingleLine().Bold()
-			}
-		})
-		if width >= 660 {
-			button.Padding(0, space12).Gap(space8)
-		}
-		button.Menu(func(m *ui.Menu) {
-			if m.Item(a.T("import_files")).Chosen() {
-				a.ChooseImport(false)
-			}
-			if m.Item(a.T("import_folder")).Chosen() {
-				a.ChooseImport(true)
-			}
-		})
+		toolbarDivider(c)
+		a.importButton(c, labels)
 	})
 }
+
+// 按真实文字宽度决定放得下多少：先把刻度尺收进弹出层，再去掉按钮文字，再藏标题，最后把搜索框收成按钮。
+func (a *App) toolbarFit(c *ui.Context, width float32) (inlineRuler, labels, title, compactSearch bool) {
+	measure := func(text string, size float32, weight int) float32 {
+		return toolbarTextWidth(c, a.Texts.Locale(), text, size, weight)
+	}
+	name, count := a.browseTitle()
+	titleWidth := min(measure(name, toolbarTitleSize, 650), toolbarTitleWidth) + space8 + measure(a.T("toolbar_item_count", formatTagCount(count)), toolbarCountSize, 400)
+	// 搜索框能缩到最小宽度，提示文字放不下时截断，所以按最小宽度算。
+	search := float32(toolbarSearchMin)
+	ruler := rulerWidth + 1 + 21 + measure(a.T("toolbar_columns", strconv.Itoa(masonryColumns(a.layoutWidth, a.thumbnailScale()))), toolbarFont, 400)
+	chip := func(text string, extra float32) float32 {
+		return toolbarChipPadding + 16 + toolbarChipGap + measure(text, toolbarFont, 400) + space12 + extra
+	}
+	filter, sort := chip(a.T("filter"), 0), chip(a.T("sort"), toolbarChipGap+12-3)
+	importLabel := 11 + toolbarAddIcon + toolbarChipGap + measure(a.T("import"), toolbarFont, 600) + 14
+	fits := func(inlineRuler, labels, title bool) bool {
+		// 固定会有：搜索、弹簧、刻度尺或它的按钮、两条竖线、筛选、排序、视图切换、导入。
+		total, items := search+2*(1+4)+2*toolbarSegmentInset+2*toolbarSegmentWidth+2, 9
+		if !a.SidebarVisible {
+			total, items = total+controlHeight, items+1
+		}
+		if AvailableUpdateVersion() != "" {
+			total, items = total+toolbarControlHeight, items+1
+		}
+		if title {
+			total, items = total+titleWidth+space8, items+1
+		}
+		if inlineRuler {
+			total += ruler
+		} else {
+			total += toolbarControlHeight
+		}
+		if labels {
+			total += filter + sort + importLabel
+		} else {
+			total += 3 * toolbarControlHeight
+		}
+		return total+float32(items-1)*space12 <= width
+	}
+	switch {
+	case fits(true, true, true):
+		return true, true, true, false
+	case fits(false, true, true):
+		return false, true, true, false
+	case fits(false, false, true):
+		return false, false, true, false
+	case fits(false, false, false):
+		return false, false, false, false
+	}
+	return false, false, false, true
+}
+
+func toolbarTextWidth(c *ui.Context, lang, text string, size float32, weight int) float32 {
+	w, _ := c.MeasureText(0, ui.Span{Text: text, Font: c.Theme().Font, Size: size, Weight: weight, Lang: lang})
+	return w
+}
+
+// 标题：当前浏览的位置和里面有多少项，按文字基线对齐。
+func (a *App) toolbarTitle(c *ui.Context) {
+	p := paletteFor(c.Theme())
+	name, count := a.browseTitle()
+	ui.Row(c.Key("toolbar-title")).AlignItems(ui.Baseline).Gap(space8).Shrink(0).Children(func() {
+		ui.Text(c.Key("title"), name).FontSize(toolbarTitleSize).FontWeight(650).TextColor(p.Text).SingleLine().MaxWidth(toolbarTitleWidth).
+			ContentTransition(ui.ContentTransition{Animation: &motionSpring})
+		ui.Text(c.Key("count"), a.T("toolbar_item_count", formatTagCount(count))).FontSize(toolbarCountSize).FontFeatures("tnum").TextColor(toolbarInk(p, .5)).SingleLine().
+			ContentTransition(ui.ContentTransition{Numeric: true, Animation: &motionSpring})
+	})
+}
+
+// 当前浏览位置的名字和项数：侧栏入口用它的名字，文件夹、标签、智能文件夹用自己的名字。
+func (a *App) browseTitle() (string, int) {
+	if a.TagPage {
+		return a.T("tag_management"), len(a.Snapshot.Tags)
+	}
+	count := len(a.Visible)
+	switch a.Query.Scope {
+	case "folder":
+		for _, folder := range a.Snapshot.Folders {
+			if folder.ID == a.Query.FolderID {
+				return folder.Name, count
+			}
+		}
+	case "tag":
+		for _, tag := range a.Snapshot.Tags {
+			if tag.ID == a.Browse.TagID {
+				return tag.Name, count
+			}
+		}
+	case "smart":
+		for _, folder := range a.Snapshot.SmartFolders {
+			if folder.ID == a.Query.SmartFolderID {
+				return folder.Name, count
+			}
+		}
+	case "favorites", "uncategorized", "untagged", "trash":
+		return a.T(a.Query.Scope), count
+	case "random":
+		return a.T("random_browse"), count
+	}
+	return a.T("all"), count
+}
+
+// 导入：品牌色按钮，带圈加号加文字；窄的时候只剩加号。点开选文件或文件夹。
+func (a *App) importButton(c *ui.Context, label bool) {
+	p := paletteFor(c.Theme())
+	button := ui.ButtonBase(c.Key("import")).Label(a.T("import")).Tooltip(a.T("import")).Height(toolbarControlHeight).MinWidth(toolbarControlHeight).Shrink(0).
+		Radius(toolbarRadius).Gap(toolbarChipGap).AlignItems(ui.Center).Justify(ui.Center).Cursor(ui.CursorPointer).Disabled(a.Busy).DimDisabled(false)
+	background, text := p.Accent, p.OnAccent
+	switch {
+	case a.Busy:
+		background, text = toolbarFill(p, toolbarChipFill), toolbarInk(p, .5)
+	case button.Pressed():
+		background = p.AccentPressed
+	case button.Hovered():
+		background = p.AccentHover
+	}
+	animateColors(button, background, text)
+	button.Children(func() {
+		toolbarIcon(c, "add").Size(toolbarAddIcon, toolbarAddIcon)
+		if label {
+			ui.Text(c, a.T("import")).FontSize(toolbarFont).FontWeight(600).SingleLine()
+		}
+	})
+	if label {
+		button.Padding(0, space12+2, 0, toolbarChipPadding+1)
+	} else {
+		button.Width(toolbarControlHeight).Padding(0)
+	}
+	button.Menu(func(m *ui.Menu) {
+		if m.Item(a.T("import_files")).Chosen() {
+			a.ChooseImport(false)
+		}
+		if m.Item(a.T("import_folder")).Chosen() {
+			a.ChooseImport(true)
+		}
+	})
+}
+
+// 工具栏按钮：浅浅一层底色、圆角 10，图标在前、文字在后；没文字时是 34 的方块。
+func toolbarChip(c *ui.Context, label string, active bool) ui.Element {
+	p := paletteFor(c.Theme())
+	button := ui.ButtonBase(c).Label(label).Tooltip(label).Height(toolbarControlHeight).MinWidth(toolbarControlHeight).Shrink(0).Padding(0).
+		Radius(toolbarRadius).Gap(toolbarChipGap).AlignItems(ui.Center).Justify(ui.Center).FontSize(toolbarFont).Cursor(ui.CursorPointer)
+	background, text := toolbarFill(p, toolbarChipFill), toolbarInk(p, .86)
+	switch {
+	case button.Pressed():
+		background, text = toolbarFill(p, .12), p.Text
+	case active:
+		background, text = toolbarFill(p, .1), p.Text
+	case button.Hovered():
+		background, text = toolbarFill(p, .075), p.Text
+	}
+	animateColors(button, background, text)
+	return button
+}
+
+// 组和组之间的细竖线。
+func toolbarDivider(c *ui.Context) {
+	ui.Box(c).Size(1, 16).Shrink(0).Margin(0, 2).Background(toolbarFill(paletteFor(c.Theme()), .1))
+}
+
+// 排序文字后面的小下拉箭头，提示点开是选项。
+func toolbarCaret(c *ui.Context) {
+	ui.Icon(c, toolbarIcons["caret-down"]).Size(12, 12).Shrink(0).TextColor(toolbarInk(paletteFor(c.Theme()), .5))
+}
+
+// 工具栏用的颜色都按「正文色叠在工具栏底色（侧栏色）上多少」来取，浅色深色同一套比例，结果是不透明色。
+func toolbarFill(p *designPalette, amount float32) ui.Color { return p.Sidebar.Mix(p.Text, amount) }
+func toolbarInk(p *designPalette, amount float32) ui.Color  { return p.Sidebar.Mix(p.Text, amount) }
 
 func toolbarIconButton(c *ui.Context, label, name string, selected ...bool) ui.Element {
 	p := paletteFor(c.Theme())
@@ -177,17 +367,32 @@ func toolbarIconButton(c *ui.Context, label, name string, selected ...bool) ui.E
 		if momentoSymbols[name] != nil {
 			appSymbol(c, name)
 		} else {
-			appIcon(c, name)
+			toolbarIcon(c, name)
 		}
 	})
 }
 
-func (a *App) toolbarSearch(c *ui.Context, hint string) {
+func (a *App) toolbarSearch(c *ui.Context, hint string) ui.Element {
 	p := paletteFor(c.Theme())
-	field := ui.Row(c.Key("asset-search-field")).Height(controlHeight).Grow(1).MinWidth(220).MaxWidth(panelNarrow).Gap(space8).Padding(0, space8).Cursor(ui.CursorText)
+	// 平时 300 宽；提示文字更长的语言加宽到能完整显示，空间不够时再往下缩。
+	need := 11 + 13 + space8 + toolbarTextWidth(c, a.Texts.Locale(), a.T("search_assets"), toolbarFont, 400) + 6
+	if hint != "" {
+		need += space8 + toolbarTextWidth(c, a.Texts.Locale(), hint, toolbarHintFont, 400) + 12
+	}
+	field := ui.Row(c.Key("asset-search-field")).Height(toolbarControlHeight).Width(max(toolbarSearchWidth, need)).MinWidth(toolbarSearchMin).Shrink(1).
+		Gap(space8).Padding(0, 6, 0, 11).Radius(toolbarRadius).Cursor(ui.CursorText)
+	// 被挤窄放不下完整提示时换成「搜索」，不让字被切掉半个。
+	placeholder := a.T("search_assets")
+	if bounds := field.LayoutBounds(); bounds.W > 0 && bounds.W+.5 < need {
+		placeholder = a.T("search")
+	}
 	field.Children(func() {
-		appIcon(c, "search").TextColor(p.TextSecondary).Shrink(0)
-		input := ui.TextInputBase(c.Key("asset-search"), &a.Query.Search).Bind(&a.Search).Search().Placeholder(a.T("search_assets")).Label(a.T("search_assets")).Tooltip(a.T("search_assets")).Grow(1).MinWidth(0).FillHeight().FontSize(fontBody).FocusRing(false)
+		ui.Icon(c, toolbarIcons["search"]).Size(13, 13).Shrink(0).TextColor(toolbarInk(p, .55))
+		shown := a.Query.Search
+		if shown == "" {
+			shown = placeholder
+		}
+		input := ui.TextInputBase(c.Key("asset-search"), &a.Query.Search).Bind(&a.Search).Search().Placeholder(placeholder).PlaceholderColor(placeholderColor(c)).Label(a.T("search_assets")).Grow(1).MinWidth(0).Padding(0, 0, searchTextLift(shown), 0).FontSize(toolbarFont).FocusRing(false)
 		if input.Changed() {
 			a.Refine()
 		}
@@ -198,42 +403,80 @@ func (a *App) toolbarSearch(c *ui.Context, hint string) {
 				a.Search.Focus()
 			}
 		} else if hint != "" {
-			ui.Text(c, hint).FontSize(fontSecondary).TextColor(p.TextTertiary).SingleLine().Shrink(0).Padding(0, space4).Radius(radiusSmall).Border(1, p.BorderSubtle)
+			// 快捷键提示是一枚小键帽：比搜索框再深一层的底，字更淡。
+			centeredTextHeight(ui.Text(c.Key("search-shortcut-hint"), hint).FontSize(toolbarHintFont).TextColor(toolbarInk(p, .55)).SingleLine().Shrink(0).
+				Radius(5).Background(toolbarFill(p, toolbarChipFill+.06)).IgnoreInput(true), 16, 6)
 		}
 	})
-	fieldStyle(c, field)
+	// 点框里任意空白处也能输入。
+	if field.Clicked() {
+		a.Search.Focus()
+	}
+	background, border := toolbarFill(p, toolbarChipFill), ui.Transparent
+	if field.FocusWithin() {
+		background, border = toolbarFill(p, toolbarChipFill), p.Focus
+	} else if field.Hovered() {
+		background = toolbarFill(p, .075)
+	}
+	field.Background(field.AnimateColor("field-background", background, motionColor))
+	return field.Border(1, field.AnimateColor("field-border", border, motionColor))
 }
 
 func (a *App) viewSwitcher(c *ui.Context) {
 	p := paletteFor(c.Theme())
-	seg := ui.SegmentedBase(c.Key("view-mode"), &a.ViewMode, 3)
-	items := make([]ui.Element, 3)
-	seg.Track.Gap(space4).Padding(space4).Radius(radiusControl).Background(p.Subtle).Border(1, p.BorderSubtle).Height(space40).Shrink(0).Label(a.T("view_mode")).Children(func() {
-		for i, item := range []struct{ ID, Label string }{{"masonry", "view_masonry"}, {"grid", "view_grid"}, {"list", "view_list"}} {
-			part := seg.Segment(i).Size(controlSmall, controlSmall).Padding(0).Center().Radius(radiusSmall).Cursor(ui.CursorPointer).Label(a.T(item.Label)).Tooltip(a.T(item.Label))
-			styleSegment(c, part, a.ViewMode == i)
-			items[i] = part
-			part.Children(func() { appIcon(c, item.ID) })
+	// 只有瀑布流和列表两种视图；分段序号 0、1 对应视图 0、2（2 沿用列表原来的编号，旧偏好不用迁移）。
+	modes := []struct {
+		ID, Label string
+		Mode      int
+	}{{"masonry", "view_masonry", 0}, {"list", "view_list", 2}}
+	index := 0
+	if a.ViewMode == 2 {
+		index = 1
+	}
+	seg := ui.SegmentedBase(c.Key("view-mode"), &index, len(modes))
+	seg.Track.Height(toolbarControlHeight).Padding(toolbarSegmentInset).Gap(2).Radius(toolbarRadius).Background(toolbarFill(p, toolbarChipFill)).Shrink(0).AlignItems(ui.Center).Label(a.T("view_mode")).Children(func() {
+		for i, item := range modes {
+			part := seg.Segment(i).Size(toolbarSegmentWidth, toolbarControlHeight-2*toolbarSegmentInset).Padding(0).Center().Radius(toolbarRadius - toolbarSegmentInset).Cursor(ui.CursorPointer).Label(a.T(item.Label)).Tooltip(a.T(item.Label))
+			// 选中的底由下面整条轨道画，这里只管图标色和未选中格的悬停底。
+			background, text := ui.Transparent, toolbarInk(p, .6)
+			if index == i {
+				text = p.Text
+			} else if part.Hovered() || part.Pressed() {
+				background, text = toolbarFill(p, .075), toolbarInk(p, .86)
+			}
+			animateColors(part, background, text)
+			part.Children(func() { toolbarIcon(c, item.ID) })
 		}
 	})
-	slidingSegmentTrack(c, seg.Track, items, a.ViewMode, space4, space4)
+	a.ViewMode = modes[index].Mode
+	// 选中底块切换时滑过去。
+	position := seg.Track.AnimateTo("indicator-position", float32(index), motionSpring)
+	seg.Track.Draw(func(pt *ui.Painter, r ui.Rect) {
+		h := float32(toolbarControlHeight - 2*toolbarSegmentInset)
+		pt.Fill(ui.Rect{X: r.X + toolbarSegmentInset + position*(toolbarSegmentWidth+2), Y: r.Y + (r.H-h)/2, W: toolbarSegmentWidth, H: h}, toolbarFill(p, .13), toolbarRadius-toolbarSegmentInset)
+	})
 }
 
+// 筛选弹层：标题栏（标题 + 清除）一条通栏分隔线，下面颜色、标签、文件类型三段只靠留白分开。
 func (a *App) filterPanel(c *ui.Context) {
 	p := paletteFor(c.Theme())
-	ui.Column(c).Gap(space12).Children(func() {
-		ui.Row(c).Children(func() {
-			ui.Text(c, a.T("filter")).FontSize(fontBody).Bold().Grow(1)
-			clear := ui.ButtonBase(c.Key("clear-filters")).Height(controlSmall).Padding(0, space8).Radius(radiusControl).Cursor(ui.CursorPointer).Label(a.T("clear_filters")).Disabled(len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions) == 0)
-			background, text := ui.Transparent, p.TextSecondary
-			if clear.Hovered() {
+	active := len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions) > 0
+	ui.Column(c).FillWidth().Gap(0).Children(func() {
+		ui.Row(c).FillWidth().Height(popHeaderHeight).Padding(0, popInset-popClearPad, 0, popInset).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, a.T("filter")).FontSize(fontBody).FontWeight(600).Grow(1).MinWidth(0).SingleLine()
+			clear := ui.ButtonBase(c.Key("clear-filters")).Height(popChipHeight).Padding(0, popClearPad).Radius(radiusSmall).Cursor(ui.CursorPointer).Label(a.T("clear_filters")).Disabled(!active).DimDisabled(false)
+			// 次要操作：字比标题小两号、颜色用三级文字色，没有条件时再淡一半。
+			background, text := ui.Transparent, p.TextTertiary
+			switch {
+			case !active:
+				text = p.TextTertiary.Alpha(.5)
+			case clear.Pressed():
+				background, text = p.Pressed, p.Text
+			case clear.Hovered():
 				background, text = p.Hover, p.Text
 			}
-			if clear.Pressed() {
-				background = p.Pressed
-			}
 			animateColors(clear, background, text)
-			clear.Children(func() { ui.Text(c, a.T("clear_filters")).SingleLine() })
+			clear.Children(func() { ui.Text(c, a.T("clear_filters")).FontSize(fontGroup).SingleLine() })
 			if clear.Clicked() {
 				a.Query.ColorFamilies = nil
 				a.Query.TagIDs = nil
@@ -241,119 +484,196 @@ func (a *App) filterPanel(c *ui.Context) {
 				a.Refine()
 			}
 		})
-		ui.Scroll(c.Key("filter-scroll")).Height(440).Gap(space12).Children(func() {
-			ui.Text(c, a.T("filter_colors")).FontSize(fontGroup).FontWeight(600).LetterSpacing(.6).TextColor(p.TextSecondary)
-			for start := 0; start < len(toolbarFamilies); start += 8 {
-				ui.Row(c.Key(start)).Gap(space8).Children(func() {
-					for _, family := range toolbarFamilies[start:min(start+8, len(toolbarFamilies))] {
-						chosen := slices.Contains(a.Query.ColorFamilies, family.ID)
-						button := ui.Button(c.Key(family.ID), "").Label(a.T("color_"+family.ID)).Tooltip(a.T("color_"+family.ID)).Size(controlHeight, controlHeight).Padding(space4).Radius(controlHeight / 2)
-						if button.Clicked() {
-							chosen = !chosen
-							a.Query.ColorFamilies = toolbarToggle(a.Query.ColorFamilies, family.ID, chosen)
+		ui.Divider(c).Background(p.BorderSubtle)
+		ui.Scroll(c.Key("filter-scroll")).FillWidth().MaxHeight(popBodyMax).Padding(popInset-2, popInset, popInset, popInset).Gap(popSectionGap).Children(func() {
+			popSection(c, a.T("filter_colors"), func() {
+				for start := 0; start < len(toolbarFamilies); start += popSwatchColumns {
+					ui.Row(c.Key(start)).FillWidth().Justify(ui.SpaceBetween).Children(func() {
+						for _, family := range toolbarFamilies[start:min(start+popSwatchColumns, len(toolbarFamilies))] {
+							chosen := slices.Contains(a.Query.ColorFamilies, family.ID)
+							if a.colorSwatch(c.Key(family.ID), family.ID, family.Hex, chosen).Clicked() {
+								a.Query.ColorFamilies = toolbarToggle(a.Query.ColorFamilies, family.ID, !chosen)
+								a.Refine()
+							}
+						}
+					})
+				}
+			})
+			popSection(c, a.T("filter_tags"), func() {
+				// 搜索框只在标签多时出现；不显示时也不按旧搜索词过滤，免得标签莫名消失又没处清。
+				query := ""
+				if len(a.Snapshot.Tags) > popTagSearchFrom {
+					query = strings.ToLower(strings.TrimSpace(a.Toolbar.TagSearch))
+					field, _ := searchField(c.Key("tag-search"), &a.Toolbar.TagSearch, a.T("search_tags"), a.T("clear_search"))
+					// 底色换成和胶囊同一套浅底，边框和聚焦边框照旧。
+					field.FillWidth().Margin(0, 0, 2, 0).Background(popFill(p, .05))
+				}
+				tags := slices.Clone(a.Snapshot.Tags)
+				slices.SortFunc(tags, func(x, y model.Tag) int { return strings.Compare(strings.ToLower(x.Name), strings.ToLower(y.Name)) })
+				tags = slices.DeleteFunc(tags, func(tag model.Tag) bool {
+					return query != "" && !strings.Contains(strings.ToLower(tag.Name), query)
+				})
+				// 没有标签时只留一行浅色说明，不画空的标签行，免得多出一截间距。
+				if len(tags) == 0 {
+					popEmpty(c, a.T("no_tags"))
+					return
+				}
+				ui.Row(c.Key("tag-chips")).FillWidth().Wrap().Gap(popChipGap).Children(func() {
+					for _, tag := range tags {
+						chosen := slices.Contains(a.Query.TagIDs, tag.ID)
+						if popChip(c.Key("filter-tag-"+tag.ID), &chosen, "", tag.Name).Changed() {
+							a.Query.TagIDs = toolbarToggle(a.Query.TagIDs, tag.ID, chosen)
 							a.Refine()
 						}
-						button.Role(ui.RoleCheckBox).Checked(chosen)
-						if chosen {
-							button.Border(2, p.Border)
-						} else {
-							button.Border(1, ui.Transparent)
-						}
-						background := ui.Transparent
-						if chosen {
-							background = p.Subtle
-						} else if button.Hovered() {
-							background = p.Hover
-						}
-						animateColors(button, background, p.Text)
-						button.Children(func() {
-							swatch := ui.Hex(family.Hex)
-							ui.Box(c).Size(22, 22).Radius(11).Background(swatch).Border(1, p.BorderSubtle).Center().Children(func() {
-								if chosen {
-									checkColor := lightPalette.Text
-									if float32(swatch.R)*.2126+float32(swatch.G)*.7152+float32(swatch.B)*.0722 < 145 {
-										checkColor = darkPalette.Text
-									}
-									appSymbol(c, "check").Size(iconSmall, iconSmall).TextColor(checkColor).PassThrough()
-								}
-							})
-						})
 					}
 				})
-			}
-			ui.Divider(c)
-			ui.Text(c, a.T("filter_tags")).FontSize(fontGroup).FontWeight(600).LetterSpacing(.6).TextColor(p.TextSecondary)
-			fieldStyle(c, ui.SearchField(c.Key("tag-search"), &a.Toolbar.TagSearch).Placeholder(a.T("search_tags")).Label(a.T("search_tags")).FillWidth())
-			tags := slices.Clone(a.Snapshot.Tags)
-			slices.SortFunc(tags, func(x, y model.Tag) int { return strings.Compare(strings.ToLower(x.Name), strings.ToLower(y.Name)) })
-			matched := 0
-			for _, tag := range tags {
-				if !strings.Contains(strings.ToLower(tag.Name), strings.ToLower(strings.TrimSpace(a.Toolbar.TagSearch))) {
-					continue
+			})
+			popSection(c, a.T("filter_types"), func() {
+				types := a.toolbarExtensions()
+				if len(types) == 0 {
+					popEmpty(c, a.T("no_file_types"))
+					return
 				}
-				matched++
-				chosen := slices.Contains(a.Query.TagIDs, tag.ID)
-				if settingsCheckbox(c.Key("filter-tag-"+tag.ID), &chosen, tag.Name).FillWidth().Changed() {
-					a.Query.TagIDs = toolbarToggle(a.Query.TagIDs, tag.ID, chosen)
-					a.Refine()
-				}
-			}
-			if matched == 0 {
-				ui.Text(c, a.T("no_tags")).TextColor(p.TextSecondary).FontSize(fontSecondary)
-			}
-			ui.Divider(c)
-			ui.Text(c, a.T("filter_types")).FontSize(fontGroup).FontWeight(600).LetterSpacing(.6).TextColor(p.TextSecondary)
-			types := a.toolbarExtensions()
-			if len(types) == 0 {
-				ui.Text(c, a.T("no_file_types")).TextColor(p.TextSecondary).FontSize(fontSecondary)
-			}
-			ui.Row(c).Wrap().Gap(space8).Children(func() {
-				for _, ext := range types {
-					chosen := slices.Contains(a.Query.Extensions, ext)
-					if animatedToggle(c.Key("extension-"+ext), &chosen, strings.ToUpper(ext)).Changed() {
-						a.Query.Extensions = toolbarToggle(a.Query.Extensions, ext, chosen)
-						a.Refine()
+				ui.Row(c.Key("type-chips")).FillWidth().Wrap().Gap(popChipGap).Children(func() {
+					for _, ext := range types {
+						chosen := slices.Contains(a.Query.Extensions, ext)
+						if popChip(c.Key("extension-"+ext), &chosen, extensionIcon(ext), strings.ToUpper(ext)).Changed() {
+							a.Query.Extensions = toolbarToggle(a.Query.Extensions, ext, chosen)
+							a.Refine()
+						}
 					}
-				}
+				})
 			})
 		})
 	})
 }
 
-func (a *App) sortPanel(c *ui.Context) {
+// popSection 是筛选里的一段：小标题，下面是内容。
+func popSection(c *ui.Context, title string, content func()) {
+	ui.Column(c.Key(title)).FillWidth().Gap(space8 + 2).Children(func() {
+		ui.Text(c, title).FontSize(fontGroup).FontWeight(600).TextColor(paletteFor(c.Theme()).TextSecondary).SingleLine()
+		content()
+	})
+}
+
+// colorSwatch 是一个圆角方块色块；选中时外面多一圈同心的正文色细框，色块本身不变。
+func (a *App) colorSwatch(c *ui.Context, id, hex string, chosen bool) ui.Element {
 	p := paletteFor(c.Theme())
-	ui.Column(c).Gap(space8).Children(func() {
-		ui.Text(c, a.T("sort")).FontSize(fontBody).Bold()
+	button := ui.ButtonBase(c).Label(a.T("color_"+id)).Tooltip(a.T("color_"+id)).Size(popSwatchHit, popSwatchHit).Shrink(0).Padding(0).Radius(popSwatchRadius + (popSwatchHit-popSwatch)/2).Cursor(ui.CursorPointer).Center()
+	button.Role(ui.RoleCheckBox).Checked(chosen)
+	ring := ui.Transparent
+	if chosen {
+		ring = p.Text
+	} else if button.Hovered() {
+		ring = p.Border
+	}
+	button.Border(2, button.AnimateColor("ring", ring, motionColor))
+	button.Children(func() {
+		ui.Box(c).Size(popSwatch, popSwatch).Radius(popSwatchRadius).Background(ui.Hex(hex)).Border(1, p.Text.Alpha(.12)).PassThrough()
+	})
+	return button
+}
+
+// popChip 是标签和文件类型共用的圆角开关：平时浅底，选中反色；icon 为空时只有文字。
+func popChip(c *ui.Context, on *bool, icon, label string) ui.Element {
+	p := paletteFor(c.Theme())
+	chip := ui.ToggleBase(c, on).Label(label).Height(popChipHeight).Padding(0, space8+1).Gap(popChipIconGap).Radius(popChipRadius).Cursor(ui.CursorPointer).AlignItems(ui.Center).MaxWidth(popChipMaxWidth)
+	background, text := popFill(p, .05), p.Text
+	switch {
+	case *on:
+		background, text = p.Text, p.Raised
+	case chip.Pressed():
+		background = popFill(p, .12)
+	case chip.Hovered():
+		background = popFill(p, .085)
+	}
+	animateColors(chip, background, text)
+	if icon != "" {
+		chip.Padding(0, space8+1, 0, space8-1)
+	}
+	return chip.Children(func() {
+		if icon != "" {
+			toolbarIcon(c, icon).Size(iconSmall, iconSmall).Shrink(0)
+		}
+		ui.Text(c, label).FontSize(fontSecondary).SingleLine().MinWidth(0)
+	})
+}
+
+// extensionIcon 按图片种类给文件类型配图标：照片、图像、动图。
+func extensionIcon(ext string) string {
+	switch ext {
+	case "jpg", "jpeg", "heic", "heif", "avif":
+		return "type-photo"
+	case "gif":
+		return "type-motion"
+	}
+	return "type-image"
+}
+
+// popEmpty 是弹层里一段没有内容时的说明：和小标题同字号、更淡，贴近小标题。
+func popEmpty(c *ui.Context, text string) {
+	ui.Text(c, text).FontSize(fontGroup).TextColor(paletteFor(c.Theme()).TextTertiary.Alpha(.75)).Margin(-space4, 0, 0, 0)
+}
+
+// 弹层里的底色按「正文色叠在弹层底色上多少」来取，和工具栏一个思路。
+func popFill(p *designPalette, amount float32) ui.Color { return p.Raised.Mix(p.Text, amount) }
+
+// 排序弹层：像系统菜单，当前字段前面打勾、右边箭头表示升序或降序；
+// 点别的字段就换过去，再点当前字段就反转方向。弹层不收起，方便连着点。
+func (a *App) sortPanel(c *ui.Context) {
+	ui.Column(c).FillWidth().Gap(0).Children(func() {
 		for _, item := range []struct{ ID, Label string }{{"added", "sort_added"}, {"name", "sort_name"}, {"size", "sort_size"}} {
 			chosen := a.Query.Sort == item.ID || a.Query.Sort == "" && item.ID == "added"
-			row := ui.ButtonBase(c.Key(item.ID)).Height(controlHeight).FillWidth().Justify(ui.Start).Padding(0, space12).Radius(radiusControl).Cursor(ui.CursorPointer).Label(a.T(item.Label))
-			background, text := ui.Transparent, p.TextSecondary
+			direction := ""
 			if chosen {
-				background, text = p.Selected, p.Text
-				elevated(row, c.Theme())
+				direction = "sort_ascending"
+				if a.Query.Descending {
+					direction = "sort_descending"
+				}
 			}
-			if row.Hovered() {
-				background, text = p.Hover, p.Text
-			}
-			if row.Pressed() {
-				background = p.Pressed
-			}
-			animateColors(row, background, text)
-			row.Children(func() { ui.Text(c, a.T(item.Label)).FontSize(fontBody).SingleLine() })
-			if row.Clicked() {
+			if a.popSortRow(c.Key(item.ID), a.T(item.Label), direction).Clicked() {
 				a.changeSort(item.ID)
-				a.Toolbar.SortOpen = false
 			}
-		}
-		ui.Divider(c)
-		descending := a.Query.Descending
-		animatedRadio(c, &descending, false, a.T("sort_ascending"))
-		animatedRadio(c, &descending, true, a.T("sort_descending"))
-		if descending != a.Query.Descending {
-			a.Query.Descending = descending
-			a.Refine()
 		}
 	})
+}
+
+// popSortRow 是排序弹层的一行：左边勾选位，中间文字，当前字段右边是方向箭头；悬停铺浅底。
+// direction 为空表示不是当前字段。
+func (a *App) popSortRow(c *ui.Context, label, direction string) ui.Element {
+	p := paletteFor(c.Theme())
+	chosen := direction != ""
+	row := ui.ButtonBase(c).Label(label).Role(ui.RoleRadio).Checked(chosen).FillWidth().Height(popRowHeight).Padding(0, popRowPadRight, 0, popRowPadLeft).Gap(popRowGap).Radius(radiusSmall + 1).Justify(ui.Start).AlignItems(ui.Center).Cursor(ui.CursorPointer)
+	if chosen {
+		row.Description(a.T(direction)).Tooltip(a.T(direction))
+	}
+	background := ui.Transparent
+	if row.Pressed() {
+		background = p.Pressed
+	} else if row.Hovered() {
+		background = p.Hover
+	}
+	animateColors(row, background, p.Text)
+	row.Children(func() {
+		ui.Box(c).Size(iconSmall, iconSmall).Shrink(0).Center().Children(func() {
+			if chosen {
+				appSymbol(c, "check").Size(iconSmall, iconSmall).TextColor(p.Accent)
+			}
+		})
+		ui.Text(c, label).FontSize(fontBody).SingleLine().Grow(1).MinWidth(0)
+		if chosen {
+			// 双向箭头：当前方向那支用正文色，另一支淡下去。
+			up, down := p.Text, p.TextTertiary.Alpha(.5)
+			if direction == "sort_descending" {
+				up, down = down, up
+			}
+			ui.Box(c).Size(iconSize, iconSize).Shrink(0).Children(func() {
+				toolbarIcon(c, "sort-up").Absolute().Left(0).Top(0).Size(iconSize, iconSize).TextColor(up)
+				toolbarIcon(c, "sort-down").Absolute().Left(0).Top(0).Size(iconSize, iconSize).TextColor(down)
+			})
+		}
+	})
+	return row
 }
 
 func (a *App) changeSort(field string) {
@@ -399,23 +719,152 @@ func toolbarToggle(values []string, value string, on bool) []string {
 	return values
 }
 
+// 工具栏规格照设计稿，整体比稿子矮一截：控件高 28、圆角 8，底色和文字色都是正文色叠在背景上的比例。
+const (
+	toolbarControlHeight = 28
+	toolbarRadius        = 8
+	toolbarChipPadding   = 10 // 带文字按钮左边距（右边 12）
+	toolbarChipGap       = 6
+	toolbarChipFill      = .043 // 搜索框、按钮、刻度尺、视图切换共用的底色
+	toolbarSearchWidth   = 300
+	toolbarSearchMin     = 160 // 设计稿是 180；1100 窗口开着侧栏时差 10 点放不下刻度尺，缩到 160
+	toolbarSegmentInset  = 2
+	toolbarSegmentWidth  = 30
+	toolbarTitleSize     = 15
+	toolbarFont          = fontSecondary // 按钮、搜索框、「N 列」、导入：比正文小一号
+	toolbarHintFont      = fontCaption   // ⌘K 键帽
+	toolbarTitleWidth    = 220           // 文件夹名太长时截断
+	toolbarCountSize     = 11.5
+	toolbarAddIcon       = 16
+
+	// 缩略图刻度尺：刻度在中间固定的指针下滑过，每 5 点一格，4 格是一档。
+	rulerWidth    = 112
+	rulerTick     = 5
+	rulerStep     = 4 * rulerTick
+	rulerTickTall = 10
+	rulerTickLow  = 6
+	rulerNeedle   = 14
+
+	// 筛选和排序弹层。
+	popFilterWidth   = 300
+	popSortWidth     = 180
+	popInset         = 16 // 筛选弹层左右留白
+	popHeaderHeight  = 44
+	popBodyMax       = 420 // 正文超出这个高度就滚动
+	popSectionGap    = 18
+	popSwatchColumns = 8
+	popSwatchHit     = 28 // 颜色圆点的点击区，也是选中细环的外径
+	popSwatch        = 20
+	popSwatchRadius  = 6
+	popChipHeight    = 26
+	popChipGap       = 6
+	popChipRadius    = 7
+	popChipIconGap   = 5
+	popChipMaxWidth  = 200 // 标签名太长时截断
+	popRowHeight     = 28
+	popRowPadLeft    = 6
+	popRowPadRight   = 8
+	popRowGap        = 6
+	popSortPadding   = 4
+	popClearPad      = 6  // 「清除筛选」按钮左右内边距
+	popTagSearchFrom = 12 // 标签超过这么多才显示搜索框
+)
+
 func (a *App) toolbarWidth(c *ui.Context) float32 {
 	width, _ := c.Size()
 	return width - a.SidebarShownWidth() - a.InspectorShownWidth()
 }
 
-func (a *App) thumbnailSizeSlider(c *ui.Context) {
-	ui.Row(c.Key("thumbnail-size-control")).Width(120).Shrink(0).Gap(space4).AlignItems(ui.Center).Children(func() {
-		disabled := a.ViewMode == 2
-		if toolbarIconButton(c.Key("thumbnail-smaller"), a.T("thumbnail_smaller"), "minus").Size(space24, controlSmall).Disabled(disabled || a.thumbnailScale() <= .5).Clicked() {
-			a.ChangeThumbnailSize(-.1)
+// 缩略图大小是一把刻度尺：拖动刻度在中间的指针下滑过，松手停到最近的一档；点刻度跳到那一档；右边显示现在是几列。
+func (a *App) thumbnailRuler(c *ui.Context) {
+	p := paletteFor(c.Theme())
+	disabled := a.ViewMode == 2
+	last := len(thumbnailSteps) - 1
+	index := float64(thumbnailStep(a.thumbnailScale()))
+	box := ui.Row(c).Height(toolbarControlHeight).Shrink(0).Radius(toolbarRadius).Background(toolbarFill(p, toolbarChipFill)).AlignItems(ui.Center).Clip()
+	if disabled {
+		box.Opacity(.5)
+	}
+	box.Children(func() {
+		// SliderBase 管键盘和读屏；指针交给上面盖着的刻度区。
+		slider := ui.SliderBase(c.Key("thumbnail-size"), &index, 0, float64(last)).Step(1).Size(rulerWidth, toolbarControlHeight).Shrink(0).
+			Label(a.T("thumbnail_size")).Tooltip(a.T("thumbnail_size")).Disabled(disabled)
+		if slider.Changed() {
+			a.SetThumbnailSize(thumbnailSteps[int(math.Round(index))])
 		}
-		size := float64(a.thumbnailScale())
-		if ui.Slider(c.Key("thumbnail-size"), &size, .5, 2).Label(a.T("thumbnail_size")).Tooltip(a.T("thumbnail_size")).Grow(1).MinWidth(0).Basis(0).Disabled(disabled).Changed() {
-			a.SetThumbnailSize(float32(size))
+		at := int(math.Round(index))
+		// 透明的拖动层只盖住刻度区：沿水平方向拖，松手总是弹回原位；拖着时它的位移就是刻度要滑过的距离。
+		// 用 Draggable 而不是 Dragged：指针拖出刻度区也一直跟着，拖过的按压也不会被当成点击。
+		scrub := ui.Box(c.Key("scrub")).Absolute().Top(0).Left(0).Bottom(0).Width(rulerWidth).Cursor(ui.CursorResizeEW)
+		if !disabled {
+			// 拖动层看不见，松手立刻回原位，紧接着的点击不会被当成「接住还在动的它」。
+			scrub.Draggable(&a.Toolbar.ScrubOffset, ui.DraggableOptions{Axis: ui.Horizontal, Snap: func(ui.Point) ui.Point { return ui.Point{} },
+				Animation: ui.Animation{Duration: time.Millisecond, NonMotion: true}})
+			// 点按刻度区时把焦点交给滑块，方向键、Home、End 接着能用；
+			// 按下时拖动层可能还在弹回途中，记下这时的位移当起点。
+			if scrub.PressedInside() {
+				a.Toolbar.ScrubBase = a.Toolbar.ScrubOffset.X
+			}
+			if _, _, ended := scrub.DragEnded(); ended || scrub.Clicked() || scrub.PressedInside() {
+				slider.Focus()
+			}
+			if scrub.Dragging() {
+				// 往左拖把右边的刻度带到指针下，就是放大；拖过半档就换档，换掉的那段记进 ScrubBase。
+				moved := a.Toolbar.ScrubOffset.X - a.Toolbar.ScrubBase
+				for moved <= -rulerStep/2 && at < last {
+					at++
+					a.Toolbar.ScrubBase -= rulerStep
+					moved += rulerStep
+				}
+				for moved >= rulerStep/2 && at > 0 {
+					at--
+					a.Toolbar.ScrubBase += rulerStep
+					moved -= rulerStep
+				}
+				// 到头了只能再拖出半档，松手弹回。
+				a.Toolbar.Scrub = max(-rulerStep/2, min(rulerStep/2, moved))
+			} else {
+				a.Toolbar.Scrub = 0
+			}
+			if scrub.Clicked() {
+				if x, _, ok := scrub.PointerPosition(); ok {
+					at = max(0, min(last, at+int(math.Round(float64((x-rulerWidth/2)/rulerStep)))))
+				}
+			}
+			if at != int(math.Round(index)) {
+				a.SetThumbnailSize(thumbnailSteps[at])
+			}
 		}
-		if toolbarIconButton(c.Key("thumbnail-larger"), a.T("thumbnail_larger"), "plus").Size(controlSmall, controlSmall).Disabled(disabled || a.thumbnailScale() >= 2).Clicked() {
-			a.ChangeThumbnailSize(.1)
+		target := float32(at) - a.Toolbar.Scrub/rulerStep
+		if scrub.Dragging() {
+			slider.Jump("ruler-position", target)
 		}
+		position := slider.AnimateTo("ruler-position", target, motionSpring)
+		// 刻度从左到右由很浅的正文色渐变到品牌色；档位范围外的再往底色里压，看得出到头了。
+		faint, track := toolbarInk(p, .2), toolbarFill(p, toolbarChipFill)
+		needle := p.Accent
+		slider.Draw(func(pt *ui.Painter, r ui.Rect) {
+			center := r.X + r.W/2
+			first := int(math.Floor(float64((position*rulerStep - r.W/2) / rulerTick)))
+			for j := first; j <= first+int(r.W/rulerTick)+1; j++ {
+				x := center + float32(j)*rulerTick - position*rulerStep
+				if x < r.X+1 || x > r.X+r.W-2 {
+					continue
+				}
+				h, color := float32(rulerTickLow), faint.Mix(p.Accent, (x-r.X)/r.W)
+				if j%4 == 0 {
+					h = rulerTickTall
+				}
+				if j < 0 || j > last*4 {
+					color = color.Mix(track, .65)
+				}
+				pt.Fill(ui.Rect{X: x, Y: r.Y + (r.H-h)/2, W: 1, H: h}, color, 0)
+			}
+			pt.Fill(ui.Rect{X: center - 1, Y: r.Y + (r.H-rulerNeedle)/2, W: 2, H: rulerNeedle}, needle, 1)
+		})
+		ui.Box(c).Size(1, rulerNeedle).Shrink(0).Background(toolbarFill(p, .08))
+		// 右边写现在是几列，比百分比直观。
+		ui.Text(c.Key("columns"), a.T("toolbar_columns", strconv.Itoa(masonryColumns(a.layoutWidth, a.thumbnailScale())))).FontSize(toolbarFont).FontFeatures("tnum").
+			TextColor(toolbarInk(p, .86)).SingleLine().Shrink(0).Padding(0, 11, 0, 10)
 	})
 }

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Seaony/Momento/app/internal/model"
@@ -13,20 +15,24 @@ import (
 
 const previewPeekThreshold = 250 * time.Millisecond
 const previewPinThreshold = 3 * time.Second
-const previewWindowDuration = 250 * time.Millisecond
+const previewWindowDuration = 420 * time.Millisecond // 慢到能看清窗口展开的过程
 
-// 预览照旧版 macOS（git 2a13147^ MomentoAssetPreviewOverlay.swift）：上面图片卡，下面单独一块信息卡。
+// 预览是一个和侧栏同色的圆角窗口：上面是图片，下面一行靠左的名称和尺寸，右边关闭。
+// 留白照旧版 macOS（git 2a13147^ MomentoAssetPreviewOverlay.swift）四周 14；图片最多占屏幕可用区域 85% 宽、85% 高，不再受主窗口大小限制。
 const (
-	previewPadding       = 14                    // 图片卡内边距
-	previewCardRadius    = 30                    // 图片卡圆角
-	previewPhotoRadius   = 12                    // 图片圆角
-	previewInfoRadius    = 16                    // 信息卡圆角
-	previewInfoHeight    = 52                    // 上下各 10 + 名称 + 3 + 尺寸
-	previewInfoGap       = 12                    // 图片卡和信息卡之间
-	previewInfoWidth     = 560                   // 信息卡固定宽度，屏幕放不下时才缩
-	previewInfoInset     = 14                    // 信息卡左右内边距，关闭按钮贴着它
-	previewInfoSide      = previewInfoInset + 48 // 文字两侧留给关闭按钮的位置，保证居中
-	previewMinimumWidth  = 200
+	previewPhotoRadius   = 6                                      // 图片圆角
+	previewImageInset    = 14                                     // 图片到窗口左、上、右边的留白，底下接底栏
+	previewCardRadius    = previewPhotoRadius + previewImageInset // 窗口圆角，和图片圆角同心
+	previewWidthPercent  = 85
+	previewHeightPercent = 85
+	previewFooterMinimum = 52  // 底栏最少两行：上下各 10 + 名称 + 3 + 尺寸
+	previewFooterPadding = 10  // 底栏上下内边距
+	previewFooterLineGap = 5   // 文件名和下面一行的间距
+	previewFooterInset   = 20  // 底栏左右内边距，和窗口圆角一样，文字比图片边再往里收一点
+	previewInfoIcon      = 10  // 尺寸、大小、相机前的小图标，和 10 号字一样高
+	previewInfoGap       = 3   // 小图标和文字的间距
+	previewCloseIcon     = 18  // 关闭按钮的实心小圆
+	previewMinimumWidth  = 240 // 太窄时名称没地方放
 	previewMinimumHeight = 160
 )
 
@@ -39,23 +45,30 @@ type previewWindows struct {
 }
 
 type previewWindow struct {
-	window, info                               *mygo.Window
-	picture                                    previewState
-	root                                       string
-	asset                                      model.Asset
-	items                                      []model.Asset
-	placeholder                                *ui.Bitmap
-	lastSelectionID                            string
-	mainSelection                              []string
-	pinned, closing, disposed                  bool
-	imageFocused, infoFocused                  bool
-	pressedAt, openedAt, closedAt, pinnedAt    time.Time
-	frame, infoFrame                           mygo.Rectangle
-	closeScale, closeOpacity                   float32
-	closedHeld                                 bool
-	closedProgress                             float32
-	closedHintOpacity                          float32
-	hostAnimating, infoAnimating, reduceMotion bool
+	window                                  *mygo.Window
+	picture                                 previewState
+	root                                    string
+	asset                                   model.Asset
+	items                                   []model.Asset
+	placeholder                             *ui.Bitmap
+	lastSelectionID                         string
+	mainSelection                           []string
+	pinned, closing, disposed               bool
+	hasFocus                                bool
+	pressedAt, openedAt, closedAt, pinnedAt time.Time
+	frame                                   mygo.Rectangle
+	closeScale, closeOpacity                float32
+	closedHeld                              bool
+	closedProgress                          float32
+	closedRingOpacity                       float32
+	hostAnimating, reduceMotion             bool
+	footerFor                               previewFooterKey
+	footerHeight                            float32
+}
+
+type previewFooterKey struct {
+	id, locale string
+	width      float32
 }
 
 func (a *App) PreviewOpen() bool { return a.previewTarget() != nil }
@@ -231,7 +244,6 @@ func (w *previewWindow) advanceHold(a *App, now time.Time) {
 		a.Preview.active = nil
 	}
 	a.Preview.pinned = append(a.Preview.pinned, w)
-	w.infoAnimating = true
 	if w.window != nil {
 		w.window.SetAlwaysOnTop(true)
 		w.window.SetMinimumSize(previewMinimumWidth, previewMinimumHeight)
@@ -334,33 +346,24 @@ func (a *App) previewMenuChanged() {
 	}
 }
 
-func (w *previewWindow) focused() bool { return w.imageFocused || w.infoFocused }
+func (w *previewWindow) focused() bool { return w.hasFocus }
 
-// 两个窗口都用 ShowInactive 显示，不抢主窗口键盘，主窗口才能判断空格是否还按着。
+// 用 ShowInactive 显示，不抢主窗口键盘，主窗口才能判断空格是否还按着。
 func (w *previewWindow) create(a *App) {
 	parent := a.Window.Bounds()
 	area := mygo.Screen.DisplayMatching(parent).WorkArea
-	w.frame, w.infoFrame = previewLayout(parent, area, w.asset, a.Preferences.PreviewFit == "fit")
+	w.frame = previewLayout(parent, area, w.asset, a.Preferences.PreviewFit == "fit", a.Texts.Locale(), preferenceZoom(a.Preferences.UIZoom))
 	w.hostAnimating = true
-	glass := func(frame mygo.Rectangle, radius int, parentWindow *mygo.Window, view func(c *ui.Context)) *mygo.Window {
-		return mygo.NewWindow(mygo.WindowOptions{Title: w.asset.Name, Width: frame.Width, Height: frame.Height,
-			Hidden: true, Frameless: true, Transparent: true, CornerRadius: radius, SkipTaskbar: true,
-			DisableResize: true, DisableMaximize: true, DisableMinimize: true, DisableFullScreen: true,
-			Vibrancy: mygo.VibrancyGlass, VibrancyTint: previewGlassTint(), Parent: parentWindow,
-			BackgroundColor: "rgba(0,0,0,0)", Content: ui.View(view)})
-	}
-	w.window = glass(w.frame, previewCardRadius, nil, func(c *ui.Context) { w.view(c, a) })
-	w.info = glass(w.infoFrame, previewInfoRadius, w.window, func(c *ui.Context) { w.infoView(c, a) })
+	w.window = mygo.NewWindow(mygo.WindowOptions{Title: w.asset.Name, Width: w.frame.Width, Height: w.frame.Height,
+		Hidden: true, Frameless: true, Transparent: true, CornerRadius: previewCardRadius, SkipTaskbar: true,
+		DisableResize: true, DisableMaximize: true, DisableMinimize: true, DisableFullScreen: true,
+		BackgroundColor: "rgba(0,0,0,0)", Content: ui.View(func(c *ui.Context) { w.view(c, a) })})
 	w.window.SetMinimumSize(1, 1)
-	w.info.SetMinimumSize(1, 1)
-	w.applyFrames(.92, 0, 0)
+	w.applyFrames(.92, 0)
 	w.window.OnClose(func(e *mygo.CloseEvent) { e.PreventDefault(); w.close(a, time.Now()) })
-	w.info.OnClose(func(e *mygo.CloseEvent) { e.PreventDefault(); w.close(a, time.Now()) })
 	w.window.OnClosed(func() { w.dispose(); a.removePreviewWindow(w) })
-	w.window.OnFocus(func() { w.imageFocused = true; a.previewMenuChanged() })
-	w.window.OnBlur(func() { w.imageFocused = false; a.previewMenuChanged() })
-	w.info.OnFocus(func() { w.infoFocused = true; a.previewMenuChanged() })
-	w.info.OnBlur(func() { w.infoFocused = false; a.previewMenuChanged() })
+	w.window.OnFocus(func() { w.hasFocus = true; a.previewMenuChanged() })
+	w.window.OnBlur(func() { w.hasFocus = false; a.previewMenuChanged() })
 	keep := func() {
 		if w.pinned && !w.closing && !w.hostAnimating {
 			w.frame = w.window.Bounds()
@@ -369,66 +372,62 @@ func (w *previewWindow) create(a *App) {
 	w.window.OnMove(keep)
 	w.window.OnResize(keep)
 	w.window.ShowInactive()
-	w.info.ShowInactive()
 }
 
-// 图片卡和信息卡作为一组，在主窗口中央；图片按比例放进最多 80% 主窗口的范围。
-func previewLayout(parent, area mygo.Rectangle, asset model.Asset, enlarge bool) (image, info mygo.Rectangle) {
-	maxW, maxH := max(1, parent.Width*8/10), max(1, parent.Height*8/10)
-	if area.Width > 0 {
-		maxW = min(maxW, area.Width)
+// 图片按比例放进屏幕可用区域 85% 宽、85% 高的范围（拿不到屏幕时按主窗口），四周加留白、下面接底栏；
+// 整个窗口在主窗口中央，不超出屏幕。底栏高度随文件名换行变化，而文件名怎么换行又取决于窗口宽度，所以算两遍。
+func previewLayout(parent, area mygo.Rectangle, asset model.Asset, enlarge bool, locale string, zoom float32) mygo.Rectangle {
+	// 拿不到屏幕时按主窗口算，并保留最小尺寸；拿得到屏幕时严格按比例，小屏幕也不超出 85%。
+	maxW, maxH := max(360, parent.Width*previewWidthPercent/100), max(320, parent.Height*previewHeightPercent/100)
+	if area.Width > 0 && area.Height > 0 {
+		maxW, maxH = area.Width*previewWidthPercent/100, area.Height*previewHeightPercent/100
 	}
-	if area.Height > 0 {
-		maxH = min(maxH, area.Height)
+	if area.Width > 0 {
+		maxW = min(maxW, area.Width-2*previewImageInset)
 	}
 	iw, ih := assetDisplaySize(asset)
 	limit := float32(1)
 	if enlarge {
 		limit = 2
 	}
-	pad := 2 * previewPadding
-	maxImageH := maxH - previewInfoGap - previewInfoHeight
-	scale := min(limit, previewFitZoom(float32(iw), float32(ih), float32(maxW-pad), float32(maxImageH-pad)))
-	width := min(maxW, max(previewMinimumWidth, int(float32(iw)*scale)+pad))
-	height := min(maxImageH, max(previewMinimumHeight, int(float32(ih)*scale)+pad))
-	infoWidth := min(maxW, previewInfoWidth)
-	total := height + previewInfoGap + previewInfoHeight
-	x, y := parent.X+(parent.Width-width)/2, parent.Y+(parent.Height-total)/2
+	footer, width, imageHeight := int(math.Ceil(previewFooterMinimum*float64(zoom))), 0, 0
+	for range 2 {
+		limitH := maxH
+		if area.Height > 0 {
+			limitH = min(maxH, area.Height-previewImageInset-footer)
+		}
+		scale := min(limit, previewFitZoom(float32(iw), float32(ih), float32(maxW), float32(limitH)))
+		width = max(previewMinimumWidth, min(maxW, int(float32(iw)*scale))+2*previewImageInset)
+		imageHeight = min(limitH, max(previewMinimumHeight, int(float32(ih)*scale)))
+		footer = previewFooterPoints(asset, width, locale, zoom)
+	}
+	height := imageHeight + previewImageInset + footer
+	x, y := parent.X+(parent.Width-width)/2, parent.Y+(parent.Height-height)/2
 	if area.Width > 0 {
 		x = max(area.X, min(x, area.X+area.Width-width))
 	}
 	if area.Height > 0 {
-		y = max(area.Y, min(y, area.Y+area.Height-total))
+		y = max(area.Y, min(y, area.Y+area.Height-height))
 	}
-	image = mygo.Rectangle{X: x, Y: y, Width: width, Height: height}
-	info = mygo.Rectangle{X: x + (width-infoWidth)/2, Y: y + height + previewInfoGap, Width: infoWidth, Height: previewInfoHeight}
-	return
+	return mygo.Rectangle{X: x, Y: y, Width: width, Height: height}
 }
 
-// 以 center 为中心缩放一个窗口矩形，两块卡片围绕同一个中心一起放大缩小。
-func scaledAround(r mygo.Rectangle, cx, cy, scale float32) mygo.Rectangle {
+// 以窗口中心缩放窗口矩形，做打开、关闭和固定时的弹动。
+func scaledAround(r mygo.Rectangle, scale float32) mygo.Rectangle {
+	cx, cy := float32(r.X)+float32(r.Width)/2, float32(r.Y)+float32(r.Height)/2
 	x := cx + (float32(r.X)-cx)*scale
 	y := cy + (float32(r.Y)-cy)*scale
 	return mygo.Rectangle{X: int(math.Round(float64(x))), Y: int(math.Round(float64(y))),
 		Width: int(math.Round(float64(float32(r.Width) * scale))), Height: int(math.Round(float64(float32(r.Height) * scale)))}
 }
 
-// 把当前动画帧的缩放和透明度同步到两个窗口；固定后图片卡只围绕自己弹一下。
-func (w *previewWindow) applyFrames(scale, opacity, infoOpacity float32) {
+// 把当前动画帧的缩放和透明度同步到窗口。
+func (w *previewWindow) applyFrames(scale, opacity float32) {
 	if w.window == nil {
 		return
 	}
-	cx, cy := float32(w.frame.X)+float32(w.frame.Width)/2, float32(w.frame.Y)+float32(w.frame.Height)/2
-	if !w.pinned {
-		top, bottom := w.frame.Y, w.infoFrame.Y+w.infoFrame.Height
-		cy = float32(top+bottom) / 2
-	}
-	w.window.SetBounds(scaledAround(w.frame, cx, cy, scale))
+	w.window.SetBounds(scaledAround(w.frame, scale))
 	w.window.SetOpacity(float64(opacity))
-	if w.info != nil {
-		w.info.SetBounds(scaledAround(w.infoFrame, cx, cy, scale))
-		w.info.SetOpacity(float64(infoOpacity))
-	}
 }
 
 func previewReveal(t float32) float32 {
@@ -455,15 +454,6 @@ func (w *previewWindow) visual(now time.Time) (scale, opacity float32) {
 	return
 }
 
-// 固定后信息卡淡出，只留图片卡。
-func (w *previewWindow) infoOpacity(now time.Time, opacity float32) float32 {
-	if !w.pinned {
-		return opacity
-	}
-	t := min(1, max(0, float32(now.Sub(w.pinnedAt))/float32(previewWindowDuration)))
-	return opacity * (1 - t)
-}
-
 func (w *previewWindow) close(a *App, now time.Time) {
 	if w.closing || w.disposed {
 		return
@@ -471,7 +461,7 @@ func (w *previewWindow) close(a *App, now time.Time) {
 	w.closeScale, w.closeOpacity = w.visual(now)
 	w.closedHeld = w.picture.Held && !w.pinned
 	w.closedProgress = w.holdProgress(now)
-	w.closedHintOpacity = min(1, max(0, float32(now.Sub(w.pressedAt)-previewPeekThreshold)/float32(120*time.Millisecond)))
+	w.closedRingOpacity = min(1, max(0, float32(now.Sub(w.pressedAt)-previewPeekThreshold)/float32(120*time.Millisecond)))
 	w.closing, w.closedAt = true, now
 	w.picture.Held = false
 	if w.window != nil {
@@ -488,11 +478,6 @@ func (w *previewWindow) close(a *App, now time.Time) {
 	a.previewMenuChanged()
 }
 func (w *previewWindow) destroyWindows() {
-	if w.info != nil {
-		w.info.Hide()
-		w.info.Destroy()
-		w.info = nil
-	}
 	if w.window != nil {
 		w.window.Hide()
 		w.window.Destroy()
@@ -530,11 +515,18 @@ func (w *previewWindow) invalidate() {
 	if w.window != nil {
 		w.window.Update(func() {})
 	}
-	if w.info != nil {
-		w.info.Update(func() {})
-	}
 }
 func (w *previewWindow) setAsset(a *App, asset model.Asset) {
+	// 换图时文件名行数可能变，窗口跟着增减底栏的高度，图片区域保持原来大小。
+	if w.window != nil && w.asset.ID != "" && w.asset.ID != asset.ID {
+		locale, zoom := a.Texts.Locale(), preferenceZoom(a.Preferences.UIZoom)
+		if delta := previewFooterPoints(asset, w.frame.Width, locale, zoom) - previewFooterPoints(w.asset, w.frame.Width, locale, zoom); delta != 0 {
+			w.frame = previewResized(w.frame, delta, mygo.Screen.DisplayMatching(w.frame).WorkArea)
+			if !w.hostAnimating {
+				w.window.SetBounds(w.frame)
+			}
+		}
+	}
 	w.asset = asset
 	w.picture.target(w.root, asset.ID, asset.Rotation)
 	w.placeholder = nil
@@ -543,9 +535,6 @@ func (w *previewWindow) setAsset(a *App, asset model.Asset) {
 	}
 	if w.window != nil {
 		w.window.SetTitle(asset.Name)
-	}
-	if w.info != nil {
-		w.info.SetTitle(asset.Name)
 	}
 	w.invalidate()
 }
@@ -561,17 +550,12 @@ func (w *previewWindow) move(a *App, delta int) {
 	}
 }
 
-// 两块卡片共用的磨砂底：系统材质上再铺一层很淡的色板色，浅色发白、深色近黑。
+// 预览窗口的底：和侧栏同色，窗口本身透明只为露出圆角。
 func previewCard(c *ui.Context, key any, radius float32) ui.Element {
-	p := paletteFor(c.Theme())
-	tint := p.Raised.Alpha(materialPanelAlpha)
-	if c.Theme().Dark {
-		tint = p.Background.Alpha(materialPanelAlpha)
-	}
-	return ui.Box(c.Key(key)).Fill().Radius(radius).Clip().Background(tint).Border(1, p.BorderSubtle)
+	return ui.Box(c.Key(key)).Fill().Radius(radius).Clip().Background(paletteFor(c.Theme()).Sidebar)
 }
 
-// 图片卡窗口：只放图片；固定后悬停右上角出现关闭按钮。动画帧由这个窗口驱动。
+// 预览窗口：上面图片，下面底栏。动画帧也由这个窗口驱动。
 func (w *previewWindow) view(c *ui.Context, a *App) {
 	a.applyTheme(c)
 	c.Root().Background(ui.Transparent)
@@ -585,16 +569,9 @@ func (w *previewWindow) view(c *ui.Context, a *App) {
 		animating = false
 	}
 	if w.window != nil && (animating || w.hostAnimating) {
-		w.applyFrames(scale, opacity, w.infoOpacity(now, opacity))
+		w.applyFrames(scale, opacity)
 		w.hostAnimating = animating
 	}
-	// 信息卡淡出结束后关掉它，固定窗口只剩图片。
-	if w.pinned && w.info != nil && (w.reduceMotion || now.Sub(w.pinnedAt) >= previewWindowDuration) {
-		w.info.Hide()
-		w.info.Destroy()
-		w.info, w.infoFocused, w.infoAnimating = nil, false, false
-	}
-
 	if w.closing && (w.reduceMotion || now.Sub(w.closedAt) >= previewWindowDuration) {
 		w.dispose()
 		w.destroyWindows()
@@ -610,9 +587,6 @@ func (w *previewWindow) view(c *ui.Context, a *App) {
 			deadline = w.pressedAt.Add(previewPeekThreshold)
 		}
 		c.After(min(16*time.Millisecond, max(time.Duration(0), deadline.Sub(now))))
-		if w.info != nil {
-			w.info.Update(func() {})
-		}
 	}
 	if w.placeholder == nil && a.Thumbnails != nil {
 		w.placeholder = a.Thumbnails.Get(w.root, w.asset)
@@ -628,89 +602,189 @@ func (w *previewWindow) view(c *ui.Context, a *App) {
 	}
 	surface.Children(func() {
 		w.viewport(c, a)
-		if w.pinned {
-			close := previewCardButton(c.Key("close-pinned-preview"), "close", a.T("close_preview"), false).
-				Absolute().Top(previewPadding).Right(previewPadding).Material(panelMaterial(c.Theme()))
-			visible := surface.Hovered()
-			close.Opacity(close.AnimateTo("visible", motionTarget(visible), motionColor)).IgnoreInput(!visible)
-			if close.Clicked() {
-				w.close(a, c.Now())
-			}
-		}
+		w.footer(c, a, now)
 	})
-	if w.imageFocused {
+	if w.hasFocus {
 		w.handleKeys(c, a, now)
 	}
 }
 
-// 信息卡窗口：名称和尺寸居中，右侧圆形关闭按钮；按住空格时第二行换成提示，底部出进度条。
-func (w *previewWindow) infoView(c *ui.Context, a *App) {
-	a.applyTheme(c)
-	c.Root().Background(ui.Transparent)
-	now := c.Now()
+// 底栏：完整文件名和尺寸靠左两行，右边一个不抢眼的关闭按钮；按住空格时关闭按钮的位置换成小圆环进度。
+func (w *previewWindow) footer(c *ui.Context, a *App, now time.Time) {
 	pal := paletteFor(c.Theme())
 	elapsed := now.Sub(w.pressedAt)
 	pinFade := w.pinned && now.Sub(w.pinnedAt) < 120*time.Millisecond
 	holding := w.picture.Held && elapsed >= previewPeekThreshold && !w.pinned || w.closing && w.closedHeld && elapsed >= previewPeekThreshold || pinFade
-	card := previewCard(c, "preview-info", previewInfoRadius)
-	card.Children(func() {
-		ui.Column(c.Key("preview-info-text")).Absolute().Left(previewInfoSide).Right(previewInfoSide).Top(0).Bottom(0).
-			Justify(ui.Center).AlignItems(ui.Center).Gap(3).Children(func() {
-			ui.Text(c, w.asset.Name).FontSize(fontBody).FontWeight(500).TextColor(pal.Text).SingleLine().TextAlign(ui.Center).MaxWidthPercent(100).Tooltip(w.asset.Name)
-			if holding {
-				ui.Text(c.Key("preview-hold-hint"), a.T("preview_hold_to_pin")).FontSize(fontGroup).TextColor(pal.TextSecondary).SingleLine()
-			} else if w.picture.errorText != "" && w.picture.Bitmap != nil {
-				ui.Text(c, w.picture.errorText).FontSize(fontGroup).TextColor(pal.Danger).SingleLine()
+	width, _ := c.Size()
+	dimensions, size, camera := previewDetails(w.asset)
+	row := ui.Row(c.Key("preview-footer")).Absolute().Left(0).Right(0).Bottom(0).Height(w.footerHeightFor(width, a.Texts.Locale())).
+		Padding(0, previewFooterInset).Gap(space12).AlignItems(ui.Center)
+	// 相机参数平时收着，鼠标移到底栏上才把第二行换成它，窗口高度不变。
+	showCamera := camera != "" && row.Hovered()
+	row.Children(func() {
+		ui.Column(c.Key("preview-info-text")).Grow(1).Shrink(1).MinWidth(0).Gap(previewFooterLineGap).Children(func() {
+			ui.Text(c.Key("preview-name"), previewFileName(w.asset)).FontSize(fontLead).FontWeight(500).TextColor(pal.Text).MaxWidthPercent(100).Selectable()
+			if w.picture.errorText != "" && w.picture.Bitmap != nil {
+				ui.Text(c, w.picture.errorText).FontSize(fontCaption).TextColor(pal.Danger).SingleLine().MaxWidthPercent(100)
 			} else {
-				ui.Text(c.Key("preview-meta"), previewSubtitle(w.asset)).FontSize(fontGroup).FontFeatures("tnum").TextColor(pal.TextSecondary).SingleLine().TextAlign(ui.Center).MaxWidthPercent(100)
+				ui.Row(c.Key("preview-meta")).Gap(space12).AlignItems(ui.Center).MaxWidthPercent(100).Children(func() {
+					if showCamera {
+						previewInfo(c, "camera", camera).Shrink(1).MinWidth(0).Tooltip(camera)
+						return
+					}
+					if dimensions != "" {
+						previewInfo(c, "maximize-square", dimensions)
+					}
+					if size != "" {
+						previewInfo(c, "diskette", size)
+					}
+				})
 			}
 		})
-		if !w.picture.Held && !w.closedHeld && !w.pinned {
-			ui.Row(c.Key("preview-close")).Absolute().Right(previewInfoInset).Top(0).Bottom(0).AlignItems(ui.Center).Children(func() {
-				if previewCardButton(c.Key("close-preview"), "close", a.T("close_preview"), false).Clicked() {
-					w.close(a, c.Now())
-				}
-			})
-		}
 		if holding {
 			value := w.holdProgress(now)
 			opacity := min(1, max(0, float32(elapsed-previewPeekThreshold)/float32(120*time.Millisecond)))
 			if w.closing {
-				value, opacity = w.closedProgress, w.closedHintOpacity
+				value, opacity = w.closedProgress, w.closedRingOpacity
 			}
 			if pinFade {
 				value, opacity = 1, 1-float32(now.Sub(w.pinnedAt))/float32(120*time.Millisecond)
 			}
-			ui.Box(c.Key("preview-hold-progress")).Absolute().Left(previewInfoInset).Right(previewInfoInset).Bottom(space4).Height(space4 / 2).
-				Radius(space4 / 4).Background(pal.BorderSubtle).IgnoreInput(true).Opacity(opacity).Children(func() {
-				ui.Box(c).WidthPercent(value * 100).FillHeight().Radius(space4 / 4).Background(pal.Accent)
-			})
+			// 占关闭按钮的位置，圆环居中，名称不会因为按住而换位。
+			ui.Box(c.Key("preview-hold-progress")).Size(controlSmall, controlSmall).Shrink(0).Justify(ui.Center).AlignItems(ui.Center).
+				IgnoreInput(true).Opacity(opacity).Children(func() { previewHoldRing(c, value, pal.Border, pal.Accent) })
+		} else if !w.picture.Held && !w.closedHeld {
+			if previewCloseButton(c.Key("close-preview"), a.T("close_preview")).Clicked() {
+				w.close(a, c.Now())
+			}
 		}
 	})
-	if w.infoFocused {
-		w.handleKeys(c, a, now)
-	}
 }
 
-// 旧版第二行只有「宽 × 高」，没有尺寸时显示文件名。
-func previewSubtitle(asset model.Asset) string {
-	if width, height := assetDisplaySize(asset); width > 0 && height > 0 {
-		return fmt.Sprintf("%d × %d", width, height)
+// 按住空格固定时的小圆环：浅色底圈，品牌橘从 12 点顺时针走满。
+func previewHoldRing(c *ui.Context, value float32, track, fill ui.Color) {
+	const stroke = 2
+	ui.Box(c.Key("preview-hold-ring")).Size(iconSmall, iconSmall).Draw(func(p *ui.Painter, r ui.Rect) {
+		cx, cy, radius := r.X+r.W/2, r.Y+r.H/2, (min(r.W, r.H)-stroke)/2
+		arc := func(end float32) [][2]float32 {
+			steps := max(2, int(end*48))
+			points := make([][2]float32, 0, steps+1)
+			for i := 0; i <= steps; i++ {
+				angle := float64(end)*2*math.Pi*float64(i)/float64(steps) - math.Pi/2
+				points = append(points, [2]float32{cx + radius*float32(math.Cos(angle)), cy + radius*float32(math.Sin(angle))})
+			}
+			return points
+		}
+		p.StrokePolyline(arc(1), stroke, track)
+		if value > 0 {
+			p.StrokePolyline(arc(min(1, value)), stroke, fill)
+		}
+	})
+}
+
+// 完整文件名：素材名加扩展名（导入时名称去掉了最后一个扩展名）。
+func previewFileName(asset model.Asset) string {
+	if extension := strings.ToLower(strings.TrimPrefix(asset.Extension, ".")); extension != "" {
+		return asset.Name + "." + extension
 	}
 	return asset.Name
 }
 
-// 卡片上的圆形磨砂按钮（旧版的玻璃按钮）：常驻浅底，悬停加深。
-func previewCardButton(c *ui.Context, symbol, label string, disabled bool) ui.Element {
+// 底栏第二行平时是尺寸和文件大小，各带一个小图标；camera 是悬停时换上的相机参数，没有相机 EXIF 时为空。
+func previewDetails(asset model.Asset) (dimensions, size, camera string) {
+	if width, height := assetDisplaySize(asset); width > 0 && height > 0 {
+		dimensions = fmt.Sprintf("%d × %d", width, height)
+	}
+	if asset.Size > 0 {
+		size = fileSize(asset.Size)
+	}
+
+	var parts []string
+	model, maker := strings.TrimSpace(asset.EXIF["cameraModel"]), strings.TrimSpace(asset.EXIF["cameraMake"])
+	// 型号里常常已经带了品牌（Canon EOS R5），这时不再重复品牌。
+	if brand, _, _ := strings.Cut(maker, " "); brand != "" && !strings.HasPrefix(strings.ToLower(model), strings.ToLower(brand)) {
+		model = strings.TrimSpace(maker + " " + model)
+	}
+	if model != "" {
+		parts = append(parts, model)
+	}
+	if v := asset.EXIF["focalLength"]; v != "" {
+		parts = append(parts, v+" mm")
+	}
+	if v := asset.EXIF["fNumber"]; v != "" {
+		parts = append(parts, "f/"+v)
+	}
+	if t, err := strconv.ParseFloat(asset.EXIF["exposureTime"], 64); err == nil && t > 0 {
+		if t < 1 {
+			parts = append(parts, fmt.Sprintf("1/%d s", int(math.Round(1/t))))
+		} else {
+			parts = append(parts, strconv.FormatFloat(t, 'f', -1, 64)+" s")
+		}
+	}
+	if v := asset.EXIF["isoSpeedRatings"]; v != "" {
+		parts = append(parts, "ISO "+v)
+	}
+	return dimensions, size, strings.Join(parts, " · ")
+}
+
+// 量出底栏需要的高度：文件名在扣掉关闭按钮后的宽度里换行，第二行固定一行，至少保持两行高。
+func previewFooterHeight(asset model.Asset, width float32, locale string) float32 {
+	family := uiFont(locale)
+	_, name := ui.ShapeText(previewFileName(asset), ui.Font{Family: family, Size: fontLead, Weight: 500, Lang: locale}, max(1, width-2*previewFooterInset-controlSmall-space12)).Size()
+	_, meta := ui.ShapeText("0", ui.Font{Family: family, Size: fontCaption, Lang: locale}, 0).Size()
+	return max(previewFooterMinimum, 2*previewFooterPadding+name+previewFooterLineGap+max(meta, previewInfoIcon))
+}
+
+// 底栏在窗口里占多少点：界面缩放后内容宽度变窄、文字变大，先按缩放后的宽度排字，再换回窗口的点。
+func previewFooterPoints(asset model.Asset, windowWidth int, locale string, zoom float32) int {
+	return int(math.Ceil(float64(previewFooterHeight(asset, float32(windowWidth)/zoom, locale) * zoom)))
+}
+
+// 底栏变高时窗口往下长；碰到工作区底边就整体上移，不超出屏幕。
+func previewResized(r mygo.Rectangle, delta int, area mygo.Rectangle) mygo.Rectangle {
+	r.Height += delta
+	if area.Height > 0 && r.Y+r.Height > area.Y+area.Height {
+		r.Y = max(area.Y, area.Y+area.Height-r.Height)
+	}
+	return r
+}
+
+// 每帧都要用底栏高度，按素材、宽度和语言缓存，不每帧重新排字。
+func (w *previewWindow) footerHeightFor(width float32, locale string) float32 {
+	key := previewFooterKey{w.asset.ID, locale, width}
+	if w.footerFor != key || w.footerHeight == 0 {
+		w.footerFor, w.footerHeight = key, previewFooterHeight(w.asset, width, locale)
+	}
+	return w.footerHeight
+}
+
+// 第二行比三级文字再浅一档，只做辅助信息。
+func previewCaptionColor(c *ui.Context) ui.Color { return paletteFor(c.Theme()).TextTertiary.Alpha(.8) }
+
+// 底栏信息：一个小图标加一段文字。
+func previewInfo(c *ui.Context, icon, text string) ui.Element {
+	color := previewCaptionColor(c)
+	row := ui.Row(c).Gap(previewInfoGap).AlignItems(ui.Center)
+	row.Children(func() {
+		appIcon(c, icon).Size(previewInfoIcon, previewInfoIcon).Shrink(0).TextColor(color)
+		ui.Text(c, text).FontSize(fontCaption).FontFeatures("tnum").TextColor(color).SingleLine().Shrink(1).MinWidth(0)
+	})
+	return row
+}
+
+// 底栏的关闭按钮：一颗浅灰实心小圆、叉是镂空的，悬停和按下逐级加深；点击区域仍是 28。
+func previewCloseButton(c *ui.Context, label string) ui.Element {
 	p := paletteFor(c.Theme())
 	button := ui.ButtonBase(c).Size(controlSmall, controlSmall).Padding(0).Radius(controlSmall / 2).
-		Label(label).Tooltip(label).Disabled(disabled).Cursor(ui.CursorPointer).Justify(ui.Center).AlignItems(ui.Center)
-	background, text := p.Hover, p.Text
-	if button.Pressed() || button.Hovered() {
-		background = p.Pressed
+		Label(label).Tooltip(label).Cursor(ui.CursorPointer).Justify(ui.Center).AlignItems(ui.Center)
+	color := p.TextTertiary.Alpha(.4)
+	if button.Pressed() {
+		color = p.TextTertiary.Alpha(.85)
+	} else if button.Hovered() {
+		color = p.TextTertiary.Alpha(.6)
 	}
-	animateColors(button, background, text)
-	button.Children(func() { appIcon(c, symbol).Size(iconSmall, iconSmall) })
+	animateColors(button, ui.Transparent, color)
+	button.Children(func() { appIcon(c, "close-circle").Size(previewCloseIcon, previewCloseIcon) })
 	return button
 }
 
@@ -742,7 +816,7 @@ func (w *previewWindow) handleKeys(c *ui.Context, a *App, now time.Time) {
 	default:
 		handled = false
 	}
-	// 键盘可能在信息卡窗口上，翻页和缩放改的是图片卡，要让两个窗口都重画。
+	// 翻页和缩放后重画。
 	if handled {
 		w.invalidate()
 	}

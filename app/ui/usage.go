@@ -38,9 +38,6 @@ func (a *App) MarkAssetsUsed(ids []string) {
 				}
 			}
 			a.Index.UpdateLastUsed(used, at)
-			if a.Query.Scope == "recent" {
-				a.refine(false)
-			}
 		})
 	}()
 }

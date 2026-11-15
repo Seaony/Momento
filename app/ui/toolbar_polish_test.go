@@ -33,8 +33,8 @@ func TestToolbarResponsiveActionsAndSearchShortcut(t *testing.T) {
 				if width < 384 {
 					toolbarClick(t, tt, a.T("view_mode"))
 				}
-				toolbarClick(t, tt, a.T("view_grid"))
-				if a.ViewMode != 1 {
+				toolbarClick(t, tt, a.T("view_list"))
+				if a.ViewMode != 2 {
 					t.Fatal("窄工具栏无法切换视图")
 				}
 				tt.Key(0, ui.KeyEscape)

@@ -1,6 +1,10 @@
 package ui
 
-import "github.com/egoist/mygo/ui"
+import (
+	"unicode"
+
+	"github.com/egoist/mygo/ui"
+)
 
 func styleSegment(c *ui.Context, item ui.Element, selected bool) {
 	theme := c.Theme()
@@ -105,6 +109,49 @@ func animatedToggle(c *ui.Context, on *bool, label string) ui.Element {
 }
 
 // 表单控件统一外观：浅底 + 浅边框；悬停底色加深一点，聚焦变浮起面并换焦点色边框。
+// 输入框底下多留一点，这一行居中时把字抬上去，让字形中心对准框中心。
+// 真窗口 2 倍截图实测（离线测试器量不出来）：中文、日文比框中心低约 1.5 点，英文大写约低 0.25 点，所以按显示的文字分开抬。
+func searchTextLift(text string) float32 {
+	for _, r := range text {
+		if unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana) {
+			return 3.25
+		}
+	}
+	return 1
+}
+
+// 应用里的搜索框：放大镜、输入框、有内容时的清除按钮。不用 ui.SearchField，因为它的占位颜色改不了、中文也偏下；
+// 输入框撑满整行，点框里任意处都能输入；有内容时按 Esc 先清空，和系统搜索框一样。
+func searchField(c *ui.Context, query *string, label, clearLabel string) (field ui.Element, changed bool) {
+	p := paletteFor(c.Theme())
+	shown := *query
+	if shown == "" {
+		shown = label
+	}
+	field = ui.Row(c).Height(controlHeight).Gap(space8).Padding(0, space8).Cursor(ui.CursorText)
+	field.Children(func() {
+		appIcon(c, "search").Size(iconMedium, iconMedium).TextColor(p.TextSecondary).Shrink(0)
+		input := ui.TextInputBase(c.Key("input"), query).Search().Label(label).Placeholder(label).PlaceholderColor(placeholderColor(c)).
+			Grow(1).MinWidth(0).FillHeight().Padding(0, 0, searchTextLift(shown), 0).FontSize(fontBody).FocusRing(false)
+		changed = input.Changed()
+		if *query != "" {
+			// 挂在输入框上：弹出层里也是先清空，不会直接关掉弹出层。
+			if input.Shortcut(0, ui.KeyEscape) {
+				*query, changed = "", true
+			}
+			// 点清除会把焦点带到按钮上，清完还给输入框，方便接着输入。
+			if toolbarIconButton(c.Key("clear"), clearLabel, "close").Size(space20, space24).Clicked() {
+				*query, changed = "", true
+				input.Focus()
+			}
+		}
+	})
+	return fieldStyle(c, field), changed
+}
+
+// 占位文字比三级文字再浅：一眼看出是提示，不像已经输入的内容。
+func placeholderColor(c *ui.Context) ui.Color { return paletteFor(c.Theme()).TextTertiary.Alpha(.6) }
+
 func fieldStyle(c *ui.Context, field ui.Element) ui.Element {
 	p := paletteFor(c.Theme())
 	background, border := p.Field, p.BorderSubtle

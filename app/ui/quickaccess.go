@@ -27,7 +27,7 @@ func (a *App) sidebarQuickAccess(c *ui.Context) {
 	if a.sidebarHidden("quick") || len(entries) == 0 {
 		return
 	}
-	ui.Text(c, a.T("quick_access")).FontSize(fontSecondary).FontWeight(600).TextColor(paletteFor(c.Theme()).Text).Padding(0, sidebarRowPadding).Height(sidebarHeader).Margin(space12, 0, 0, 0)
+	centeredTextHeight(ui.Text(c, a.T("quick_access")).FontSize(fontSecondary).FontWeight(600).TextColor(paletteFor(c.Theme()).Text).Margin(space12, 0, 0, 0), sidebarHeader, sidebarRowPadding)
 	a.GBrowsing.QuickList.Key = func(i int) any { return entries[i].ID }
 	a.GBrowsing.QuickList.Label = func(i int) string { name, _, _, _ := a.quickAccessTarget(entries[i]); return name }
 	a.GBrowsing.QuickList.Reorder = func(rows []int, to int) {

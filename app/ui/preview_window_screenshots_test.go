@@ -15,7 +15,7 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// 把图片卡和信息卡按真实布局画在一块模拟桌面上，检查两块卡片的整体效果。
+// 把预览窗口按真实布局画在一块模拟桌面上，检查整体效果。
 func TestPreviewWindowScreenshots(t *testing.T) {
 	if os.Getenv("MOMENTO_PREVIEW_WINDOW_SCREENSHOTS") != "1" {
 		t.Skip("设置 MOMENTO_PREVIEW_WINDOW_SCREENSHOTS=1 输出独立预览窗口截图")
@@ -25,7 +25,7 @@ func TestPreviewWindowScreenshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixture := newScreenshotFixture(t)
-	for _, state := range []string{"normal", "hold", "pinned"} {
+	for _, state := range []string{"normal", "hold", "pinned", "camera"} {
 		for _, theme := range []string{"light", "dark"} {
 			a := fixture.app(t, "small", "zh-CN", theme)
 			var asset model.Asset
@@ -35,7 +35,10 @@ func TestPreviewWindowScreenshots(t *testing.T) {
 					break
 				}
 			}
-			asset.Name = "暖光下的山间晨雾.jpg"
+			asset.Name = "暖光下的山间晨雾"
+			if state == "camera" {
+				asset.EXIF = map[string]string{"cameraMake": "SONY", "cameraModel": "ILCE-7M4", "focalLength": "35", "fNumber": "1.8", "exposureTime": "0.004", "isoSpeedRatings": "100"}
+			}
 			a.ShowPreview(asset.ID, false)
 			w := a.Preview.active
 			w.asset = asset
@@ -45,12 +48,9 @@ func TestPreviewWindowScreenshots(t *testing.T) {
 			}
 			w.picture.finishPicture(w.picture.Generation, picture, nil)
 			canvas := mygo.Rectangle{Width: 900, Height: 640}
-			imageFrame, infoFrame := previewLayout(canvas, mygo.Rectangle{}, asset, a.Preferences.PreviewFit == "fit")
+			imageFrame := previewLayout(canvas, mygo.Rectangle{}, asset, a.Preferences.PreviewFit == "fit", a.Texts.Locale(), 1)
 			imageTester := ui.NewTester(func(c *ui.Context) { w.view(c, a) }, imageFrame.Width, imageFrame.Height)
-			infoTester := ui.NewTester(func(c *ui.Context) { w.infoView(c, a) }, infoFrame.Width, infoFrame.Height)
-			for _, tt := range []*ui.Tester{imageTester, infoTester} {
-				tt.SetLocale(a.Texts.Locale())
-			}
+			imageTester.SetLocale(a.Texts.Locale())
 			start := imageTester.Now()
 			w.openedAt = start.Add(-time.Second)
 			switch state {
@@ -61,17 +61,17 @@ func TestPreviewWindowScreenshots(t *testing.T) {
 				w.pinned, w.pinnedAt = true, start.Add(-time.Second)
 			}
 			imageTester.Frame()
-			infoTester.Frame()
 			if state == "pinned" {
 				imageTester.Move(float32(imageFrame.Width)/2, float32(imageFrame.Height)/2)
+				imageTester.Advance(300 * time.Millisecond)
+			}
+			if state == "camera" {
+				imageTester.Move(float32(imageFrame.Width)/3, float32(imageFrame.Height)-previewFooterMinimum/2)
 				imageTester.Advance(300 * time.Millisecond)
 			}
 			out := image.NewRGBA(image.Rect(0, 0, canvas.Width, canvas.Height))
 			paintDesktop(out, theme == "dark")
 			draw.Draw(out, image.Rect(imageFrame.X, imageFrame.Y, imageFrame.X+imageFrame.Width, imageFrame.Y+imageFrame.Height), imageTester.Image(), image.Point{}, draw.Over)
-			if state != "pinned" {
-				draw.Draw(out, image.Rect(infoFrame.X, infoFrame.Y, infoFrame.X+infoFrame.Width, infoFrame.Y+infoFrame.Height), infoTester.Image(), image.Point{}, draw.Over)
-			}
 			writePreviewWindowContact(t, filepath.Join(dir, state+"-"+theme+".png"), out)
 		}
 	}

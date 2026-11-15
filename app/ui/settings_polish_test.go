@@ -44,7 +44,7 @@ func TestSettingsPolishLocalizedLayout(t *testing.T) {
 					for _, navigation := range settingsTabs {
 						measure[a.T(navigation.key)] = 0
 					}
-					for _, key := range []string{"close_background", "close_quit", "rename", "folder_expand", "momento_preview", "default_app", "system_preview", "wheel_navigate", "wheel_zoom", "preview_smart", "preview_fit_window", "preview_smooth", "preview_pixelated", "preview_checker", "preview_solid", "all", "tag_management", "trash", "favorites", "uncategorized", "untagged", "recent", "random_browse", "quick_access", "smart_folders", "folders"} {
+					for _, key := range []string{"close_background", "close_quit", "rename", "folder_expand", "momento_preview", "default_app", "system_preview", "wheel_navigate", "wheel_zoom", "preview_smart", "preview_fit_window", "preview_smooth", "preview_pixelated", "preview_checker", "preview_solid", "all", "tag_management", "trash", "favorites", "uncategorized", "untagged", "random_browse", "quick_access", "smart_folders", "folders"} {
 						measure[a.T(key)] = 0
 					}
 					tt := polishedSettingsTester(a, UpdateCheckStatus{}, measure)

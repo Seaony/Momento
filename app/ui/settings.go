@@ -60,18 +60,14 @@ func (a *App) settingsView(c *ui.Context, update UpdateCheckStatus) {
 	a.SyncMenuFocus(c)
 	a.Settings.Tab = max(0, min(a.Settings.Tab, len(settingsTabs)-1))
 	background := settingsBackground(c)
-	if c.Vibrancy() {
-		c.Root().Background(ui.Transparent)
-	} else {
-		c.Root().Background(background)
-	}
+	c.Root().Background(background)
 	ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
 		side := ui.Column(c.Key("settings-sidebar")).Width(200).Shrink(0).BorderWidth(0, 1, 0, 0).BorderColor(p.BorderSubtle)
-		sidebarMaterial(c, side)
+		side.Background(p.Sidebar)
 		side.Children(func() {
 			bar := c.TitleBar()
 			if bar.Left > 0 {
-				ui.Box(c.Key("settings-sidebar-titlebar")).Height(max(44, bar.Bottom+space8)).FillWidth().Shrink(0).DragWindow()
+				ui.Box(c.Key("settings-sidebar-titlebar")).Height(max(titleBarHeight, bar.Bottom+space8)).FillWidth().Shrink(0).DragWindow()
 			} else {
 				ui.Row(c.Key("settings-sidebar-titlebar")).Height(rowHeight).FillWidth().Padding(0, space16).DragWindow().Children(func() { ui.Text(c, a.T("settings")).Bold() })
 			}
@@ -375,9 +371,9 @@ func (a *App) updateMessage(c *ui.Context, update UpdateCheckStatus, centered bo
 func settingsPanel(c *ui.Context, open *bool, width float32, body func()) ui.Element {
 	p := paletteFor(c.Theme())
 	return ui.DialogBase(c, open, func(backdrop, panel ui.Element) {
-		backdrop.Material(frostedSurface{tint: p.Scrim, blur: 12})
+		backdrop.Background(p.Scrim)
 		panel.Width(width).MaxWidthPercent(92).MaxHeightPercent(92).Padding(space24).Gap(space12).
-			Radius(radiusPanel).Material(panelMaterial(c.Theme()))
+			Radius(radiusPanel).Background(panelColor(c.Theme()))
 		elevated(panel, c.Theme())
 		dialogMotion(backdrop, panel)
 		body()

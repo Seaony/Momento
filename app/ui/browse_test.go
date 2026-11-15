@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/Seaony/Momento/app/internal/catalog"
 	"github.com/Seaony/Momento/app/internal/model"
@@ -71,7 +72,7 @@ func TestThumbnailSizeChangesMasonryAndGrid(t *testing.T) {
 		t.Fatal("瀑布流没有随缩略图大小改列宽")
 	}
 	a.ViewMode = 2
-	a.ChangeThumbnailSize(-.1)
+	a.StepThumbnailSize(-1)
 	if a.thumbnailScale() != 2 {
 		t.Fatal("列表视图仍允许调整缩略图")
 	}
@@ -178,9 +179,59 @@ func TestThumbnailSliderIsDisabledInList(t *testing.T) {
 	if !ok || access.Disabled {
 		t.Fatal("宽窗口没有可用的缩略图滑块")
 	}
-	tt.ClickAt(access.Bounds.X+access.Bounds.W/2, access.Bounds.Y+access.Bounds.H/2)
-	if a.thumbnailScale() == 1 {
-		t.Fatal("滑块没有改变缩略图大小")
+	// 刻度尺：点指针右边第 k 档的刻度就往大走 k 档，点左边往小走。
+	center, y := access.Bounds.X+access.Bounds.W/2, access.Bounds.Y+access.Bounds.H/2
+	for _, step := range []struct{ offset, want int }{{1, 3}, {-2, 1}, {1, 2}} {
+		tt.ClickAt(center+float32(step.offset)*rulerStep, y)
+		tt.Frame()
+		if got := thumbnailStep(a.thumbnailScale()); got != step.want {
+			t.Fatalf("点偏 %d 档后停在第 %d 档，应为 %d", step.offset, got, step.want)
+		}
+	}
+	// 往左拖一档多，刻度跟着走，放大一档；往右拖回来又缩小。
+	tt.Press(center, y)
+	for x := center; x >= center-rulerStep-4; x -= 4 {
+		tt.Move(x, y)
+		tt.Frame()
+	}
+	tt.Release(center-rulerStep-4, y)
+	tt.Frame()
+	if got := thumbnailStep(a.thumbnailScale()); got != 3 {
+		t.Fatalf("往左拖一档后停在第 %d 档，应为 3", got)
+	}
+	tt.Press(center, y)
+	for x := center; x <= center+rulerStep+4; x += 4 {
+		tt.Move(x, y)
+		tt.Frame()
+	}
+	tt.Release(center+rulerStep+4, y)
+	tt.Frame()
+	if got := thumbnailStep(a.thumbnailScale()); got != 2 {
+		t.Fatalf("往右拖一档后停在第 %d 档，应为 2", got)
+	}
+	// 拖出刻度区（上下移开）后继续往左拖两档，再移回来松手：换两档，松手不算点击。
+	tt.Press(center, y)
+	tt.Move(center, y+200)
+	tt.Frame()
+	for x := center; x >= center-2*rulerStep-4; x -= 4 {
+		tt.Move(x, y+200)
+		tt.Frame()
+	}
+	tt.Move(center-2*rulerStep-4, y)
+	tt.Frame()
+	tt.Release(center-2*rulerStep-4, y)
+	tt.Frame()
+	if got := thumbnailStep(a.thumbnailScale()); got != 4 {
+		t.Fatalf("拖出刻度区后停在第 %d 档，应为 4", got)
+	}
+	// 点过刻度后方向键直接能调。
+	tt.Advance(time.Second)
+	tt.ClickAt(center-rulerStep, y)
+	tt.Frame()
+	tt.Key(0, ui.KeyLeft)
+	tt.Frame()
+	if got := thumbnailStep(a.thumbnailScale()); got != 2 {
+		t.Fatalf("点刻度后按左方向键停在第 %d 档，应为 2", got)
 	}
 	a.ViewMode = 2
 	tt.Frame()
@@ -207,5 +258,28 @@ func TestInspectorFailedDraftIsRetainedAndRestored(t *testing.T) {
 	tt.Frame()
 	if a.Inspector.Note != "Saved nowhere yet" || a.Inspector.SourceURL != "https://example.com/draft" {
 		t.Fatal("重新选择素材没有恢复失败草稿")
+	}
+}
+
+// 缩略图只停在几个档位：任意值吸附到最近一档，菜单和快捷键一次走一档，两端不越界。
+func TestThumbnailSizeSnapsToSteps(t *testing.T) {
+	a := toolbarTestApp()
+	a.SetThumbnailSize(1.3)
+	if a.thumbnailScale() != 1.5 {
+		t.Fatalf("1.3 没有吸附到 1.5：%v", a.thumbnailScale())
+	}
+	a.StepThumbnailSize(-1)
+	if a.thumbnailScale() != 1 {
+		t.Fatalf("往小一档应是 1：%v", a.thumbnailScale())
+	}
+	for range 10 {
+		a.StepThumbnailSize(1)
+	}
+	if a.thumbnailScale() != 2 {
+		t.Fatalf("最大只到 2：%v", a.thumbnailScale())
+	}
+	a.Preferences.ThumbnailSize = .6
+	if a.thumbnailScale() != .5 {
+		t.Fatalf("旧偏好 0.6 应显示为 0.5 档：%v", a.thumbnailScale())
 	}
 }

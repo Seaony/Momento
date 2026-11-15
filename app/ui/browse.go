@@ -2,6 +2,7 @@ package ui
 
 import (
 	"cmp"
+	"math"
 	"math/rand/v2"
 	"path/filepath"
 	"runtime"
@@ -100,15 +101,32 @@ func (a *App) browseAssets(query catalog.Query) []model.Asset {
 	return result
 }
 
+// 视图只有瀑布流（0）和列表（2），2 沿用列表原来的编号。
+var viewModes = []int{0, 2}
+
+// 缩略图大小只有这几档，滑块、菜单和快捷键都按档走。
+var thumbnailSteps = []float32{.5, .75, 1, 1.5, 2}
+
+// 最接近 size 的那一档；以前存下的任意值也吸附过来。
+func thumbnailStep(size float32) int {
+	best := 0
+	for i, step := range thumbnailSteps {
+		if math.Abs(float64(step-size)) < math.Abs(float64(thumbnailSteps[best]-size)) {
+			best = i
+		}
+	}
+	return best
+}
+
 func (a *App) thumbnailScale() float32 {
 	if a.Preferences.ThumbnailSize == 0 {
 		return 1
 	}
-	return max(.5, min(2, a.Preferences.ThumbnailSize))
+	return thumbnailSteps[thumbnailStep(a.Preferences.ThumbnailSize)]
 }
 func (a *App) SetThumbnailSize(size float32) {
-	size = max(.5, min(2, size))
-	if size == a.thumbnailScale() {
+	size = thumbnailSteps[thumbnailStep(size)]
+	if size == a.Preferences.ThumbnailSize {
 		return
 	}
 	a.Preferences.ThumbnailSize = size
@@ -116,9 +134,12 @@ func (a *App) SetThumbnailSize(size float32) {
 	a.queuePreferences()
 	a.InvalidateWindows()
 }
-func (a *App) ChangeThumbnailSize(delta float32) {
+
+// 往大（1）或往小（-1）走一档，列表视图不调。
+func (a *App) StepThumbnailSize(direction int) {
 	if a.ViewMode != 2 {
-		a.SetThumbnailSize(a.thumbnailScale() + delta)
+		i := max(0, min(len(thumbnailSteps)-1, thumbnailStep(a.thumbnailScale())+direction))
+		a.SetThumbnailSize(thumbnailSteps[i])
 	}
 }
 

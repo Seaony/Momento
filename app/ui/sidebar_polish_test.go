@@ -57,7 +57,7 @@ func TestSidebarLocalizedLabelsFit(t *testing.T) {
 			tt := ui.NewTester(func(c *ui.Context) {
 				a.applyTheme(c)
 				a.sidebar(c)
-				for _, key := range []string{"all", "recent", "favorites", "random_browse", "uncategorized", "untagged", "tag_management", "new_folder", "new_smart_folder"} {
+				for _, key := range []string{"all", "random_browse", "favorites", "uncategorized", "untagged", "tag_management", "new_folder", "new_smart_folder"} {
 					label := a.T(key)
 					width, _ := c.MeasureText(0, ui.Span{Text: label, Size: 13})
 					// 236 宽侧栏扣除左右留白、行内留白、图标、间距与三位数计数。

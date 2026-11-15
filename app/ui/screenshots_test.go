@@ -50,11 +50,11 @@ func TestStateScreenshots(t *testing.T) {
 	states := []string{
 		"welcome", "empty", "small", "single", "multiple", "large", "search-empty", "importing", "trash",
 		"settings", "export", "new-library", "error",
-		"grid", "list", "single-details", "single-details-bottom", "tag-picker", "folder-picker", "filter", "sort", "tags",
-		"search-results", "search-cleared", "grid-selected", "list-selected", "masonry-hover", "grid-hover", "list-hover",
+		"list", "single-details", "single-details-bottom", "tag-picker", "folder-picker", "filter", "sort", "tags",
+		"search-results", "search-cleared", "list-selected", "masonry-hover", "list-hover",
 		"single-details-mixed-dpi", "single-details-mixed-dpi-bottom", "filter-selected", "filter-color-hover",
 	}
-	for _, key := range []string{"toggle_sidebar", "filter", "sort", "view_masonry", "view_grid", "view_list", "import"} {
+	for _, key := range []string{"toggle_sidebar", "filter", "sort", "view_masonry", "view_list", "import"} {
 		states = append(states, "toolbar-hover-"+key)
 	}
 	var records []screenshotRecord
@@ -281,9 +281,6 @@ func (fixture screenshotFixture) app(t *testing.T, state, language, appearance s
 			a.Selected.Add(asset.ID)
 		}
 	}
-	if state == "grid" || state == "grid-selected" || state == "grid-hover" {
-		a.ViewMode = 1
-	}
 	if state == "list" || state == "list-selected" || state == "list-hover" {
 		a.ViewMode = 2
 	}
@@ -504,7 +501,7 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 			expect(a.T("color_gray"))
 		}
 	case "sort":
-		for _, key := range []string{"sort_added", "sort_name", "sort_size", "sort_ascending", "sort_descending"} {
+		for _, key := range []string{"sort_added", "sort_name", "sort_size"} {
 			expect(a.T(key))
 		}
 	case "tags":

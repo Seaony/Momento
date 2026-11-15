@@ -139,7 +139,7 @@ func (a *App) sidebarSettings(c *ui.Context) {
 		items := []struct {
 			key, label string
 			fixed      bool
-		}{{"all", "all", true}, {"tags", "tag_management", true}, {"trash", "trash", true}, {"favorites", "favorites", false}, {"unfiled", "uncategorized", false}, {"untagged", "untagged", false}, {"recent", "recent", false}, {"random", "random_browse", false}}
+		}{{"all", "all", true}, {"tags", "tag_management", true}, {"trash", "trash", true}, {"favorites", "favorites", false}, {"unfiled", "uncategorized", false}, {"untagged", "untagged", false}, {"random", "random_browse", false}}
 		ui.Column(c).FillWidth().Padding(space16).Gap(space12).Children(func() {
 			for start := 0; start < len(items); start += 3 {
 				ui.Row(c).FillWidth().Gap(space8).Children(func() {

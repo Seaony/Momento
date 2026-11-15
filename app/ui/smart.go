@@ -133,7 +133,7 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 			title = a.T("smart_folder_edit_title")
 		}
 		ui.Text(c, title).FontSize(fontHeading).Bold().TextColor(titleColor(c.Theme()))
-		fieldStyle(c, ui.TextInput(c.Key("smart-name"), &state.SmartName).FillWidth().Label(a.T("smart_folder_name")).Placeholder(a.T("smart_folder_name")).AutoFocus().Disabled(state.Saving))
+		fieldStyle(c, ui.TextInput(c.Key("smart-name"), &state.SmartName).FillWidth().Label(a.T("smart_folder_name")).Placeholder(a.T("smart_folder_name")).PlaceholderColor(placeholderColor(c)).AutoFocus().Disabled(state.Saving))
 		settingsSegments(c.Key("smart-match"), a.T("smart_match"), &state.SmartMatch, a.T("smart_all"), a.T("smart_any")).Disabled(state.Saving)
 		_, height := c.Size()
 		ui.Scroll(c.Key("smart-rules")).TrackScroll(&state.RulesScroll).MaxHeight(max(120, min(280, height-312))).FillWidth().Gap(space8).Children(func() {
@@ -213,7 +213,7 @@ func smartSelect(c *ui.Context, value *string, options []string, label func(stri
 		sidebarRowIcon(c, "chevron-down", false, control.Hovered()).Size(iconSmall, iconSmall).Shrink(0)
 	})
 	selectParts.Popup(func(panel ui.Element) {
-		elevated(popupMotion(panel), c.Theme()).Margin(space4, 0, 0, 0).Padding(space4).Radius(radiusPanel).Material(panelMaterial(c.Theme())).Border(1, paletteFor(c.Theme()).BorderSubtle)
+		elevated(popupMotion(panel), c.Theme()).Margin(space4, 0, 0, 0).Padding(space4).Radius(radiusPanel).Background(panelColor(c.Theme())).Border(1, paletteFor(c.Theme()).BorderSubtle)
 		ui.Scroll(c).MaxHeight(280).FillWidth().Gap(space4).Children(func() {
 			for i, name := range names {
 				item := selectParts.Item(name).Height(controlHeight).FillWidth().Padding(space4, space12).Radius(radiusControl).Cursor(ui.CursorPointer)
@@ -274,7 +274,7 @@ func (a *App) smartRuleValue(c *ui.Context, rule *model.SmartRule, index int) {
 	case "size":
 		unit = a.T("smart_megabytes")
 	}
-	input := fieldStyle(c, ui.TextInput(c, &rule.Value).Grow(1).MinWidth(0).Label(label).Placeholder(placeholder).Disabled(a.GBrowsing.Saving))
+	input := fieldStyle(c, ui.TextInput(c, &rule.Value).Grow(1).MinWidth(0).Label(label).Placeholder(placeholder).PlaceholderColor(placeholderColor(c)).Disabled(a.GBrowsing.Saving))
 	if rule.Field == "added" || rule.Field == "width" || rule.Field == "height" || rule.Field == "size" {
 		input.FontFeatures("tnum")
 	}

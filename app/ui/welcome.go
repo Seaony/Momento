@@ -33,7 +33,7 @@ func (a *App) welcome(c *ui.Context) {
 		a.onboarding(c)
 		return
 	}
-	fadeMotion(ui.Column(c.Key("welcome")).Fill().Padding(max(MainToolbarHeight, c.TitleBar().Bottom+space16), space24, space24, space24).Center().Gap(space16).Material(panelMaterial(c.Theme())).DragWindow()).Children(func() {
+	fadeMotion(ui.Column(c.Key("welcome")).Fill().Padding(max(MainToolbarHeight, c.TitleBar().Bottom+space16), space24, space24, space24).Center().Gap(space16).Background(panelColor(c.Theme())).DragWindow()).Children(func() {
 		a.welcomeContent(c, false)
 	})
 }
@@ -91,7 +91,7 @@ func (a *App) onboarding(c *ui.Context) {
 	if a.Welcome.Direction < 0 {
 		direction = -1
 	}
-	fadeMotion(ui.Column(c.Key("onboarding")).Fill().Padding(max(MainToolbarHeight, c.TitleBar().Bottom+space16), space24, space24, space24).Material(panelMaterial(c.Theme())).DragWindow()).Children(func() {
+	fadeMotion(ui.Column(c.Key("onboarding")).Fill().Padding(max(MainToolbarHeight, c.TitleBar().Bottom+space16), space24, space24, space24).Background(panelColor(c.Theme())).DragWindow()).Children(func() {
 		ui.Box(c.Key("onboarding-stage")).Grow(1).FillWidth().Clip().ChildExit(ui.Motion{X: -32 * direction}).Children(func() {
 			ui.Column(c.Key(step)).Absolute().Fill().Center().Gap(space16).
 				Transition(ui.ElementTransition{Animation: &motionSpring, Enter: &ui.Motion{X: 32 * direction}, Exit: &ui.Motion{X: -32 * direction}}).Children(func() {
@@ -113,7 +113,7 @@ func (a *App) onboarding(c *ui.Context) {
 				}
 			})
 		})
-		elevated(ui.Row(c).FillWidth().AlignItems(ui.Center).Padding(space12, space16).Gap(space12).Radius(radiusPanel).Material(toolbarMaterial(c.Theme())), c.Theme()).Children(func() {
+		elevated(ui.Row(c).FillWidth().AlignItems(ui.Center).Padding(space12, space16).Gap(space12).Radius(radiusPanel).Background(c.Theme().Background), c.Theme()).Children(func() {
 			if step < 2 && settingsButton(c, a.T("onboarding_skip")).Clicked() {
 				a.finishOnboarding()
 			}
