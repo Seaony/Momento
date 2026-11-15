@@ -65,11 +65,11 @@ func TestLibraryLifecycleAndPortablePaths(t *testing.T) {
 			t.Fatalf("目录 %s: %v", dir, err)
 		}
 	}
-	if err := l.Rename("  新名字  "); err != nil {
+	if err := l.Edit("  新名字  ", "mountain"); err != nil {
 		t.Fatal(err)
 	}
 	if l.Root != originalRoot || l.Manifest.LibraryID != originalID {
-		t.Fatal("重命名改变了图库位置或身份")
+		t.Fatal("编辑改变了图库位置或身份")
 	}
 	if err := l.Close(); err != nil {
 		t.Fatal(err)
@@ -83,7 +83,7 @@ func TestLibraryLifecycleAndPortablePaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer opened.Close()
-	if opened.Manifest.DisplayName != "新名字" {
+	if opened.Manifest.DisplayName != "新名字" || opened.Manifest.Icon != "mountain" {
 		t.Fatal(opened.Manifest)
 	}
 	s := snapshot(t, opened)
@@ -208,10 +208,10 @@ func TestManifestFailuresAndMissingDetection(t *testing.T) {
 	}
 }
 
-func TestRenameFailurePreservesManifest(t *testing.T) {
+func TestEditFailurePreservesManifest(t *testing.T) {
 	l := newTestLibrary(t)
 	before := l.Manifest
-	if err := l.Rename(""); err == nil {
+	if err := l.Edit("", "wave"); err == nil {
 		t.Fatal("允许空名称")
 	}
 	if l.Manifest != before {
@@ -224,7 +224,7 @@ func TestRenameFailurePreservesManifest(t *testing.T) {
 	if err := os.Mkdir(path, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := l.Rename("不能写"); err == nil {
+	if err := l.Edit("不能写", "wave"); err == nil {
 		t.Fatal("写入失败被吞掉")
 	}
 	if l.Manifest != before {
@@ -274,19 +274,19 @@ func TestDeleteFailureLeavesCurrentLibraryUsable(t *testing.T) {
 func TestFolderTreeMoveDeleteAndMemberships(t *testing.T) {
 	l := newTestLibrary(t)
 	seedAsset(t, l, "a")
-	a, err := l.CreateFolder(t.Context(), "A", "")
+	a, err := l.CreateFolder(t.Context(), "A", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := l.CreateFolder(t.Context(), "B", "")
+	b, err := l.CreateFolder(t.Context(), "B", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := l.CreateFolder(t.Context(), "C", a.ID)
+	c, err := l.CreateFolder(t.Context(), "C", a.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	d, err := l.CreateFolder(t.Context(), "D", c.ID)
+	d, err := l.CreateFolder(t.Context(), "D", c.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,7 +312,7 @@ func TestFolderTreeMoveDeleteAndMemberships(t *testing.T) {
 	if err := l.MoveFolder(t.Context(), c.ID, b.ID, 0); err != nil {
 		t.Fatal(err)
 	}
-	if err := l.RenameFolder(t.Context(), c.ID, "改名"); err != nil {
+	if err := l.EditFolder(t.Context(), c.ID, "改名", ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := l.SetAssetFolders(t.Context(), []string{"a"}, []string{c.ID, d.ID}, true); err != nil {
@@ -342,11 +342,11 @@ func TestFolderTreeMoveDeleteAndMemberships(t *testing.T) {
 func TestInvalidFolderParentAndBatchRelationsRollback(t *testing.T) {
 	l := newTestLibrary(t)
 	seedAsset(t, l, "a")
-	f, err := l.CreateFolder(t.Context(), "F", "")
+	f, err := l.CreateFolder(t.Context(), "F", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := l.CreateFolder(t.Context(), "无效", "missing"); err == nil {
+	if _, err := l.CreateFolder(t.Context(), "无效", "missing", ""); err == nil {
 		t.Fatal("允许不存在的父级")
 	}
 	if err := l.MoveFolder(t.Context(), f.ID, "missing", 0); err == nil {

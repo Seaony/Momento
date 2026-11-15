@@ -41,7 +41,7 @@ func (a *App) sidebar(c *ui.Context) {
 		side.Background(paletteFor(c.Theme()).Sidebar)
 		side.Children(func() {
 			ui.Column(c).FillWidth().Padding(0, sidebarPadding).Shrink(0).Children(func() { a.sidebarTopBar(c) })
-			ui.Scroll(c.Key("sidebar_scopes")).Grow(1).Padding(0, sidebarPadding, sidebarSectionGap, sidebarPadding).Gap(sidebarRowGap).Children(func() {
+			ui.Scroll(c.Key("sidebar_scopes")).Scrollbars(false).Grow(1).Padding(0, sidebarPadding, sidebarSectionGap, sidebarPadding).Gap(sidebarRowGap).Children(func() {
 				a.sidebarScope(c, "all", "all", "照片", counts.All)
 				if !a.sidebarHidden("random") {
 					a.sidebarScope(c, "random", "random_browse", "随机浏览", -1)
@@ -103,10 +103,7 @@ func (a *App) sidebarFooter(c *ui.Context, trashCount int) {
 		}
 		trash.ContextMenu(func(m *ui.Menu) {
 			if m.Item(a.T("empty_trash")).Disabled(trashCount == 0 || a.Busy).Chosen() {
-				a.Confirm(a.T("empty_trash"), a.T("empty_trash_detail"), a.T("clear"), func() {
-					service := a.Assets
-					a.Run("empty_trash", func(ctx context.Context) error { return service.EmptyTrash(ctx) })
-				})
+				a.ConfirmEmptyTrash()
 			}
 		})
 		if sidebarFooterButton(c.Key("settings"), a.T("settings"), "settings", false).Clicked() {
@@ -143,8 +140,9 @@ func (a *App) sidebarTopBar(c *ui.Context) {
 		} else {
 			ui.Column(c).Grow(1).MinWidth(0).Children(func() { a.sidebarLibrary(c) })
 		}
-		button := ui.ButtonBase(c.Key("sidebar-toggle")).Size(controlSmall, controlSmall).Padding(0).Radius(radiusCard).Cursor(ui.CursorPointer).Label(a.T("toggle_sidebar")).Tooltip(a.T("toggle_sidebar")).Children(func() {
-			sidebarAppIcon(c, "sidebar", false).Size(iconSize, iconSize)
+		// 收起按钮比侧栏图标小一号，平时更淡，悬停才变成正文色。
+		button := ui.ButtonBase(c.Key("sidebar-toggle")).Size(sidebarToggleSize, sidebarToggleSize).Padding(0).Radius(radiusCard).Cursor(ui.CursorPointer).Label(a.T("toggle_sidebar")).Tooltip(a.T("toggle_sidebar")).Children(func() {
+			sidebarAppIcon(c, "sidebar", false).Size(iconMedium, iconMedium)
 		})
 		sidebarControlColors(c, button, true)
 		if button.Clicked() {
@@ -232,11 +230,25 @@ func sidebarNavIcon(c *ui.Context, name string, selected bool) {
 	})
 }
 
+// 文件夹行的图标：没选图标时和原来一样（选中换实心版）；选了图标的用它的加粗线性版，选中时上品牌色。
+func sidebarFolderIcon(c *ui.Context, icon string, selected bool) {
+	if folderIconID(icon) == "folder" {
+		sidebarNavIcon(c, "文件夹", selected)
+		return
+	}
+	ui.Box(c).Size(sidebarIconBox, sidebarIconBox).Shrink(0).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
+		glyph := folderSidebarIcon(c, icon).Size(sidebarIconSize, sidebarIconSize)
+		if selected {
+			glyph.TextColor(paletteFor(c.Theme()).Accent)
+		}
+	})
+}
+
 func sidebarControlColors(c *ui.Context, control ui.Element, muted bool) {
 	background := ui.Color{}
 	text := paletteFor(c.Theme()).Text
 	if muted {
-		text = paletteFor(c.Theme()).Text.Alpha(sidebarIdleInk)
+		text = paletteFor(c.Theme()).Text.Alpha(sidebarToggleInk)
 	}
 	if control.Pressed() {
 		background, text = paletteFor(c.Theme()).Pressed, paletteFor(c.Theme()).Text
@@ -289,17 +301,22 @@ func (a *App) sidebarFolders(c *ui.Context, counts catalog.Counts) {
 			ink := sidebarRowStyle(c, row, selected)
 			row.Drag(AssetsDrag{LibraryID: a.libraryID(), FolderID: folder.ID})
 			row.Children(func() {
+				ui.Box(c).Size(sidebarRowPadding, sidebarRowHeight).Shrink(0)
+				sidebarFolderIcon(c, folder.Icon, selected)
+				ui.Text(c, folder.Name).SingleLine().Shrink(1).MinWidth(0).Margin(0, 0, 0, sidebarIconGap)
+				// 有子文件夹时，展开箭头紧跟在名字后面，不挤占图标那一列，所有行的图标保持对齐。
 				if opened != nil {
-					arrow := ui.ButtonBase(c.Key("disclose")).Size(sidebarRowPadding, sidebarRowHeight).Shrink(0).Padding(0).Cursor(ui.CursorPointer).Justify(ui.Center).AlignItems(ui.Center).Label(a.T("toggle_folder", folder.Name))
-					arrow.Children(func() { sidebarChevron(c, *opened).Size(iconTiny, iconTiny).Shrink(0) })
+					arrow := ui.ButtonBase(c.Key("disclose")).Size(sidebarDiscloseHit, sidebarDiscloseHit).Shrink(0).Padding(0).Margin(0, 0, 0, 2).Radius(radiusSmall).
+						Cursor(ui.CursorPointer).Justify(ui.Center).AlignItems(ui.Center).Label(a.T("toggle_folder", folder.Name))
+					arrow.Children(func() {
+						chevron := sidebarChevron(c, *opened).Size(iconTiny, iconTiny).Shrink(0)
+						chevron.TextColor(chevron.AnimateColor("ink", ink.Alpha(themeValue(c, .6, .65)), motionColor))
+					})
 					if arrow.Clicked() {
 						*opened = !*opened
 					}
-				} else {
-					ui.Box(c).Size(sidebarRowPadding, sidebarRowHeight).Shrink(0)
 				}
-				sidebarNavIcon(c, "文件夹", selected)
-				ui.Text(c, folder.Name).SingleLine().Grow(1).MinWidth(0).Margin(0, 0, 0, sidebarIconGap)
+				ui.Box(c).Grow(1).MinWidth(0)
 				if a.Preferences.SidebarCounts {
 					ui.Box(c).Width(sidebarCountGap).Shrink(0)
 					sidebarCountText(c, counts.Folders[folder.ID], ink)
@@ -323,7 +340,7 @@ func (a *App) sidebarFolders(c *ui.Context, counts catalog.Counts) {
 					*open = true
 					a.sidebarCreateFolder(folder.ID)
 				}
-				if m.Item(a.T("rename_folder")).Disabled(a.Busy).Chosen() {
+				if m.Item(a.T("edit_folder")).Disabled(a.Busy).Chosen() {
 					a.renameSidebarFolder(folder)
 				}
 				m.Separator()
@@ -353,10 +370,7 @@ func (a *App) sidebarFolders(c *ui.Context, counts catalog.Counts) {
 }
 
 func (a *App) sidebarCreateFolder(parentID string) {
-	lib := a.Library
-	a.Ask(a.T("new_folder"), "", func(name string) {
-		a.Run("new_folder", func(ctx context.Context) error { _, err := lib.CreateFolder(ctx, name, parentID); return err })
-	})
+	a.ShowNewFolder(parentID, "", nil)
 }
 
 func (a *App) sidebarCanDrop(drag AssetsDrag) bool {
@@ -433,8 +447,13 @@ func (a *App) renameSidebarFolder(folder model.Folder) {
 	if a.Busy || a.Library == nil {
 		return
 	}
-	lib := a.Library
-	a.Ask(a.T("rename_folder"), folder.Name, func(name string) {
-		a.Run("rename_folder", func(ctx context.Context) error { return lib.RenameFolder(ctx, folder.ID, name) })
+	a.ShowEditFolder(folder)
+}
+
+// 清空回收站前先确认；侧栏回收站右键和回收站页的工具栏按钮共用。
+func (a *App) ConfirmEmptyTrash() {
+	a.Confirm(a.T("empty_trash"), a.T("empty_trash_detail"), a.T("clear"), func() {
+		service := a.Assets
+		a.Run("empty_trash", func(ctx context.Context) error { return service.EmptyTrash(ctx) })
 	})
 }

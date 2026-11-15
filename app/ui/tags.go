@@ -15,8 +15,8 @@ type tagsState struct {
 	Scroll ui.ScrollState
 }
 
-func (a *App) tags(c *ui.Context) {
-	p := paletteFor(c.Theme())
+// 标签管理页显示的标签：按顶部搜索框筛选，按名字排序。
+func (a *App) visibleTags() []model.Tag {
 	search := strings.ToLower(strings.TrimSpace(a.Tags.Search))
 	tags := make([]model.Tag, 0, len(a.Snapshot.Tags))
 	for _, tag := range a.Snapshot.Tags {
@@ -30,39 +30,42 @@ func (a *App) tags(c *ui.Context) {
 		}
 		return strings.Compare(left.ID, right.ID)
 	})
-	searchChanged := false
-	counts := a.Index.Counts().Tags
-	scroll := ui.Scroll(c.Key("tag-list")).TrackScroll(&a.Tags.Scroll).Grow(1).FillWidth().Label(a.T("tag_management")).Role(ui.RoleList)
-	inset := scroll.AnimateTo("header-inset", a.contentTopInset(), motionSpring)
-	scroll.Padding(inset+space16, space24, space24, space24).ScrollbarInsets(inset, 0, 0)
-	scroll.Children(func() {
-		ui.Column(c.Key("tag-header")).Height(space64+space12).Shrink(0).FillWidth().Gap(space12).Padding(0, 0, space16, 0).Children(func() {
-			ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(space12).Children(func() {
-				search, changed := searchField(c.Key("tag-search"), &a.Tags.Search, a.T("search_tags"), a.T("clear_search"))
-				search.Grow(1).MinWidth(0)
-				if changed {
-					searchChanged = true
-				}
-				if primaryButton(c.Key("new-tag"), a.T("new_tag"), a.Busy).Radius(radiusControl).Clicked() {
-					lib := a.Library
-					a.Ask(a.T("new_tag"), "", func(name string) {
-						a.Run("create_tag", func(ctx context.Context) error {
-							_, err := lib.CreateTag(ctx, name)
-							return err
-						})
-					})
-				}
-			})
-			ui.Text(c, a.T("tag_total", formatTagCount(len(tags)))).ContentTransition(ui.ContentTransition{Numeric: true, Animation: &motionSpring}).FontSize(fontSecondary).TextColor(p.TextSecondary)
+	return tags
+}
+
+// 新建标签：标签管理页工具栏右上角的按钮。
+func (a *App) NewTag() {
+	lib := a.Library
+	a.Ask("tags", a.T("new_tag"), "", func(name string) {
+		a.Run("create_tag", func(ctx context.Context) error {
+			_, err := lib.CreateTag(ctx, name)
+			return err
 		})
+	})
+}
+
+// 标签管理页：搜索和新建都在顶部工具栏里，页面里只列标签。
+func (a *App) tags(c *ui.Context) {
+	p := paletteFor(c.Theme())
+	search := strings.TrimSpace(a.Tags.Search)
+	tags := a.visibleTags()
+	counts := a.Index.Counts().Tags
+	scroll := ui.Scroll(c.Key("tag-list")).Scrollbars(false).TrackScroll(&a.Tags.Scroll).Grow(1).FillWidth().Label(a.T("tag_management")).Role(ui.RoleList)
+	inset := scroll.AnimateTo("header-inset", a.contentTopInset(), motionSpring)
+	scroll.Padding(inset+space16, space24, space24, space24)
+	scroll.Children(func() {
 		if len(tags) == 0 {
 			fadeMotion(ui.Column(c.Key("tag-empty"))).MinHeight(220).FillWidth().Center().Gap(space8).Children(func() {
-				ui.Column(c).Size(space64, space64).Radius(space32).Background(p.Subtle).Center().Margin(0, 0, space8, 0).Children(func() { appIcon(c, "tag").Size(space32, space32).TextColor(p.TextSecondary) })
+				art := "no-tags"
+				if search != "" {
+					art = "search-empty"
+				}
+				emptyArt(c.Key("tag-empty-art"), art, emptyArtLarge).Margin(0, 0, space8, 0)
 				if search == "" {
 					ui.Text(c, a.T("no_tags")).FontSize(fontTitle).FontWeight(600).TextColor(p.Text)
 					ui.Text(c, a.T("no_tags_hint")).FontSize(fontBody).TextColor(p.TextSecondary)
 				} else {
-					ui.Text(c, a.T("no_tag_results", strings.TrimSpace(a.Tags.Search))).FontSize(fontBody)
+					ui.Text(c, a.T("no_tag_results", search)).FontSize(fontBody)
 				}
 			})
 			return
@@ -72,7 +75,7 @@ func (a *App) tags(c *ui.Context) {
 			height = bounds.H
 		}
 		const rowHeight = space40 + space4
-		viewportTop := a.Tags.Scroll.Y - inset - space16 - (space64 + space12)
+		viewportTop := a.Tags.Scroll.Y - inset - space16
 		first := min(len(tags), max(0, int(viewportTop/rowHeight)-2))
 		last := min(len(tags), first+int(height/rowHeight)+5)
 		fadeMotion(ui.Box(c.Key("tag-rows"))).Height(float32(len(tags) * rowHeight)).Shrink(0).FillWidth().Children(func() {
@@ -90,19 +93,29 @@ func (a *App) tags(c *ui.Context) {
 				row.Children(func() {
 					appIcon(c, "tag").Size(iconSize, iconSize).Shrink(0).TextColor(row.AnimateColor("tag-icon-color", iconColor, motionColor))
 					ui.Text(c, tag.Name).ContentTransition(ui.ContentTransition{Animation: &motionSpring}).FontSize(fontBody).Grow(1).MinWidth(0).SingleLine()
-					ui.Text(c, a.T("tag_asset_count", formatTagCount(counts[tag.ID]))).ContentTransition(ui.ContentTransition{Numeric: true, Animation: &motionSpring}).FontSize(fontSecondary).TextColor(p.TextSecondary).Shrink(0)
-					if inspectorIconButton(c.Key("rename"), a.T("rename_tag")+" "+tag.Name, "edit").Tooltip(a.T("rename_tag")).Disabled(a.Busy).Clicked() {
-						lib := a.Library
-						a.Ask(a.T("rename_tag"), tag.Name, func(name string) {
-							a.Run("rename_tag", func(ctx context.Context) error { return lib.RenameTag(ctx, tag.ID, name) })
-						})
+					// 数量用和列表日期同一档的弱化字色；改名、删除平时收起，悬停这一行或键盘焦点在这一行（含按钮）时才出现，位置不变免得数量跳动。
+					ui.Text(c, a.T("tag_asset_count", formatTagCount(counts[tag.ID]))).ContentTransition(ui.ContentTransition{Numeric: true, Animation: &motionSpring}).
+						FontSize(fontSecondary).FontWeight(500).FontFeatures("tnum").TextColor(p.Text.Alpha(themeValue(c, .56, .64))).Shrink(0)
+					tools := ui.Row(c.Key("tools")).Gap(space4).Shrink(0).AlignItems(ui.Center)
+					shown := row.Hovered() || row.FocusWithin()
+					opacity := float32(0)
+					if shown {
+						opacity = 1
 					}
-					if inspectorIconButton(c.Key("delete"), a.T("delete_tag")+" "+tag.Name, "trash").Tooltip(a.T("delete_tag")).Disabled(a.Busy).Clicked() {
-						lib := a.Library
-						a.Confirm(a.T("delete_tag"), a.T("delete_tag_detail", tag.Name), a.T("delete"), func() {
-							a.Run("delete_tag", func(ctx context.Context) error { return lib.DeleteTag(ctx, tag.ID) })
-						})
-					}
+					tools.Opacity(tools.AnimateTo("opacity", opacity, motionSpring)).IgnoreInput(!shown).Children(func() {
+						if inspectorIconButton(c.Key("rename"), a.T("rename_tag")+" "+tag.Name, "edit").Tooltip(a.T("rename_tag")).Disabled(a.Busy).Clicked() {
+							lib := a.Library
+							a.Ask("pencil-simple", a.T("rename_tag"), tag.Name, func(name string) {
+								a.Run("rename_tag", func(ctx context.Context) error { return lib.RenameTag(ctx, tag.ID, name) })
+							})
+						}
+						if inspectorIconButton(c.Key("delete"), a.T("delete_tag")+" "+tag.Name, "trash").Tooltip(a.T("delete_tag")).Disabled(a.Busy).Clicked() {
+							lib := a.Library
+							a.Confirm(a.T("delete_tag"), a.T("delete_tag_detail", tag.Name), a.T("delete"), func() {
+								a.Run("delete_tag", func(ctx context.Context) error { return lib.DeleteTag(ctx, tag.ID) })
+							})
+						}
+					})
 				})
 				row.ContextMenu(func(m *ui.Menu) { a.QuickAccessMenu(m, "tag", tag.ID) })
 				if row.DoubleClicked() || row.Submitted() {
@@ -111,9 +124,6 @@ func (a *App) tags(c *ui.Context) {
 			}
 		})
 	})
-	if searchChanged {
-		a.Tags.Scroll.ScrollTo(0, 0, motionSpring)
-	}
 }
 
 func formatTagCount(count int) string {

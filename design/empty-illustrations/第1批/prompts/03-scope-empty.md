@@ -1,0 +1,1 @@
+Read and follow the common style in /Users/seaony/code/Momento/design/empty-illustrations/第1批/prompts/00-common.md first. Subject: an empty collection — a stack of two or three blank photo frames (rounded rectangles, slightly offset), the front one empty with a faint dashed inner outline. Meaning: no images here yet.

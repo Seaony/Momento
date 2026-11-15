@@ -1,26 +1,26 @@
 package ui
 
-import "math"
+import "sort"
 
-// 列表只计算可见窗口，卡片与瀑布流共用同一个画布和身份。
-func (a *App) assetRows(width, top, bottom float32) ([]MasonryItem, float32, int) {
-	columns, gap, rowHeight := 1, float32(0), float32(space64)
-	rows := (len(a.Visible) + columns - 1) / columns
-	first := max(0, int(math.Floor(float64(top/(rowHeight+gap)))))
-	last := min(rows, int(math.Ceil(float64(bottom/(rowHeight+gap)))))
-	items := make([]MasonryItem, 0, max(0, last-first)*columns)
-	for row := first; row < last; row++ {
-		for column := range columns {
-			index := row*columns + column
-			if index >= len(a.Visible) {
-				break
-			}
-			itemWidth := width
-			if columns > 1 {
-				itemWidth = rowHeight
-			}
-			items = append(items, MasonryItem{Index: index, X: float32(column) * (itemWidth + gap), Y: float32(row) * (rowHeight + gap), Width: itemWidth, Height: rowHeight})
+// 列表每行高度不同（跟着缩略图走），按筛选结果算一次每行的顶部位置，之后每帧只二分查找可见的几行。
+type listLayout struct {
+	version uint64
+	tops    []float32 // 第 i 行的顶部；最后多一项是总高度
+}
+
+func (a *App) assetRows(width, top, bottom float32) ([]MasonryItem, float32) {
+	if a.list.tops == nil || a.list.version != a.visibleVersion {
+		tops := make([]float32, len(a.Visible)+1)
+		for i, asset := range a.Visible {
+			tops[i+1] = tops[i] + listRowHeight(asset)
 		}
+		a.list = listLayout{version: a.visibleVersion, tops: tops}
 	}
-	return items, max(0, float32(rows)*(rowHeight+gap)-gap), columns
+	tops := a.list.tops
+	first := sort.Search(len(a.Visible), func(i int) bool { return tops[i+1] > top })
+	var items []MasonryItem
+	for i := first; i < len(a.Visible) && tops[i] < bottom; i++ {
+		items = append(items, MasonryItem{Index: i, Y: tops[i], Width: width, Height: tops[i+1] - tops[i]})
+	}
+	return items, tops[len(tops)-1]
 }

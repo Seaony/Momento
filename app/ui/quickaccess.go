@@ -67,7 +67,7 @@ func (a *App) sidebarQuickAccess(c *ui.Context) {
 				a.unpinQuickAccess(entry.ID)
 			}
 		})
-	}).FillWidth().Height(float32(len(entries)) * sidebarRowHeight).Shrink(0)
+	}).Scrollbars(false).FillWidth().Height(float32(len(entries)) * sidebarRowHeight).Shrink(0)
 }
 
 func (a *App) PinQuickAccess(kind, id string) {

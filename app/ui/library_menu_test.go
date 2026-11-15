@@ -66,7 +66,7 @@ func TestLibraryMenuListsRecentLibrariesWithCurrentCheck(t *testing.T) {
 			t.Fatalf("%s 的当前状态应为 %v", recent.DisplayName, current)
 		}
 	}
-	for _, key := range []string{"rename_library", "clear_library_cache", "delete_library"} {
+	for _, key := range []string{"edit_library", "clear_library_cache", "delete_library"} {
 		if tt.HasText(a.T(key)) {
 			t.Fatalf("%s 应移到当前图库的更多菜单里", key)
 		}
@@ -98,10 +98,10 @@ func moreMenuItems(t *testing.T, a *App, path string, keys []string) []string {
 }
 
 func TestLibraryMoreMenuDiffersForCurrentLibrary(t *testing.T) {
-	keys := []string{"rename_library", "reveal_library", "clear_library_cache", "delete_library", "remove_recent_library"}
+	keys := []string{"edit_library", "reveal_library", "clear_library_cache", "delete_library", "remove_recent_library"}
 	a := libraryMenuTestApp(t)
 	current := moreMenuItems(t, a, a.Library.Root, keys)
-	if want := []string{"rename_library", "reveal_library", "clear_library_cache", "delete_library"}; !slices.Equal(current, want) {
+	if want := []string{"edit_library", "reveal_library", "clear_library_cache", "delete_library"}; !slices.Equal(current, want) {
 		t.Fatalf("当前图库菜单项 %v，应为 %v", current, want)
 	}
 	a = libraryMenuTestApp(t)

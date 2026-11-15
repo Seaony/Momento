@@ -53,7 +53,7 @@ func (a *App) LockNow() {
 	a.clearPasswordSecrets()
 	a.Lock.ErrorKey, a.Lock.Detail = "", ""
 	a.CloseAllPreviewWindows()
-	a.PromptOpen, a.ConfirmOpen, a.NewLibraryOpen, a.ExportOpen = false, false, false, false
+	a.PromptOpen, a.ConfirmOpen, a.NewLibraryOpen, a.EditLibraryOpen, a.ExportOpen = false, false, false, false, false
 	a.SettingsOpen = false
 	if a.SettingsWindow != nil {
 		a.SettingsWindow.Close()
@@ -122,33 +122,33 @@ func (a *App) passwordSettingsDialog(c *ui.Context) {
 			Center().Background(paletteFor(c.Theme()).Scrim).Modal()
 		back.Children(func() {
 			title := a.T("password_dialog_" + a.Lock.Mode)
-			panel := ui.Column(c.Key("password-settings")).Width(panelDialog).MaxWidthPercent(92).MaxHeightPercent(92).
-				Padding(space24).Gap(space12).Radius(radiusPanel).Background(panelColor(c.Theme())).
-				Role(ui.RoleDialog).Label(title)
-			elevated(panel, c.Theme())
+			panel := dialogSurface(c, ui.Column(c.Key("password-settings")).Width(panelDialog)).Role(ui.RoleDialog).Label(title)
 			dialogMotion(back, panel)
 			panel.Children(func() {
-				dialogHeading(c, "lock", title)
 				var submit bool
-				if a.Lock.Mode != "enable" {
-					ui.Text(c, a.T("password_current")).FontWeight(600)
-					input := fieldStyle(c, ui.TextInput(c.Key([2]any{"current-password", a.Lock.EditorSession}), &a.Lock.CurrentPassword).
-						Password().Label(a.T("password_current")).FillWidth().Disabled(a.PasswordOperationPending()))
-					submit = input.Submitted()
-				}
-				if a.Lock.Mode != "disable" {
-					ui.Text(c, a.T("password_new")).FontWeight(600)
-					fieldStyle(c, ui.TextInput(c.Key([2]any{"new-password", a.Lock.EditorSession}), &a.Lock.NewPassword).
-						Password().Label(a.T("password_new")).FillWidth().Disabled(a.PasswordOperationPending()))
-					ui.Text(c, a.T("password_confirm")).FontWeight(600)
-					input := fieldStyle(c, ui.TextInput(c.Key([2]any{"confirm-password", a.Lock.EditorSession}), &a.Lock.ConfirmPassword).
-						Password().Label(a.T("password_confirm")).FillWidth().Disabled(a.PasswordOperationPending()))
-					submit = submit || input.Submitted()
-					ui.Text(c, a.T("password_minimum")).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary)
-				}
-				a.passwordFeedback(c)
-				ui.Row(c).Gap(space8).Justify(ui.End).Margin(space4, 0, 0, 0).Children(func() {
-					if settingsButton(c, a.T("cancel")).Disabled(a.PasswordOperationPending()).Clicked() {
+				dialogLayout(c, "lock", title, func() {
+					if a.Lock.Mode != "enable" {
+						dialogSection(c, a.T("password_current"), func() {
+							input := fieldStyle(c, ui.TextInput(c.Key([2]any{"current-password", a.Lock.EditorSession}), &a.Lock.CurrentPassword).
+								Password().Label(a.T("password_current")).FillWidth().Disabled(a.PasswordOperationPending()))
+							submit = input.Submitted()
+						})
+					}
+					if a.Lock.Mode != "disable" {
+						dialogSection(c, a.T("password_new"), func() {
+							fieldStyle(c, ui.TextInput(c.Key([2]any{"new-password", a.Lock.EditorSession}), &a.Lock.NewPassword).
+								Password().Label(a.T("password_new")).FillWidth().Disabled(a.PasswordOperationPending()))
+						})
+						dialogSection(c, a.T("password_confirm"), func() {
+							input := fieldStyle(c, ui.TextInput(c.Key([2]any{"confirm-password", a.Lock.EditorSession}), &a.Lock.ConfirmPassword).
+								Password().Label(a.T("password_confirm")).FillWidth().Disabled(a.PasswordOperationPending()))
+							submit = submit || input.Submitted()
+							ui.Text(c, a.T("password_minimum")).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary)
+						})
+					}
+					a.passwordFeedback(c)
+				}, func() {
+					if dialogButton(c, a.T("cancel"), a.PasswordOperationPending()).Clicked() {
 						a.closePasswordDialog()
 					}
 					ready := !a.PasswordOperationPending() && a.passwordCooldown() == 0
@@ -162,7 +162,7 @@ func (a *App) passwordSettingsDialog(c *ui.Context) {
 					if a.Lock.Busy {
 						label = a.T("password_verifying")
 					}
-					button := primaryButton(c.Key("password-save"), label, !ready)
+					button := dialogPrimaryButton(c.Key("password-save"), label, !ready)
 					if ready && (button.Clicked() || submit) {
 						a.submitPasswordSettings()
 					}

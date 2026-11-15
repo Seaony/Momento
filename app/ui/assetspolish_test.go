@@ -183,10 +183,11 @@ func TestAssetThirdRoundLocalesFit(t *testing.T) {
 				tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.assetArea(c) }, 560, 600)
 				tt.SetLocale(a.Texts.Locale())
 				if state == "list" {
-					values := fmt.Sprintf("600 × 400 · %s", fileSize(a.Visible[0].Size))
-					box, ok := tt.Find(values)
-					if !ok || box.H > 20 || box.X < 16 || box.X+box.W > 544 {
-						t.Fatalf("列表等宽数值发生截断或换行：%+v", box)
+					for _, values := range []string{"600 × 400", a.Texts.Relative(a.Visible[0].CreatedAt.Local(), time.Now())} {
+						box, ok := tt.Find(values)
+						if !ok || box.H > 20 || box.X < 16 || box.X+box.W > 544 {
+							t.Fatalf("列表等宽数值 %q 发生截断或换行：%+v", values, box)
+						}
 					}
 					return
 				}

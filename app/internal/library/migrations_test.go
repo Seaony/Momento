@@ -53,8 +53,9 @@ func databaseVersion(t *testing.T, db *sql.DB) int {
 func TestUpgradePreservesLegacyAssetsAndRelationships(t *testing.T) {
 	old := legacyLibrary(t)
 	seedAsset(t, old, "a")
-	folder, err := old.CreateFolder(t.Context(), "旧文件夹", "")
-	if err != nil {
+	// 旧库还没有 icon 列，按旧结构直接写入。
+	folder := model.Folder{ID: "old-folder", Name: "旧文件夹"}
+	if _, err := old.DB.Exec("INSERT INTO folders(id,name,sort_index) VALUES(?,?,0)", folder.ID, folder.Name); err != nil {
 		t.Fatal(err)
 	}
 	tag, err := old.CreateTag(t.Context(), "旧标签")
@@ -80,7 +81,7 @@ func TestUpgradePreservesLegacyAssetsAndRelationships(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer upgraded.Close()
-	if upgraded.Manifest.SchemaVersion != 2 || upgraded.Manifest.LibraryID != identity || databaseVersion(t, upgraded.DB) != 2 {
+	if upgraded.Manifest.SchemaVersion != model.SchemaVersion || upgraded.Manifest.LibraryID != identity || databaseVersion(t, upgraded.DB) != model.SchemaVersion {
 		t.Fatal("版本或身份错误", upgraded.Manifest)
 	}
 	if got := snapshot(t, upgraded); !reflect.DeepEqual(got, before) {
@@ -94,7 +95,7 @@ func TestUpgradePreservesLegacyAssetsAndRelationships(t *testing.T) {
 		t.Fatal(err)
 	}
 	var saved model.Manifest
-	if err = json.Unmarshal(data, &saved); err != nil || saved.SchemaVersion != 2 {
+	if err = json.Unmarshal(data, &saved); err != nil || saved.SchemaVersion != model.SchemaVersion {
 		t.Fatal("未同步清单", err)
 	}
 	if err := upgraded.Close(); err != nil {
@@ -214,7 +215,7 @@ func TestUpgradeRecoversManifestAheadOfDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer opened.Close()
-	if databaseVersion(t, opened.DB) != 2 || len(snapshot(t, opened).Assets) != 1 {
+	if databaseVersion(t, opened.DB) != model.SchemaVersion || len(snapshot(t, opened).Assets) != 1 {
 		t.Fatal("无法恢复中断的升级")
 	}
 }
@@ -244,7 +245,7 @@ func TestImportLegacyLibraryUpgradesOnlyCopy(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer imported.Close()
-	if imported.Manifest.SchemaVersion != 2 || databaseVersion(t, imported.DB) != 2 || snapshot(t, imported).Assets[0].ID != asset.ID {
+	if imported.Manifest.SchemaVersion != model.SchemaVersion || databaseVersion(t, imported.DB) != model.SchemaVersion || snapshot(t, imported).Assets[0].ID != asset.ID {
 		t.Fatal("导入副本未升级")
 	}
 	after, err := os.ReadFile(filepath.Join(old.Root, "manifest.json"))
@@ -293,5 +294,46 @@ func TestUpgradeCommitFailureRestoresManifestAndRollsBack(t *testing.T) {
 	}
 	if len(snapshot(t, old).Assets) != 1 {
 		t.Fatal("提交失败丢失旧素材")
+	}
+}
+
+// v2 的图库升到 v3：文件夹保留，图标为空；之后能存图标。
+func TestUpgradeV2AddsFolderIcons(t *testing.T) {
+	old := legacyLibrary(t)
+	if _, err := old.DB.Exec(migrationV2); err != nil {
+		t.Fatal(err)
+	}
+	old.Manifest.SchemaVersion = 2
+	if err := writeJSON(filepath.Join(old.Root, "manifest.json"), old.Manifest); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.DB.Exec("INSERT INTO folders(id,name,sort_index) VALUES('f','旧文件夹',0)"); err != nil {
+		t.Fatal(err)
+	}
+	old.Close()
+	opened, err := Open(t.Context(), old.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	if databaseVersion(t, opened.DB) != 3 || opened.Manifest.SchemaVersion != 3 {
+		t.Fatal("v2 没有升到 v3")
+	}
+	if folders := snapshot(t, opened).Folders; len(folders) != 1 || folders[0].Name != "旧文件夹" || folders[0].Icon != "" {
+		t.Fatalf("升级改变了文件夹：%+v", folders)
+	}
+	if err := opened.EditFolder(t.Context(), "f", "旧文件夹", "star"); err != nil {
+		t.Fatal(err)
+	}
+	created, err := opened.CreateFolder(t.Context(), "新文件夹", "", "camera")
+	if err != nil {
+		t.Fatal(err)
+	}
+	icons := map[string]string{}
+	for _, folder := range snapshot(t, opened).Folders {
+		icons[folder.ID] = folder.Icon
+	}
+	if icons["f"] != "star" || icons[created.ID] != "camera" {
+		t.Fatalf("文件夹图标没有存下：%v", icons)
 	}
 }

@@ -239,7 +239,7 @@ func TestImportURLWithRequestPreservesDestinationKeywordsAndTags(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	folder, err := lib.CreateFolder(ctx, "Destination", "")
+	folder, err := lib.CreateFolder(ctx, "Destination", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

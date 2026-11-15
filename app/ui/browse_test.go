@@ -115,38 +115,10 @@ func TestSidebarFolderDoubleClickPreference(t *testing.T) {
 			if action == "expand" && !tt.HasText("UI details") {
 				t.Fatal("双击没有展开文件夹")
 			}
-			if action == "rename" && (!a.PromptOpen || a.PromptValue != "Design references") {
-				t.Fatal("双击没有打开重命名")
+			if action == "rename" && (!a.Dialog.Folder.Open || a.Dialog.Folder.Name != "Design references" || a.Dialog.Folder.ID == "") {
+				t.Fatal("双击没有打开编辑文件夹")
 			}
 		})
-	}
-}
-
-func TestInspectorNotesAndSourceCanBeEdited(t *testing.T) {
-	a := inspectorTestApp(model.Asset{ID: "a", Name: "Reference", Note: "Original", SourceURL: "https://example.com"})
-	tt := ui.NewTester(a.inspector, 280, 1000)
-	field, ok := tt.AccessByRole(ui.RoleTextField, a.T("asset_note"))
-	if !ok {
-		t.Fatal("没有备注输入框")
-	}
-	tt.ClickAt(field.Bounds.X+field.Bounds.W/2, field.Bounds.Y+field.Bounds.H/2)
-	tt.Key(ui.Cmd, ui.KeyA)
-	tt.Type("Two lines\nSecond line")
-	if a.Inspector.Note != "Two lines\nSecond line" {
-		t.Fatalf("备注没有保留多行：%q focus=%v", a.Inspector.Note, tt.Focused(a.T("asset_note")))
-	}
-	field, ok = tt.AccessByRole(ui.RoleTextField, a.T("source_url"))
-	if !ok {
-		t.Fatal("没有来源输入框")
-	}
-	tt.ClickAt(field.Bounds.X+field.Bounds.W/2, field.Bounds.Y+field.Bounds.H/2)
-	tt.Key(ui.Cmd, ui.KeyA)
-	tt.Key(0, ui.KeyBackspace)
-	if a.Inspector.SourceURL != "" {
-		t.Fatal("来源链接不能清空")
-	}
-	if _, ok := tt.Find(a.T("open_source_url")); ok {
-		t.Fatal("空链接仍显示打开按钮")
 	}
 }
 
@@ -172,72 +144,73 @@ func TestInspectorKeepsDraftWhenImportIsBusy(t *testing.T) {
 	}
 }
 
-func TestThumbnailSliderIsDisabledInList(t *testing.T) {
+func TestThumbnailSliderHiddenInList(t *testing.T) {
 	a := toolbarTestApp()
 	tt := ui.NewTester(func(c *ui.Context) { ui.Column(c).Fill().Children(func() { a.toolbar(c); ui.Spacer(c) }) }, 1500, 640)
 	access, ok := tt.AccessByRole(ui.RoleSlider, a.T("thumbnail_size"))
 	if !ok || access.Disabled {
 		t.Fatal("宽窗口没有可用的缩略图滑块")
 	}
-	// 刻度尺：点指针右边第 k 档的刻度就往大走 k 档，点左边往小走。
-	center, y := access.Bounds.X+access.Bounds.W/2, access.Bounds.Y+access.Bounds.H/2
-	for _, step := range []struct{ offset, want int }{{1, 3}, {-2, 1}, {1, 2}} {
-		tt.ClickAt(center+float32(step.offset)*rulerStep, y)
+	// 刻度尺：刻度固定，左端最小、右端最大；第 k 档在左边留白之后 k 个档距的位置。
+	gap := float32(rulerWidth-2*rulerPad) / float32(len(thumbnailSteps)-1)
+	left, y := access.Bounds.X+rulerPad, access.Bounds.Y+access.Bounds.H/2
+	stepX := func(k float32) float32 { return left + k*gap }
+	// 点哪一档就到哪一档，点在两档之间按近的算。
+	for _, step := range []struct {
+		at   float32
+		want int
+	}{{3, 3}, {0.3, 0}, {4, 4}, {1.6, 2}} {
+		tt.ClickAt(stepX(step.at), y)
 		tt.Frame()
 		if got := thumbnailStep(a.thumbnailScale()); got != step.want {
-			t.Fatalf("点偏 %d 档后停在第 %d 档，应为 %d", step.offset, got, step.want)
+			t.Fatalf("点在第 %v 档处停在第 %d 档，应为 %d", step.at, got, step.want)
 		}
 	}
-	// 往左拖一档多，刻度跟着走，放大一档；往右拖回来又缩小。
-	tt.Press(center, y)
-	for x := center; x >= center-rulerStep-4; x -= 4 {
+	// 从第 2 档拖到第 4 档：拖着时就跟着换档，松手停在第 4 档。
+	tt.Advance(time.Second)
+	tt.Press(stepX(2), y)
+	for x := stepX(2); x <= stepX(4); x += 4 {
 		tt.Move(x, y)
 		tt.Frame()
+		if x >= stepX(3)+2 && x < stepX(3.5)-2 {
+			if got := thumbnailStep(a.thumbnailScale()); got != 3 {
+				t.Fatalf("拖过第 3 档时停在第 %d 档", got)
+			}
+		}
 	}
-	tt.Release(center-rulerStep-4, y)
+	tt.Release(stepX(4), y)
 	tt.Frame()
-	if got := thumbnailStep(a.thumbnailScale()); got != 3 {
-		t.Fatalf("往左拖一档后停在第 %d 档，应为 3", got)
+	if got := thumbnailStep(a.thumbnailScale()); got != 4 {
+		t.Fatalf("拖到右端后停在第 %d 档，应为 4", got)
 	}
-	tt.Press(center, y)
-	for x := center; x <= center+rulerStep+4; x += 4 {
-		tt.Move(x, y)
-		tt.Frame()
-	}
-	tt.Release(center+rulerStep+4, y)
+	// 拖过左端也只停在最左一档；指针移出刻度区（上下移开）也一直跟着，松手不算点击。
+	tt.Advance(time.Second)
+	tt.Press(stepX(4), y)
+	tt.Move(stepX(4), y+200)
 	tt.Frame()
-	if got := thumbnailStep(a.thumbnailScale()); got != 2 {
-		t.Fatalf("往右拖一档后停在第 %d 档，应为 2", got)
-	}
-	// 拖出刻度区（上下移开）后继续往左拖两档，再移回来松手：换两档，松手不算点击。
-	tt.Press(center, y)
-	tt.Move(center, y+200)
-	tt.Frame()
-	for x := center; x >= center-2*rulerStep-4; x -= 4 {
+	for x := stepX(4); x >= stepX(-1); x -= 6 {
 		tt.Move(x, y+200)
 		tt.Frame()
 	}
-	tt.Move(center-2*rulerStep-4, y)
+	tt.Release(stepX(-1), y+200)
 	tt.Frame()
-	tt.Release(center-2*rulerStep-4, y)
-	tt.Frame()
-	if got := thumbnailStep(a.thumbnailScale()); got != 4 {
-		t.Fatalf("拖出刻度区后停在第 %d 档，应为 4", got)
+	if got := thumbnailStep(a.thumbnailScale()); got != 0 {
+		t.Fatalf("拖过左端后停在第 %d 档，应为 0", got)
 	}
 	// 点过刻度后方向键直接能调。
 	tt.Advance(time.Second)
-	tt.ClickAt(center-rulerStep, y)
+	tt.ClickAt(stepX(2), y)
 	tt.Frame()
 	tt.Key(0, ui.KeyLeft)
 	tt.Frame()
-	if got := thumbnailStep(a.thumbnailScale()); got != 2 {
-		t.Fatalf("点刻度后按左方向键停在第 %d 档，应为 2", got)
+	if got := thumbnailStep(a.thumbnailScale()); got != 1 {
+		t.Fatalf("点刻度后按左方向键停在第 %d 档，应为 1", got)
 	}
 	a.ViewMode = 2
 	tt.Frame()
-	access, ok = tt.AccessByRole(ui.RoleSlider, a.T("thumbnail_size"))
-	if !ok || !access.Disabled {
-		t.Fatal("列表视图滑块没有禁用")
+	tt.Advance(time.Second)
+	if _, ok := tt.AccessByRole(ui.RoleSlider, a.T("thumbnail_size")); ok {
+		t.Fatal("列表视图仍显示缩略图滑块")
 	}
 }
 

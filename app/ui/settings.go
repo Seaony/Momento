@@ -71,7 +71,7 @@ func (a *App) settingsView(c *ui.Context, update UpdateCheckStatus) {
 			} else {
 				ui.Row(c.Key("settings-sidebar-titlebar")).Height(rowHeight).FillWidth().Padding(0, space16).DragWindow().Children(func() { ui.Text(c, a.T("settings")).Bold() })
 			}
-			ui.Scroll(c.Key("settings-navigation")).Grow(1).Padding(space8).Gap(space4).Children(func() {
+			ui.Scroll(c.Key("settings-navigation")).Scrollbars(false).Grow(1).Padding(space8).Gap(space4).Children(func() {
 				for i, tab := range settingsTabs {
 					if i == 3 || i == 7 || i == 9 {
 						ui.Divider(c).Margin(space4, space8)
@@ -113,7 +113,7 @@ func (a *App) settingsView(c *ui.Context, update UpdateCheckStatus) {
 			ui.Row(c.Key("settings-titlebar")).Height(rowHeight).Shrink(0).FillWidth().Padding(0, bar.Right+space24, 0, space24).Center().DragWindow().Children(func() {
 				ui.Text(c, a.T(settingsTabs[a.Settings.Tab].key)).FontSize(fontBody).FontWeight(600).TextColor(p.Text).SingleLine()
 			})
-			ui.Scroll(c.Key("settings-content")).TrackScroll(&a.Settings.Scroll).Grow(1).Padding(space16, space24, space24, space24).Children(func() {
+			ui.Scroll(c.Key("settings-content")).Scrollbars(false).TrackScroll(&a.Settings.Scroll).Grow(1).Padding(space16, space24, space24, space24).Children(func() {
 				fadeMotion(ui.Column(c.Key(a.Settings.Tab)).FillWidth().Gap(space24)).Children(func() {
 					switch a.Settings.Tab {
 					case SettingsAppearance:
@@ -368,14 +368,96 @@ func (a *App) updateMessage(c *ui.Context, update UpdateCheckStatus, centered bo
 	}
 }
 
-func settingsPanel(c *ui.Context, open *bool, width float32, body func()) ui.Element {
+// dialogPanel 是所有对话框的外壳：遮罩、动效、浮起面板，里面按 dialogLayout 排。
+func dialogPanel(c *ui.Context, open *bool, width float32, icon, title string, body, footer func()) ui.Element {
 	p := paletteFor(c.Theme())
 	return ui.DialogBase(c, open, func(backdrop, panel ui.Element) {
 		backdrop.Background(p.Scrim)
-		panel.Width(width).MaxWidthPercent(92).MaxHeightPercent(92).Padding(space24).Gap(space12).
-			Radius(radiusPanel).Background(panelColor(c.Theme()))
-		elevated(panel, c.Theme())
+		dialogSurface(c, panel.Width(width).Label(title))
 		dialogMotion(backdrop, panel)
-		body()
+		dialogLayout(c, icon, title, body, footer)
 	})
+}
+
+// 对话框面板本身：没有内边距，标题栏、分隔线、内容、按钮行各自留白。
+func dialogSurface(c *ui.Context, panel ui.Element) ui.Element {
+	panel.MaxWidthPercent(92).MaxHeightPercent(92).Padding(0).Gap(0).Radius(radiusPanel).Background(panelColor(c.Theme()))
+	return elevated(panel, c.Theme())
+}
+
+// 所有对话框同一个骨架：标题栏（次要色小图标 + 14 号标题）、通栏分隔线、内容、右下角的操作按钮。body 为空时只有标题和按钮。
+func dialogLayout(c *ui.Context, icon, title string, body, footer func()) {
+	p := paletteFor(c.Theme())
+	ui.Row(c.Key("dialog-header")).FillWidth().Height(dialogHeaderHeight).Padding(0, space20).Gap(space8).AlignItems(ui.Center).Shrink(0).Children(func() {
+		if icon != "" {
+			appIcon(c, icon).Size(iconMedium, iconMedium).Shrink(0).TextColor(p.TextSecondary)
+		}
+		ui.Text(c, title).FontSize(fontLead).FontWeight(600).TextColor(p.Text).SingleLine().Grow(1).MinWidth(0)
+	})
+	ui.Box(c.Key("dialog-divider")).FillWidth().Height(1).Shrink(0).Background(p.BorderSubtle.Mix(p.Border, .5))
+	if body != nil {
+		ui.Column(c.Key("dialog-body")).FillWidth().MinHeight(0).Shrink(1).Padding(space20, space20, 0, space20).Gap(space16).Children(body)
+	}
+	ui.Row(c.Key("dialog-footer")).FillWidth().Wrap().Padding(space20).Justify(ui.End).AlignItems(ui.Center).Gap(space8).Shrink(0).Children(footer)
+}
+
+// 对话框底部和页面中间（空状态、欢迎页）的次要按钮：高 32、左右留 16、最窄 72，浅底无边框，13 号 500。
+func dialogButton(c *ui.Context, label string, disabled bool) ui.Element {
+	p := paletteFor(c.Theme())
+	button := ui.ButtonBase(c).Height(controlHeight).MinWidth(dialogButtonMinWidth).Padding(0, space16).Shrink(0).Radius(radiusControl).
+		Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(label).Disabled(disabled)
+	fill := themeValue(c, .055, .075)
+	switch {
+	case button.Pressed():
+		fill += .06
+	case button.Hovered():
+		fill += .03
+	}
+	ink := p.Text
+	if disabled {
+		fill, ink = themeValue(c, .035, .05), p.TextTertiary
+	}
+	button.Background(button.AnimateColor("dialog-button", p.Text.Alpha(fill), motionColor))
+	button.Children(func() {
+		ui.Text(c, label).FontSize(fontBody).FontWeight(500).TextColor(button.AnimateColor("dialog-button-ink", ink, motionColor)).SingleLine()
+	})
+	return button
+}
+
+// 对话框底部和页面中间的主按钮：和次要按钮同尺寸，品牌色底；禁用时退成次要按钮的浅底加三级色字。
+func dialogPrimaryButton(c *ui.Context, label string, disabled bool) ui.Element {
+	return dialogActionButton(c, label, disabled, false)
+}
+
+// 删除确认用的危险色主按钮。深色下危险色是浅红，文字用背景色才看得清（白字对比度只有 2:1）。
+func dialogDangerButton(c *ui.Context, label string) ui.Element {
+	return dialogActionButton(c, label, false, true)
+}
+
+func dialogActionButton(c *ui.Context, label string, disabled, danger bool) ui.Element {
+	p := paletteFor(c.Theme())
+	button := ui.ButtonBase(c).Height(controlHeight).MinWidth(dialogButtonMinWidth).Padding(0, space16).Shrink(0).Radius(radiusControl).
+		Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(label).Disabled(disabled)
+	theme := c.Theme()
+	fill, ink := theme.Accent, theme.AccentText
+	switch {
+	case disabled:
+		fill, ink = p.Text.Alpha(themeValue(c, .035, .05)), p.TextTertiary
+	case danger:
+		fill, ink = p.Danger, p.Background
+		if button.Pressed() {
+			fill = fill.Mix(theme.Text, .15)
+		} else if button.Hovered() {
+			fill = fill.Mix(theme.Text, .08)
+		}
+	case button.Pressed():
+		fill = theme.AccentPressed
+	case button.Hovered():
+		fill = theme.AccentHover
+	}
+	button.Background(button.AnimateColor("dialog-primary", fill, motionColor))
+	button.Children(func() {
+		ui.Text(c, label).FontSize(fontBody).FontWeight(500).TextColor(button.AnimateColor("dialog-primary-ink", ink, motionColor)).SingleLine()
+	})
+	return button
 }

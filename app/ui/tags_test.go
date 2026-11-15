@@ -15,14 +15,38 @@ import (
 func tagsTestApp(snapshot model.Snapshot) *App {
 	return &App{
 		Library: &library.Library{}, Snapshot: snapshot, Index: catalog.New(snapshot),
-		Texts: i18n.Catalog{Language: "en"},
+		Texts: i18n.Catalog{Language: "en"}, TagPage: true, SidebarVisible: true,
+	}
+}
+
+// 和主窗口一样：标签列表铺满，工具栏盖在上面。
+func tagsView(a *App) func(c *ui.Context) {
+	return func(c *ui.Context) {
+		ui.Column(c).Fill().Children(func() {
+			a.tags(c)
+			ui.Column(c.Key("main-header")).Absolute().Top(0).Left(0).Right(0).Children(func() { a.toolbar(c) })
+		})
 	}
 }
 
 func tagsTester(a *App) *ui.Tester {
-	return ui.NewTester(func(c *ui.Context) {
-		ui.Column(c).Fill().Children(func() { a.tags(c) })
-	}, 720, 640)
+	return ui.NewTester(tagsView(a), 720, 640)
+}
+
+// 标签管理页的工具栏只有标题、搜索标签和新建标签，没有筛选、排序、视图和导入。
+func TestTagsToolbarOnlyHasTagControls(t *testing.T) {
+	a := tagsTestApp(model.Snapshot{Tags: []model.Tag{{ID: "nature", Name: "Landscape"}}})
+	tt := tagsTester(a)
+	for _, key := range []string{"search_tags", "new_tag", "tag_management"} {
+		if _, ok := tt.Find(a.T(key)); !ok {
+			t.Errorf("工具栏缺少 %s", key)
+		}
+	}
+	for _, key := range []string{"filter", "sort", "view_mode", "import", "thumbnail_size", "search_assets"} {
+		if _, ok := tt.Find(a.T(key)); ok {
+			t.Errorf("标签管理页不应出现 %s", key)
+		}
+	}
 }
 
 func TestTagsSearchAndCounts(t *testing.T) {
@@ -68,6 +92,7 @@ func TestTagsNewAndRenameOpenNamePrompt(t *testing.T) {
 	}
 	a.PromptOpen = false
 	tt.Frame()
+	hoverTagRow(t, tt, "Landscape")
 	if err := tt.Click(a.T("rename_tag") + " Landscape"); err != nil {
 		t.Fatal(err)
 	}
@@ -82,6 +107,7 @@ func TestTagsNewAndRenameOpenNamePrompt(t *testing.T) {
 func TestTagsDeletionRequiresConfirmation(t *testing.T) {
 	a := tagsTestApp(model.Snapshot{Tags: []model.Tag{{ID: "nature", Name: "Landscape"}}})
 	tt := tagsTester(a)
+	hoverTagRow(t, tt, "Landscape")
 	if err := tt.Click(a.T("delete_tag") + " Landscape"); err != nil {
 		t.Fatal(err)
 	}
@@ -121,9 +147,10 @@ func TestTagsLocalizedControlsFit(t *testing.T) {
 			a := tagsTestApp(model.Snapshot{Tags: []model.Tag{{ID: "nature", Name: "Landscape"}}})
 			a.Texts.Language = language
 			var searchWidth, actionWidth float32
+			view := tagsView(a)
 			tt := ui.NewTester(func(c *ui.Context) {
 				a.applyTheme(c)
-				ui.Column(c).Fill().Children(func() { a.tags(c) })
+				view(c)
 				searchWidth, _ = c.MeasureText(0, ui.Span{Text: a.T("search_tags"), Size: 13, Lang: language})
 				actionWidth, _ = c.MeasureText(0, ui.Span{Text: a.T("new_tag"), Size: 13, Lang: language})
 			}, 584, 640)
@@ -163,14 +190,63 @@ func TestTagsOnlyBuildVisibleRows(t *testing.T) {
 func TestTagsImportInsetMovesSmoothly(t *testing.T) {
 	a := tagsTestApp(model.Snapshot{Tags: []model.Tag{{ID: "a", Name: "Reference"}}})
 	tt := tagsTester(a)
-	before, _ := tt.Find(a.T("new_tag"))
+	before, _ := tt.Find("Reference")
 	a.Progress = &model.ImportProgress{Stage: "importing", Total: 10}
 	tt.Frame()
 	tt.Advance(90 * time.Millisecond)
-	middle, _ := tt.Find(a.T("new_tag"))
+	middle, _ := tt.Find("Reference")
 	tt.Advance(time.Second)
-	after, _ := tt.Find(a.T("new_tag"))
+	after, _ := tt.Find("Reference")
 	if middle.Y <= before.Y || middle.Y >= after.Y || after.Y-before.Y != 120 {
 		t.Fatalf("导入进度出现时标签内容没有平滑让位：%+v → %+v → %+v", before, middle, after)
+	}
+}
+
+// 改名、删除按钮平时收起，先把鼠标移到这一行上它们才可点。
+func hoverTagRow(t *testing.T, tt *ui.Tester, name string) {
+	t.Helper()
+	box, ok := tt.Find(name)
+	if !ok {
+		t.Fatalf("找不到标签行 %s", name)
+	}
+	tt.Move(box.X+box.W/2, box.Y+box.H/2)
+	tt.Advance(time.Second)
+}
+
+func TestTagRowToolsOnlyOnHover(t *testing.T) {
+	a := tagsTestApp(model.Snapshot{Tags: []model.Tag{{ID: "nature", Name: "Landscape"}}})
+	tt := tagsTester(a)
+	if err := tt.Click(a.T("delete_tag") + " Landscape"); err == nil {
+		t.Fatal("没悬停时删除按钮不应该能点")
+	}
+	hoverTagRow(t, tt, "Landscape")
+	if err := tt.Click(a.T("delete_tag") + " Landscape"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// 纯键盘：Tab 移到标签行后，再按 Tab 能走到改名、删除按钮。
+func TestTagRowToolsReachableByKeyboard(t *testing.T) {
+	a := tagsTestApp(model.Snapshot{Tags: []model.Tag{{ID: "nature", Name: "Landscape"}}})
+	tt := tagsTester(a)
+	for range 20 {
+		if tt.Focused("Landscape") {
+			break
+		}
+		tt.Key(0, ui.KeyTab)
+		tt.Advance(100 * time.Millisecond)
+	}
+	if !tt.Focused("Landscape") {
+		t.Fatal("Tab 走不到标签行")
+	}
+	tt.Key(0, ui.KeyTab)
+	tt.Advance(time.Second)
+	if !tt.Focused(a.T("rename_tag") + " Landscape") {
+		t.Fatal("键盘移到标签行后，改名按钮没有接到焦点")
+	}
+	tt.Key(0, ui.KeyTab)
+	tt.Advance(100 * time.Millisecond)
+	if !tt.Focused(a.T("delete_tag") + " Landscape") {
+		t.Fatal("键盘走不到删除按钮")
 	}
 }

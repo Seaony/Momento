@@ -13,7 +13,7 @@ func TestDialogsPromptRequiresNameAndSubmitsOnce(t *testing.T) {
 	a := &App{}
 	calls := 0
 	name := ""
-	a.Ask("Rename", "", func(value string) { calls++; name = value })
+	a.Ask("pencil-simple", "Rename", "", func(value string) { calls++; name = value })
 	tt := ui.NewTester(a.dialogs, 1100, 640)
 	if button, ok := tt.AccessByRole(ui.RoleButton, a.T("save")); !ok || !button.Disabled {
 		t.Fatal("空名称时保存按钮应禁用")

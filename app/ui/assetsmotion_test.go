@@ -61,7 +61,7 @@ func TestAssetReorderUsesStableIdentityAndIntermediatePosition(t *testing.T) {
 		t.Run(string(rune('0'+mode)), func(t *testing.T) {
 			a := assetsMotionFixture(t)
 			a.ViewMode = mode
-			tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.assetArea(c) }, 700, 600)
+			tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.assetArea(c) }, 700, 960)
 			tt.Advance(time.Second)
 			before := assetMotionBounds(t, tt, "Photo 0")
 			a.Query.Descending = true
@@ -87,58 +87,64 @@ func TestAssetReorderUsesStableIdentityAndIntermediatePosition(t *testing.T) {
 	}
 }
 
-func TestAssetViewAndSizeCrossfadeWithoutCardMorphing(t *testing.T) {
-	for _, change := range []string{"list", "size"} {
-		t.Run(change, func(t *testing.T) {
+func TestAssetViewSwitchCrossfadesWithoutCardMorphing(t *testing.T) {
+	a := assetsMotionFixture(t)
+	tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.assetArea(c) }, 700, 600)
+	tt.Advance(time.Second)
+	a.ViewMode = 2
+	tt.Frame()
+	start := assetMotionBounds(t, tt, "Photo 1")
+	tt.Advance(87 * time.Millisecond)
+	middle := assetMotionBounds(t, tt, "Photo 1")
+	tt.Advance(163 * time.Millisecond)
+	after := assetMotionBounds(t, tt, "Photo 1")
+	endPixels := append([]byte(nil), tt.Image().Pix...)
+	tt.Advance(time.Second)
+	if !bytes.Equal(endPixels, tt.Image().Pix) {
+		t.Fatal("100%帧仍有旧布局残影或未完成的变形")
+	}
+	for _, frame := range []ui.Rect{start, middle} {
+		if math.Abs(float64(frame.W/frame.H-after.W/after.H)) > .02 || frame.W/after.W < .975 || frame.W/after.W > 1.005 {
+			t.Fatalf("切换视图时卡片在逐张变形：%+v -> %+v -> %+v", start, middle, after)
+		}
+	}
+	if math.Abs(float64(after.H-listRowHeight(a.Visible[1]))) > .01 {
+		t.Fatalf("列表终点行高异常：%+v", after)
+	}
+}
+
+// 调缩略图大小：卡片从原来的位置和大小弹到新的，中间帧在两者之间，之后完全落定。
+// 700 宽时 1 和 1.5 两档列数不同；320 宽时列数相同、只改大小，两种都要有过渡。
+func TestAssetSizeChangeGlidesCards(t *testing.T) {
+	for _, width := range []int{700, 320} {
+		t.Run(fmt.Sprint(width), func(t *testing.T) {
 			a := assetsMotionFixture(t)
-			tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.assetArea(c) }, 700, 600)
+			tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.assetArea(c) }, width, 600)
 			tt.Advance(time.Second)
-			switch change {
-			case "list":
-				a.ViewMode = 2
-			case "size":
-				a.Preferences.ThumbnailSize = 1.5
-				a.layout = nil
-			}
+			before := assetMotionBounds(t, tt, "Photo 1")
+			columns := len(a.layout.columns)
+			a.SetThumbnailSize(1.5)
 			tt.Frame()
 			start := assetMotionBounds(t, tt, "Photo 1")
 			tt.Advance(87 * time.Millisecond)
 			middle := assetMotionBounds(t, tt, "Photo 1")
-			tt.Advance(163 * time.Millisecond)
+			tt.Advance(time.Second)
 			after := assetMotionBounds(t, tt, "Photo 1")
 			endPixels := append([]byte(nil), tt.Image().Pix...)
 			tt.Advance(time.Second)
 			if !bytes.Equal(endPixels, tt.Image().Pix) {
-				t.Fatal("100%帧仍有旧布局残影或未完成的变形")
+				t.Fatal("调大小落定后仍有未完成的动画")
 			}
-			for _, frame := range []ui.Rect{start, middle} {
-				if math.Abs(float64(frame.W/frame.H-after.W/after.H)) > .02 || frame.W/after.W < .975 || frame.W/after.W > 1.005 {
-					t.Fatalf("卡片仍在逐张变形，未保持新布局形状：%+v -> %+v -> %+v", start, middle, after)
-				}
+			if (width == 700) == (len(a.layout.columns) == columns) {
+				t.Fatalf("样本没有覆盖预期的列数变化：%d -> %d", columns, len(a.layout.columns))
 			}
-			if change == "list" && after.H != 64 {
-				t.Fatalf("列表终点行高异常：%+v", after)
+			if rectDistance(before, start) > 1 || rectDistance(before, after) < 5 {
+				t.Fatalf("卡片没有从原布局出发或没有到新布局：%+v -> %+v -> %+v", before, start, after)
+			}
+			if rectDistance(middle, before) < 1 || rectDistance(middle, after) < 1 || rectDistance(middle, before)+rectDistance(middle, after) > rectDistance(before, after)+1 {
+				t.Fatalf("中间帧不在新旧布局之间：%+v -> %+v -> %+v", before, middle, after)
 			}
 		})
-	}
-}
-
-// 缩略图大小只有几档，档距大；窄到 320 宽时 1 和 1.5 两档的列数相同，才能测到「列数不变只改大小」。
-func TestAssetSizeChangeWithinSameColumnsLaysOutImmediately(t *testing.T) {
-	a := assetsMotionFixture(t)
-	tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.assetArea(c) }, 320, 600)
-	tt.Advance(time.Second)
-	before := assetMotionBounds(t, tt, "Photo 1")
-	columns := len(a.layout.columns)
-	a.Preferences.ThumbnailSize = 1.5
-	a.layout = nil
-	tt.Frame()
-	start := assetMotionBounds(t, tt, "Photo 1")
-	pixels := append([]byte(nil), tt.Image().Pix...)
-	tt.Advance(250 * time.Millisecond)
-	after := assetMotionBounds(t, tt, "Photo 1")
-	if len(a.layout.columns) != columns || start.H == before.H || start != after || !bytes.Equal(pixels, tt.Image().Pix) {
-		t.Fatalf("同列数调大小仍在逐卡变形：%+v -> %+v -> %+v", before, start, after)
 	}
 }
 
@@ -147,7 +153,7 @@ func TestAssetRemovalAndInsertionFadeOnlyVisibleCards(t *testing.T) {
 		t.Run(fmt.Sprint(mode), func(t *testing.T) {
 			a := assetsMotionFixture(t)
 			a.ViewMode = mode
-			tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.assetArea(c) }, 700, 600)
+			tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.assetArea(c) }, 700, 960)
 			tt.Advance(time.Second)
 			box := assetMotionBounds(t, tt, "Photo 5")
 			x, y := int(box.X+box.W/2), int(box.Y+box.H/2)
@@ -263,39 +269,51 @@ func TestAssetHoverCapsuleAndSelectionRingFade(t *testing.T) {
 	}
 }
 
-func TestAssetChromeWidthFollowsPaneWithoutCardOverlap(t *testing.T) {
+func assertAssetsDoNotOverlap(t *testing.T, a *App, tt *ui.Tester) {
+	t.Helper()
+	for i, first := range a.Visible {
+		one, ok := tt.Find(first.Name)
+		if !ok {
+			continue
+		}
+		for _, second := range a.Visible[i+1:] {
+			two, ok := tt.Find(second.Name)
+			if ok && min(one.X+one.W, two.X+two.W)-max(one.X, two.X) > .5 && min(one.Y+one.H, two.Y+two.H)-max(one.Y, two.Y) > .5 {
+				t.Fatalf("落定后素材互相重叠：%s %+v / %s %+v", first.Name, one, second.Name, two)
+			}
+		}
+	}
+}
+
+// 检查器展开时，第一帧就按最终宽度排版，卡片随栏宽一起弹过去。
+func TestAssetInspectorLaysOutAtFinalWidthAndCardsGlide(t *testing.T) {
 	a := assetsMotionFixture(t)
 	a.SidebarVisible, a.SidebarWidth = true, 236
 	tt := ui.NewTester(a.View, 1100, 640)
 	tt.Advance(time.Second)
-	before := a.layoutWidth
+	before := assetMotionBounds(t, tt, "Photo 3")
 	a.selectAsset(a.Visible[0].ID, 0, 0)
 	tt.Frame()
-	tt.Advance(87 * time.Millisecond)
-	if a.layoutWidth <= 551 || a.layoutWidth >= before {
-		t.Fatalf("卡片布局没有跟随检查器的实际中间宽度：%v -> %v", before, a.layoutWidth)
-	}
-	for _, advance := range []time.Duration{0, 88 * time.Millisecond, 75 * time.Millisecond, time.Second} {
-		tt.Advance(advance)
-		for i, first := range a.Visible {
-			one, ok := tt.Find(first.Name)
-			if !ok {
-				continue
-			}
-			for _, second := range a.Visible[i+1:] {
-				two, ok := tt.Find(second.Name)
-				if ok && min(one.X+one.W, two.X+two.W)-max(one.X, two.X) > .5 && min(one.Y+one.H, two.Y+two.H)-max(one.Y, two.Y) > .5 {
-					t.Fatalf("检查器宽度变化中素材互相重叠：%s %+v / %s %+v", first.Name, one, second.Name, two)
-				}
-			}
-		}
-	}
 	if math.Abs(float64(a.layoutWidth-551)) > .01 {
-		t.Fatalf("检查器展开后布局宽度异常：%v", a.layoutWidth)
+		t.Fatalf("检查器展开第一帧没有按最终宽度排版：%v", a.layoutWidth)
 	}
+	tt.Advance(87 * time.Millisecond)
+	middle := assetMotionBounds(t, tt, "Photo 3")
+	tt.Advance(time.Second)
+	after := assetMotionBounds(t, tt, "Photo 3")
+	if rectDistance(before, after) < 20 || rectDistance(middle, before) < 5 || rectDistance(middle, after) < 5 {
+		t.Fatalf("卡片没有随检查器弹过去：%+v -> %+v -> %+v", before, middle, after)
+	}
+	endPixels := append([]byte(nil), tt.Image().Pix...)
+	tt.Advance(time.Second)
+	if !bytes.Equal(endPixels, tt.Image().Pix) {
+		t.Fatal("检查器展开落定后仍有未完成的动画")
+	}
+	assertAssetsDoNotOverlap(t, a, tt)
 }
 
-func TestAssetSidebarContinuousColumnsSettlesWithoutOldCanvases(t *testing.T) {
+// 侧栏收起和展开：栏宽一路变化，列数只换一次，不在半路来回跳。
+func TestAssetSidebarToggleChangesColumnsOnce(t *testing.T) {
 	a := assetsMotionFixture(t)
 	a.SidebarVisible, a.SidebarWidth = true, 236
 	tt := ui.NewTester(a.View, 1440, 900)
@@ -315,17 +333,16 @@ func TestAssetSidebarContinuousColumnsSettlesWithoutOldCanvases(t *testing.T) {
 				break
 			}
 		}
-		if len(counts) < 3 || a.SidebarShownWidth() != target {
-			t.Fatalf("没有覆盖侧栏连续跨列或栏宽未落定：%v，%v", counts, a.SidebarShownWidth())
+		if len(counts) != 1 || a.SidebarShownWidth() != target {
+			t.Fatalf("侧栏动画中列数变了不止一次或栏宽未落定：%v，%v", counts, a.SidebarShownWidth())
 		}
-		tt.Frame()
-		tt.Advance(assetColumnsEnterDuration)
+		tt.Advance(time.Second)
 		endPixels := append([]byte(nil), tt.Image().Pix...)
 		tt.Advance(time.Second)
-		current := tt.Image()
-		if !bytes.Equal(endPixels, current.Pix) {
-			t.Fatal("侧栏连续跨列落定后仍有旧画布残影")
+		if !bytes.Equal(endPixels, tt.Image().Pix) {
+			t.Fatal("侧栏落定后仍有未完成的动画")
 		}
+		assertAssetsDoNotOverlap(t, a, tt)
 	}
 }
 
@@ -333,7 +350,7 @@ func TestAssetBlankClickClearsSelectionAndInspector(t *testing.T) {
 	for _, mode := range viewModes {
 		a := assetViewFixture()
 		a.ViewMode = mode
-		tt := ui.NewTester(a.assetArea, 700, 600)
+		tt := ui.NewTester(a.assetArea, 700, 960)
 		if err := tt.Click("Photo 0"); err != nil {
 			t.Fatal(err)
 		}
@@ -347,7 +364,7 @@ func TestAssetBlankClickClearsSelectionAndInspector(t *testing.T) {
 		if !a.InspectorVisible {
 			t.Fatal("点同一张素材没有重新展开检查器")
 		}
-		tt.ClickAt(690, 590)
+		tt.ClickAt(690, 950)
 		if a.Selected.Len() != 0 || a.InspectorVisible {
 			t.Fatalf("视图%d点击空白没有清空选择并收起检查器", mode)
 		}

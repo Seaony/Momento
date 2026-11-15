@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"bytes"
+	"image"
 	"slices"
 	"testing"
 	"time"
@@ -252,9 +254,9 @@ func TestNarrowToolbarKeepsThumbnailPopover(t *testing.T) {
 	}
 	a.ViewMode = 2
 	tt.Frame()
-	button, ok = tt.AccessByRole(ui.RoleButton, a.T("thumbnail_size"))
-	if !ok || !button.Disabled {
-		t.Fatal("列表视图缩略图入口没有禁用")
+	tt.Advance(time.Second)
+	if _, ok := tt.AccessByRole(ui.RoleButton, a.T("thumbnail_size")); ok {
+		t.Fatal("列表视图仍显示缩略图入口")
 	}
 	a.ViewMode = 0
 	tt.SetSize(1500, 640)
@@ -264,5 +266,69 @@ func TestNarrowToolbarKeepsThumbnailPopover(t *testing.T) {
 	}
 	if slider, ok = tt.AccessByRole(ui.RoleSlider, a.T("thumbnail_size")); !ok || slider.Disabled {
 		t.Fatal("宽窗口没有完整滑块")
+	}
+}
+
+// 列表视图用不上缩略图大小：刻度尺收起淡出，回到瀑布流时展开，中间帧在两者之间。
+func TestToolbarThumbnailRulerHidesInList(t *testing.T) {
+	a := assetViewFixture()
+	a.Preferences = DefaultPreferences()
+	a.Preferences.Theme = "light"
+	tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.toolbar(c) }, 1500, MainToolbarHeight)
+	tt.Advance(time.Second)
+	slider, ok := tt.AccessByRole(ui.RoleSlider, a.T("thumbnail_size"))
+	if !ok {
+		t.Fatal("瀑布流没有显示刻度尺")
+	}
+	region := image.Rect(int(slider.Bounds.X), 0, int(slider.Bounds.X+slider.Bounds.W), MainToolbarHeight)
+	crop := func() []byte {
+		img := tt.Image()
+		var out []byte
+		for y := region.Min.Y; y < region.Max.Y; y++ {
+			out = append(out, img.Pix[img.PixOffset(region.Min.X, y):img.PixOffset(region.Max.X, y)]...)
+		}
+		return out
+	}
+	shown := crop()
+	a.ViewMode = 2
+	tt.Frame()
+	tt.Advance(time.Second)
+	if _, ok := tt.AccessByRole(ui.RoleSlider, a.T("thumbnail_size")); ok {
+		t.Fatal("列表视图仍显示刻度尺")
+	}
+	hidden := crop()
+	a.ViewMode = 0
+	tt.Frame()
+	tt.Advance(80 * time.Millisecond)
+	middle := crop()
+	tt.Advance(time.Second)
+	if bytes.Equal(middle, shown) || bytes.Equal(middle, hidden) {
+		t.Fatal("刻度尺展开没有过渡")
+	}
+	if !bytes.Equal(crop(), shown) {
+		t.Fatal("刻度尺展开后没有回到原样")
+	}
+}
+
+// 回收站页右上角是「清空回收站」，不是导入；回收站空时不可点。
+func TestTrashToolbarEmptiesInsteadOfImport(t *testing.T) {
+	a := toolbarTestApp()
+	a.Query.Scope = "trash"
+	a.Refine()
+	tt := toolbarTester(a)
+	if _, ok := tt.Find(a.T("import")); ok {
+		t.Fatal("回收站页不应出现导入")
+	}
+	if err := tt.Click(a.T("empty_trash")); err == nil && a.ConfirmOpen {
+		t.Fatal("回收站是空的，清空按钮不应能点")
+	}
+
+	a.Snapshot.Assets[0].Trashed = true
+	a.Index = catalog.New(a.Snapshot)
+	a.Refine()
+	tt.Frame()
+	toolbarClick(t, tt, a.T("empty_trash"))
+	if !a.ConfirmOpen || a.ConfirmTitle != a.T("empty_trash") || a.Busy {
+		t.Fatal("清空回收站没有先要求确认")
 	}
 }

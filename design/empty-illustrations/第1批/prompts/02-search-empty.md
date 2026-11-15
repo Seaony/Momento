@@ -1,0 +1,1 @@
+Read and follow the common style in /Users/seaony/code/Momento/design/empty-illustrations/第1批/prompts/00-common.md first. Subject: searching and finding nothing — a magnifying glass resting over a blank photo card (rounded rectangle), with a few small dotted marks around suggesting empty search. Meaning: no results.

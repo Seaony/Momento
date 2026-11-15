@@ -52,7 +52,7 @@ func TestStateScreenshots(t *testing.T) {
 		"settings", "export", "new-library", "error",
 		"list", "single-details", "single-details-bottom", "tag-picker", "folder-picker", "filter", "sort", "tags",
 		"search-results", "search-cleared", "list-selected", "masonry-hover", "list-hover",
-		"single-details-mixed-dpi", "single-details-mixed-dpi-bottom", "filter-selected", "filter-color-hover",
+		"single-details-mixed-dpi", "single-details-mixed-dpi-bottom", "filter-selected", "filter-color-hover", "folder-dialog", "import-menu", "confirm-delete", "tags-hover",
 	}
 	for _, key := range []string{"toggle_sidebar", "filter", "sort", "view_masonry", "view_list", "import"} {
 		states = append(states, "toolbar-hover-"+key)
@@ -196,7 +196,10 @@ func (fixture screenshotFixture) app(t *testing.T, state, language, appearance s
 			snapshot.Assets[i].Trashed = true
 		}
 	}
-	if state == "tag-picker" || state == "folder-picker" || strings.HasPrefix(state, "filter") || state == "tags" {
+	if state == "folder-dialog" {
+		snapshot.Folders = []model.Folder{{ID: "design", Name: "Design references", Icon: "palette"}, {ID: "travel", Name: "Travel", Icon: "camera"}, {ID: "misc", Name: "Inbox"}}
+	}
+	if state == "tag-picker" || state == "folder-picker" || strings.HasPrefix(state, "filter") || strings.HasPrefix(state, "tags") {
 		snapshot.Folders = []model.Folder{{ID: "design", Name: "Design references"}, {ID: "ui", Name: "UI layouts", ParentID: "design"}}
 		snapshot.Tags = []model.Tag{{ID: "reference", Name: "Reference"}, {ID: "landscape", Name: "Landscape 山水"}, {ID: "inspiration", Name: "Inspiration"}, {ID: "typography", Name: "Typography"}}
 		for i := range snapshot.Assets {
@@ -215,12 +218,12 @@ func (fixture screenshotFixture) app(t *testing.T, state, language, appearance s
 			asset.Name = "Landscape reference with morning light and layered mountains"
 			asset.SourceURL = "https://example.com/references/landscape?collection=morning-light"
 			asset.EXIF = map[string]string{
-				"fileModifiedAt": "2026-01-01 12:34:56", "contentCreatedAt": "2025-12-12 08:42:10",
+				"fileModifiedAt": "2026-01-01T04:34:56Z", "contentCreatedAt": "2025-12-12T08:42:10Z",
 				"pixelWidth": fmt.Sprint(asset.Width), "pixelHeight": fmt.Sprint(asset.Height),
 				"dpiWidth": "300", "dpiHeight": "300", "colorModel": "RGB", "profileName": "Display P3",
 				"cameraMake": "FUJIFILM", "cameraModel": "FUJIFILM X-T5", "lensModel": "XF16-55mmF2.8 R LM WR",
-				"exposureTime": "1/250 s", "focalLength": "35 mm", "isoSpeedRatings": "200", "flashFired": "false",
-				"fNumber": "f/2.8", "exposureProgram": "Aperture priority", "meteringMode": "Multi-segment", "whiteBalance": "Auto",
+				"exposureTime": "0.004", "focalLength": "35", "isoSpeedRatings": "200", "flashFired": "false",
+				"fNumber": "2.8", "exposureProgram": "3", "meteringMode": "5", "whiteBalance": "0",
 			}
 			if strings.Contains(state, "mixed-dpi") {
 				asset.EXIF["dpiHeight"] = "72"
@@ -287,9 +290,20 @@ func (fixture screenshotFixture) app(t *testing.T, state, language, appearance s
 	if state == "tag-picker" || state == "folder-picker" {
 		a.Inspector.LibraryID = a.Library.Manifest.LibraryID
 		a.Inspector.TagsOpen, a.Inspector.FoldersOpen = state == "tag-picker", state == "folder-picker"
+		a.Inspector.FolderExpanded = map[string]bool{"design": true}
 	}
 	if strings.HasPrefix(state, "filter") {
 		a.Toolbar.FilterOpen = true
+	}
+	if state == "confirm-delete" {
+		a.Confirm(a.T("delete_folder"), a.T("delete_folder_detail", "Travel"), a.T("delete"), func() {})
+	}
+	if state == "import-menu" {
+		a.Toolbar.ImportOpen = true
+	}
+	if state == "folder-dialog" {
+		a.ShowNewFolder("", "旅行", nil)
+		a.Dialog.Folder.Icon = "camera"
 	}
 	if state == "filter-selected" || state == "filter-color-hover" {
 		for _, family := range toolbarFamilies {
@@ -300,7 +314,7 @@ func (fixture screenshotFixture) app(t *testing.T, state, language, appearance s
 	if state == "sort" {
 		a.Toolbar.SortOpen = true
 	}
-	if state == "tags" {
+	if strings.HasPrefix(state, "tags") {
 		a.TagPage = true
 	}
 	if state == "importing" {
@@ -361,6 +375,9 @@ func prepareScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 	if state == "masonry-hover" || state == "grid-hover" || state == "list-hover" {
 		label = a.Visible[1].Name
 	}
+	if state == "tags-hover" {
+		label = "Reference"
+	}
 	if label != "" {
 		box, ok := tt.Find(label)
 		if !ok || box.W <= 0 || box.H <= 0 {
@@ -390,7 +407,7 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 		expect(a.T("drop_images"))
 		expect(a.T("import"))
 	case "single", "grid-selected", "list-selected", "masonry-hover", "grid-hover", "list-hover":
-		expect(a.T("title"))
+		expect(a.T("edit_title"))
 		selected := a.SelectedAssets()[0]
 		expect(strings.ToUpper(selected.Extension))
 		for _, color := range selected.Colors {
@@ -410,9 +427,7 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 		}
 	case "search-empty":
 		expect(a.T("search_empty", a.Query.Search))
-		if _, ok := tt.Find(a.T("result_count", "0")); !ok {
-			expect(a.T("result_count", "0"))
-		}
+		expect(a.T("toolbar_item_count", "0"))
 	case "search-results":
 		if len(a.Visible) != 1 {
 			t.Fatalf("搜索应只匹配一张素材，实际 %d", len(a.Visible))
@@ -440,7 +455,7 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 		expect(a.T("export_count", 1))
 		expect("90%")
 	case "new-library":
-		for _, key := range []string{"new_library", "new_library_detail", "library_name", "location", "choose_location", "create_library"} {
+		for _, key := range []string{"new_library", "library_name", "location", "change_location", "create_library"} {
 			expect(a.T(key))
 		}
 	case "error":
@@ -448,18 +463,20 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 			expect(a.T(key))
 		}
 	case "single-details", "single-details-bottom", "single-details-mixed-dpi", "single-details-mixed-dpi-bottom":
-		source, ok := tt.AccessByRole(ui.RoleTextField, a.T("source_url"))
-		if !ok || !strings.Contains(source.Value, "example.com") {
-			t.Fatalf("来源输入框未显示完整地址: %+v", source)
+		if !strings.HasSuffix(state, "-bottom") {
+			expect("https://example.com/references/landscape?collection=morning-light")
 		}
-		expect(a.T("exif_metadata"))
+		expect(a.T("exif"))
+		for _, text := range []string{"1/250 s", "35 mm", "f/2.8", a.T("exif_exposureProgram_3"), a.T("exif_meteringMode_5")} {
+			expect(text)
+		}
 		selected := a.SelectedAssets()
 		if len(selected) != 1 || len(selected[0].EXIF) != 19 {
 			t.Fatal("长检查器必须单选并带19个EXIF字段")
 		}
 		fields := 0
 		for _, key := range inspectorEXIFKeys {
-			if value := inspectorEXIFValue(selected[0].EXIF, key); value != "" {
+			if value := inspectorEXIFValue(a.Texts, selected[0].EXIF, key); value != "" {
 				fields++
 				expect(a.T("exif_" + key))
 			}
@@ -479,12 +496,12 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 		expect(resolution)
 	case "tag-picker":
 		expect(a.T("search_tags"))
-		expect(a.T("create_tag"))
+		expect(fmt.Sprintf("%s (%d)", a.T("all_tags"), 4))
 		expect("Landscape 山水 (1/3)")
 	case "folder-picker":
 		expect(a.T("search_folders"))
-		expect(a.T("create_folder"))
-		expect("Design references / UI layouts (2/3)")
+		expect("Design references (1/3)")
+		expect("UI layouts (2/3)")
 	case "filter", "filter-selected", "filter-color-hover":
 		for _, key := range []string{"filter_colors", "filter_tags", "filter_types"} {
 			expect(a.T(key))
@@ -504,9 +521,9 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 		for _, key := range []string{"sort_added", "sort_name", "sort_size"} {
 			expect(a.T(key))
 		}
-	case "tags":
+	case "tags", "tags-hover":
 		expect(a.T("new_tag"))
-		expect(a.T("tag_total", "4"))
+		expect(a.T("search_tags"))
 		expect("Landscape 山水")
 	default:
 		if counts := a.Index.Counts(); counts.All != 14 || counts.Uncategorized != 14 || counts.Untagged != 14 {

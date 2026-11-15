@@ -151,7 +151,8 @@ func (a *App) assetPreviewShortcut(c *ui.Context, area ui.Element) {
 	}
 	mods, key, ok := parseShortcut(a.Shortcut("preview"))
 	// 在卡片的祖先上认领按键，避免空格先变成点击或翻页。
-	if ok && area.Shortcut(mods, key) {
+	// 指针停在图片上时再在窗口根上认领：焦点留在侧栏、工具栏的按钮上时，空格也去预览，不被那个按钮接走。
+	if ok && (area.Shortcut(mods, key) || a.hovered != "" && c.Root().Shortcut(mods, key)) {
 		a.activatePreviewShortcut(c)
 	}
 }

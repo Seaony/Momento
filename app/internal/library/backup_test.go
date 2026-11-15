@@ -45,8 +45,9 @@ func addBackupAsset(t *testing.T, l *Library) model.Asset {
 	if _, err := l.DB.Exec("INSERT INTO asset_colors(asset_id,hex,proportion,family,sort_index) VALUES(?,?,?,?,?)", id, "#D25A28", 1, "orange", 0); err != nil {
 		t.Fatal(err)
 	}
-	folder, err := l.CreateFolder(t.Context(), "参考", "")
-	if err != nil {
+	// 新旧结构的库都要能用：只写各版本都有的列。
+	folder := model.Folder{ID: "folder-" + id, Name: "参考"}
+	if _, err := l.DB.Exec("INSERT INTO folders(id,name,sort_index) VALUES(?,?,0)", folder.ID, folder.Name); err != nil {
 		t.Fatal(err)
 	}
 	tag, err := l.CreateTag(t.Context(), "标签")

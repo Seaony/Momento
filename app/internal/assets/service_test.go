@@ -99,7 +99,7 @@ func TestImportDeduplicatesPreservesEditsRestoresAndBackfillsSource(t *testing.T
 	if asset.Name != "a" || asset.OriginalFileName != "a.png" || asset.Extension != "png" || asset.Width != 96 || asset.Height != 64 || len(asset.Colors) == 0 || len(asset.Colors) > 8 {
 		t.Fatalf("%+v", asset)
 	}
-	folder, err := lib.CreateFolder(ctx, "Folder", "")
+	folder, err := lib.CreateFolder(ctx, "Folder", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

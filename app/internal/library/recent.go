@@ -10,10 +10,12 @@ import (
 )
 
 type Recent struct {
-	Path        string    `json:"path"`
-	LibraryID   string    `json:"libraryID"`
-	DisplayName string    `json:"displayName"`
-	LastOpened  time.Time `json:"lastOpened"`
+	Path        string `json:"path"`
+	LibraryID   string `json:"libraryID"`
+	DisplayName string `json:"displayName"`
+	// 打开时从 manifest 抄一份图标编号，图库菜单不用逐个打开图库就能显示。
+	Icon       string    `json:"icon,omitempty"`
+	LastOpened time.Time `json:"lastOpened"`
 }
 
 type RecentStore struct {

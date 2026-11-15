@@ -1,0 +1,1 @@
+Read and follow the common style in /Users/seaony/code/Momento/design/empty-illustrations/第1批/prompts/00-common.md first. Subject: a folder with a small eye or radar-wave mark beside it (watching), the folder empty. Meaning: no watched folders yet — the app can watch a folder and auto-import new images.

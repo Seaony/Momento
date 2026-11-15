@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 var formatVerbs = regexp.MustCompile(`%\[[0-9]+\][sdv]|%[sdv]`)
@@ -293,5 +294,32 @@ func TestImportStageKeysMatchProducers(t *testing.T) {
 		if pair, ok := messages["import_stage_"+stage]; !ok || pair[0] == "" || pair[1] == "" || pair[2] == "" {
 			t.Errorf("import stage %q needs Chinese, English and Japanese translations", stage)
 		}
+	}
+}
+
+func TestRelativeTime(t *testing.T) {
+	now := time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
+	zh, en := Catalog{Language: "zh-CN"}, Catalog{Language: "en"}
+	for _, tc := range []struct {
+		texts Catalog
+		ago   time.Duration
+		want  string
+	}{
+		{zh, 10 * time.Second, "刚刚"},
+		{zh, -time.Minute, "刚刚"},
+		{zh, 5 * time.Minute, "5 分钟前"},
+		{en, 3 * time.Hour, "3 hr ago"},
+		{zh, 30 * time.Hour, "昨天"},
+		{en, 6 * 24 * time.Hour, "6 days ago"},
+		{zh, 29 * 24 * time.Hour, "29 天前"},
+		{zh, 31 * 24 * time.Hour, "2026年10月15日"},
+		{en, 400 * 24 * time.Hour, "Oct 11, 2025"},
+	} {
+		if got := tc.texts.Relative(now.Add(-tc.ago), now); got != tc.want {
+			t.Errorf("%v 前显示 %q，期望 %q", tc.ago, got, tc.want)
+		}
+	}
+	if got := en.DateTime(now); got != "Nov 15, 2026 at 12:00 PM" {
+		t.Errorf("英文日期时间 %q", got)
 	}
 }

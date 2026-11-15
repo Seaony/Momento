@@ -25,7 +25,7 @@ func TestPreviewWindowScreenshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixture := newScreenshotFixture(t)
-	for _, state := range []string{"normal", "hold", "pinned", "camera"} {
+	for _, state := range []string{"normal", "hold", "pinned"} {
 		for _, theme := range []string{"light", "dark"} {
 			a := fixture.app(t, "small", "zh-CN", theme)
 			var asset model.Asset
@@ -36,9 +36,6 @@ func TestPreviewWindowScreenshots(t *testing.T) {
 				}
 			}
 			asset.Name = "暖光下的山间晨雾"
-			if state == "camera" {
-				asset.EXIF = map[string]string{"cameraMake": "SONY", "cameraModel": "ILCE-7M4", "focalLength": "35", "fNumber": "1.8", "exposureTime": "0.004", "isoSpeedRatings": "100"}
-			}
 			a.ShowPreview(asset.ID, false)
 			w := a.Preview.active
 			w.asset = asset
@@ -63,10 +60,6 @@ func TestPreviewWindowScreenshots(t *testing.T) {
 			imageTester.Frame()
 			if state == "pinned" {
 				imageTester.Move(float32(imageFrame.Width)/2, float32(imageFrame.Height)/2)
-				imageTester.Advance(300 * time.Millisecond)
-			}
-			if state == "camera" {
-				imageTester.Move(float32(imageFrame.Width)/3, float32(imageFrame.Height)-previewFooterMinimum/2)
 				imageTester.Advance(300 * time.Millisecond)
 			}
 			out := image.NewRGBA(image.Rect(0, 0, canvas.Width, canvas.Height))

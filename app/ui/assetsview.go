@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/Seaony/Momento/app/internal/model"
@@ -22,9 +21,9 @@ func (a *App) contentTopInset() float32 {
 
 func (a *App) assetArea(c *ui.Context) {
 	a.hovered = ""
-	scroll := ui.Scroll(c.Key("assets")).Grow(1).FillWidth().TrackScroll(&a.scroll)
+	scroll := ui.Scroll(c.Key("assets")).Scrollbars(false).Grow(1).FillWidth().TrackScroll(&a.scroll)
 	inset := scroll.AnimateTo("header-inset", a.contentTopInset(), motionSpring)
-	scroll.Padding(inset+space16, space16, space16).ScrollbarInsets(inset, 0, 0)
+	scroll.Padding(inset+space16, space16, space16)
 	box := scroll.Bounds()
 	width, height := box.W-2*space16, box.H
 	if width <= 0 {
@@ -37,15 +36,15 @@ func (a *App) assetArea(c *ui.Context) {
 	if height <= 0 {
 		height = 640
 	}
+	width = a.settledAssetWidth(c, width)
 	viewportTop := a.scroll.Y - inset - space16
 	top, bottom := max(0, viewportTop-height), viewportTop+2*height
 	state := ui.Local(scroll, "asset-layout", func() assetLayoutState { return assetLayoutState{} })
 	var items []MasonryItem
 	var contentHeight float32
-	var columns int
 	switch a.ViewMode {
 	case 1, 2:
-		items, contentHeight, columns = a.assetRows(width, top, bottom)
+		items, contentHeight = a.assetRows(width, top, bottom)
 	default:
 		if a.layout == nil || a.layoutVersion != a.visibleVersion || a.layoutWidth != width {
 			if state.ratios == nil || state.ratiosVersion != a.visibleVersion {
@@ -61,33 +60,30 @@ func (a *App) assetArea(c *ui.Context) {
 			a.layout = NewMasonryScaled(state.ratios, width, a.thumbnailScale())
 			a.layoutWidth, a.layoutVersion = width, a.visibleVersion
 		}
-		items, contentHeight, columns = a.layout.Visible(top, bottom), a.layout.Height(), len(a.layout.columns)
+		items, contentHeight = a.layout.Visible(top, bottom), a.layout.Height()
 	}
-	moveCards := state.prepare(a.ViewMode, columns, width, a.thumbnailScale())
+	reflow := state.prepare(a.ViewMode, width, a.thumbnailScale())
 	scroll.Children(func() {
 		mode := ui.Box(c.Key(assetModeID{a.ViewMode})).Height(contentHeight).FillWidth().Shrink(0).
 			Transition(ui.ElementTransition{Duration: assetEnterDuration, ExitDuration: assetExitDuration, Colors: true,
 				Enter: &ui.Motion{Scale: .98}, Exit: &ui.Motion{}})
 		mode.Children(func() {
-			canvas := ui.Box(c.Key(assetCanvasID{state.generation})).Height(contentHeight).FillWidth().Shrink(0).
-				Transition(ui.ElementTransition{Duration: assetColumnsEnterDuration, ExitDuration: assetColumnsExitDuration, Colors: true,
-					Enter: &ui.Motion{}, Exit: &ui.Motion{}})
-			canvas.Children(func() {
-				for _, item := range items {
-					asset := a.Visible[item.Index]
-					card := ui.Column(c.Key(asset.ID)).Absolute().Left(item.X).Top(item.Y).Size(item.Width, item.Height)
-					// 形状与列数不变时才移动卡片；变宽、缩放和换视图都直接布局。
-					if moveCards && item.Y+item.Height > viewportTop+inset && item.Y < viewportTop+height {
-						card.Transition(ui.ElementTransition{Duration: assetEnterDuration, ExitDuration: assetExitDuration, Position: true,
-							Enter: &ui.Motion{}, Exit: &ui.Motion{}})
-					} else {
-						card.Transition(ui.ElementTransition{Duration: -1, Position: true, Size: true})
-					}
-					card.Children(func() { a.assetCard(c, asset, item.Index, a.ViewMode == 2, item.Width) })
+			for _, item := range items {
+				asset := a.Visible[item.Index]
+				card := ui.Column(c.Key(asset.ID)).Absolute().Left(item.X).Top(item.Y).Size(item.Width, item.Height)
+				switch {
+				case reflow:
+					// 缩略图大小、栏宽、窗口宽度变了：每张卡片从原来的位置和大小弹到新的，图片跟着变宽变窄。
+					card.Transition(ui.ElementTransition{Duration: assetReflowDuration, Ease: assetReflowEase, ExitDuration: assetExitDuration, Position: true, Size: true,
+						Enter: &ui.Motion{}, Exit: &ui.Motion{}})
+				case item.Y+item.Height > viewportTop+inset && item.Y < viewportTop+height:
+					// 筛选、排序、增删：屏幕里的卡片按身份移过去。
+					card.Transition(ui.ElementTransition{Duration: assetEnterDuration, ExitDuration: assetExitDuration, Position: true,
+						Enter: &ui.Motion{}, Exit: &ui.Motion{}})
+				default:
+					card.Transition(ui.ElementTransition{Duration: -1, Position: true, Size: true})
 				}
-			})
-			if canvas.Clicked() {
-				a.clearAssetSelection()
+				card.Children(func() { a.assetCard(c, asset, item.Index, a.ViewMode == 2, item.Width) })
 			}
 		})
 		if mode.Clicked() {
@@ -98,38 +94,38 @@ func (a *App) assetArea(c *ui.Context) {
 		a.clearAssetSelection()
 	}
 	a.assetPreviewShortcut(c, scroll)
+	a.assetArrowKeys(c, inset, height)
 	if len(a.Visible) == 0 {
 		p := paletteFor(c.Theme())
-		icon, title, hint := "photos", a.T("scope_empty"), a.T("scope_empty_hint")
+		art, title, hint := "scope-empty", a.T("scope_empty"), a.T("scope_empty_hint")
 		hasFilters := len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions) > 0
 		emptyLibrary := len(a.Snapshot.Assets) == 0 && a.Query.Scope != "trash" && a.Query.Search == "" && !hasFilters
 		switch {
 		case a.Query.Search != "":
-			icon, title, hint = "search", a.T("search_empty", a.Query.Search), a.T("search_empty_hint")
+			art, title, hint = "search-empty", a.T("search_empty", a.Query.Search), a.T("search_empty_hint")
 		case a.Query.Scope == "trash":
-			icon, title, hint = "trash", a.T("trash_empty_title"), a.T("trash_empty_hint")
+			art, title, hint = "trash-empty", a.T("trash_empty_title"), a.T("trash_empty_hint")
 		case emptyLibrary:
-			title, hint = a.T("drop_images"), a.T("drop_images_hint")
+			art, title, hint = "empty-library", a.T("drop_images"), a.T("drop_images_hint")
 		}
 		fadeMotion(ui.Column(c.Key("asset-empty")).Absolute().Top(inset).Left(space24).Right(space24).Bottom(space24).
 			Center().Gap(space12).PassThrough()).Children(func() {
-			ui.Box(c.Key("empty-icon")).Size(space48, space48).Radius(space24).Background(p.Subtle).TextColor(p.TextSecondary).
-				Center().Children(func() { appIcon(c, icon).Size(space24, space24) })
+			emptyArt(c.Key("empty-art"), art, emptyArtLarge).Margin(0, 0, space4, 0)
 			ui.Text(c.Key("empty-title"), title).FontSize(fontTitle).FontWeight(600).TextColor(p.Text).TextAlign(ui.Center)
 			ui.Text(c.Key("empty-hint"), hint).FontSize(fontBody).TextColor(p.TextSecondary).TextAlign(ui.Center)
 			switch {
 			case a.Query.Search != "":
-				if primaryButton(c, a.T("clear_search"), false).Clicked() {
+				if dialogPrimaryButton(c, a.T("clear_search"), false).Clicked() {
 					a.Query.Search = ""
 					a.Refine()
 				}
 			case hasFilters:
-				if primaryButton(c, a.T("clear_filters"), false).Clicked() {
+				if dialogPrimaryButton(c, a.T("clear_filters"), false).Clicked() {
 					a.Query.ColorFamilies, a.Query.TagIDs, a.Query.Extensions = nil, nil, nil
 					a.Refine()
 				}
 			case emptyLibrary:
-				if primaryButton(c, a.T("import"), false).Clicked() {
+				if dialogPrimaryButton(c, a.T("import"), false).Clicked() {
 					a.ChooseImport(false)
 				}
 			}
@@ -138,11 +134,48 @@ func (a *App) assetArea(c *ui.Context) {
 }
 
 const (
-	assetEnterDuration        = 180 * time.Millisecond
-	assetExitDuration         = 120 * time.Millisecond
-	assetColumnsEnterDuration = 90 * time.Millisecond
-	assetColumnsExitDuration  = 60 * time.Millisecond
+	assetEnterDuration  = 180 * time.Millisecond
+	assetExitDuration   = 120 * time.Millisecond
+	assetReflowDuration = 250 * time.Millisecond
 )
+
+// 前段快、尾段柔和，和栏宽弹簧的手感接近，但在 250ms 准时落定，和栏宽同时到位。
+var assetReflowEase = ui.CubicBezier(.25, 1, .5, 1)
+
+// 列表行：缩略图宽固定 112，行高跟着缩略图的实际高度走，上下各留 12；名称和尺寸两行至少要 40 高。
+const (
+	listRowRadius     float32 = radiusPanel // 悬停底色和选中框的圆角
+	listThumbnail     float32 = 112
+	listRowPadding    float32 = space12
+	listRowMinContent float32 = 40
+	listMetaGap               = 7 // 标题和下面尺寸、大小一行的间距
+	listFavoriteInset         = 4 // 收藏按钮离缩略图左上角的距离（缩略图比卡片小，比卡片的 8 收一点）
+)
+
+// 列表第二行的一项：小图标加文字，和预览底栏同一套图标，字号 11、三级文字色。
+func listInfo(c *ui.Context, icon, text string) {
+	color := paletteFor(c.Theme()).Text.Alpha(themeValue(c, .42, .48))
+	ui.Row(c).Gap(previewInfoGap).AlignItems(ui.Center).Children(func() {
+		appIcon(c, icon).Size(fontGroup, fontGroup).Shrink(0).TextColor(color)
+		ui.Text(c, text).FontSize(fontGroup).FontFeatures("tnum").TextColor(color).SingleLine()
+	})
+}
+
+func listRowHeight(asset model.Asset) float32 {
+	_, h := listThumbnailSize(assetDisplaySize(asset))
+	return max(h, listRowMinContent) + 2*listRowPadding
+}
+
+// 长边贴满方框，短边按原图比例；读不到尺寸时按正方形。
+func listThumbnailSize(width, height int) (float32, float32) {
+	if width <= 0 || height <= 0 {
+		return listThumbnail, listThumbnail
+	}
+	if width >= height {
+		return listThumbnail, max(space4, listThumbnail*float32(height)/float32(width))
+	}
+	return max(space4, listThumbnail*float32(width)/float32(height)), listThumbnail
+}
 
 // 卡片左上角的心和右上角的尺寸角标照旧版：高 16，红心用系统红。
 const assetBadgeHeight = 16
@@ -150,28 +183,34 @@ const assetBadgeHeight = 16
 var favoriteRed = ui.Hex("#FF3B30")
 
 type assetModeID struct{ mode int }
-type assetCanvasID struct{ generation uint64 }
 
 type assetLayoutState struct {
 	ready         bool
-	mode, columns int
+	mode          int
 	width, scale  float32
-	generation    uint64
 	ratiosVersion uint64
 	ratios        []float32
 }
 
-func (s *assetLayoutState) prepare(mode, columns int, width, scale float32) bool {
-	sameShape := s.ready && s.mode == mode && s.columns == columns
-	if s.ready && s.mode != mode {
-		s.generation = 0
-	} else if s.ready && s.columns != columns {
-		// 变列数单独使用短过渡，不沿用切换视图的时长。
-		s.generation++
+// 同一视图里布局宽度或缩略图大小变了，返回 true，这一帧起卡片按弹簧变到新布局。
+func (s *assetLayoutState) prepare(mode int, width, scale float32) bool {
+	reflow := s.ready && s.mode == mode && (s.width != width || s.scale != scale)
+	s.ready, s.mode, s.width, s.scale = true, mode, width, scale
+	return reflow
+}
+
+// 侧栏、检查器展开收起时，直接按它们落定后的宽度排版：卡片和栏宽走同一条弹簧一次到位，不在半路反复换列。
+// 拖分隔条时栏宽直接跟手，显示宽度就是目标宽度，这里不改变什么。
+func (a *App) settledAssetWidth(c *ui.Context, width float32) float32 {
+	sidebar := float32(0)
+	if a.SidebarVisible {
+		sidebar = a.SidebarWidth
 	}
-	moveCards := !s.ready || sameShape && s.width == width && s.scale == scale
-	s.ready, s.mode, s.columns, s.width, s.scale = true, mode, columns, width, scale
-	return moveCards
+	if !a.chromeLayoutReady || a.SidebarShownWidth() == sidebar && a.InspectorShownWidth() == a.InspectorTargetWidth() {
+		return width
+	}
+	window, _ := c.Size()
+	return window - 2*space16 - sidebar - a.InspectorTargetWidth() - 1
 }
 
 func (a *App) clearAssetSelection() {
@@ -217,12 +256,16 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 	selected := a.Selected.Has(asset.ID)
 	var card ui.Element
 	if list {
-		card = ui.Row(c.Key(asset.ID)).Fill().Gap(space16).Padding(space8, space12).Radius(radiusCard).
-			BorderWidth(0, 0, 1, 0).BorderColor(p.BorderSubtle)
+		card = ui.Row(c.Key(asset.ID)).Fill().Gap(space16).Padding(listRowPadding, space12).Radius(listRowRadius).
+			BorderWidth(0, 0, 1, 0).BorderColor(p.hairline())
 	} else {
 		card = ui.Column(c.Key(asset.ID)).Fill().Radius(radiusCard).FocusRing(false).Shadow(0, 1, 2, 0, p.Shadow)
 	}
 	card.Label(asset.Name).Focusable().AccessSelected(selected).Cursor(ui.CursorPointer)
+	if a.focusAssetID == asset.ID {
+		a.focusAssetID = ""
+		card.Focus()
+	}
 	focused := card.FocusVisible()
 	wasFocused := ui.Local(card, "keyboard-focus", func() bool { return false })
 	revealFocus := focused && !*wasFocused
@@ -258,16 +301,32 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 		}
 		thumb := a.Bitmap(asset)
 		if list {
-			if thumb != nil {
-				ui.Image(c.Key("thumbnail"), thumb).Size(space48, space48).Fit(ui.Cover).Radius(radiusCard).Shadow(0, 1, 2, 0, p.Shadow)
-			} else {
-				ui.Box(c).Size(space48, space48).Radius(radiusCard).Background(p.Subtle).Shadow(0, 1, 2, 0, p.Shadow)
-			}
-			ui.Column(c.Key("list-meta")).Grow(1).MinWidth(0).Gap(space4).Children(func() {
-				ui.Text(c, asset.Name).FontSize(fontBody).FontWeight(600).SingleLine()
-				ui.Text(c.Key("list-values"), fmt.Sprintf("%d × %d · %s", width, height, fileSize(asset.Size))).FontFeatures("tnum").FontSize(fontNumber).TextColor(p.TextSecondary).SingleLine()
+			// 缩略图按原图比例显示，长边贴满 112，放在 112 宽的框里居中，名称一列仍然对齐；极细长的图短边最少 4，图片用 Contain 不裁切。
+			w, h := listThumbnailSize(width, height)
+			ui.Box(c.Key("thumbnail-frame")).Width(listThumbnail).FillHeight().Shrink(0).Center().Children(func() {
+				if thumb != nil {
+					ui.Image(c.Key("thumbnail"), thumb).Size(w, h).Fit(ui.Contain).Radius(radiusCard).Shadow(0, 1, 2, 0, p.Shadow)
+				} else {
+					ui.Box(c).Size(w, h).Radius(radiusCard).Background(p.Subtle).Shadow(0, 1, 2, 0, p.Shadow)
+				}
 			})
-			ui.Text(c.Key("list-extension"), strings.ToUpper(asset.Extension)).FontSize(fontSecondary).TextColor(p.TextSecondary).Margin(0, space40, 0, 0)
+			// 照旧版 macOS 列表行的字色层次：标题 13 号正文色约 72%，下面尺寸、大小一行 11 号约 42%（各带一个小图标），右边时间 12 号约 56%；深色各提亮一点。
+			ui.Column(c.Key("list-meta")).Grow(1).MinWidth(0).Gap(listMetaGap).Children(func() {
+				ui.Text(c, previewFileName(asset)).FontSize(fontBody).FontWeight(500).TextColor(p.Text.Alpha(themeValue(c, .72, .8))).SingleLine()
+				dimensions, size := previewDetails(asset)
+				ui.Row(c.Key("list-values")).Gap(space12).AlignItems(ui.Center).Children(func() {
+					if dimensions != "" {
+						listInfo(c, "maximize-square", dimensions)
+					}
+					if size != "" {
+						listInfo(c, "diskette", size)
+					}
+				})
+			})
+			// 最右边是导入时间：一个月内写「3 天前」，更早写日期，悬停看完整时间。
+			added := asset.CreatedAt.Local()
+			ui.Text(c.Key("list-added"), a.Texts.Relative(added, time.Now())).FontSize(fontSecondary).FontWeight(500).FontFeatures("tnum").
+				TextColor(p.Text.Alpha(themeValue(c, .56, .64))).SingleLine().Shrink(0).Tooltip(a.Texts.DateTime(added))
 		} else {
 			radius := float32(radiusCard)
 			if thumb != nil {
@@ -287,16 +346,20 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 			ring := fadeMotion(ui.Box(c.Key("selection-ring")).Absolute().Left(-space4).Top(-space4).Right(-space4).Bottom(-space4).
 				Radius(radiusPanel).Border(2, p.Accent).PassThrough())
 			if list {
-				ring.Left(2).Top(2).Right(2).Bottom(2).Radius(radiusCard)
+				ring.Left(2).Top(2).Right(2).Bottom(2).Radius(listRowRadius - 2)
 			}
 		}
 		if hovered || asset.Favorite {
 			button := ui.ButtonBase(c.Key("favorite")).Label(a.T("favorite")).Tooltip(a.T("favorite")).Absolute().Cursor(ui.CursorPointer).
 				Justify(ui.Center).AlignItems(ui.Center).Padding(0)
+			// 旧版：图片左上角一颗白色心，不带底；鼠标移到心上才出黑色半透明底，收藏后变成红色实心。悬停才出现，收藏了常驻。
 			if list {
-				button.Top(space16).Right(space8).Size(controlSmall, controlSmall).Radius(radiusControl).Background(panelColor(c.Theme()))
+				// 列表里贴着缩略图（在 112 宽的框里居中）的左上角。
+				w, h := listThumbnailSize(width, height)
+				left := listRowPadding + (listThumbnail-w)/2
+				top := listRowPadding + (max(h, listRowMinContent)-h)/2
+				button.Top(top+listFavoriteInset).Left(left+listFavoriteInset-1).Size(22, assetBadgeHeight).Radius(assetBadgeHeight / 2)
 			} else {
-				// 旧版：左上角一颗白色心，不带底；鼠标移到心上才出黑色半透明底，收藏后变成红色实心。
 				button.Top(space8).Left(7).Size(22, assetBadgeHeight).Radius(assetBadgeHeight / 2)
 			}
 			favoriteFocused := button.FocusVisible()
@@ -307,24 +370,15 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 			}
 			*wasFavoriteFocused = favoriteFocused
 			fadeMotion(button)
-			if list {
-				ink := p.TextSecondary
-				if button.Hovered() || asset.Favorite {
-					ink = p.Text
-				}
-				button.TextColor(button.AnimateColor("favorite-ink", ink, motionColor))
-				button.Children(func() { appIconSelected(c, "heart", asset.Favorite).Size(iconSize, iconSize) })
-			} else {
-				ink, background := ui.RGBA(255, 255, 255, .92), ui.Transparent
-				if asset.Favorite {
-					ink = favoriteRed
-				}
-				if button.Hovered() {
-					background = ui.RGBA(0, 0, 0, .3)
-				}
-				animateColors(button, background, ink)
-				button.Children(func() { appIconSelected(c, "heart", asset.Favorite).Size(14, 14) })
+			ink, background := ui.RGBA(255, 255, 255, .92), ui.Transparent
+			if asset.Favorite {
+				ink = favoriteRed
 			}
+			if button.Hovered() {
+				background = ui.RGBA(0, 0, 0, .3)
+			}
+			animateColors(button, background, ink)
+			button.Children(func() { appIconSelected(c, "heart", asset.Favorite).Size(14, 14) })
 			if button.Clicked() {
 				a.SetFavorite([]string{asset.ID}, !asset.Favorite)
 			}

@@ -11,7 +11,6 @@ var browseLinkIcon = iconRegular["link-simple"]
 
 // 图库菜单用到的语义名，并进统一的图标别名表；以后整体换图标库只改映射。
 var libraryMenuIconAliases = map[string]string{
-	"drag-handle":    "dots-six-vertical",
 	"more":           "dots-three",
 	"reveal":         "folder-open",
 	"open-library":   "folder-open",

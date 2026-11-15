@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -616,11 +615,9 @@ func (w *previewWindow) footer(c *ui.Context, a *App, now time.Time) {
 	pinFade := w.pinned && now.Sub(w.pinnedAt) < 120*time.Millisecond
 	holding := w.picture.Held && elapsed >= previewPeekThreshold && !w.pinned || w.closing && w.closedHeld && elapsed >= previewPeekThreshold || pinFade
 	width, _ := c.Size()
-	dimensions, size, camera := previewDetails(w.asset)
+	dimensions, size := previewDetails(w.asset)
 	row := ui.Row(c.Key("preview-footer")).Absolute().Left(0).Right(0).Bottom(0).Height(w.footerHeightFor(width, a.Texts.Locale())).
 		Padding(0, previewFooterInset).Gap(space12).AlignItems(ui.Center)
-	// 相机参数平时收着，鼠标移到底栏上才把第二行换成它，窗口高度不变。
-	showCamera := camera != "" && row.Hovered()
 	row.Children(func() {
 		ui.Column(c.Key("preview-info-text")).Grow(1).Shrink(1).MinWidth(0).Gap(previewFooterLineGap).Children(func() {
 			ui.Text(c.Key("preview-name"), previewFileName(w.asset)).FontSize(fontLead).FontWeight(500).TextColor(pal.Text).MaxWidthPercent(100).Selectable()
@@ -628,10 +625,6 @@ func (w *previewWindow) footer(c *ui.Context, a *App, now time.Time) {
 				ui.Text(c, w.picture.errorText).FontSize(fontCaption).TextColor(pal.Danger).SingleLine().MaxWidthPercent(100)
 			} else {
 				ui.Row(c.Key("preview-meta")).Gap(space12).AlignItems(ui.Center).MaxWidthPercent(100).Children(func() {
-					if showCamera {
-						previewInfo(c, "camera", camera).Shrink(1).MinWidth(0).Tooltip(camera)
-						return
-					}
 					if dimensions != "" {
 						previewInfo(c, "maximize-square", dimensions)
 					}
@@ -690,41 +683,15 @@ func previewFileName(asset model.Asset) string {
 	return asset.Name
 }
 
-// 底栏第二行平时是尺寸和文件大小，各带一个小图标；camera 是悬停时换上的相机参数，没有相机 EXIF 时为空。
-func previewDetails(asset model.Asset) (dimensions, size, camera string) {
+// 底栏第二行：尺寸和文件大小，各带一个小图标，悬停也不变。
+func previewDetails(asset model.Asset) (dimensions, size string) {
 	if width, height := assetDisplaySize(asset); width > 0 && height > 0 {
 		dimensions = fmt.Sprintf("%d × %d", width, height)
 	}
 	if asset.Size > 0 {
 		size = fileSize(asset.Size)
 	}
-
-	var parts []string
-	model, maker := strings.TrimSpace(asset.EXIF["cameraModel"]), strings.TrimSpace(asset.EXIF["cameraMake"])
-	// 型号里常常已经带了品牌（Canon EOS R5），这时不再重复品牌。
-	if brand, _, _ := strings.Cut(maker, " "); brand != "" && !strings.HasPrefix(strings.ToLower(model), strings.ToLower(brand)) {
-		model = strings.TrimSpace(maker + " " + model)
-	}
-	if model != "" {
-		parts = append(parts, model)
-	}
-	if v := asset.EXIF["focalLength"]; v != "" {
-		parts = append(parts, v+" mm")
-	}
-	if v := asset.EXIF["fNumber"]; v != "" {
-		parts = append(parts, "f/"+v)
-	}
-	if t, err := strconv.ParseFloat(asset.EXIF["exposureTime"], 64); err == nil && t > 0 {
-		if t < 1 {
-			parts = append(parts, fmt.Sprintf("1/%d s", int(math.Round(1/t))))
-		} else {
-			parts = append(parts, strconv.FormatFloat(t, 'f', -1, 64)+" s")
-		}
-	}
-	if v := asset.EXIF["isoSpeedRatings"]; v != "" {
-		parts = append(parts, "ISO "+v)
-	}
-	return dimensions, size, strings.Join(parts, " · ")
+	return dimensions, size
 }
 
 // 量出底栏需要的高度：文件名在扣掉关闭按钮后的宽度里换行，第二行固定一行，至少保持两行高。

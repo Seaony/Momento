@@ -1,0 +1,1 @@
+Read and follow the common style in /Users/seaony/code/Momento/design/empty-illustrations/第1批/prompts/00-common.md first. Subject: an empty library waiting for images — an open, empty shallow tray or box with two blank photo cards (rounded rectangles with a tiny mountain-and-sun mark) floating down into it, with a small downward arrow hint. Meaning: drop images here.

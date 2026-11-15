@@ -95,7 +95,7 @@ func TestSettingsPageAndDialogTransitions(t *testing.T) {
 		ui.Box(c).Fill().Background(c.Theme().Background)
 		b.dialogs(c)
 	}, 760, 560)
-	b.Ask("重命名", "参考图片", func(string) {})
+	b.Ask("pencil-simple", "重命名", "参考图片", func(string) {})
 	dialog.Frame()
 	opening := settingsMotionFrames(dialog)
 	if bytes.Equal(opening[0].Pix, opening[1].Pix) {
@@ -168,7 +168,7 @@ func TestDialogsSecondRoundScreenshots(t *testing.T) {
 					a.ExportOpen = true
 					a.Dialog.Format = model.ExportJPEG
 				case "prompt":
-					a.Ask("重命名", "山间晨雾", func(string) {})
+					a.Ask("pencil-simple", "重命名", "山间晨雾", func(string) {})
 				case "confirm":
 					a.Confirm("移到回收站", "这张图片会移到回收站，你可以稍后恢复。", "移到回收站", func() {})
 				case "extension-picker":

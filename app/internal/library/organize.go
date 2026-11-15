@@ -31,28 +31,29 @@ func (l *Library) transaction(ctx context.Context, run func(*sql.Tx) error) erro
 	return tx.Commit()
 }
 
-func (l *Library) CreateFolder(ctx context.Context, name, parentID string) (model.Folder, error) {
+func (l *Library) CreateFolder(ctx context.Context, name, parentID, icon string) (model.Folder, error) {
 	name, err := cleanName(name)
 	if err != nil {
 		return model.Folder{}, err
 	}
-	folder := model.Folder{ID: uuid.NewString(), Name: name, ParentID: parentID}
+	folder := model.Folder{ID: uuid.NewString(), Name: name, ParentID: parentID, Icon: icon}
 	err = l.transaction(ctx, func(tx *sql.Tx) error {
 		if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(sort_index)+1,0) FROM folders WHERE parent_id IS ?", parentValue(parentID)).Scan(&folder.SortIndex); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, "INSERT INTO folders(id,name,parent_id,sort_index) VALUES(?,?,?,?)", folder.ID, name, parentValue(parentID), folder.SortIndex)
+		_, err := tx.ExecContext(ctx, "INSERT INTO folders(id,name,parent_id,sort_index,icon) VALUES(?,?,?,?,?)", folder.ID, name, parentValue(parentID), folder.SortIndex, icon)
 		return err
 	})
 	return folder, err
 }
 
-func (l *Library) RenameFolder(ctx context.Context, id, name string) error {
+// EditFolder 改文件夹的名字和图标。
+func (l *Library) EditFolder(ctx context.Context, id, name, icon string) error {
 	name, err := cleanName(name)
 	if err != nil {
 		return err
 	}
-	return changed(l.DB.ExecContext(ctx, "UPDATE folders SET name=? WHERE id=?", name, id))
+	return changed(l.DB.ExecContext(ctx, "UPDATE folders SET name=?,icon=? WHERE id=?", name, icon, id))
 }
 
 func (l *Library) DeleteFolder(ctx context.Context, id string) error {

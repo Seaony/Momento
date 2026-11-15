@@ -22,14 +22,31 @@ type inspectorState struct {
 	TagsOpen, FoldersOpen                       bool
 	Pending                                     []inspectorEdit
 	TagSearch, FolderSearch                     string
+	// 正在原地编辑的字段：title、note、source；平时只显示文字，点了才变输入框。
+	Editing string
+	EditKey ui.Key
+	// 文件夹选择器里展开的父文件夹。
+	FolderExpanded map[string]bool
 }
 
-var inspectorEXIFKeys = []string{
-	"fileCreatedAt", "fileModifiedAt", "contentCreatedAt", "resolution",
-	"colorModel", "profileName", "cameraMake", "cameraModel", "lensModel", "exposureTime",
-	"focalLength", "isoSpeedRatings", "flashFired", "fNumber", "exposureProgram", "meteringMode",
-	"whiteBalance", "creator",
-}
+// 照旧版 macOS 检查器的规格。
+const (
+	inspectorContentWidth   = 280 - 2*space16
+	inspectorPreviewMax     = 360
+	inspectorLabelWidth     = 74
+	inspectorEditRadius     = 7
+	inspectorChipHeight     = 26
+	inspectorChipRadius     = 9
+	inspectorSwatch         = 16
+	inspectorSwatchHit      = inspectorSwatch + 4
+	inspectorMultiCardW     = 156
+	inspectorMultiCardH     = 112
+	inspectorPickerWidth    = 240
+	inspectorPickerMaxList  = 220
+	inspectorFolderRowH     = 26
+	inspectorFolderIndent   = 22
+	inspectorSectionTitleSz = 10
+)
 
 func (a *App) inspector(c *ui.Context) {
 	if a.Library != nil && a.Inspector.LibraryID != a.Library.Manifest.LibraryID {
@@ -38,69 +55,85 @@ func (a *App) inspector(c *ui.Context) {
 	selected := a.SelectedAssets()
 	if len(selected) == 0 {
 		a.saveInspectorEdits()
-		a.Inspector.AssetID = ""
+		a.Inspector.AssetID, a.Inspector.Editing = "", ""
 		return
-	}
-	title := a.T("selected_assets", len(selected))
-	if len(selected) == 1 {
-		title = ""
 	}
 	ui.Column(c).Grow(1).FillWidth().MinHeight(0).Children(func() {
 		if bar := c.TitleBar(); bar.Right > 0 {
 			ui.Box(c.Key("inspector-window-controls")).Height(max(bar.Bottom, bar.Height)).Shrink(0).FillWidth().DragWindow()
 		}
-		ui.Row(c.Key("inspector-header")).Height(space40).Shrink(0).FillWidth().Padding(space4, space16).Gap(space8).Children(func() {
-			ui.Text(c.Key("inspector-heading"), title).FontSize(fontBody).FontWeight(600).TextColor(paletteFor(c.Theme()).Text).SingleLine().Grow(1).MinWidth(0).ContentTransition(ui.ContentTransition{Animation: &motionSpring})
+		ui.Row(c.Key("inspector-header")).Height(space40).Shrink(0).FillWidth().Padding(space4, space16).Children(func() {
+			ui.Spacer(c)
 			if inspectorIconButton(c.Key("collapse-inspector"), a.T("close_inspector"), "collapse-inspector").Shrink(0).Clicked() {
 				a.CollapseInspector()
 			}
 		})
-		ui.Scroll(c.Key("inspector_content")).Grow(1).Padding(0, space16, space16, space16).Gap(space16).Children(func() {
+		ui.Scroll(c.Key("inspector_content")).Scrollbars(false).Grow(1).Padding(0, space16, space16, space16).Children(func() {
 			if len(selected) == 1 {
-				fadeMotion(ui.Column(c.Key("inspector-asset-" + selected[0].ID))).FillWidth().Gap(space16).Children(func() { a.inspectorAsset(c, selected[0]) })
-			} else {
-				a.saveInspectorEdits()
-				a.Inspector.AssetID = ""
+				asset := selected[0]
+				a.syncInspectorAsset(asset)
+				fadeMotion(ui.Column(c.Key("inspector-asset-" + asset.ID))).FillWidth().Gap(space12).Children(func() {
+					ui.Column(c.Key("inspector-head")).FillWidth().Gap(space8).Children(func() {
+						a.inspectorPreview(c, asset)
+						a.inspectorColors(c, asset)
+						a.inspectorTitle(c, asset)
+					})
+					a.inspectorDetails(c, asset)
+					a.inspectorTags(c, selected)
+					a.inspectorFolders(c, selected)
+					a.inspectorNotes(c, asset)
+					a.inspectorEXIF(c, asset)
+				})
+				return
 			}
-			a.inspectorTags(c, selected)
-			a.inspectorFolders(c, selected)
-			if len(selected) == 1 {
-				a.inspectorNotes(c, selected[0])
-			}
+			a.saveInspectorEdits()
+			a.Inspector.AssetID, a.Inspector.Editing = "", ""
+			ui.Column(c.Key("inspector-multiple")).FillWidth().Gap(space12).Children(func() {
+				a.inspectorStack(c, selected)
+				a.inspectorTags(c, selected)
+				a.inspectorFolders(c, selected)
+			})
 		})
 	})
 }
 
-func (a *App) inspectorAsset(c *ui.Context, asset model.Asset) {
-	width, height := assetDisplaySize(asset)
-	if a.Inspector.AssetID != asset.ID || a.Inspector.SourceTitle != asset.Name {
-		if a.Inspector.AssetID != asset.ID {
-			a.saveInspectorEdits()
-		}
-		a.Inspector.AssetID, a.Inspector.Title, a.Inspector.SourceTitle = asset.ID, asset.Name, asset.Name
-		a.Inspector.Note, a.Inspector.SourceNote = asset.Note, asset.Note
-		a.Inspector.SourceURL, a.Inspector.SavedSourceURL = asset.SourceURL, asset.SourceURL
-		for _, edit := range a.Inspector.Pending {
-			if edit.ID == asset.ID {
-				if edit.Rename {
-					a.Inspector.Title = edit.Name
-				}
-				if edit.Details {
-					a.Inspector.Note = edit.Note
-					a.Inspector.SourceURL = edit.Source
-				}
+// 换了素材就把草稿换成新素材的值；还没写进图库的修改从待保存队列里取回。
+func (a *App) syncInspectorAsset(asset model.Asset) {
+	if a.Inspector.AssetID == asset.ID && a.Inspector.SourceTitle == asset.Name {
+		return
+	}
+	if a.Inspector.AssetID != asset.ID {
+		a.saveInspectorEdits()
+		a.Inspector.Editing = ""
+	}
+	a.Inspector.AssetID, a.Inspector.Title, a.Inspector.SourceTitle = asset.ID, asset.Name, asset.Name
+	a.Inspector.Note, a.Inspector.SourceNote = asset.Note, asset.Note
+	a.Inspector.SourceURL, a.Inspector.SavedSourceURL = asset.SourceURL, asset.SourceURL
+	for _, edit := range a.Inspector.Pending {
+		if edit.ID == asset.ID {
+			if edit.Rename {
+				a.Inspector.Title = edit.Name
+			}
+			if edit.Details {
+				a.Inspector.Note = edit.Note
+				a.Inspector.SourceURL = edit.Source
 			}
 		}
 	}
+}
+
+// 图片按宽度铺满、保持比例，太高的限高；点一下打开预览。
+func (a *App) inspectorPreview(c *ui.Context, asset model.Asset) {
 	p := paletteFor(c.Theme())
-	preview := ui.Column(c.Key("inspector_preview")).Height(176).Padding(space12).Radius(radiusPanel).
-		Background(p.Subtle).Label(a.T("image_preview")).Cursor(ui.CursorPointer).Center().Children(func() {
+	preview := ui.Column(c.Key("inspector_preview")).FillWidth().Label(a.T("image_preview")).Cursor(ui.CursorPointer).Center()
+	preview.Children(func() {
 		if bitmap := a.Bitmap(asset); bitmap != nil {
-			availableWidth := float32(280 - 2*space16 - 2*space12)
-			imageWidth, imageHeight := bitmap.Size()
-			scale := min(availableWidth/float32(imageWidth), float32(176-2*space12)/float32(imageHeight))
-			elevated(ui.Image(c, bitmap), c.Theme()).Size(float32(imageWidth)*scale, float32(imageHeight)*scale).Radius(radiusCard).Fit(ui.Contain).Label(a.T("image_preview"))
-		} else {
+			w, h := bitmap.Size()
+			scale := min(float32(inspectorContentWidth)/float32(w), float32(inspectorPreviewMax)/float32(h))
+			ui.Image(c, bitmap).Size(float32(w)*scale, float32(h)*scale).Radius(radiusCard).Fit(ui.Contain).Label(a.T("image_preview"))
+			return
+		}
+		ui.Column(c.Key("preview-placeholder")).FillWidth().Height(inspectorContentWidth / 1.25).Radius(radiusCard).Background(p.Subtle).Center().Children(func() {
 			if a.Library != nil && a.Thumbnails != nil {
 				if err := a.Thumbnails.Error(a.Library.Root, asset); err != nil {
 					ui.Text(c, a.T("preview_failed")).FontSize(fontSecondary).TextColor(p.Danger).Tooltip(a.Texts.Error(err))
@@ -108,27 +141,38 @@ func (a *App) inspectorAsset(c *ui.Context, asset model.Asset) {
 				}
 			}
 			ui.Text(c, a.T("loading_preview")).FontSize(fontSecondary).TextColor(p.TextSecondary)
-		}
+		})
 	})
 	if preview.Clicked() {
 		a.ShowPreview(asset.ID, false)
 	}
-	ui.Column(c.Key("inspector-filename")).Gap(space4).Children(func() {
-		input := ui.TextInput(c.Key("asset_title_"+asset.ID), &a.Inspector.Title).
-			Label(a.T("title")).FontSize(fontBody).FontWeight(600).Disabled(a.Busy)
-		fieldStyle(c, input)
-		if input.Submitted() || input.FocusLeft() {
-			a.saveInspectorTitle()
-		}
-		ui.Textf(c.Key("inspector-dimensions"), "%d × %d · %s", width, height, strings.ToUpper(asset.Extension)).FontFeatures("tnum").FontSize(fontNumber).TextColor(p.TextSecondary)
-	})
-	if len(asset.Colors) > 0 {
-		ui.Row(c).Gap(space4).Children(func() {
-			for _, color := range asset.Colors[:min(8, len(asset.Colors))] {
-				hex := color.Hex
-				if ui.Button(c.Key("swatch_"+hex), "").Label(a.T("copy_color", hex)).
-					Grow(1).MinWidth(0).Height(controlSmall).Padding(0).Radius(radiusSmall).Background(ui.Hex(hex)).
-					Tooltip(hex).Clicked() {
+}
+
+// 色板：浅底圆角条里一排 16 的色块，悬停时上方浮出色值和占比，点击复制色值。
+func (a *App) inspectorColors(c *ui.Context, asset model.Asset) {
+	if len(asset.Colors) == 0 {
+		return
+	}
+	p := paletteFor(c.Theme())
+	colors := asset.Colors[:min(len(asset.Colors), (inspectorContentWidth-10+1)/(inspectorSwatchHit+1))]
+	ui.Row(c.Key("inspector-colors")).FillWidth().Height(28).Center().Children(func() {
+		strip := ui.Row(c.Key("color-strip")).Padding(3, 5).Gap(1).Radius(10).Background(p.Subtle).Border(1, p.BorderSubtle)
+		strip.Children(func() {
+			hovered := -1
+			for i, color := range colors {
+				hex := strings.ToUpper(color.Hex)
+				tip := inspectorColorTip(color)
+				swatch := ui.ButtonBase(c.Key("swatch_"+hex)).Label(a.T("copy_color", hex)).Description(tip).
+					Size(inspectorSwatchHit, inspectorSwatchHit).Padding(2).Radius(inspectorEditRadius).Cursor(ui.CursorPointer)
+				background := ui.Transparent
+				if swatch.Hovered() {
+					background, hovered = p.Hover, i
+				}
+				swatch.Background(swatch.AnimateColor("hover", background, motionColor))
+				swatch.Children(func() {
+					ui.Box(c).Size(inspectorSwatch, inspectorSwatch).Radius(5).Background(ui.Hex(hex)).Border(1, p.Text.Alpha(.08))
+				})
+				if swatch.Clicked() {
 					c.WriteClipboardThen(hex, func(err error) {
 						if err != nil {
 							a.ShowError(err)
@@ -138,65 +182,248 @@ func (a *App) inspectorAsset(c *ui.Context, asset model.Asset) {
 					})
 				}
 			}
+			if hovered < 0 {
+				return
+			}
+			// 提示跟着悬停的色块滑动，离开色板时淡出。
+			text := inspectorColorTip(colors[hovered])
+			w, h := c.MeasureText(0, ui.Span{Text: text, Font: c.Theme().Font, Size: fontGroup, Weight: 500, Lang: a.Texts.Locale()})
+			w, h = w+2*space8, h+2*space4
+			center := float32(5 + hovered*(inspectorSwatchHit+1) + inspectorSwatchHit/2)
+			bubble := ui.Box(c.Key("color-tip")).Absolute().Left(center-w/2).Top(-h-6).Size(w, h).ZIndex(10).
+				Radius(6).Background(c.Theme().Inverse).Center().IgnoreInput(true).AccessHidden(true)
+			bubble.Transition(ui.ElementTransition{Animation: &motionSpring, Position: true, Colors: true,
+				Enter: &ui.Motion{Scale: .96, Y: 2}, Exit: &ui.Motion{Scale: .96, Y: 2}})
+			bubble.Children(func() {
+				ui.Text(c, text).FontSize(fontGroup).FontWeight(500).FontFeatures("tnum").TextColor(c.Theme().InverseText).SingleLine()
+			})
 		})
-	}
-
-	ui.Column(c).Gap(space8).Children(func() {
-		a.inspectorDetail(c, "file_size", fileSize(asset.Size))
-		a.inspectorDetail(c, "date_added", asset.CreatedAt.Local().Format("2006-01-02 15:04"))
 	})
+}
 
-	if hasInspectorEXIF(asset.EXIF) {
-		ui.Column(c).Gap(space8).Children(func() {
-			ui.Divider(c)
-			ui.Text(c, a.T("exif_metadata")).FontSize(fontGroup).FontWeight(600).LetterSpacing(.8).TextColor(p.TextTertiary)
-			for _, key := range inspectorEXIFKeys {
-				if value := inspectorEXIFValue(asset.EXIF, key); value != "" {
-					if key == "flashFired" && (value == "true" || value == "false") {
-						value = a.T("exif_flash_" + value)
-					}
-					a.inspectorDetail(c, "exif_"+key, value)
-				}
+func inspectorColorTip(color model.Color) string {
+	hex := strings.ToUpper(color.Hex)
+	if color.Proportion <= 0 {
+		return hex
+	}
+	return fmt.Sprintf("%s (%.1f%%)", hex, color.Proportion*100)
+}
+
+// 标题平时只是文字，悬停才出浅底和细边，点一下才变成输入框；回车或失焦保存，Esc 放弃。
+func (a *App) inspectorTitle(c *ui.Context, asset model.Asset) {
+	if a.Inspector.Editing == "title" {
+		a.inspectorEditor(c, "asset_title_"+asset.ID, &a.Inspector.Title, a.T("edit_title"), "", fontBody, 6, true, func(cancel bool) {
+			if cancel || strings.TrimSpace(a.Inspector.Title) == "" {
+				a.Inspector.Title = a.Inspector.SourceTitle
 			}
 		})
+		return
+	}
+	a.inspectorEditable(c, "title-display", a.T("edit_title"), func(p *designPalette) {
+		ui.Text(c, a.Inspector.Title).FontSize(fontBody).TextColor(p.Text).FillWidth()
+	}, func() { a.Inspector.Editing = "title" })
+}
+
+// 可原地编辑的文字：悬停铺浅底和细边，点一下进入编辑。
+func (a *App) inspectorEditable(c *ui.Context, key, label string, content func(p *designPalette), edit func()) ui.Element {
+	p := paletteFor(c.Theme())
+	button := ui.ButtonBase(c.Key(key)).Label(label).FillWidth().Padding(space4, 6).Radius(inspectorEditRadius).Cursor(ui.CursorPointer).AlignItems(ui.Start)
+	background, border := ui.Transparent, ui.Transparent
+	if button.Hovered() || button.Focused() {
+		background, border = p.Text.Alpha(themeValue(c, .045, .06)), p.BorderSubtle
+	}
+	button.Background(button.AnimateColor("edit-bg", background, motionColor)).Border(1, button.AnimateColor("edit-border", border, motionColor))
+	button.Children(func() { content(p) })
+	if button.Clicked() {
+		edit()
+	}
+	return button
+}
+
+// 编辑中的输入框：和显示态同样的内边距和字号，品牌色细边；按行数长高（去掉 TextArea 自带的 80 最小高度）。
+// single 为真时回车结束编辑（标题、链接），否则回车换行（备注）。
+func (a *App) inspectorEditor(c *ui.Context, key string, value *string, label, placeholder string, size float32, lines int, single bool, done func(cancel bool)) {
+	p := paletteFor(c.Theme())
+	input := ui.TextArea(c.Key(key), value).Lines(1, lines).Label(label).Placeholder(placeholder).PlaceholderColor(placeholderColor(c)).
+		FillWidth().MinHeight(0).Padding(space4, 6).FontSize(size).Radius(inspectorEditRadius).Background(p.Raised).Border(1, p.Accent.Alpha(.65)).
+		FocusRing(false).Scrollbars(false).AutoFocus().Disabled(a.Busy)
+	// 回车、Esc 在输入框处理之前拦下，记下来留到下一帧处理：单行字段回车不插换行，光标停在哪都不改内容。
+	input.OnTextKey(func(k ui.TextKey) bool {
+		switch {
+		case k.Key == ui.KeyEscape && k.Mods == 0:
+			a.Inspector.EditKey = ui.KeyEscape
+		case k.Key == ui.KeyEnter && k.Mods == 0 && single:
+			a.Inspector.EditKey = ui.KeyEnter
+		default:
+			return false
+		}
+		return true
+	})
+	finish := func(cancel bool) {
+		done(cancel)
+		a.Inspector.Editing, a.Inspector.EditKey = "", 0
+		a.saveInspectorEdits()
+	}
+	// 粘贴进单行字段的换行换成空格。
+	if single && strings.ContainsAny(*value, "\r\n") {
+		*value = strings.Join(strings.Fields(strings.NewReplacer("\r", " ", "\n", " ").Replace(*value)), " ")
+	}
+	switch {
+	case a.Inspector.EditKey == ui.KeyEscape:
+		finish(true)
+	case a.Inspector.EditKey == ui.KeyEnter, input.FocusLeft():
+		finish(false)
 	}
 }
 
-func (a *App) inspectorNotes(c *ui.Context, asset model.Asset) {
+// 浅色、深色各取一个值（多为叠在底色上的正文色比例）。
+func themeValue(c *ui.Context, light, dark float32) float32 {
+	if c.Theme().Dark {
+		return dark
+	}
+	return light
+}
+
+// 区块：一条浅分隔线、大写小标题，再是内容，间距都是 12。
+func inspectorSection(c *ui.Context, key, title string, body func()) {
 	p := paletteFor(c.Theme())
-	ui.Column(c).Gap(space8).Children(func() {
-		ui.Divider(c.Key("inspector-notes-divider")).Background(p.BorderSubtle)
-		ui.Text(c, a.T("asset_note")).FontSize(fontGroup).FontWeight(600).LetterSpacing(.8).TextColor(p.TextTertiary)
-		note := ui.TextArea(c.Key("asset-note-"+asset.ID), &a.Inspector.Note).Label(a.T("asset_note")).Placeholder(a.T("asset_note_placeholder")).PlaceholderColor(placeholderColor(c)).Height(88).FillWidth().Disabled(a.Busy)
-		fieldStyle(c, note)
-		if note.FocusLeft() {
-			a.saveInspectorDetails()
+	ui.Column(c.Key(key)).FillWidth().Gap(space12).Children(func() {
+		ui.Box(c).Height(1).FillWidth().Background(p.hairline())
+		// 备注不要小标题，占位文字「添加备注」已经说明了用途。
+		if title != "" {
+			ui.Text(c, strings.ToUpper(title)).FontSize(inspectorSectionTitleSz).FontWeight(600).TextColor(p.TextTertiary)
+		}
+		body()
+	})
+}
+
+// 一行信息：左边 74 宽的次要色标签，右边左对齐的值，可选中复制。
+func inspectorInfo(c *ui.Context, label, value string) {
+	p := paletteFor(c.Theme())
+	ui.Row(c).FillWidth().AlignItems(ui.Start).Gap(10).Children(func() {
+		ui.Text(c, label).FontSize(fontSecondary).TextColor(p.TextTertiary).Width(inspectorLabelWidth).Shrink(0)
+		ui.Text(c, value).FontSize(fontSecondary).FontFeatures("tnum").TextColor(p.Text).Grow(1).MinWidth(0).Selectable()
+	})
+}
+
+func (a *App) inspectorDetails(c *ui.Context, asset model.Asset) {
+	inspectorSection(c, "inspector-details", a.T("details"), func() {
+		if asset.Extension != "" {
+			inspectorInfo(c, a.T("kind"), strings.ToUpper(asset.Extension))
+		}
+		if width, height := assetDisplaySize(asset); width > 0 && height > 0 {
+			inspectorInfo(c, a.T("dimensions"), fmt.Sprintf("%d × %d", width, height))
+		}
+		if asset.Size > 0 {
+			inspectorInfo(c, a.T("file_size"), fileSize(asset.Size))
+		}
+		if !asset.CreatedAt.IsZero() {
+			inspectorInfo(c, a.T("date_added"), a.Texts.DateTime(asset.CreatedAt.Local()))
+		}
+		// 和旧版一样，没有链接就不显示这一行。
+		if strings.TrimSpace(a.Inspector.SourceURL) != "" || a.Inspector.Editing == "source" {
+			a.inspectorLink(c, asset)
 		}
 	})
-	ui.Column(c).Gap(space8).Children(func() {
-		ui.Text(c, a.T("source_url")).FontSize(fontGroup).FontWeight(600).LetterSpacing(.8).TextColor(p.TextTertiary)
-		ui.Row(c).Gap(space8).Children(func() {
-			ui.Box(c.Key("source-field")).Grow(1).MinWidth(0).Height(space32).Children(func() {
-				source := ui.TextInput(c.Key("asset-source-"+asset.ID), &a.Inspector.SourceURL).Label(a.T("source_url")).Placeholder(a.T("source_url_placeholder")).PlaceholderColor(placeholderColor(c)).TextColor(p.Link).Fill().Disabled(a.Busy)
-				fieldStyle(c, source)
-				if source.Submitted() || source.FocusLeft() {
-					a.saveInspectorDetails()
-				}
-				if !source.Focused() {
-					source.TextColor(ui.Transparent).PlaceholderColor(ui.Transparent)
-					text, color := a.Inspector.SourceURL, p.Link
-					if text == "" {
-						text, color = a.T("source_url_placeholder"), placeholderColor(c)
+}
+
+// 链接：有地址时点文字打开，悬停变品牌色加下划线，右边浮出编辑按钮；没有地址时点占位文字直接编辑。
+func (a *App) inspectorLink(c *ui.Context, asset model.Asset) {
+	p := paletteFor(c.Theme())
+	// 链接文字自带 6 的内边距，标签后的间距相应减掉，文字和上面各行的值对齐。
+	row := ui.Row(c.Key("inspector-link")).FillWidth().AlignItems(ui.Center).Gap(10 - 7)
+	row.Children(func() {
+		ui.Text(c, a.T("link")).FontSize(fontSecondary).TextColor(p.TextTertiary).Width(inspectorLabelWidth).Shrink(0)
+		if a.Inspector.Editing == "source" {
+			ui.Box(c.Key("link-editor")).Grow(1).MinWidth(0).Children(func() {
+				a.inspectorEditor(c, "asset-source-"+asset.ID, &a.Inspector.SourceURL, a.T("source_url"), a.T("source_url_placeholder"), fontSecondary, 4, true, func(cancel bool) {
+					if cancel {
+						a.Inspector.SourceURL = a.Inspector.SavedSourceURL
 					}
-					ui.Row(c.Key("source-display")).Absolute().Fill().Padding(0, space12).IgnoreInput(true).PassThrough().AccessHidden(true).Children(func() {
-						ui.Text(c, text).FontSize(fontBody).TextColor(color).SingleLine().Grow(1).MinWidth(0)
-					})
+				})
+			})
+			return
+		}
+		url := strings.TrimSpace(a.Inspector.SourceURL)
+		link := ui.ButtonBase(c.Key("link-open")).Label(a.T("open_source_url")).Description(url).Grow(1).MinWidth(0).
+			Padding(3, 6).Radius(inspectorEditRadius).Cursor(ui.CursorPointer).AlignItems(ui.Center)
+		background, border, ink := ui.Transparent, ui.Transparent, p.Text
+		if link.Hovered() || link.Focused() {
+			background, border, ink = p.Text.Alpha(themeValue(c, .05, .08)), p.BorderSubtle, p.Link
+		}
+		link.Background(link.AnimateColor("link-bg", background, motionColor)).Border(1, link.AnimateColor("link-border", border, motionColor))
+		link.Children(func() {
+			text := ui.Text(c, url).FontSize(fontSecondary).TextColor(link.AnimateColor("link-ink", ink, motionColor)).SingleLine().Grow(1).MinWidth(0)
+			if link.Hovered() {
+				text.Underline()
+			}
+		})
+		if link.Clicked() {
+			c.OpenURLThen(url, a.ShowError)
+		}
+		edit := inspectorIconButton(c.Key("link-edit"), a.T("edit_link"), "edit").Size(space20, space20)
+		edit.Opacity(edit.AnimateTo("shown", motionTarget(row.Hovered() || edit.Focused()), motionColor))
+		if edit.Clicked() {
+			a.Inspector.Editing = "source"
+		}
+	})
+}
+
+func (a *App) inspectorNotes(c *ui.Context, asset model.Asset) {
+	inspectorSection(c, "inspector-notes", "", func() {
+		if a.Inspector.Editing == "note" {
+			a.inspectorEditor(c, "asset-note-"+asset.ID, &a.Inspector.Note, a.T("asset_note"), a.T("asset_note_placeholder"), fontSecondary, 10, false, func(cancel bool) {
+				if cancel {
+					a.Inspector.Note = a.Inspector.SourceNote
 				}
 			})
-			if strings.TrimSpace(a.Inspector.SourceURL) != "" {
-				if inspectorIconButton(c.Key("open-source"), a.T("open_source_url"), "external-link").Clicked() {
-					c.OpenURLThen(strings.TrimSpace(a.Inspector.SourceURL), a.ShowError)
-				}
+			return
+		}
+		a.inspectorEditable(c, "note-display", a.T("asset_note"), func(p *designPalette) {
+			if strings.TrimSpace(a.Inspector.Note) == "" {
+				ui.Text(c, a.T("asset_note_placeholder")).FontSize(fontSecondary).TextColor(placeholderColor(c)).FillWidth()
+				return
+			}
+			ui.Text(c, a.Inspector.Note).FontSize(fontSecondary).TextColor(p.Text).FillWidth()
+		}, func() { a.Inspector.Editing = "note" })
+	})
+}
+
+func (a *App) inspectorEXIF(c *ui.Context, asset model.Asset) {
+	items := a.inspectorEXIFItems(asset.EXIF)
+	if len(items) == 0 {
+		return
+	}
+	// EXIF 可以收起：点小标题一行切换，收起状态记在偏好里。
+	p := paletteFor(c.Theme())
+	open := !a.Preferences.EXIFCollapsed
+	ui.Column(c.Key("inspector-exif")).FillWidth().Children(func() {
+		ui.Box(c).Height(1).FillWidth().Background(p.hairline())
+		header := ui.ButtonBase(c.Key("exif-toggle")).Label(a.T("exif")).Expanded(open).FillWidth().Height(space32).Padding(0).
+			AlignItems(ui.Center).Gap(space4).Cursor(ui.CursorPointer)
+		ink := p.TextTertiary
+		if header.Hovered() {
+			ink = p.TextSecondary
+		}
+		header.TextColor(header.AnimateColor("ink", ink, motionColor))
+		header.Children(func() {
+			ui.Text(c, strings.ToUpper(a.T("exif"))).FontSize(inspectorSectionTitleSz).FontWeight(600)
+			ui.Spacer(c)
+			arrow := appIcon(c, "caret-right").Size(12, 12)
+			arrow.Rotate(arrow.AnimateTo("rotation", motionTarget(open)*90, motionSpring))
+		})
+		if header.Clicked() {
+			a.Preferences.EXIFCollapsed = open
+			a.queuePreferences()
+		}
+		if !open {
+			return
+		}
+		body := ui.Column(c.Key("exif-body")).FillWidth().Gap(space12).Padding(space4, 0, 0, 0)
+		body.Transition(ui.ElementTransition{Animation: &motionSpring, Enter: &ui.Motion{Collapse: true}, Exit: &ui.Motion{Collapse: true}})
+		body.Children(func() {
+			for _, item := range items {
+				inspectorInfo(c, item[0], item[1])
 			}
 		})
 	})
@@ -204,71 +431,65 @@ func (a *App) inspectorNotes(c *ui.Context, asset model.Asset) {
 
 func (a *App) saveInspectorTitle() { a.saveInspectorEdits() }
 
-func (a *App) inspectorDetail(c *ui.Context, key, value string) {
+// 多选：最多三张缩略图错开叠放，底部压一块「已选择 N 个素材」。
+func (a *App) inspectorStack(c *ui.Context, selected []model.Asset) {
 	p := paletteFor(c.Theme())
-	ui.Row(c).AlignItems(ui.Start).Gap(space8).Children(func() {
-		ui.Text(c, a.T(key)).FontSize(fontSecondary).TextColor(p.TextTertiary).Width(space48 * 2).Shrink(0)
-		text := ui.Text(c, value).FontSize(fontSecondary).TextColor(p.Text).Grow(1).MinWidth(0).TextAlign(ui.End).Selectable()
-		switch key {
-		case "file_size", "date_added", "exif_fileCreatedAt", "exif_fileModifiedAt", "exif_contentCreatedAt", "exif_resolution", "exif_exposureTime", "exif_focalLength", "exif_isoSpeedRatings", "exif_fNumber":
-			text.FontFeatures("tnum").FontSize(fontNumber)
+	title := a.T("selected_assets", len(selected))
+	ui.Box(c.Key("inspector-stack")).FillWidth().Height(156).Label(title).Children(func() {
+		rotation := []float32{-6, 1.5, 7}
+		offsetX := []float32{-34, 0, 34}
+		offsetY := []float32{12, 0, 14}
+		for i, asset := range selected[:min(3, len(selected))] {
+			card := ui.Box(c.Key("stack-"+asset.ID)).Absolute().Size(inspectorMultiCardW, inspectorMultiCardH).
+				Left((inspectorContentWidth-inspectorMultiCardW)/2+offsetX[i]).Top((156-inspectorMultiCardH)/2+offsetY[i]).
+				Radius(radiusCard).Background(p.Subtle).Border(1, p.BorderSubtle).Shadow(0, 8, 28, 0, ui.Hex("#000000").Alpha(.24)).
+				Rotate(rotation[i]).ZIndex(i).Clip().AccessHidden(true)
+			layoutMotion(card)
+			card.Children(func() {
+				if bitmap := a.Bitmap(asset); bitmap != nil {
+					ui.Image(c, bitmap).Fill().Fit(ui.Cover)
+				}
+			})
 		}
+		ui.Row(c.Key("stack-count")).Absolute().Left(0).Right(0).Bottom(5).ZIndex(5).Center().Children(func() {
+			ui.Row(c).Height(28).Padding(0, 10).Radius(9).Background(p.Raised).Border(1, p.BorderSubtle).Shadow(0, 1, 2, 0, p.Shadow).Center().Children(func() {
+				ui.Text(c, title).FontSize(fontSecondary).FontWeight(600).TextColor(p.Text).SingleLine()
+			})
+		})
 	})
 }
 
-func hasInspectorEXIF(values map[string]string) bool {
-	for _, key := range inspectorEXIFKeys {
-		if inspectorEXIFValue(values, key) != "" {
-			return true
-		}
-	}
-	return false
-}
-
-func inspectorEXIFValue(values map[string]string, key string) string {
-	if key != "resolution" {
-		return values[key]
-	}
-	width, height := values["dpiWidth"], values["dpiHeight"]
-	if width == "" {
-		width = height
-	}
-	if width == "" {
-		return ""
-	}
-	if height == "" || width == height {
-		return width + " dpi"
-	}
-	return width + " × " + height + " dpi"
-}
-
 type inspectorMembership struct {
-	ID, Name, Label string
+	ID, Name, ParentID, Icon string
 }
 
 func (a *App) inspectorTags(c *ui.Context, selected []model.Asset) {
 	items := make([]inspectorMembership, 0, len(a.Snapshot.Tags))
 	for _, tag := range a.Snapshot.Tags {
-		items = append(items, inspectorMembership{tag.ID, tag.Name, tag.Name})
+		items = append(items, inspectorMembership{ID: tag.ID, Name: tag.Name})
 	}
+	slices.SortFunc(items, func(x, y inspectorMembership) int {
+		return strings.Compare(strings.ToLower(x.Name), strings.ToLower(y.Name))
+	})
 	a.inspectorMemberships(c, selected, items, false)
 }
 
 func (a *App) inspectorFolders(c *ui.Context, selected []model.Asset) {
 	items := make([]inspectorMembership, 0, len(a.Snapshot.Folders))
 	for _, folder := range a.Snapshot.Folders {
-		items = append(items, inspectorMembership{folder.ID, folder.Name, inspectorFolderPath(a.Snapshot.Folders, folder.ID)})
+		items = append(items, inspectorMembership{ID: folder.ID, Name: folder.Name, ParentID: folder.ParentID, Icon: folder.Icon})
 	}
 	a.inspectorMemberships(c, selected, items, true)
 }
 
+// 标签、文件夹区：已加入的显示成药丸，悬停时前面的图标换成移除按钮；最后是加号药丸，点开选择器。
 func (a *App) inspectorMemberships(c *ui.Context, selected []model.Asset, items []inspectorMembership, folder bool) {
 	ids := inspectorIDs(selected)
-	kind, plural := "tag", "tags"
-	open, search := &a.Inspector.TagsOpen, &a.Inspector.TagSearch
+	kind, plural, icon := "tag", "tags", "hashtag"
+	open := &a.Inspector.TagsOpen
 	if folder {
-		kind, plural = "folder", "folders"
-		open, search = &a.Inspector.FoldersOpen, &a.Inspector.FolderSearch
+		kind, plural, icon = "folder", "folders", "folder"
+		open = &a.Inspector.FoldersOpen
 	}
 	set := func(id string, add bool) {
 		if folder {
@@ -277,86 +498,333 @@ func (a *App) inspectorMemberships(c *ui.Context, selected []model.Asset, items 
 			a.SetTags(ids, []string{id}, add)
 		}
 	}
-	ui.Column(c.Key("inspector_" + plural)).Gap(space8).Children(func() {
-		ui.Divider(c)
-		ui.Row(c).Children(func() {
-			ui.Text(c, a.T(plural)).FontSize(fontGroup).FontWeight(600).LetterSpacing(.8).TextColor(paletteFor(c.Theme()).TextTertiary)
-			ui.Spacer(c)
-			add := inspectorIconButton(c.Key("inspector_add_"+kind), a.T("add_"+plural), "plus").Disabled(a.Busy)
+	p := paletteFor(c.Theme())
+	inspectorSection(c, "inspector_"+plural, a.T(plural), func() {
+		ui.Row(c.Key("chips")).FillWidth().Wrap().Gap(6).Children(func() {
+			for _, item := range items {
+				count := inspectorMembershipCount(selected, item.ID, folder)
+				if count == 0 {
+					continue
+				}
+				chip := ui.Row(c.Key("member_"+item.ID)).Height(inspectorChipHeight).MaxWidthPercent(100).Padding(0, 9).Gap(5).
+					Radius(inspectorChipRadius).AlignItems(ui.Center).Label(item.Name)
+				layoutMotion(chip)
+				hovered := chip.Hovered()
+				chip.Background(chip.AnimateColor("chip-bg", p.Text.Alpha(themeValue(c, chipAlpha(hovered, .03, .07), chipAlpha(hovered, .04, .12))), motionColor))
+				chip.Children(func() {
+					remove := ui.ButtonBase(c.Key("remove")).Label(a.T("remove_"+kind, item.Name)).Size(18, 20).Padding(0).Center().Cursor(ui.CursorPointer).Disabled(a.Busy)
+					remove.Children(func() {
+						switch {
+						case hovered || remove.Focused():
+							appIcon(c, "close-circle").Size(14, 14).TextColor(p.Text)
+						case folder:
+							folderIcon(c, item.Icon).Size(12, 12).TextColor(p.Text)
+						default:
+							appIcon(c, icon).Size(12, 12).TextColor(p.Text)
+						}
+					})
+					if remove.Clicked() {
+						set(item.ID, false)
+					}
+					ui.Text(c, item.Name).FontSize(fontSecondary).FontWeight(500).TextColor(p.Text).SingleLine().MinWidth(0).Tooltip(inspectorMembershipPath(items, item.ID))
+					if len(selected) > 1 && count < len(selected) {
+						ui.Textf(c, "%d/%d", count, len(selected)).FontFeatures("tnum").FontSize(fontGroup).TextColor(p.TextSecondary)
+					}
+				})
+			}
+			add := ui.ButtonBase(c.Key("inspector_add_"+kind)).Label(a.T("add_"+plural)).Size(34, inspectorChipHeight).Padding(0).
+				Radius(inspectorChipRadius).Center().Cursor(ui.CursorPointer).Disabled(a.Busy)
+			background := p.Text.Alpha(themeValue(c, .045, .08))
+			if add.Pressed() || *open {
+				background = p.Text.Alpha(themeValue(c, .1, .16))
+			} else if add.Hovered() {
+				background = p.Text.Alpha(themeValue(c, .07, .12))
+			}
+			add.Background(add.AnimateColor("add-bg", background, motionColor))
+			add.Children(func() { appIcon(c, "add-plain").Size(14, 14).TextColor(p.Text) })
 			if add.Clicked() {
 				*open = !*open
 			}
-			floatingPopover(c.Key("inspector_"+kind+"_picker"), add, open, func() {
-				ui.Column(c).Width(244).Gap(space8).Children(func() {
-					searchField(c.Key("picker-search"), search, a.T("search_"+plural), a.T("clear_search"))
-					ui.Scroll(c).MaxHeight(220).Gap(space4).Children(func() {
-						query := strings.ToLower(strings.TrimSpace(*search))
-						for _, item := range items {
-							if query != "" && !strings.Contains(strings.ToLower(item.Label), query) {
-								continue
-							}
-							count := inspectorMembershipCount(selected, item.ID, folder)
-							all := count == len(selected)
-							label := item.Label
-							if count > 0 && !all {
-								label += fmt.Sprintf(" (%d/%d)", count, len(selected))
-							}
-							if settingsCheckbox(c.Key(item.ID), &all, label).Disabled(a.Busy).Changed() {
-								set(item.ID, all)
-							}
-						}
-						if len(items) == 0 {
-							ui.Text(c, a.T("no_"+plural)).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary)
-						}
-					})
-					if secondaryButton(c, a.T("create_"+kind)).Disabled(a.Busy).Clicked() {
-						*open = false
-						lib := a.Library
-						a.Ask(a.T("create_"+kind), *search, func(name string) {
-							a.Run("create_asset_"+kind, func(ctx context.Context) error {
-								if folder {
-									item, err := lib.CreateFolder(ctx, name, "")
-									if err != nil {
-										return err
-									}
-									return lib.SetAssetFolders(ctx, ids, []string{item.ID}, true)
-								}
-								item, err := lib.CreateTag(ctx, name)
-								if err != nil {
-									return err
-								}
-								return lib.SetAssetTags(ctx, ids, []string{item.ID}, true)
-							})
-						})
+			picker := floatingPopover(c.Key("inspector_"+kind+"_picker"), add, open, func() {
+				ui.Column(c).Width(inspectorPickerWidth).Padding(10).Gap(10).Children(func() {
+					if folder {
+						a.inspectorFolderPicker(c, selected, items, set)
+					} else {
+						a.inspectorTagPicker(c, selected, items, set)
 					}
 				})
 			})
-		})
-		found := false
-		for _, item := range items {
-			count := inspectorMembershipCount(selected, item.ID, folder)
-			if count == 0 {
-				continue
+			// 选择器在加号正下方居中弹出（放不下时 mygo 会自动挪回窗口里）。
+			if picker.Valid() {
+				picker.AttachTo(add, ui.AnchorBottom, ui.AnchorTop)
 			}
-			found = true
-			layoutMotion(ui.Row(c.Key("member_"+item.ID))).AlignSelf(ui.Start).MaxWidthPercent(100).Height(space32).Padding(0, space8).Radius(radiusPanel).Background(paletteFor(c.Theme()).Subtle).Gap(space8).Children(func() {
-				ui.Text(c, item.Label).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).Text).SingleLine().Tooltip(item.Label).Grow(1).MinWidth(0)
-				if len(selected) > 1 {
-					ui.Textf(c, "%d/%d", count, len(selected)).FontFeatures("tnum").FontSize(fontNumber).TextColor(paletteFor(c.Theme()).TextSecondary)
-				}
-				if inspectorRemoveButton(c, a.T("remove_"+kind, item.Name)).Disabled(a.Busy).Clicked() {
-					set(item.ID, false)
+			if !*open {
+				a.Inspector.TagSearch, a.Inspector.FolderSearch = inspectorResetSearch(folder, a.Inspector.TagSearch, a.Inspector.FolderSearch)
+			}
+		})
+	})
+}
+
+func chipAlpha(hovered bool, rest, hover float32) float32 {
+	if hovered {
+		return hover
+	}
+	return rest
+}
+
+// 选择器关上时清掉它自己的搜索词，下次打开从头开始。
+func inspectorResetSearch(folder bool, tag, folderSearch string) (string, string) {
+	if folder {
+		return tag, ""
+	}
+	return "", folderSearch
+}
+
+// 标签选择器：搜索框、「全部标签 (N)」和一片标签药丸；搜不到就给一行「创建」。
+// 点标签就加上并关掉选择器；回车优先加完全同名的，其次第一个还没加的，都没有就创建。
+func (a *App) inspectorTagPicker(c *ui.Context, selected []model.Asset, items []inspectorMembership, set func(string, bool)) {
+	p := paletteFor(c.Theme())
+	query := strings.TrimSpace(a.Inspector.TagSearch)
+	lower := strings.ToLower(query)
+	var matches []inspectorMembership
+	exact := ""
+	for _, item := range items {
+		if lower == "" || strings.Contains(strings.ToLower(item.Name), lower) {
+			matches = append(matches, item)
+		}
+		if lower != "" && strings.ToLower(item.Name) == lower {
+			exact = item.ID
+		}
+	}
+	all := func(id string) bool { return inspectorMembershipCount(selected, id, false) == len(selected) }
+	choose := func(id string) {
+		if a.Busy {
+			return
+		}
+		set(id, true)
+		a.Inspector.TagsOpen = false
+	}
+	_, _, submitted := searchFieldFocus(c.Key("picker-search"), &a.Inspector.TagSearch, a.T("search_tags"), a.T("clear_search"), true)
+	if submitted && query != "" {
+		switch {
+		case exact != "":
+			choose(exact)
+		case slices.ContainsFunc(matches, func(m inspectorMembership) bool { return !all(m.ID) }):
+			choose(matches[slices.IndexFunc(matches, func(m inspectorMembership) bool { return !all(m.ID) })].ID)
+		default:
+			a.createInspectorMembership(selected, query, false)
+		}
+	}
+	ui.Scroll(c.Key("tag-choices")).Scrollbars(false).MaxHeight(inspectorPickerMaxList).FillWidth().Gap(space8).Children(func() {
+		creating := query != "" && exact == ""
+		if len(matches) == 0 {
+			// 有「创建」行时不再提示「没有匹配的标签」，两句话说的是一回事。
+			if !creating {
+				inspectorPickerEmpty(c, "no-tags", a.T("no_tags"))
+			}
+		} else {
+			ui.Text(c, fmt.Sprintf("%s (%d)", a.T("all_tags"), len(matches))).FontSize(fontGroup).FontWeight(600).TextColor(p.TextSecondary).Padding(0, 2)
+			ui.Row(c.Key("choices")).FillWidth().Wrap().Gap(6).Children(func() {
+				for _, item := range matches {
+					count := inspectorMembershipCount(selected, item.ID, false)
+					done := count == len(selected)
+					label := item.Name
+					if count > 0 && !done {
+						label += fmt.Sprintf(" (%d/%d)", count, len(selected))
+					}
+					choice := ui.ButtonBase(c.Key(item.ID)).Label(label).Height(inspectorChipHeight).MaxWidthPercent(100).Padding(0, 9).Gap(6).
+						Radius(inspectorChipRadius).AlignItems(ui.Center).Cursor(ui.CursorPointer).Disabled(done || a.Busy).AccessSelected(done)
+					ink := p.Text
+					if done {
+						ink = p.TextSecondary
+					}
+					choice.Background(choice.AnimateColor("choice-bg", p.Text.Alpha(themeValue(c, chipAlpha(choice.Hovered() || done, .04, .08), chipAlpha(choice.Hovered() || done, .08, .16))), motionColor))
+					choice.Children(func() {
+						appIcon(c, "hashtag").Size(12, 12).TextColor(ink)
+						ui.Text(c, label).FontSize(fontSecondary).FontWeight(500).TextColor(ink).SingleLine().MinWidth(0)
+					})
+					if choice.Clicked() {
+						choose(item.ID)
+					}
 				}
 			})
 		}
-		if !found {
-			key := "no_" + plural
-			if !folder && len(selected) > 1 {
-				key = "selected_no_tags"
-			}
-			fadeMotion(ui.Text(c.Key("membership-empty"), a.T(key))).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary)
+		if creating {
+			a.inspectorCreateRow(c, selected, query, false)
 		}
 	})
+}
+
+// 文件夹选择器：搜索框下是可展开的文件夹树，勾选框切换加入或移出，选择器不关；搜索时连同上级一起显示并展开。
+func (a *App) inspectorFolderPicker(c *ui.Context, selected []model.Asset, items []inspectorMembership, set func(string, bool)) {
+	query := strings.TrimSpace(a.Inspector.FolderSearch)
+	lower := strings.ToLower(query)
+	children := map[string][]inspectorMembership{}
+	exact := false
+	for _, item := range items {
+		children[item.ParentID] = append(children[item.ParentID], item)
+		if lower != "" && strings.ToLower(item.Name) == lower {
+			exact = true
+		}
+	}
+	var matches func(id string) bool
+	matches = func(id string) bool {
+		for _, child := range children[id] {
+			if strings.Contains(strings.ToLower(child.Name), lower) || matches(child.ID) {
+				return true
+			}
+		}
+		return false
+	}
+	if a.Inspector.FolderExpanded == nil {
+		a.Inspector.FolderExpanded = map[string]bool{}
+	}
+	_, _, submitted := searchFieldFocus(c.Key("picker-search"), &a.Inspector.FolderSearch, a.T("search_folders"), a.T("clear_search"), true)
+	if submitted && query != "" && !exact {
+		a.createInspectorMembership(selected, query, true)
+	}
+	ui.Scroll(c.Key("folder-choices")).Scrollbars(false).MaxHeight(inspectorPickerMaxList + 40).FillWidth().Gap(1).Children(func() {
+		shown := 0
+		var walk func(parent string, depth int)
+		walk = func(parent string, depth int) {
+			for _, item := range children[parent] {
+				hasChildren := len(children[item.ID]) > 0
+				if lower != "" && !strings.Contains(strings.ToLower(item.Name), lower) && !matches(item.ID) {
+					continue
+				}
+				shown++
+				expanded := a.Inspector.FolderExpanded[item.ID] || (lower != "" && hasChildren)
+				a.inspectorFolderRow(c, selected, items, item, depth, hasChildren, expanded, set)
+				if hasChildren && expanded {
+					walk(item.ID, depth+1)
+				}
+			}
+		}
+		walk("", 0)
+		creating := query != "" && !exact
+		if shown == 0 && !creating {
+			inspectorPickerEmpty(c, "no-folders", a.T("no_folders"))
+		}
+		if creating {
+			if shown > 0 {
+				ui.Box(c).Height(space8 - 1)
+			}
+			a.inspectorCreateRow(c, selected, query, true)
+		}
+	})
+}
+
+func (a *App) inspectorFolderRow(c *ui.Context, selected []model.Asset, items []inspectorMembership, item inspectorMembership, depth int, hasChildren, expanded bool, set func(string, bool)) {
+	p := paletteFor(c.Theme())
+	count := inspectorMembershipCount(selected, item.ID, true)
+	checked := count == len(selected)
+	row := ui.Row(c.Key("folder-"+item.ID)).FillWidth().Height(inspectorFolderRowH).Padding(0, 9, 0, float32(depth*inspectorFolderIndent)).Gap(2).Radius(11).AlignItems(ui.Center)
+	background := ui.Transparent
+	if row.Hovered() {
+		background = p.Hover
+	}
+	row.Background(row.AnimateColor("row-bg", background, motionColor))
+	row.Children(func() {
+		toggle := ui.ButtonBase(c.Key("expand")).Size(20, inspectorFolderRowH).Padding(0).Center().Cursor(ui.CursorPointer)
+		if hasChildren {
+			toggle.Label(a.T("toggle_folder", item.Name)).Expanded(expanded)
+			toggle.Children(func() {
+				arrow := appIcon(c, "caret-right").Size(10, 10).TextColor(p.TextSecondary)
+				arrow.Rotate(arrow.AnimateTo("rotation", map[bool]float32{false: 0, true: 90}[expanded], motionSpring))
+			})
+			if toggle.Clicked() {
+				a.Inspector.FolderExpanded[item.ID] = !a.Inspector.FolderExpanded[item.ID]
+			}
+		} else {
+			toggle.AccessHidden(true).IgnoreInput(true)
+		}
+		label := item.Name
+		if count > 0 && !checked {
+			label += fmt.Sprintf(" (%d/%d)", count, len(selected))
+		}
+		pick := ui.CheckboxBase(c.Key("pick"), &checked).Label(label).Grow(1).MinWidth(0).FillHeight().Gap(space8).AlignItems(ui.Center).Cursor(ui.CursorPointer).Disabled(a.Busy)
+		pick.Children(func() {
+			box := ui.Box(c.Key("box")).Size(15, 15).Radius(4.5).Shrink(0).Center()
+			fill, border := p.Text.Alpha(themeValue(c, .035, .08)), p.Text.Alpha(themeValue(c, .11, .26))
+			if checked || count > 0 {
+				fill, border = p.Text.Alpha(themeValue(c, .08, .22)), p.Text.Alpha(themeValue(c, .18, .42))
+			}
+			box.Background(box.AnimateColor("fill", fill, motionColor)).Border(1, box.AnimateColor("border", border, motionColor))
+			box.Children(func() {
+				switch {
+				case checked:
+					appIcon(c, "check").Size(10, 10).TextColor(p.Text)
+				case count > 0:
+					// 部分素材在这个文件夹里：画一道短横。
+					ui.Box(c).Size(7, 1.5).Radius(1).Background(p.Text)
+				}
+			})
+			ui.Text(c, label).FontSize(fontSecondary).FontWeight(600).TextColor(p.Text).SingleLine().Grow(1).MinWidth(0).Tooltip(inspectorMembershipPath(items, item.ID))
+		})
+		if pick.Changed() {
+			set(item.ID, checked)
+		}
+	})
+}
+
+// 选择器空状态：一个淡色小图标加「还没有标签」，居中，颜色比正文浅。
+func inspectorPickerEmpty(c *ui.Context, art, text string) {
+	p := paletteFor(c.Theme())
+	ui.Column(c.Key("picker-empty")).FillWidth().Padding(space12, 0).Gap(space8).AlignItems(ui.Center).Children(func() {
+		emptyArt(c.Key("art"), art, emptyArtSmall)
+		ui.Text(c, text).FontSize(fontSecondary).TextColor(p.TextTertiary.Alpha(.8)).TextAlign(ui.Center)
+	})
+}
+
+// 「创建 xxx」行：新建标签或文件夹并直接加到所选素材上。
+func (a *App) inspectorCreateRow(c *ui.Context, selected []model.Asset, name string, folder bool) {
+	p := paletteFor(c.Theme())
+	row := ui.ButtonBase(c.Key("create")).Label(a.T("create_named", name)).FillWidth().Height(34).Padding(0, 10).Gap(space8).
+		Radius(11).AlignItems(ui.Center).Cursor(ui.CursorPointer).Disabled(a.Busy)
+	row.Background(row.AnimateColor("create-bg", p.Text.Alpha(themeValue(c, chipAlpha(row.Hovered(), .04, .08), chipAlpha(row.Hovered(), .08, .16))), motionColor))
+	row.Children(func() {
+		appIcon(c, "add-plain").Size(12, 12).TextColor(p.Text)
+		ui.Text(c, a.T("create_named", name)).FontSize(fontSecondary).FontWeight(500).TextColor(p.Text).SingleLine().Grow(1).MinWidth(0)
+	})
+	if row.Clicked() {
+		a.createInspectorMembership(selected, name, folder)
+	}
+}
+
+func (a *App) createInspectorMembership(selected []model.Asset, name string, folder bool) {
+	// 别的写入还没结束时 Run 会直接跳过；这时不清搜索词也不关选择器，用户可以稍后再按一次。
+	if a.Busy {
+		return
+	}
+	lib, ids := a.Library, inspectorIDs(selected)
+	if folder {
+		// 文件夹先弹出新建对话框选图标，建好后把所选素材放进去。
+		a.Inspector.FoldersOpen, a.Inspector.FolderSearch = false, ""
+		a.ShowNewFolder("", name, ids)
+		return
+	}
+	a.Inspector.TagsOpen, a.Inspector.TagSearch = false, ""
+	a.Run("create_asset_tag", func(ctx context.Context) error {
+		item, err := lib.CreateTag(ctx, name)
+		if err != nil {
+			return err
+		}
+		return lib.SetAssetTags(ctx, ids, []string{item.ID}, true)
+	})
+}
+
+func inspectorMembershipPath(items []inspectorMembership, id string) string {
+	var parts []string
+	for id != "" {
+		i := slices.IndexFunc(items, func(item inspectorMembership) bool { return item.ID == id })
+		if i < 0 {
+			break
+		}
+		parts = append(parts, items[i].Name)
+		id = items[i].ParentID
+	}
+	slices.Reverse(parts)
+	return strings.Join(parts, " / ")
 }
 
 func inspectorIDs(selected []model.Asset) []string {
@@ -379,26 +847,6 @@ func inspectorMembershipCount(selected []model.Asset, id string, folder bool) in
 		}
 	}
 	return count
-}
-
-func inspectorFolderPath(folders []model.Folder, id string) string {
-	var parts []string
-	for id != "" {
-		found := false
-		for _, folder := range folders {
-			if folder.ID == id {
-				parts = append(parts, folder.Name)
-				found = true
-				id = folder.ParentID
-				break
-			}
-		}
-		if !found {
-			break
-		}
-	}
-	slices.Reverse(parts)
-	return strings.Join(parts, " / ")
 }
 
 func (a *App) inspectorDraft() (inspectorEdit, bool) {

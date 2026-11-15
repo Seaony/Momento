@@ -66,87 +66,90 @@ type Preferences struct {
 	SidebarVisible          bool                        `json:"sidebarVisible"`
 	SidebarWidth            float32                     `json:"sidebarWidth"`
 	SmartFolders            bool                        `json:"smartFolders"`
+	EXIFCollapsed           bool                        `json:"exifCollapsed"`
 }
 
 type App struct {
-	Window                                   *mygo.Window
-	SettingsWindow                           *mygo.Window
-	SettingsRequested                        func()
-	Extension                                *browser.Service
-	ExtensionStatus                          browser.Status
-	Texts                                    i18n.Catalog
-	Library                                  *library.Library
-	Assets                                   *assets.Service
-	Snapshot                                 model.Snapshot
-	Index                                    *catalog.Index
-	Query                                    catalog.Query
-	Visible                                  []model.Asset
-	Selected                                 ui.Selection[string]
-	ViewMode                                 int
-	TagPage                                  bool
-	SidebarVisible, InspectorVisible         bool
-	SidebarWidth                             float32
-	sidebarShownWidth, inspectorShownWidth   float32
-	sidebarSplitWidth                        float32
-	chromeLayoutReady                        bool
-	Search                                   ui.Handle
-	Busy                                     bool
-	Progress                                 *model.ImportProgress
-	Error, Notice                            string
-	SettingsOpen, NewLibraryOpen, ExportOpen bool
-	Preferences                              Preferences
-	Browse                                   browseState
-	GBrowsing                                gBrowsingState
-	Welcome                                  welcomeState
-	Lock                                     lockState
-	Import                                   importState
-	Quitting                                 bool
-	quitAfterInspector                       bool
-	pendingLibraryAfterEdits                 string
-	TextInputFocused                         bool
-	menuInspectorAvailable                   bool
-	menuPreviewOpen                          bool
-	PreferencesChanged                       func()
-	WindowShown                              func()
-	Recent                                   []library.Recent
-	Sidebar                                  sidebarState
-	Toolbar                                  toolbarState
-	Inspector                                inspectorState
-	Preview                                  previewWindows
-	Settings                                 settingsState
-	Dialog                                   dialogsState
-	Tags                                     tagsState
-	MenuChanged                              func()
-	InspectorAvailabilityChanged             func(bool)
-	PromptOpen, ConfirmOpen                  bool
-	PromptTitle, PromptValue                 string
-	PromptSubmit                             func(string)
-	ConfirmTitle, ConfirmDetail              string
-	ConfirmLabel                             string
-	ConfirmAction                            func()
-	Thumbnails                               *thumbnailCache
-	manifest                                 model.Manifest
-	pendingOpen                              string
-	pendingImports                           [][2]string
-	assetByID                                map[string]model.Asset
-	configDir                                string
-	recents                                  *library.RecentStore
-	ctx                                      context.Context
-	cancel                                   context.CancelFunc
-	prefMu                                   sync.Mutex
-	prefVersion                              atomic.Uint64
-	workMu                                   sync.Mutex
-	generation                               uint64
-	scroll                                   ui.ScrollState
-	selectedIndex                            int
-	anchor                                   int
-	hovered                                  string
-	assetClickID, pendingAssetActivation     string
-	assetClickBounds                         ui.Rect
-	layout                                   *MasonryLayout
-	layoutWidth                              float32
-	layoutVersion                            uint64
-	visibleVersion                           uint64
+	Window                                                    *mygo.Window
+	SettingsWindow                                            *mygo.Window
+	SettingsRequested                                         func()
+	Extension                                                 *browser.Service
+	ExtensionStatus                                           browser.Status
+	Texts                                                     i18n.Catalog
+	Library                                                   *library.Library
+	Assets                                                    *assets.Service
+	Snapshot                                                  model.Snapshot
+	Index                                                     *catalog.Index
+	Query                                                     catalog.Query
+	Visible                                                   []model.Asset
+	Selected                                                  ui.Selection[string]
+	ViewMode                                                  int
+	TagPage                                                   bool
+	SidebarVisible, InspectorVisible                          bool
+	SidebarWidth                                              float32
+	sidebarShownWidth, inspectorShownWidth                    float32
+	sidebarSplitWidth                                         float32
+	chromeLayoutReady                                         bool
+	Search                                                    ui.Handle
+	Busy                                                      bool
+	Progress                                                  *model.ImportProgress
+	Error, Notice                                             string
+	SettingsOpen, NewLibraryOpen, EditLibraryOpen, ExportOpen bool
+	Preferences                                               Preferences
+	Browse                                                    browseState
+	GBrowsing                                                 gBrowsingState
+	Welcome                                                   welcomeState
+	Lock                                                      lockState
+	Import                                                    importState
+	Quitting                                                  bool
+	quitAfterInspector                                        bool
+	pendingLibraryAfterEdits                                  string
+	TextInputFocused                                          bool
+	menuInspectorAvailable                                    bool
+	menuPreviewOpen                                           bool
+	PreferencesChanged                                        func()
+	WindowShown                                               func()
+	Recent                                                    []library.Recent
+	Sidebar                                                   sidebarState
+	Toolbar                                                   toolbarState
+	Inspector                                                 inspectorState
+	Preview                                                   previewWindows
+	Settings                                                  settingsState
+	Dialog                                                    dialogsState
+	Tags                                                      tagsState
+	MenuChanged                                               func()
+	InspectorAvailabilityChanged                              func(bool)
+	PromptOpen, ConfirmOpen                                   bool
+	PromptIcon, PromptTitle, PromptValue                      string
+	PromptSubmit                                              func(string)
+	ConfirmTitle, ConfirmDetail                               string
+	ConfirmLabel                                              string
+	ConfirmAction                                             func()
+	Thumbnails                                                *thumbnailCache
+	manifest                                                  model.Manifest
+	pendingOpen                                               string
+	pendingImports                                            [][2]string
+	assetByID                                                 map[string]model.Asset
+	configDir                                                 string
+	recents                                                   *library.RecentStore
+	ctx                                                       context.Context
+	cancel                                                    context.CancelFunc
+	prefMu                                                    sync.Mutex
+	prefVersion                                               atomic.Uint64
+	workMu                                                    sync.Mutex
+	generation                                                uint64
+	scroll                                                    ui.ScrollState
+	selectedIndex                                             int
+	anchor                                                    int
+	hovered                                                   string
+	assetClickID, pendingAssetActivation                      string
+	assetClickBounds                                          ui.Rect
+	layout                                                    *MasonryLayout
+	layoutWidth                                               float32
+	layoutVersion                                             uint64
+	list                                                      listLayout
+	focusAssetID                                              string // 方向键移动选择后，下一帧把键盘焦点交给这张卡片
+	visibleVersion                                            uint64
 }
 
 func New() *App {
@@ -295,7 +298,8 @@ func (a *App) ShowError(err error) {
 	}
 }
 func (a *App) Notify(s string) { a.Notice = s }
-func (a *App) Ask(title, initial string, submit func(string)) {
+func (a *App) Ask(icon, title, initial string, submit func(string)) {
+	a.PromptIcon = icon
 	a.PromptTitle = title
 	a.PromptValue = initial
 	a.PromptSubmit = submit
@@ -309,6 +313,11 @@ func (a *App) Confirm(title, detail, label string, action func()) {
 	a.ConfirmOpen = true
 }
 func (a *App) ShowNewLibrary() { a.NewLibraryOpen = true }
+func (a *App) ShowEditLibrary() {
+	if a.Library != nil {
+		a.EditLibraryOpen = true
+	}
+}
 
 func (a *App) Run(label string, work func(context.Context) error) {
 	if a.Library == nil || a.Busy {
@@ -338,7 +347,7 @@ func (a *App) Run(label string, work func(context.Context) error) {
 			}
 			a.manifest = lib.Manifest
 			a.applySnapshot(snapshot)
-			if label == "rename_library" {
+			if label == "edit_library" {
 				a.Window.SetTitle(a.manifest.DisplayName + " – Momento")
 				a.remember()
 			}
@@ -512,7 +521,7 @@ func (a *App) remember() {
 	root := a.Library.Root
 	gen := a.generation
 	go func() {
-		err := a.recents.Add(library.Recent{Path: root, LibraryID: m.LibraryID, DisplayName: m.DisplayName, LastOpened: time.Now()})
+		err := a.recents.Add(library.Recent{Path: root, LibraryID: m.LibraryID, DisplayName: m.DisplayName, Icon: m.Icon, LastOpened: time.Now()})
 		var recent []library.Recent
 		if err == nil {
 			recent, err = a.recents.List()
@@ -529,13 +538,19 @@ func (a *App) remember() {
 		})
 	}()
 }
-func (a *App) CreateLibraryAt(path, name string) {
+func (a *App) CreateLibraryAt(path, name, icon string) {
 	if a.Busy {
 		return
 	}
 	a.Busy = true
 	go func() {
 		lib, err := library.Create(a.ctx, path, name)
+		if err == nil && icon != "" {
+			err = lib.Edit(name, icon)
+			if err != nil {
+				err = errors.Join(err, lib.Close())
+			}
+		}
 		if err == nil {
 			err = lib.Close()
 		}
@@ -550,9 +565,9 @@ func (a *App) CreateLibraryAt(path, name string) {
 		})
 	}()
 }
-func (a *App) RenameLibrary(name string) {
+func (a *App) EditLibrary(name, icon string) {
 	lib := a.Library
-	a.Run("rename_library", func(ctx context.Context) error { return lib.Rename(name) })
+	a.Run("edit_library", func(ctx context.Context) error { return lib.Edit(name, icon) })
 }
 func (a *App) ReorderRecent(paths []string) {
 	if a.recents == nil {

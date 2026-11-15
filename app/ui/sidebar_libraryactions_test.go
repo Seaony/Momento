@@ -40,7 +40,7 @@ func TestSidebarLibraryManagementMenu(t *testing.T) {
 	open := true
 	app.Sidebar.LibraryMore = map[string]*bool{app.Library.Root: &open}
 	tt.Frame()
-	for _, key := range []string{"rename_library", "reveal_library", "clear_library_cache", "delete_library"} {
+	for _, key := range []string{"edit_library", "reveal_library", "clear_library_cache", "delete_library"} {
 		if !tt.HasText(app.T(key)) {
 			t.Errorf("当前图库的更多菜单缺少 %s", key)
 		}
@@ -57,7 +57,7 @@ func TestSidebarLibraryManagementDisabledWhileBusy(t *testing.T) {
 	open := true
 	app.Sidebar.LibraryMore = map[string]*bool{app.Library.Root: &open}
 	tt.Frame()
-	for _, key := range []string{"import_library", "export_library", "rename_library", "clear_library_cache", "delete_library"} {
+	for _, key := range []string{"import_library", "export_library", "edit_library", "clear_library_cache", "delete_library"} {
 		access, ok := tt.Access(app.T(key))
 		if !ok || !access.Disabled {
 			t.Errorf("%s 未在忙碌时禁用", key)

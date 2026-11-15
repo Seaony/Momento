@@ -22,32 +22,36 @@ type designPalette struct {
 }
 
 var lightPalette = designPalette{
-	Background: ui.Hex("#FFFCFA"), Sidebar: ui.Hex("#FFF7F1"), Raised: ui.Hex("#FFFFFF"),
-	Subtle: ui.Hex("#FDF1E8"), Hover: ui.Hex("#FBECE0"), Pressed: ui.Hex("#F7E2D2"), Selected: ui.Hex("#FFFFFF"),
-	BorderSubtle: ui.Hex("#F3E3D6"), Border: ui.Hex("#EAD6C6"),
-	Text: ui.Hex("#2B221D"), TextSecondary: ui.Hex("#6F5F55"), TextTertiary: ui.Hex("#7D6B60"),
+	Background: ui.Hex("#FCFBFF"), Sidebar: ui.Hex("#F7F5FF"), Raised: ui.Hex("#FFFFFF"),
+	Subtle: ui.Hex("#F1EEFD"), Hover: ui.Hex("#ECE8FB"), Pressed: ui.Hex("#E3DEF8"), Selected: ui.Hex("#FFFFFF"),
+	BorderSubtle: ui.Hex("#E7E3F7"), Border: ui.Hex("#DAD4F0"),
+	Text: ui.Hex("#221F2E"), TextSecondary: ui.Hex("#5F5A72"), TextTertiary: ui.Hex("#6E6882"),
 	SegmentSelected: ui.Hex("#FFFFFF"),
-	Field:           ui.Hex("#F7EEE6"), FieldHover: ui.Hex("#F3E8DE"),
-	Accent: ui.Hex("#F47B45"), AccentHover: ui.Hex("#FA8B59"), AccentPressed: ui.Hex("#E8733D"),
-	OnAccent: ui.Hex("#2B221D"), Focus: ui.Hex("#D9622C"), Link: ui.Hex("#A74320"),
+	Field:           ui.Hex("#F2EFFC"), FieldHover: ui.Hex("#EDE9FA"),
+	// 品牌色取 logo 刺猬背上的靛紫，白字在上面对比度 5.2。
+	Accent: ui.Hex("#6553F0"), AccentHover: ui.Hex("#6E5CF4"), AccentPressed: ui.Hex("#5845E0"),
+	OnAccent: ui.Hex("#FFFFFF"), Focus: ui.Hex("#5B49E8"), Link: ui.Hex("#4B3BC9"),
 	Danger: ui.Hex("#B91C1C"), Warning: ui.Hex("#8F4500"), Success: ui.Hex("#166534"),
-	Shadow: ui.RGBA(92, 56, 32, .07), Scrim: ui.RGBA(43, 34, 29, .25),
+	Shadow: ui.RGBA(40, 32, 96, .07), Scrim: ui.RGBA(34, 31, 46, .25),
 }
 
-// 深色以近黑为主，只留一点暖意；橘色只在强调色上出现。
+// 深色以近黑为主，只带一点冷紫；靛紫只在强调色上出现。
 var darkPalette = designPalette{
-	Background: ui.Hex("#111010"), Sidebar: ui.Hex("#171615"), Raised: ui.Hex("#201E1D"),
-	Subtle: ui.Hex("#1A1918"), Hover: ui.Hex("#262422"), Pressed: ui.Hex("#2E2B29"), Selected: ui.Hex("#232120"),
-	BorderSubtle: ui.Hex("#252321"), Border: ui.Hex("#322F2D"),
-	Text: ui.Hex("#F4F0ED"), TextSecondary: ui.Hex("#B6AEA8"), TextTertiary: ui.Hex("#938A84"),
-	SegmentSelected: ui.Hex("#2F2C2A"),
-	Field:           ui.Hex("#1A1918"), FieldHover: ui.Hex("#201E1D"),
-	// 品牌色和浅色一样用 logo 橘，不另调浅；链接文字仍用浅一些的橘，深底上好读。
-	Accent: ui.Hex("#F47B45"), AccentHover: ui.Hex("#FA8B59"), AccentPressed: ui.Hex("#E8733D"),
-	OnAccent: ui.Hex("#2B221D"), Focus: ui.Hex("#F47B45"), Link: ui.Hex("#FFB48F"),
+	Background: ui.Hex("#101012"), Sidebar: ui.Hex("#161619"), Raised: ui.Hex("#1F1E23"),
+	Subtle: ui.Hex("#19191D"), Hover: ui.Hex("#25242A"), Pressed: ui.Hex("#2D2C33"), Selected: ui.Hex("#222127"),
+	BorderSubtle: ui.Hex("#242329"), Border: ui.Hex("#312F37"),
+	Text: ui.Hex("#F1F0F5"), TextSecondary: ui.Hex("#AEACB8"), TextTertiary: ui.Hex("#8C8A96"),
+	SegmentSelected: ui.Hex("#2D2C33"),
+	Field:           ui.Hex("#19191D"), FieldHover: ui.Hex("#1F1E23"),
+	// 品牌色和浅色一样；焦点框和链接文字用浅一些的紫，深底上好认。
+	Accent: ui.Hex("#6553F0"), AccentHover: ui.Hex("#6E5CF4"), AccentPressed: ui.Hex("#5845E0"),
+	OnAccent: ui.Hex("#FFFFFF"), Focus: ui.Hex("#8B80FA"), Link: ui.Hex("#B4ADFF"),
 	Danger: ui.Hex("#FF9B9B"), Warning: ui.Hex("#FCD478"), Success: ui.Hex("#88DDA9"),
 	Shadow: ui.RGBA(0, 0, 0, .36), Scrim: ui.RGBA(0, 0, 0, .55),
 }
+
+// 内容区里的细分隔线（列表行之间、检查器各区块之间）同一个颜色：BorderSubtle 往背景色混到 35%，比别处的边框淡，仍然不透明。
+func (p *designPalette) hairline() ui.Color { return p.Background.Mix(p.BorderSubtle, .35) }
 
 func paletteFor(t *ui.Theme) *designPalette {
 	if t.Dark {
@@ -94,12 +98,11 @@ const (
 
 	// 侧栏照旧版 macOS（git 2a13147^ MomentoSidebarView.swift）抄的规格。
 	sidebarPadding          = 14 // 侧栏左右留白
-	sidebarLibraryGap       = 18 // 图库选择器和第一行之间
+	sidebarLibraryGap       = 22 // 图库选择器和第一行之间
 	sidebarLibraryInset     = 5  // 图库选择器左边留白
-	sidebarLogoRadius       = 5
 	sidebarLibraryHeight    = 26
-	sidebarRowHeight        = 30
-	sidebarRowGap           = 2
+	sidebarRowHeight        = 32
+	sidebarRowGap           = 4
 	sidebarRowPadding       = 8 // 行内左右留白
 	sidebarRowRadius        = 9
 	sidebarIconBox          = 18 // 图标占位宽
@@ -108,24 +111,32 @@ const (
 	sidebarWeight           = 400 // 常规字重
 	sidebarSelectedWeight   = 500 // 选中行文字重一档
 	sidebarIdleInk          = .6  // 未选中的文字和图标是正文色 60%
+	sidebarToggleSize       = 26
+	sidebarToggleInk        = .42 // 顶部收起按钮平时的颜色，比未选中行更淡
 	sidebarCountInk         = .8  // 数量再暗一档：未选中约正文色 48%
 	sidebarCountSize        = fontGroup
 	sidebarCountGap         = 6
 	sidebarBadgeSize        = 8 // 回收站角标
 	sidebarDividerInset     = 12
-	sidebarDividerSpace     = 6 // 分隔线上下各留
+	sidebarDividerSpace     = 10 // 分隔线上下各留
 	sidebarSectionGap       = 18
-	sidebarGroupGap         = 6  // 入口组、分隔线、文件夹分区之间
+	sidebarGroupGap         = 8  // 入口组、分隔线、文件夹分区之间
 	sidebarHeader           = 32 // 「快速访问」标题行
 	sidebarLibraryEnd       = 7  // 图库选择器右边留白
+	sidebarLibraryNameGap   = 6  // 图库图标和名称之间
+	sidebarLibraryCaretGap  = 4  // 名称和上下箭头之间，比图标那边更近
+	sidebarLibraryCaretInk  = .5 // 上下箭头平时是正文色 50%
 	sidebarFolderIndent     = 18
+	sidebarDiscloseHit      = 18 // 文件夹名后面展开箭头的点击区
 	sidebarFooterButtonSize = 28
 	sidebarFooterGap        = 6
 	sidebarFooterPadding    = 9
 
-	panelNarrow = 360 // 弹出层、引导里的窄面板
-	panelDialog = 420 // 对话框
-	panelWide   = 560 // 宽面板、引导页
+	panelNarrow          = 360 // 弹出层、引导里的窄面板
+	panelDialog          = 420 // 对话框
+	dialogHeaderHeight   = 48  // 对话框标题栏，下面是一条通栏分隔线
+	dialogButtonMinWidth = 72  // 对话框底部按钮最窄宽度，「取消」「新建」这类短词也不会显得局促
+	panelWide            = 560 // 宽面板、引导页
 )
 
 // 让文字在固定高度里垂直居中。直接给 Text 设 Height 时字会贴在顶部；改用行高撑出高度，

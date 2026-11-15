@@ -145,3 +145,28 @@ func TestFocusedAssetEnterPreviewShortcut(t *testing.T) {
 		})
 	}
 }
+
+// 焦点停在侧栏「全部」这类按钮上时（点过或用 Tab 移过去），指针移到图片上按空格仍要打开预览，
+// 而不是被按钮接走、再点一次「全部」还亮出焦点框。
+func TestSpacePreviewWinsOverFocusedSidebarRow(t *testing.T) {
+	a := sidebarTestApp()
+	tt := ui.NewTester(a.View, 1100, 640)
+	tt.Frame()
+	for i := 0; i < 40 && !tt.Focused(a.T("all")); i++ {
+		tt.Key(0, ui.KeyTab)
+	}
+	if !tt.Focused(a.T("all")) {
+		t.Fatal("没能把焦点移到「全部」")
+	}
+	card, ok := tt.AccessByRole(ui.RoleButton, "Portrait")
+	if !ok {
+		t.Fatal("缺少悬停素材")
+	}
+	tt.Move(card.Bounds.X+card.Bounds.W/2, card.Bounds.Y+card.Bounds.H/2)
+	tt.Frame()
+	tt.KeyDown(ui.KeySpace)
+	tt.KeyUp(ui.KeySpace)
+	if !a.PreviewOpen() || a.PreviewAssetID() != "b" {
+		t.Fatalf("焦点在侧栏按钮上时空格没有预览悬停图：%q", a.PreviewAssetID())
+	}
+}

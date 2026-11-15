@@ -1,0 +1,1 @@
+Read and follow the common style in /Users/seaony/code/Momento/design/empty-illustrations/第1批/prompts/00-common.md first. Subject: two blank tag labels (rounded tag shapes with a small hole and a short string), one overlapping the other at a slight angle, no text on them. Meaning: no tags yet.

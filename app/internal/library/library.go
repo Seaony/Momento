@@ -188,7 +188,8 @@ func (l *Library) Close() error {
 	return l.DB.Close()
 }
 
-func (l *Library) Rename(name string) error {
+// Edit 改图库的名称和图标，一起写回 manifest。
+func (l *Library) Edit(name, icon string) error {
 	name, err := cleanName(name)
 	if err != nil {
 		return err
@@ -196,12 +197,12 @@ func (l *Library) Rename(name string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	next := l.Manifest
-	next.DisplayName, next.UpdatedAt = name, time.Now().UTC()
+	next.DisplayName, next.Icon, next.UpdatedAt = name, icon, time.Now().UTC()
 	if err := writeJSON(filepath.Join(l.Root, "manifest.json"), next); err != nil {
 		return err
 	}
 	l.Manifest = next
-	slog.Info("重命名图库", "path", l.Root, "name", name)
+	slog.Info("编辑图库", "path", l.Root, "name", name, "icon", icon)
 	return nil
 }
 

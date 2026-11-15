@@ -123,6 +123,13 @@ func searchTextLift(text string) float32 {
 // 应用里的搜索框：放大镜、输入框、有内容时的清除按钮。不用 ui.SearchField，因为它的占位颜色改不了、中文也偏下；
 // 输入框撑满整行，点框里任意处都能输入；有内容时按 Esc 先清空，和系统搜索框一样。
 func searchField(c *ui.Context, query *string, label, clearLabel string) (field ui.Element, changed bool) {
+	field, changed, _ = searchFieldFocus(c, query, label, clearLabel, false)
+	return field, changed
+}
+
+// autofocus 为真时，搜索框出现的那一帧就把光标放进输入框（弹出的选择器一打开就能打字）。
+// submitted 报告这一帧在输入框里按了回车。
+func searchFieldFocus(c *ui.Context, query *string, label, clearLabel string, autofocus bool) (field ui.Element, changed, submitted bool) {
 	p := paletteFor(c.Theme())
 	shown := *query
 	if shown == "" {
@@ -133,7 +140,10 @@ func searchField(c *ui.Context, query *string, label, clearLabel string) (field 
 		appIcon(c, "search").Size(iconMedium, iconMedium).TextColor(p.TextSecondary).Shrink(0)
 		input := ui.TextInputBase(c.Key("input"), query).Search().Label(label).Placeholder(label).PlaceholderColor(placeholderColor(c)).
 			Grow(1).MinWidth(0).FillHeight().Padding(0, 0, searchTextLift(shown), 0).FontSize(fontBody).FocusRing(false)
-		changed = input.Changed()
+		if autofocus {
+			input.AutoFocus()
+		}
+		changed, submitted = input.Changed(), input.Submitted()
 		if *query != "" {
 			// 挂在输入框上：弹出层里也是先清空，不会直接关掉弹出层。
 			if input.Shortcut(0, ui.KeyEscape) {
@@ -146,7 +156,7 @@ func searchField(c *ui.Context, query *string, label, clearLabel string) (field 
 			}
 		}
 	})
-	return fieldStyle(c, field), changed
+	return fieldStyle(c, field), changed, submitted
 }
 
 // 占位文字比三级文字再浅：一眼看出是提示，不像已经输入的内容。

@@ -5,6 +5,7 @@ import (
 
 	"image"
 	"image/color"
+	"strings"
 	"testing"
 	"time"
 
@@ -320,7 +321,7 @@ func TestPreviewHoldShowsOnlyRing(t *testing.T) {
 	w.pressedAt = time.Now().Add(-time.Second)
 	const width, height = previewMinimumWidth, 240
 	tt := ui.NewTester(func(c *ui.Context) { w.view(c, a) }, width, height)
-	meta, _, _ := previewDetails(w.asset)
+	meta, _ := previewDetails(w.asset)
 	if !tt.HasText(meta) {
 		t.Fatalf("按住时尺寸信息不见了：%v", tt.Texts())
 	}
@@ -510,9 +511,9 @@ func TestPreviewFocusedWindowShortcutsWithoutElementFocus(t *testing.T) {
 	}
 }
 
-func TestPreviewFooterShowsFullNameAndHidesCameraUntilHover(t *testing.T) {
+func TestPreviewFooterKeepsSameDetailsOnHover(t *testing.T) {
 	asset := model.Asset{Name: "晨雾", Extension: "JPG", Size: 3 << 20, Width: 4000, Height: 3000,
-		EXIF: map[string]string{"cameraMake": "SONY", "cameraModel": "ILCE-7M4", "focalLength": "35", "fNumber": "1.8", "exposureTime": "0.004", "isoSpeedRatings": "100"}}
+		EXIF: map[string]string{"cameraMake": "SONY", "cameraModel": "ILCE-7M4", "focalLength": "35"}}
 	if got := previewFileName(asset); got != "晨雾.jpg" {
 		t.Fatalf("文件名没带扩展名：%q", got)
 	}
@@ -520,12 +521,9 @@ func TestPreviewFooterShowsFullNameAndHidesCameraUntilHover(t *testing.T) {
 	if got := previewFileName(model.Asset{Name: "logo.png", Extension: "png"}); got != "logo.png.png" {
 		t.Fatalf("文件名少了扩展名：%q", got)
 	}
-	dimensions, size, camera := previewDetails(asset)
-	if dimensions != "4000 × 3000" || size != "3.0 MB" || camera != "SONY ILCE-7M4 · 35 mm · f/1.8 · 1/250 s · ISO 100" {
-		t.Fatalf("信息行：%q / %q / %q", dimensions, size, camera)
-	}
-	if _, _, camera := previewDetails(model.Asset{EXIF: map[string]string{"cameraMake": "Canon", "cameraModel": "Canon EOS R5"}}); camera != "Canon EOS R5" {
-		t.Fatalf("品牌重复：%q", camera)
+	dimensions, size := previewDetails(asset)
+	if dimensions != "4000 × 3000" || size != "3.0 MB" {
+		t.Fatalf("信息行：%q / %q", dimensions, size)
 	}
 
 	a := previewFixture(400, 300)
@@ -533,13 +531,14 @@ func TestPreviewFooterShowsFullNameAndHidesCameraUntilHover(t *testing.T) {
 	w.asset.Name, w.asset.Extension, w.asset.EXIF = asset.Name, asset.Extension, asset.EXIF
 	tt := ui.NewTester(func(c *ui.Context) { w.view(c, a) }, 428, 366)
 	tt.Frame()
-	if !tt.HasText("晨雾.jpg") || tt.HasText(camera) {
-		t.Fatalf("平时应只显示文件名和尺寸：%v", tt.Texts())
+	before := strings.Join(tt.Texts(), "|")
+	if !tt.HasText("晨雾.jpg") {
+		t.Fatalf("没有文件名：%v", tt.Texts())
 	}
 	tt.Move(100, 366-previewFooterMinimum/2)
 	tt.Advance(100 * time.Millisecond)
-	if !tt.HasText(camera) {
-		t.Fatalf("悬停底栏没有换成相机参数：%v", tt.Texts())
+	if after := strings.Join(tt.Texts(), "|"); after != before || tt.HasText("ILCE-7M4") {
+		t.Fatalf("悬停底栏后第二行变了：%q → %q", before, after)
 	}
 }
 

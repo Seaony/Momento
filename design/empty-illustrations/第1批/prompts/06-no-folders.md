@@ -1,0 +1,1 @@
+Read and follow the common style in /Users/seaony/code/Momento/design/empty-illustrations/第1批/prompts/00-common.md first. Subject: an empty open folder (rounded, simple), nothing inside, with a small dashed outline of a sheet hinting something can be placed in. Meaning: no folders yet.

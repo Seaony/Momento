@@ -22,16 +22,3 @@ func primaryButtonState(c *ui.Context, button ui.Element, disabled bool) ui.Elem
 	animateColors(button, background, text)
 	return button
 }
-
-func secondaryButton(c *ui.Context, label string) ui.Element {
-	button := ui.Button(c, label).Padding(space4, space12).Radius(radiusControl).FontSize(fontBody)
-	theme := c.Theme()
-	background := theme.Surface
-	if button.Pressed() {
-		background = theme.SurfacePressed
-	} else if button.Hovered() {
-		background = theme.SurfaceHover
-	}
-	animateColors(button, background, theme.Text)
-	return button
-}

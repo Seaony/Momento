@@ -58,7 +58,7 @@ func (a *App) sidebarSmartRows(c *ui.Context) {
 			}
 			if m.Item(a.T("rename_smart_folder")).Disabled(a.Busy).Chosen() {
 				lib := a.Library
-				a.Ask(a.T("rename_smart_folder"), folder.Name, func(name string) {
+				a.Ask("pencil-simple", a.T("rename_smart_folder"), folder.Name, func(name string) {
 					a.Run("rename_smart_folder", func(ctx context.Context) error { return lib.RenameSmartFolder(ctx, folder.ID, name) })
 				})
 			}
@@ -127,16 +127,15 @@ func (a *App) EditSmartFolder(id string) {
 
 func (a *App) smartFolderDialog(c *ui.Context) {
 	state := &a.GBrowsing
-	settingsPanel(c.Key("smart-folder-editor"), &state.SmartOpen, 648, func() {
-		title := a.T("smart_folder_create_title")
-		if state.SmartID != "" {
-			title = a.T("smart_folder_edit_title")
-		}
-		ui.Text(c, title).FontSize(fontHeading).Bold().TextColor(titleColor(c.Theme()))
+	title := a.T("smart_folder_create_title")
+	if state.SmartID != "" {
+		title = a.T("smart_folder_edit_title")
+	}
+	dialogPanel(c.Key("smart-folder-editor"), &state.SmartOpen, 648, "smart-folder", title, func() {
 		fieldStyle(c, ui.TextInput(c.Key("smart-name"), &state.SmartName).FillWidth().Label(a.T("smart_folder_name")).Placeholder(a.T("smart_folder_name")).PlaceholderColor(placeholderColor(c)).AutoFocus().Disabled(state.Saving))
 		settingsSegments(c.Key("smart-match"), a.T("smart_match"), &state.SmartMatch, a.T("smart_all"), a.T("smart_any")).Disabled(state.Saving)
 		_, height := c.Size()
-		ui.Scroll(c.Key("smart-rules")).TrackScroll(&state.RulesScroll).MaxHeight(max(120, min(280, height-312))).FillWidth().Gap(space8).Children(func() {
+		ui.Scroll(c.Key("smart-rules")).Scrollbars(false).TrackScroll(&state.RulesScroll).MaxHeight(max(120, min(280, height-312))).FillWidth().Gap(space8).Children(func() {
 			remove := -1
 			for i := range state.SmartRules {
 				rule := &state.SmartRules[i]
@@ -165,18 +164,17 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 		if state.SmartError != "" {
 			ui.Text(c, state.SmartError).TextColor(paletteFor(c.Theme()).Danger).Role(ui.RoleStatus)
 		}
-		ui.Row(c).FillWidth().Justify(ui.End).Gap(space8).Children(func() {
-			if settingsButton(c, a.T("cancel")).Height(controlHeight).Disabled(state.Saving).Clicked() {
-				state.SmartOpen = false
-			}
-			label := a.T("save")
-			if state.Saving {
-				label = a.T("smart_saving")
-			}
-			if primaryButton(c, label, state.Saving || a.Busy).Clicked() {
-				a.saveSmartFolder()
-			}
-		})
+	}, func() {
+		if dialogButton(c, a.T("cancel"), state.Saving).Clicked() {
+			state.SmartOpen = false
+		}
+		label := a.T("save")
+		if state.Saving {
+			label = a.T("smart_saving")
+		}
+		if dialogPrimaryButton(c, label, state.Saving || a.Busy).Clicked() {
+			a.saveSmartFolder()
+		}
 	})
 	if state.Saving {
 		state.SmartOpen = true
@@ -214,7 +212,7 @@ func smartSelect(c *ui.Context, value *string, options []string, label func(stri
 	})
 	selectParts.Popup(func(panel ui.Element) {
 		elevated(popupMotion(panel), c.Theme()).Margin(space4, 0, 0, 0).Padding(space4).Radius(radiusPanel).Background(panelColor(c.Theme())).Border(1, paletteFor(c.Theme()).BorderSubtle)
-		ui.Scroll(c).MaxHeight(280).FillWidth().Gap(space4).Children(func() {
+		ui.Scroll(c).Scrollbars(false).MaxHeight(280).FillWidth().Gap(space4).Children(func() {
 			for i, name := range names {
 				item := selectParts.Item(name).Height(controlHeight).FillWidth().Padding(space4, space12).Radius(radiusControl).Cursor(ui.CursorPointer)
 				background := ui.Color{}

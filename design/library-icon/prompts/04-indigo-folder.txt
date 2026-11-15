@@ -1,0 +1,6 @@
+Edit the first reference image (the coral folder with a rainbow hedgehog on its front). Keep EVERYTHING about its shape, composition, camera angle, proportions, material (soft matte clay 3D), lighting and the hedgehog's pose and happy expression exactly the same. Only change colors, to match the second reference image (the app icon):
+- Folder (back flap and front panel): change from coral red to a soft indigo-violet, close to #7B6CF6 on the front panel, slightly deeper #6553F0 on the back flap; keep the same soft highlights and shading.
+- Hedgehog spikes: replace the rainbow with the app icon's gradient — violet/purple on the left side flowing to blue and light sky blue on the right side, like the second reference.
+- Hedgehog face, ears and paws: off-white / very light warm white like the second reference (not beige); inner ears and cheeks soft pink; nose dark brown; mouth pink.
+- Background: fully transparent (PNG with alpha). No black or colored fringe around the edges, clean anti-aliased edges.
+- No text, no extra elements. Square 1024x1024 output.

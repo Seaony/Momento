@@ -31,11 +31,13 @@ func (a *App) quickAccessTarget(entry model.QuickAccess) (name, icon string, cou
 	case "folder":
 		for _, folder := range a.Snapshot.Folders {
 			if folder.ID == entry.TargetID {
-				name = folder.Name
+				name, icon = folder.Name, "文件夹"
+				if folderIconID(folder.Icon) != "folder" {
+					icon = folderIconPrefix + folder.Icon
+				}
 				break
 			}
 		}
-		icon = "文件夹"
 		selected = !a.TagPage && a.Query.Scope == "folder" && a.Query.FolderID == entry.TargetID
 	case "tag":
 		for _, tag := range a.Snapshot.Tags {

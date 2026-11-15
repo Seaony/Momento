@@ -51,15 +51,15 @@ func (a *App) welcomeContent(c *ui.Context, onboarding bool) {
 		ui.Text(c, a.T(title)).FontSize(fontTitle).FontWeight(600).TextColor(paletteFor(c.Theme()).Text).FillWidth().TextAlign(ui.Center)
 		ui.Text(c, a.T("welcome_hint")).TextColor(paletteFor(c.Theme()).TextSecondary).FillWidth().TextAlign(ui.Center)
 		ui.Row(c).Gap(space12).Margin(space8, 0).Children(func() {
-			if primaryButton(c, a.T("new_library"), false).Clicked() {
+			if dialogPrimaryButton(c, a.T("new_library"), false).Clicked() {
 				a.ShowNewLibrary()
 			}
-			if settingsButton(c, a.T("open_library")).Clicked() {
+			if dialogButton(c, a.T("open_library"), false).Clicked() {
 				a.ChooseOpenLibrary()
 			}
 		})
 		if len(a.Recent) > 0 {
-			ui.Scroll(c).Width(panelNarrow).MaxWidthPercent(100).MaxHeight(192).Gap(space8).Children(func() {
+			ui.Scroll(c).Scrollbars(false).Width(panelNarrow).MaxWidthPercent(100).MaxHeight(192).Gap(space8).Children(func() {
 				for _, recent := range a.Recent {
 					button := ui.ButtonBase(c.Key(recent.Path)).FillWidth().Height(space40).Padding(space8, space12).Gap(space8).
 						Radius(radiusControl).Label(recent.DisplayName).Tooltip(recent.DisplayName).Cursor(ui.CursorPointer)
@@ -105,7 +105,7 @@ func (a *App) onboarding(c *ui.Context) {
 					ui.Image(c, appLogo).Size(96, 96).Fit(ui.Contain)
 					ui.Text(c, a.T("onboarding_extension")).FontSize(fontTitle).FontWeight(600).TextColor(paletteFor(c.Theme()).Text)
 					ui.Text(c, a.T("onboarding_extension_hint")).MaxWidth(panelWide).TextAlign(ui.Center).TextColor(paletteFor(c.Theme()).TextSecondary)
-					if primaryButton(c, a.T("onboarding_get_extension"), false).Margin(space12, 0, 0, 0).Clicked() {
+					if dialogPrimaryButton(c, a.T("onboarding_get_extension"), false).Margin(space12, 0, 0, 0).Clicked() {
 						c.OpenURLThen(browserExtensionURL, a.ShowError)
 					}
 				case 2:
@@ -114,17 +114,17 @@ func (a *App) onboarding(c *ui.Context) {
 			})
 		})
 		elevated(ui.Row(c).FillWidth().AlignItems(ui.Center).Padding(space12, space16).Gap(space12).Radius(radiusPanel).Background(c.Theme().Background), c.Theme()).Children(func() {
-			if step < 2 && settingsButton(c, a.T("onboarding_skip")).Clicked() {
+			if step < 2 && dialogButton(c, a.T("onboarding_skip"), false).Clicked() {
 				a.finishOnboarding()
 			}
 			ui.Box(c).Grow(1)
 			ui.Text(c, a.T("onboarding_progress", step+1, 3)).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary)
 			ui.Box(c).Grow(1)
-			if settingsButton(c, a.T("onboarding_previous")).Disabled(step == 0).Clicked() {
+			if dialogButton(c, a.T("onboarding_previous"), step == 0).Clicked() {
 				a.Welcome.Direction = -1
 				a.Welcome.Step--
 			}
-			if step < 2 && primaryButton(c, a.T("onboarding_next"), false).Clicked() {
+			if step < 2 && dialogPrimaryButton(c, a.T("onboarding_next"), false).Clicked() {
 				a.Welcome.Direction = 1
 				a.Welcome.Step++
 			}

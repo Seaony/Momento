@@ -1,0 +1,1 @@
+Read and follow the common style in /Users/seaony/code/Momento/design/empty-illustrations/第1批/prompts/00-common.md first. Subject: a clean, empty trash bin with its lid slightly lifted, nothing inside, with two tiny sparkles beside it. Meaning: the trash is empty and clean.

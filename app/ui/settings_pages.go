@@ -223,7 +223,10 @@ func (a *App) importSettings(c *ui.Context) {
 		libraryID := a.Library.Manifest.LibraryID
 		rules := a.Preferences.AutoImport[libraryID]
 		if len(rules) == 0 {
-			settingsRow(c, func() { ui.Text(c, a.T("auto_import_empty")).TextColor(p.TextSecondary) })
+			ui.Column(c.Key("auto-import-empty")).FillWidth().Padding(space16, 0).Gap(space8).AlignItems(ui.Center).Children(func() {
+				emptyArt(c.Key("art"), "no-watched", emptyArtSmall)
+				ui.Text(c, a.T("auto_import_empty")).FontSize(fontSecondary).TextColor(p.TextTertiary)
+			})
 		}
 		for i, rule := range rules {
 			if i > 0 {

@@ -90,13 +90,18 @@ func (l *Library) Snapshot(ctx context.Context) (snapshot model.Snapshot, err er
 	if err = errors.Join(rows.Err(), rows.Close()); err != nil {
 		return snapshot, err
 	}
-	rows, err = tx.QueryContext(ctx, "SELECT id,name,COALESCE(parent_id,''),sort_index FROM folders ORDER BY sort_index,id")
+	// 升级前的旧库（只在升级流程里读）还没有 icon 列。
+	folderIcon := "icon"
+	if l.Manifest.SchemaVersion < 3 {
+		folderIcon = "''"
+	}
+	rows, err = tx.QueryContext(ctx, "SELECT id,name,COALESCE(parent_id,''),sort_index,"+folderIcon+" FROM folders ORDER BY sort_index,id")
 	if err != nil {
 		return snapshot, err
 	}
 	for rows.Next() {
 		var folder model.Folder
-		if err = rows.Scan(&folder.ID, &folder.Name, &folder.ParentID, &folder.SortIndex); err != nil {
+		if err = rows.Scan(&folder.ID, &folder.Name, &folder.ParentID, &folder.SortIndex, &folder.Icon); err != nil {
 			rows.Close()
 			return snapshot, err
 		}

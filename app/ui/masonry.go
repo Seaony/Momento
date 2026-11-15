@@ -82,6 +82,17 @@ func (m *MasonryLayout) Visible(top, bottom float32) []MasonryItem {
 
 func (m *MasonryLayout) Height() float32 { return m.height }
 
+// 第 index 张素材在第几列第几个；只在按方向键时查一次。
+func (m *MasonryLayout) locate(index int) (column, row int, ok bool) {
+	for column, items := range m.columns {
+		row := sort.Search(len(items), func(i int) bool { return items[i].Index >= index })
+		if row < len(items) && items[row].Index == index {
+			return column, row, true
+		}
+	}
+	return 0, 0, false
+}
+
 // 瀑布流在这个宽度和缩略图大小下排几列；工具栏的「几列」也用它。
 func masonryColumns(width, scale float32) int {
 	scale = max(.5, min(2, scale))

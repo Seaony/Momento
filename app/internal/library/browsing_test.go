@@ -160,11 +160,11 @@ func TestSmartFolderEditsValidateAndDeletePins(t *testing.T) {
 
 func TestQuickAccessDedupeMoveAndDeletionLifecycle(t *testing.T) {
 	l := newTestLibrary(t)
-	parent, err := l.CreateFolder(t.Context(), "父文件夹", "")
+	parent, err := l.CreateFolder(t.Context(), "父文件夹", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	child, err := l.CreateFolder(t.Context(), "子文件夹", parent.ID)
+	child, err := l.CreateFolder(t.Context(), "子文件夹", parent.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestQuickAccessDedupeMoveAndDeletionLifecycle(t *testing.T) {
 	if err := l.MoveQuickAccess(t.Context(), "missing", 0); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatal(err)
 	}
-	if err := l.RenameFolder(t.Context(), parent.ID, "改名"); err != nil {
+	if err := l.EditFolder(t.Context(), parent.ID, "改名", ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := snapshot(t, l).QuickAccess[1]; got.TargetID != parent.ID || got.ID != first.ID {
@@ -232,11 +232,11 @@ func TestQuickAccessDedupeMoveAndDeletionLifecycle(t *testing.T) {
 
 func TestQuickAccessMoveFailureRollsBackWholeOrder(t *testing.T) {
 	l := newTestLibrary(t)
-	a, err := l.CreateFolder(t.Context(), "A", "")
+	a, err := l.CreateFolder(t.Context(), "A", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := l.CreateFolder(t.Context(), "B", "")
+	b, err := l.CreateFolder(t.Context(), "B", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}

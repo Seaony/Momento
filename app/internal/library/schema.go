@@ -96,4 +96,10 @@ END;
 PRAGMA user_version = 2;
 `
 
-const schema = schemaV1 + migrationV2
+// v3：文件夹可以选一个图标（界面图标库里的名字，空是默认文件夹图标）。
+const migrationV3 = `
+ALTER TABLE folders ADD COLUMN icon TEXT NOT NULL DEFAULT '';
+PRAGMA user_version = 3;
+`
+
+const schema = schemaV1 + migrationV2 + migrationV3

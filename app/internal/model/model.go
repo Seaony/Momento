@@ -2,14 +2,16 @@ package model
 
 import "time"
 
-const SchemaVersion = 2
+const SchemaVersion = 3
 
 type Manifest struct {
-	SchemaVersion int       `json:"schemaVersion"`
-	LibraryID     string    `json:"libraryID"`
-	DisplayName   string    `json:"displayName"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+	SchemaVersion int    `json:"schemaVersion"`
+	LibraryID     string `json:"libraryID"`
+	DisplayName   string `json:"displayName"`
+	// Icon 是图库图标的编号（内置图标之一），空着用应用图标。
+	Icon      string    `json:"icon,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 type Color struct {
@@ -49,6 +51,7 @@ type Folder struct {
 	Name      string `json:"name"`
 	ParentID  string `json:"parentID"`
 	SortIndex int    `json:"sortIndex"`
+	Icon      string `json:"icon,omitempty"`
 }
 
 type Tag struct {

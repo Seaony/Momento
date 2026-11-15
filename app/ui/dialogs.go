@@ -1,7 +1,10 @@
 package ui
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -12,38 +15,45 @@ import (
 )
 
 type dialogsState struct {
-	NewName       string
-	NewPath       string
-	Picking       bool
-	NewWasOpen    bool
-	ExportWasOpen bool
-	Format        model.ExportFormat
-	Quality       float64
+	NewName string
+	NewIcon string
+	// NewDir 是图库要放进的文件夹；包名跟着图库名称走，改名时不用重新选位置。
+	NewDir         string
+	Picking        bool
+	NewWasOpen     bool
+	IconPickerOpen bool
+	EditName       string
+	EditIcon       string
+	EditWasOpen    bool
+	ExportWasOpen  bool
+	Folder         folderDialogState
+	Format         model.ExportFormat
+	Quality        float64
 }
 
 func (a *App) dialogs(c *ui.Context) {
 	if a.NewLibraryOpen && !a.Dialog.NewWasOpen {
-		a.Dialog.NewName = a.T("untitled_library")
-		a.Dialog.NewPath = ""
+		a.Dialog.NewName, a.Dialog.NewIcon, a.Dialog.NewDir = a.T("untitled_library"), "", defaultLibraryDir()
+		a.Dialog.IconPickerOpen = false
 	}
 	a.Dialog.NewWasOpen = a.NewLibraryOpen
+	if a.EditLibraryOpen && !a.Dialog.EditWasOpen {
+		a.Dialog.EditName, a.Dialog.EditIcon = a.libraryName(), a.manifest.Icon
+		a.Dialog.IconPickerOpen = false
+	}
+	a.Dialog.EditWasOpen = a.EditLibraryOpen
 	if a.ExportOpen && !a.Dialog.ExportWasOpen {
 		a.Dialog.Format = model.ExportOriginal
 		a.Dialog.Quality = 0.9
 	}
 	a.Dialog.ExportWasOpen = a.ExportOpen
 	a.newLibraryDialog(c)
+	a.editLibraryDialog(c)
+	a.folderDialog(c)
 	a.exportDialog(c)
 	a.promptDialog(c)
 	a.confirmationDialog(c)
 	a.errorDialog(c)
-}
-
-func dialogHeading(c *ui.Context, icon, title string) {
-	ui.Row(c).FillWidth().Gap(space8).AlignItems(ui.Center).Children(func() {
-		appIcon(c, icon).Size(iconSize, iconSize).TextColor(paletteFor(c.Theme()).TextSecondary)
-		ui.Text(c, title).FontSize(fontTitle).FontWeight(600).TextColor(paletteFor(c.Theme()).Text).Grow(1)
-	})
 }
 
 func (a *App) confirmationDialog(c *ui.Context) {
@@ -58,28 +68,18 @@ func (a *App) confirmationDialog(c *ui.Context) {
 			a.ConfirmOpen = false
 		}
 		backdrop.Children(func() {
-			panel := ui.Column(c).Width(panelDialog).MaxWidthPercent(92).Padding(space24).Gap(space12).Radius(radiusPanel).
-				Background(panelColor(c.Theme())).
-				Role(ui.RoleAlertDialog).Label(a.ConfirmTitle).Description(a.ConfirmDetail)
-			elevated(panel, c.Theme())
+			panel := dialogSurface(c, ui.Column(c).Width(panelDialog)).Role(ui.RoleAlertDialog).Label(a.ConfirmTitle).Description(a.ConfirmDetail)
 			dialogMotion(backdrop, panel)
 			panel.Children(func() {
-				dialogHeading(c, "warning", a.ConfirmTitle)
+				var body func()
 				if a.ConfirmDetail != "" {
-					ui.Text(c, a.ConfirmDetail).FillWidth().TextColor(paletteFor(c.Theme()).TextSecondary)
+					body = func() { ui.Text(c, a.ConfirmDetail).FillWidth().TextColor(paletteFor(c.Theme()).TextSecondary) }
 				}
-				ui.Row(c).FillWidth().Wrap().Justify(ui.End).Gap(space8).Margin(space8, 0, 0, 0).Children(func() {
-					if settingsButton(c, a.T("cancel")).Clicked() {
+				dialogLayout(c, "trash", a.ConfirmTitle, body, func() {
+					if dialogButton(c, a.T("cancel"), false).Clicked() {
 						a.ConfirmOpen = false
 					}
-					confirm := primaryButton(c, a.ConfirmLabel, false).AutoFocus().TextColor(paletteFor(c.Theme()).Background)
-					color := paletteFor(c.Theme()).Danger
-					if confirm.Pressed() {
-						color = color.Mix(c.Theme().Text, .15)
-					} else if confirm.Hovered() {
-						color = color.Mix(c.Theme().Text, .08)
-					}
-					if confirm.Background(confirm.AnimateColor("danger-surface", color, motionColor)).Clicked() {
+					if dialogDangerButton(c, a.ConfirmLabel).AutoFocus().Clicked() {
 						a.ConfirmOpen = false
 						confirmed = true
 					}
@@ -97,50 +97,98 @@ func (a *App) confirmationDialog(c *ui.Context) {
 }
 
 func (a *App) newLibraryDialog(c *ui.Context) {
-	settingsPanel(c.Key("new-library"), &a.NewLibraryOpen, 460, func() {
-		dialogHeading(c, "create-library", a.T("new_library"))
-		ui.Text(c, a.T("new_library_detail")).TextColor(paletteFor(c.Theme()).TextSecondary)
-		ui.Text(c, a.T("library_name")).FontWeight(600).Margin(space4, 0, 0, 0)
-		name := fieldStyle(c, ui.TextInput(c.Key("library-name"), &a.Dialog.NewName).Label(a.T("library_name")).AutoFocus().FillWidth().Disabled(a.Busy || a.Dialog.Picking))
-		ui.Text(c, a.T("location")).FontWeight(600).Margin(space4, 0, 0, 0)
-		location := a.Dialog.NewPath
-		if location == "" {
-			location = a.T("choose_library_location")
-		}
-		ui.Text(c, location).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary).SingleLine().Tooltip(location)
-		if settingsButton(c, a.T("choose_location")).FillWidth().Disabled(a.Busy || a.Dialog.Picking || strings.TrimSpace(a.Dialog.NewName) == "").Clicked() {
-			a.pickLibraryLocation()
-		}
-		ui.Row(c).Gap(space8).Justify(ui.End).Margin(space8, 0, 0, 0).Children(func() {
-			if settingsButton(c, a.T("cancel")).Disabled(a.Busy || a.Dialog.Picking).Clicked() {
-				a.NewLibraryOpen = false
+	p := paletteFor(c.Theme())
+	disabled := a.Busy || a.Dialog.Picking
+	name := strings.TrimSpace(a.Dialog.NewName)
+	ready := !disabled && name != "" && a.Dialog.NewDir != ""
+	var input ui.Element
+	dialogPanel(c.Key("new-library"), &a.NewLibraryOpen, panelDialog, "create-library", a.T("new_library"), func() {
+		dialogSection(c, a.T("library_name"), func() {
+			input = a.libraryNameField(c, &a.Dialog.NewName, &a.Dialog.NewIcon, &a.Dialog.IconPickerOpen, disabled).AutoFocus()
+		})
+		dialogSection(c, a.T("location"), func() {
+			// 整行点了就换位置；显示最终会建出来的图库包路径，跟着名称变。
+			location := a.T("choose_library_location")
+			if a.Dialog.NewDir != "" {
+				location = libraryDisplayPath(filepath.Join(a.Dialog.NewDir, libraryPackageName(name)))
 			}
-			ready := !a.Busy && !a.Dialog.Picking && strings.TrimSpace(a.Dialog.NewName) != "" && a.Dialog.NewPath != ""
-			create := primaryButton(c, a.T("create_library"), !ready)
-			if ready && (create.Clicked() || name.Submitted()) {
-				a.CreateLibraryAt(a.Dialog.NewPath, strings.TrimSpace(a.Dialog.NewName))
+			row := menuFieldStyle(c, ui.ButtonBase(c.Key("library-location")).FillWidth().Height(controlHeight).Padding(0, space12).Gap(space8).
+				AlignItems(ui.Center).Cursor(ui.CursorPointer).Label(a.T("choose_location")).Tooltip(location).Disabled(disabled))
+			row.Children(func() {
+				appIcon(c, "folder").Size(iconMedium, iconMedium).TextColor(p.TextSecondary).Shrink(0)
+				ui.Text(c, location).FontSize(fontSecondary).TextColor(p.TextSecondary).SingleLine().Grow(1).MinWidth(0)
+				ui.Text(c, a.T("change_location")).FontSize(fontSecondary).FontWeight(500).TextColor(p.Text).Shrink(0)
+			})
+			if row.Clicked() {
+				a.pickLibraryLocation()
 			}
 		})
+	}, func() {
+		if dialogButton(c, a.T("cancel"), disabled).Clicked() {
+			a.NewLibraryOpen = false
+		}
+		create := dialogPrimaryButton(c, a.T("create_library"), !ready)
+		if ready && (create.Clicked() || input.Submitted()) {
+			a.CreateLibraryAt(filepath.Join(a.Dialog.NewDir, libraryPackageName(name)), name, a.Dialog.NewIcon)
+		}
 	})
+}
+
+func (a *App) editLibraryDialog(c *ui.Context) {
+	name := strings.TrimSpace(a.Dialog.EditName)
+	ready := !a.Busy && name != ""
+	var input ui.Element
+	dialogPanel(c.Key("edit-library"), &a.EditLibraryOpen, panelDialog, "pencil-simple", a.T("edit_library"), func() {
+		dialogSection(c, a.T("library_name"), func() {
+			input = a.libraryNameField(c, &a.Dialog.EditName, &a.Dialog.EditIcon, &a.Dialog.IconPickerOpen, a.Busy).AutoFocus()
+		})
+	}, func() {
+		if dialogButton(c, a.T("cancel"), false).Clicked() {
+			a.EditLibraryOpen = false
+		}
+		save := dialogPrimaryButton(c, a.T("save"), !ready)
+		if ready && (save.Clicked() || input.Submitted()) {
+			a.EditLibraryOpen = false
+			a.EditLibrary(name, a.Dialog.EditIcon)
+		}
+	})
+}
+
+// 对话框里一组：小标题在上，控件在下。
+func dialogSection(c *ui.Context, title string, body func()) {
+	ui.Column(c).FillWidth().Gap(space8).Children(func() {
+		ui.Text(c, title).FontSize(fontSecondary).FontWeight(600).TextColor(paletteFor(c.Theme()).TextSecondary)
+		body()
+	})
+}
+
+// 新建图库默认放进「图片」文件夹；没有就放用户目录。读不到用户目录时留空，让用户自己选。
+func defaultLibraryDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		slog.Error("读取用户目录失败", "error", err)
+		return ""
+	}
+	pictures := filepath.Join(home, "Pictures")
+	if info, err := os.Stat(pictures); err == nil && info.IsDir() {
+		return pictures
+	}
+	return home
 }
 
 func (a *App) pickLibraryLocation() {
 	a.Dialog.Picking = true
-	title, name := a.T("choose_library_location"), libraryPackageName(a.Dialog.NewName)
+	title, dir := a.T("choose_library_location"), a.Dialog.NewDir
 	go func() {
-		path, err := mygo.Dialog.Save(mygo.SaveDialogOptions{
-			Parent: a.Window, Title: title, DefaultPath: name, CreateDirectories: true,
-			Filters: []mygo.FileFilter{{Name: "Momento", Extensions: []string{"momento"}}},
+		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+			Parent: a.Window, Title: title, DefaultPath: dir, Directory: true, CreateDirectories: true,
 		})
 		a.Window.Update(func() {
 			a.Dialog.Picking = false
 			if err != nil {
 				a.ShowError(err)
-			} else if path != "" {
-				if !strings.EqualFold(filepath.Ext(path), ".momento") {
-					path += ".momento"
-				}
-				a.Dialog.NewPath = path
+			} else if len(paths) > 0 {
+				a.Dialog.NewDir = paths[0]
 			}
 		})
 	}()
@@ -158,36 +206,40 @@ func libraryPackageName(name string) string {
 }
 
 func (a *App) exportDialog(c *ui.Context) {
-	settingsPanel(c.Key("export"), &a.ExportOpen, 420, func() {
-		dialogHeading(c, "export", a.T("export"))
-		ui.Text(c, a.T("export_count", a.Selected.Len())).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary)
-		for _, asset := range a.SelectedAssets() {
-			if asset.Rotation != 0 {
-				ui.Text(c, a.T("export_rotation_metadata_hint")).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary)
-				break
-			}
-		}
-		ui.Text(c, a.T("export_format")).FontWeight(600).Margin(space4, 0, 0, 0)
-		ui.RadioGroup(c, func() {
-			animatedRadio(c, &a.Dialog.Format, model.ExportOriginal, a.T("export_original"))
-			animatedRadio(c, &a.Dialog.Format, model.ExportJPEG, a.T("export_jpeg"))
-			animatedRadio(c, &a.Dialog.Format, model.ExportPNG, a.T("export_png"))
-		}).Label(a.T("export_format")).Disabled(a.Dialog.Picking)
-		if a.Dialog.Format == model.ExportJPEG {
-			fadeMotion(ui.Row(c.Key("jpeg-quality-title")).Margin(space4, 0, 0, 0)).Children(func() {
-				ui.Text(c, a.T("jpeg_quality")).FontWeight(600).Grow(1)
-				ui.Text(c, fmt.Sprintf("%.0f%%", a.Dialog.Quality*100)).FontFeatures("tnum").FontSize(fontNumber).TextColor(paletteFor(c.Theme()).TextSecondary)
-			})
-			fadeMotion(ui.Slider(c.Key("jpeg-quality"), &a.Dialog.Quality, 0.01, 1).Label(a.T("jpeg_quality")).FillWidth()).Disabled(a.Dialog.Picking)
-		}
-		ui.Row(c).Gap(space8).Justify(ui.End).Margin(space8, 0, 0, 0).Children(func() {
-			if settingsButton(c, a.T("cancel")).Disabled(a.Dialog.Picking).Clicked() {
-				a.ExportOpen = false
-			}
-			if primaryButton(c, a.T("export"), a.Busy || a.Dialog.Picking || a.Selected.Len() == 0).Clicked() {
-				a.pickExportDestination()
+	p := paletteFor(c.Theme())
+	dialogPanel(c.Key("export"), &a.ExportOpen, panelDialog, "export", a.T("export"), func() {
+		ui.Column(c).FillWidth().Gap(space4).Children(func() {
+			ui.Text(c, a.T("export_count", a.Selected.Len())).TextColor(p.TextSecondary)
+			for _, asset := range a.SelectedAssets() {
+				if asset.Rotation != 0 {
+					ui.Text(c, a.T("export_rotation_metadata_hint")).FontSize(fontSecondary).TextColor(p.TextSecondary)
+					break
+				}
 			}
 		})
+		dialogSection(c, a.T("export_format"), func() {
+			ui.RadioGroup(c, func() {
+				animatedRadio(c, &a.Dialog.Format, model.ExportOriginal, a.T("export_original"))
+				animatedRadio(c, &a.Dialog.Format, model.ExportJPEG, a.T("export_jpeg"))
+				animatedRadio(c, &a.Dialog.Format, model.ExportPNG, a.T("export_png"))
+			}).Label(a.T("export_format")).Disabled(a.Dialog.Picking)
+		})
+		if a.Dialog.Format == model.ExportJPEG {
+			fadeMotion(ui.Column(c.Key("jpeg-quality")).FillWidth().Gap(space8)).Children(func() {
+				ui.Row(c).FillWidth().Children(func() {
+					ui.Text(c, a.T("jpeg_quality")).FontSize(fontSecondary).FontWeight(600).TextColor(p.TextSecondary).Grow(1)
+					ui.Text(c, fmt.Sprintf("%.0f%%", a.Dialog.Quality*100)).FontFeatures("tnum").FontSize(fontNumber).TextColor(p.TextSecondary)
+				})
+				ui.Slider(c.Key("jpeg-quality-slider"), &a.Dialog.Quality, 0.01, 1).Label(a.T("jpeg_quality")).FillWidth().Disabled(a.Dialog.Picking)
+			})
+		}
+	}, func() {
+		if dialogButton(c, a.T("cancel"), a.Dialog.Picking).Clicked() {
+			a.ExportOpen = false
+		}
+		if dialogPrimaryButton(c, a.T("export"), a.Busy || a.Dialog.Picking || a.Selected.Len() == 0).Clicked() {
+			a.pickExportDestination()
+		}
 	})
 }
 
@@ -238,54 +290,126 @@ func exportDialogFileName(asset model.Asset, format model.ExportFormat) string {
 }
 
 func (a *App) promptDialog(c *ui.Context) {
-	settingsPanel(c.Key("text-prompt"), &a.PromptOpen, 420, func() {
-		ui.Text(c, a.PromptTitle).FontSize(fontTitle).FontWeight(600).TextColor(paletteFor(c.Theme()).Text)
-		input := fieldStyle(c, ui.TextInput(c.Key("prompt-value"), &a.PromptValue).Label(a.PromptTitle).AutoFocus().FillWidth())
-		ui.Row(c).Gap(space8).Justify(ui.End).Margin(space8, 0, 0, 0).Children(func() {
-			if settingsButton(c, a.T("cancel")).Clicked() {
-				a.PromptOpen = false
-				a.PromptSubmit = nil
+	var input ui.Element
+	dialogPanel(c.Key("text-prompt"), &a.PromptOpen, panelDialog, a.PromptIcon, a.PromptTitle, func() {
+		input = fieldStyle(c, ui.TextInput(c.Key("prompt-value"), &a.PromptValue).Label(a.PromptTitle).AutoFocus().FillWidth())
+	}, func() {
+		if dialogButton(c, a.T("cancel"), false).Clicked() {
+			a.PromptOpen = false
+			a.PromptSubmit = nil
+		}
+		ready := strings.TrimSpace(a.PromptValue) != ""
+		submit := dialogPrimaryButton(c, a.T("save"), !ready)
+		if ready && (submit.Clicked() || input.Submitted()) {
+			a.PromptOpen = false
+			callback := a.PromptSubmit
+			a.PromptSubmit = nil
+			if callback != nil {
+				callback(strings.TrimSpace(a.PromptValue))
 			}
-			ready := strings.TrimSpace(a.PromptValue) != ""
-			submit := primaryButton(c, a.T("save"), !ready)
-			if ready && (submit.Clicked() || input.Submitted()) {
-				a.PromptOpen = false
-				callback := a.PromptSubmit
-				a.PromptSubmit = nil
-				if callback != nil {
-					callback(strings.TrimSpace(a.PromptValue))
-				}
-			}
-		})
+		}
 	})
 }
 
 func (a *App) errorDialog(c *ui.Context) {
 	open := a.Error != ""
-	settingsPanel(c.Key("error"), &open, 500, func() {
-		dialogHeading(c, "warning", a.T("operation_failed"))
-		ui.Scroll(c).MaxHeight(180).Children(func() {
-			ui.Text(c, a.Error).Selectable().TextColor(paletteFor(c.Theme()).Danger)
+	p := paletteFor(c.Theme())
+	dialogPanel(c.Key("error"), &open, 500, "warning", a.T("operation_failed"), func() {
+		ui.Scroll(c).Scrollbars(false).MaxHeight(180).FillWidth().Children(func() {
+			ui.Text(c, a.Error).Selectable().TextColor(p.Danger)
 		})
-		ui.Text(c, a.T("log_location")).FontWeight(600).Margin(space4, 0, 0, 0)
-		ui.Text(c, logging.Directory()).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary).Selectable()
-		ui.Row(c).Gap(space8).Justify(ui.End).Margin(space8, 0, 0, 0).Children(func() {
-			if settingsButton(c, a.T("copy_error")).Clicked() {
-				details := a.Error + "\n" + a.T("log_location") + ": " + logging.Directory()
-				c.WriteClipboardThen(details, func(err error) {
-					if err != nil {
-						a.ShowError(err)
-					} else {
-						a.Notify(a.T("copied"))
-					}
-				})
-			}
-			if primaryButton(c, a.T("close"), false).Clicked() {
-				open = false
-			}
+		dialogSection(c, a.T("log_location"), func() {
+			ui.Text(c, logging.Directory()).FontSize(fontSecondary).TextColor(p.TextSecondary).Selectable()
 		})
+	}, func() {
+		if dialogButton(c, a.T("copy_error"), false).Clicked() {
+			details := a.Error + "\n" + a.T("log_location") + ": " + logging.Directory()
+			c.WriteClipboardThen(details, func(err error) {
+				if err != nil {
+					a.ShowError(err)
+				} else {
+					a.Notify(a.T("copied"))
+				}
+			})
+		}
+		if dialogPrimaryButton(c, a.T("close"), false).Clicked() {
+			open = false
+		}
 	})
 	if !open {
 		a.Error = ""
 	}
+}
+
+// 新建或编辑文件夹的对话框：名称框左边是图标按钮，点开选图标。
+type folderDialogState struct {
+	Open, PickerOpen bool
+	// ID 为空是新建；Parent 是新建时的上级；Assets 是建好后要放进去的素材（检查器里「创建」时带上）。
+	ID, Parent, Name, Icon string
+	Assets                 []string
+	// 打开时的图库代数；切换、删除或丢失图库后代数会变，草稿不能写进别的图库。
+	Generation uint64
+}
+
+func (a *App) ShowNewFolder(parentID, name string, assetIDs []string) {
+	if a.Library == nil {
+		return
+	}
+	a.Dialog.Folder = folderDialogState{Open: true, Parent: parentID, Name: name, Assets: assetIDs, Generation: a.generation}
+}
+
+func (a *App) ShowEditFolder(folder model.Folder) {
+	if a.Library == nil {
+		return
+	}
+	a.Dialog.Folder = folderDialogState{Open: true, ID: folder.ID, Name: folder.Name, Icon: folder.Icon, Generation: a.generation}
+}
+
+func (a *App) folderDialog(c *ui.Context) {
+	state := &a.Dialog.Folder
+	if state.Open && (state.Generation != a.generation || a.Library == nil) {
+		*state = folderDialogState{}
+	}
+	name := strings.TrimSpace(state.Name)
+	ready := !a.Busy && name != ""
+	icon, title, action := "create-library", a.T("new_folder"), a.T("create")
+	if state.ID != "" {
+		icon, title, action = "pencil-simple", a.T("edit_folder"), a.T("save")
+	}
+	var input ui.Element
+	dialogPanel(c.Key("folder-dialog"), &state.Open, panelDialog, icon, title, func() {
+		dialogSection(c, a.T("folder_name"), func() {
+			input = a.iconNameField(c.Key("folder-name-field"), &state.Name, &state.PickerOpen, a.Busy, a.T("folder_icon"), a.T("folder_name"),
+				func() { ui.Icon(c, folderIconsRegular[folderIconID(state.Icon)]).Size(iconMedium, iconMedium) },
+				func() { a.folderIconGrid(c, &state.Icon, &state.PickerOpen) }).AutoFocus()
+		})
+	}, func() {
+		if dialogButton(c, a.T("cancel"), false).Clicked() {
+			state.Open = false
+		}
+		submit := dialogPrimaryButton(c, action, !ready)
+		if ready && (submit.Clicked() || input.Submitted()) {
+			a.saveFolderDialog(name)
+		}
+	})
+}
+
+func (a *App) saveFolderDialog(name string) {
+	state := a.Dialog.Folder
+	a.Dialog.Folder.Open = false
+	lib := a.Library
+	if lib == nil || state.Generation != a.generation {
+		return
+	}
+	if state.ID != "" {
+		a.Run("edit_folder", func(ctx context.Context) error { return lib.EditFolder(ctx, state.ID, name, state.Icon) })
+		return
+	}
+	a.Run("new_folder", func(ctx context.Context) error {
+		folder, err := lib.CreateFolder(ctx, name, state.Parent, state.Icon)
+		if err != nil || len(state.Assets) == 0 {
+			return err
+		}
+		return lib.SetAssetFolders(ctx, state.Assets, []string{folder.ID}, true)
+	})
 }
