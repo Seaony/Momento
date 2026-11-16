@@ -33,6 +33,10 @@ var v5Validation = []string{
 	"SELECT rating FROM assets LIMIT 0",
 }
 
+var v6Validation = []string{
+	"SELECT id,asset_id,x,y,w,h,text,created_at FROM asset_annotations LIMIT 0",
+}
+
 var v2Validation = []string{
 	"SELECT last_used_at,rotation FROM assets LIMIT 0",
 	"SELECT id,name,match_mode,rules_json,sort_index FROM smart_folders LIMIT 0",
@@ -56,6 +60,9 @@ func validateSchema(ctx context.Context, db schemaReader, version int) error {
 	}
 	if version >= 5 {
 		queries = append(queries, v5Validation...)
+	}
+	if version >= 6 {
+		queries = append(queries, v6Validation...)
 	}
 	for _, query := range queries {
 		rows, err := db.QueryContext(ctx, query)
@@ -113,6 +120,11 @@ func upgrade(ctx context.Context, db *sql.DB, root string, manifest *model.Manif
 	}
 	if version < 5 {
 		if _, err = conn.ExecContext(ctx, migrationV5); err != nil {
+			return err
+		}
+	}
+	if version < 6 {
+		if _, err = conn.ExecContext(ctx, migrationV6); err != nil {
 			return err
 		}
 	}

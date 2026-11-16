@@ -56,6 +56,7 @@ var ShortcutDefinitions = []ShortcutDefinition{
 	{"preview_next", "next_asset", "preview", "Right", false},
 	{"preview_flip", "preview_flip", "preview", "H", false},
 	{"preview_grayscale", "preview_grayscale", "preview", "G", false},
+	{"preview_annotate", "preview_annotate", "preview", "A", false},
 }
 
 func shortcutDefinition(action string) (ShortcutDefinition, bool) {

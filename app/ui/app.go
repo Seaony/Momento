@@ -103,6 +103,9 @@ type App struct {
 	SettingsOpen, NewLibraryOpen, EditLibraryOpen, ExportOpen bool
 	Rename                                                    renameState
 	Similar                                                   similarState
+	libraryOpening                                            bool             // 正在后台打开另一个图库
+	annotationSaves                                           []annotationSave // 还没确认写进图库的批注改动
+	annotationKey                                             int
 	Preferences                                               Preferences
 	Browse                                                    browseState
 	GBrowsing                                                 gBrowsingState
@@ -346,6 +349,8 @@ func (a *App) RunPatch(label string, ids []string, work func(context.Context) er
 type assetPatch struct {
 	ids   []string
 	apply func(*model.Asset)
+	// failed 在写入失败、或排队时换了图库被作废时，在界面线程上调用（可以为空）。
+	failed func(error)
 }
 
 type queuedRun struct {
@@ -383,6 +388,9 @@ func (a *App) run(label string, work func(context.Context) error, patch *assetPa
 			}
 			a.Busy = false
 			if err != nil {
+				if patch != nil && patch.failed != nil {
+					patch.failed(err)
+				}
 				a.ShowError(err)
 				a.drainPending()
 				return
@@ -555,7 +563,7 @@ func (a *App) OpenLibrary(path string) {
 		}
 		return
 	}
-	a.Busy = true
+	a.Busy, a.libraryOpening = true, true
 	go func() {
 		a.workMu.Lock()
 		defer a.workMu.Unlock()
@@ -573,7 +581,7 @@ func (a *App) OpenLibrary(path string) {
 		}
 
 		a.Window.Update(func() {
-			a.Busy = false
+			a.Busy, a.libraryOpening = false, false
 			if err != nil {
 				a.ShowError(err)
 				// 外接盘没插这类情况保留在列表里，标成「找不到」，插上后还能直接打开。
@@ -744,6 +752,10 @@ func (a *App) DeleteLibrary() {
 // 返回是否放弃了没保存的修改。图库连接本身由调用方关闭。
 func (a *App) closeLibrary(reason string) bool {
 	discarded := a.DiscardInspectorEdits(reason)
+	// 图库没了，关预览时不能再发起批注写入（写不进去，还会让 Busy 一直挂着）。
+	if a.dropPreviewAnnotationDrafts(reason) {
+		discarded = true
+	}
 	a.ClosePreview()
 	a.closeHoverVideo()
 	a.cancelExtensionPicker()
@@ -1091,6 +1103,9 @@ func (a *App) drainPending() {
 		a.queuedRuns = a.queuedRuns[1:]
 		if next.generation != a.generation || a.Library == nil {
 			slog.Warn("图库已切换，丢弃排队的操作", "operation", next.label)
+			if next.patch != nil && next.patch.failed != nil {
+				next.patch.failed(errors.New("library changed before the write ran"))
+			}
 			continue
 		}
 		a.run(next.label, next.work, next.patch)

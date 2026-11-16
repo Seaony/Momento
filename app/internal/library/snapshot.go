@@ -158,6 +158,11 @@ func (l *Library) Snapshot(ctx context.Context) (snapshot model.Snapshot, err er
 			return snapshot, err
 		}
 	}
+	if l.Manifest.SchemaVersion >= 6 {
+		if err = loadAnnotations(ctx, tx, snapshot.Assets, byID); err != nil {
+			return snapshot, err
+		}
+	}
 	if l.Manifest.SchemaVersion >= 2 {
 		rows, err = tx.QueryContext(ctx, "SELECT id,name,match_mode,rules_json,sort_index FROM smart_folders ORDER BY sort_index,id")
 		if err != nil {

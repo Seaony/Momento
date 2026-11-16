@@ -491,6 +491,9 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 		if m.Item(a.T("preview")).Chosen() {
 			a.ShowPreview(asset.ID, false)
 		}
+		if !isVideoAsset(asset) && !asset.Trashed && m.Item(a.T("add_annotation")).Chosen() {
+			a.AnnotateAsset(asset.ID, "")
+		}
 		if m.Item(a.T("open_default_app")).Chosen() {
 			a.OpenAssetExternally(asset)
 		}

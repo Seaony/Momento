@@ -23,7 +23,7 @@ func TestEagleFeatureScreenshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixture := newScreenshotFixture(t)
-	states := []string{"single", "multiple", "filter", "sort", "smart", "rename-format", "rename-replace", "subfolders", "recent", "smart-more", "preview-flip"}
+	states := []string{"single", "multiple", "filter", "sort", "smart", "rename-format", "rename-replace", "subfolders", "recent", "smart-more", "preview-flip", "similar", "similar-progress", "export-resize", "export-invalid", "annotate-edit", "annotate-hover", "inspector-annotations"}
 	if only := os.Getenv("MOMENTO_STAGE8_ONLY"); only != "" {
 		states = strings.Split(only, ",")
 	}
@@ -111,9 +111,29 @@ func TestEagleFeatureScreenshots(t *testing.T) {
 			case "recent":
 				a.SetScope("recent", "")
 			}
+			if strings.HasPrefix(state, "annotate") || state == "inspector-annotations" {
+				snapshot := a.Snapshot
+				snapshot.Assets = append([]model.Asset(nil), snapshot.Assets...)
+				for i := range snapshot.Assets {
+					if snapshot.Assets[i].ID == a.Visible[0].ID {
+						snapshot.Assets[i].Annotations = []model.Annotation{
+							{ID: "n1", X: .08, Y: .12, W: .34, H: .3, Text: "标题字太细，换中黑"},
+							{ID: "n2", X: .5, Y: .55, W: .4, H: .3, Text: "这块留白可以再大一点"},
+						}
+					}
+				}
+				a.applySnapshot(snapshot)
+				if state == "inspector-annotations" {
+					a.InspectorVisible = true
+					a.Selected.Add(a.Visible[0].ID)
+				}
+			}
 			width, height := 1100, 700
+			if state == "inspector-annotations" {
+				height = 1150 // 批注在检查器下半部分
+			}
 			view := a.View
-			if state == "preview-flip" {
+			if state == "preview-flip" || strings.HasPrefix(state, "annotate") {
 				asset := a.Visible[0]
 				photo, _, _, _, err := assets.PrepareImage(filepath.Join(fixture.root, filepath.FromSlash(asset.RelativePath)))
 				if err != nil {
@@ -122,7 +142,11 @@ func TestEagleFeatureScreenshots(t *testing.T) {
 				a.ShowPreview(asset.ID, false)
 				w := a.Preview.active
 				w.picture.Bitmap = ui.NewBitmap(photo)
-				w.flipped, w.gray = true, true
+				w.flipped, w.gray = state == "preview-flip", state == "preview-flip"
+				if state == "annotate-edit" {
+					w.notes.On = true
+					w.notes.edit = &annotationEdit{Rect: model.Annotation{X: .55, Y: .1, W: .35, H: .28}, Text: "换成品牌紫"}
+				}
 				frame := previewLayout(mygo.Rectangle{Width: 900, Height: 640}, mygo.Rectangle{}, asset, a.Preferences.PreviewFit == "fit", a.Texts.Locale(), 1)
 				width, height = frame.Width, frame.Height
 				view = func(c *ui.Context) { w.view(c, a) }
@@ -139,6 +163,12 @@ func TestEagleFeatureScreenshots(t *testing.T) {
 			tt.SetWindowActive(true)
 			tt.Frame()
 			tt.Advance(time.Second)
+			if state == "annotate-hover" {
+				// 指针停在第二个框上，框下面显示它的文字。
+				photo := a.Preview.active.picture.imageRect(a.Preview.active.picture.viewport)
+				tt.Move(photo.X+photo.W*.7, photo.Y+photo.H*.7)
+				tt.Frame()
+			}
 			writeScreenshot(t, filepath.Join(dir, state+"-zh-CN-"+theme+".png"), tt)
 		}
 	}

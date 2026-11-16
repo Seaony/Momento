@@ -338,3 +338,14 @@ func TestIncludeSubfolders(t *testing.T) {
 		t.Fatalf("有环的文件夹：%v", got)
 	}
 }
+
+// 搜索也查区域批注的文字。
+func TestSearchMatchesAnnotationText(t *testing.T) {
+	snapshot := sampleSnapshot()
+	snapshot.Assets[0].Annotations = []model.Annotation{{ID: "n", X: .1, Y: .1, W: .2, H: .2, Text: "换成品牌紫"}}
+	index := New(snapshot)
+	got := index.Query(Query{Search: "品牌紫"})
+	if len(got) != 1 || got[0].ID != snapshot.Assets[0].ID {
+		t.Fatalf("搜不到批注里的字：%v", got)
+	}
+}

@@ -107,7 +107,7 @@ func New(snapshot model.Snapshot) *Index {
 		idx.counts.Folders[folder.ID] = 0
 	}
 	for i, asset := range snapshot.Assets {
-		e := entry{name: strings.ToLower(asset.Name), extension: normalizedExtension(asset.Extension), note: strings.ToLower(asset.Note), source: strings.ToLower(asset.SourceURL)}
+		e := entry{name: strings.ToLower(asset.Name), extension: normalizedExtension(asset.Extension), note: strings.ToLower(searchNote(asset)), source: strings.ToLower(asset.SourceURL)}
 		for _, id := range asset.TagIDs {
 			e.tagNames = append(e.tagNames, tagNames[id])
 		}
@@ -343,4 +343,16 @@ func cloneSmartFolders(folders []model.SmartFolder) []model.SmartFolder {
 		copy[i].Rules = slices.Clone(copy[i].Rules)
 	}
 	return copy
+}
+
+// searchNote 是搜索时当作备注的文字：备注加上各块区域批注。
+func searchNote(asset model.Asset) string {
+	if len(asset.Annotations) == 0 {
+		return asset.Note
+	}
+	parts := []string{asset.Note}
+	for _, note := range asset.Annotations {
+		parts = append(parts, note.Text)
+	}
+	return strings.Join(parts, "\n")
 }

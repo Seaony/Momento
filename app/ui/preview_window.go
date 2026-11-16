@@ -54,6 +54,7 @@ type previewWindow struct {
 	lastSelectionID           string
 	mainSelection             []string
 	pinned, closing, disposed bool
+	notes                     previewNotes
 	hasFocus                  bool
 	// 只在预览里看的水平翻转和灰度，不改原图，翻页时保留，关掉预览就没了。
 	flipped, gray                           bool
@@ -178,9 +179,14 @@ func (a *App) ReconcilePreviewKeys(c *ui.Context) {
 	if w == nil || w.closing || a.IsLocked() || c.FocusTakesText() || a.Settings.RecordingShortcut != "" {
 		return
 	}
+	if c.Shortcut(0, ui.KeyEscape) {
+		w.escape(a, c.Now())
+		a.markPreviewInput()
+		return
+	}
 	space := previewSpaceShortcut(c)
 	repeat := space && c.ShortcutRepeated()
-	if c.Shortcut(0, ui.KeyEscape) || space && !repeat && !w.picture.Held && !released {
+	if space && !repeat && !w.picture.Held && !released {
 		w.close(a, c.Now())
 		a.markPreviewInput()
 		return
@@ -200,7 +206,7 @@ func (a *App) ReconcilePreviewKeys(c *ui.Context) {
 		a.markPreviewInput()
 		return
 	}
-	for _, action := range []string{"preview_zoom_in", "preview_zoom_out", "preview_fit", "preview_actual", "preview_flip", "preview_grayscale"} {
+	for _, action := range []string{"preview_zoom_in", "preview_zoom_out", "preview_fit", "preview_actual", "preview_flip", "preview_grayscale", "preview_annotate"} {
 		mods, key, ok := parseShortcut(a.Shortcut(action))
 		if !ok {
 			continue
@@ -225,11 +231,27 @@ func (a *App) ReconcilePreviewKeys(c *ui.Context) {
 			w.flipped = !w.flipped
 		case "preview_grayscale":
 			w.gray = !w.gray
+		case "preview_annotate":
+			w.toggleAnnotating(a)
 		}
 		w.invalidate()
 		a.markPreviewInput()
 		return
 	}
+}
+
+// escape 一层层退：先收起批注输入框（不存），再退出批注模式，最后才关窗口。预览窗口和主窗口按 Esc 都走这里。
+func (w *previewWindow) escape(a *App, now time.Time) {
+	switch {
+	case w.notes.edit != nil:
+		w.notes.edit = nil
+	case w.notes.On:
+		w.notes.On, w.notes.drawing = false, false
+	default:
+		w.close(a, now)
+		return
+	}
+	w.invalidate()
 }
 
 // 根元素认领有焦点控件的空格，全窗入口处理没有元素焦点的空格。
@@ -337,6 +359,8 @@ func (a *App) CancelPreviewGesture() {
 	a.Preview.spaceDown = time.Time{}
 }
 func (a *App) CloseAllPreviewWindows() {
+	// 锁定、退出、换图库都走这里：直接销毁窗口前先把正在写的批注存下。
+	a.flushPreviewAnnotations()
 	windows := append(slices.Clone(a.Preview.pinned), a.Preview.fading...)
 	if a.Preview.active != nil {
 		windows = append(windows, a.Preview.active)
@@ -477,6 +501,8 @@ func (w *previewWindow) close(a *App, now time.Time) {
 	if w.closing || w.disposed {
 		return
 	}
+	// 正在写的批注先存下，关窗口不能把字丢了。
+	w.commitAnnotation(a)
 	w.closeScale, w.closeOpacity = w.visual(now)
 	w.closedHeld = w.picture.Held && !w.pinned
 	w.closedProgress = w.holdProgress(now)
@@ -554,6 +580,12 @@ func (w *previewWindow) setAsset(a *App, asset model.Asset) {
 	if asset.ID != w.asset.ID {
 		w.closeVideo()
 		w.closeLive()
+		// 换图前把上一张正在写的批注存下；视频没有批注模式。
+		w.commitAnnotation(a)
+		w.notes.drawing = false
+		if isVideoAsset(asset) {
+			w.notes.On = false
+		}
 	}
 	w.asset = asset
 	w.picture.target(w.root, asset.ID, asset.Rotation)
@@ -835,7 +867,18 @@ func previewCloseButton(c *ui.Context, label string) ui.Element {
 
 // 预览窗口自己拿到键盘时（点过它）处理关闭、翻页和缩放。
 func (w *previewWindow) handleKeys(c *ui.Context, a *App, now time.Time) {
-	if c.Shortcut(0, ui.KeyEscape) || c.Shortcut(ui.Cmd, ui.KeyW) || !w.pinned && previewSpaceShortcut(c) {
+	if c.Shortcut(0, ui.KeyEscape) {
+		w.escape(a, now)
+		return
+	}
+	// 正在输入批注时，空格、方向键、字母都是打字，不翻页、不关窗口。
+	if c.FocusTakesText() {
+		if c.Shortcut(ui.Cmd, ui.KeyW) {
+			w.close(a, now)
+		}
+		return
+	}
+	if c.Shortcut(ui.Cmd, ui.KeyW) || !w.pinned && previewSpaceShortcut(c) {
 		w.close(a, now)
 		return
 	}
@@ -863,6 +906,8 @@ func (w *previewWindow) handleKeys(c *ui.Context, a *App, now time.Time) {
 		w.flipped = !w.flipped
 	case a.previewShortcut(root, "preview_grayscale"):
 		w.gray = !w.gray
+	case a.previewShortcut(root, "preview_annotate"):
+		w.toggleAnnotating(a)
 	default:
 		handled = false
 	}

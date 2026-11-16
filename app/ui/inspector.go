@@ -107,6 +107,7 @@ func (a *App) inspector(c *ui.Context) {
 					a.inspectorTags(c, selected)
 					a.inspectorFolders(c, selected)
 					a.inspectorNotes(c, asset)
+					a.inspectorAnnotations(c, asset)
 					a.inspectorEXIF(c, asset)
 				})
 				return
@@ -1003,11 +1004,12 @@ func (a *App) inspectorDraft() (inspectorEdit, bool) {
 func (a *App) InspectorEditsPending() bool {
 	_, dirty := a.inspectorDraft()
 	_, multi := strings.CutPrefix(a.Inspector.Editing, "multi-")
-	return dirty || len(a.Inspector.Pending) > 0 || multi || a.Inspector.MultiSaving
+	return dirty || len(a.Inspector.Pending) > 0 || multi || a.Inspector.MultiSaving || a.annotationSavesPending()
 }
 
+// 批注写失败也算在这里：退出、换图库时一样给「放弃修改」的出口。
 func (a *App) InspectorEditsFailed() bool {
-	return slices.ContainsFunc(a.Inspector.Pending, func(edit inspectorEdit) bool { return edit.Failed })
+	return slices.ContainsFunc(a.Inspector.Pending, func(edit inspectorEdit) bool { return edit.Failed }) || a.annotationSavesFailed()
 }
 
 func (a *App) saveInspectorEdits() {
@@ -1041,6 +1043,8 @@ func (a *App) FlushInspectorEdits() {
 		a.Inspector.Pending[i].Failed = false
 	}
 	a.ContinueInspectorEdits()
+	// 预览里正在写的批注也一起存下，之前没写进去的再试一次。
+	a.flushPreviewAnnotations()
 }
 
 // 每帧推进已失焦的草稿，不碰正在输入的内容，也不循环重试失败写入。
@@ -1157,7 +1161,8 @@ func (a *App) DiscardInspectorEdits(reason string) bool {
 		slog.Warn("放弃未保存的检查器修改", "reason", reason, "asset", edit.ID, "name", edit.Name, "note", edit.Note, "source", edit.Source)
 	}
 	a.Inspector = inspectorState{}
-	return len(edits) > 0
+	annotations := a.discardAnnotationSaves(reason)
+	return len(edits) > 0 || annotations
 }
 
 // 分组标题比下面的字段名（类型、尺寸……）再浅一档，一眼能分出是标题还是字段。

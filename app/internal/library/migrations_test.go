@@ -413,8 +413,8 @@ func TestUpgradeV4AddsRating(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer opened.Close()
-	if databaseVersion(t, opened.DB) != 5 || opened.Manifest.SchemaVersion != 5 {
-		t.Fatal("v4 没有升到 v5")
+	if databaseVersion(t, opened.DB) != model.SchemaVersion || opened.Manifest.SchemaVersion != model.SchemaVersion {
+		t.Fatal("v4 没有升到最新版本")
 	}
 	assets := snapshot(t, opened).Assets
 	if len(assets) != before || before == 0 {
