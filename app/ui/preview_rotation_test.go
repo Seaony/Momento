@@ -20,7 +20,7 @@ func TestPreviewLoadsLibraryRotationWithoutChangingOriginal(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, rotation := range []int{0, 90, 180, 270} {
-		picture, err := readPreviewPicture(path, rotation)
+		picture, err := readPreviewPicture(path, rotation, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -33,14 +33,14 @@ func TestPreviewLoadsLibraryRotationWithoutChangingOriginal(t *testing.T) {
 	if !bytes.Equal(original, after) {
 		t.Fatal("预览旋转改动了原始文件")
 	}
-	if _, err = readPreviewPicture(path, 45); err == nil {
+	if _, err = readPreviewPicture(path, 45, false); err == nil {
 		t.Fatal("接受了非法旋转角度")
 	}
 }
 
 func TestPreviewGIFRotatesEveryFrameAndLoops(t *testing.T) {
 	for _, rotation := range []int{90, 180, 270} {
-		picture, err := readPreviewPicture(writeDirectionalPreview(t, true), rotation)
+		picture, err := readPreviewPicture(writeDirectionalPreview(t, true), rotation, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -65,13 +65,13 @@ func TestPreviewRotationChangeInvalidatesPendingDecode(t *testing.T) {
 	p := previewState{Open: true}
 	p.target("library", "one", 0)
 	old := p.Generation
-	p.Bitmap, p.pixelBitmap = previewBitmaps(image.NewRGBA(image.Rect(0, 0, 120, 80)))
+	p.Bitmap = previewBitmap(image.NewRGBA(image.Rect(0, 0, 120, 80)), false)
 	p.Zoom = 4
 	p.initialized = true
 	p.Loading = true
 	p.target("library", "one", 90)
 	p.finish(old, ui.NewBitmap(image.NewRGBA(image.Rect(0, 0, 120, 80))), nil)
-	if p.Bitmap != nil || p.pixelBitmap != nil || p.Loading || p.initialized || p.Zoom != 1 {
+	if p.Bitmap != nil || p.Loading || p.initialized || p.Zoom != 1 {
 		t.Fatal("旋转后沿用了旧方向的解码或视图状态")
 	}
 	if p.targetRotation != 90 {
@@ -88,10 +88,6 @@ func checkPreviewRotation(t *testing.T, picture previewPicture, rotation, frame 
 	w, h := picture.bitmap.Size()
 	if w != width || h != height {
 		t.Fatalf("旋转%d°后尺寸%d×%d，预期%d×%d", rotation, w, h, width, height)
-	}
-	pw, ph := picture.pixelBitmap.Size()
-	if pw != w || ph != h {
-		t.Fatal("两种采样的旋转尺寸不同")
 	}
 	expected := map[int]int{0: 0, 90: 2, 180: 3, 270: 1}[rotation]
 	expected = (expected + frame) % 4

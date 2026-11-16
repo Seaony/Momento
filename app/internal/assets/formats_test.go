@@ -5,7 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"image/png"
+	"image/jpeg"
 	"os"
 	"path/filepath"
 	"testing"
@@ -64,11 +64,19 @@ func TestEightFormatsImportWithThumbnails(t *testing.T) {
 			if !bytes.Equal(stored, original) {
 				t.Fatal("原文件内容在导入时改变")
 			}
-			thumbnail, err := os.Open(filepath.Join(lib.Root, "thumbnails", asset.ID+".png"))
+			path, err = assets.ThumbnailPath(lib.Root, asset.ID)
 			if err != nil {
 				t.Fatal(err)
 			}
-			img, decodeErr := png.Decode(thumbnail)
+			// 样例都不透明，缩略图应该是 JPEG。
+			if filepath.Ext(path) != ".jpg" {
+				t.Fatalf("缩略图格式不对：%s", path)
+			}
+			thumbnail, err := os.Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			img, decodeErr := jpeg.Decode(thumbnail)
 			closeErr := thumbnail.Close()
 			if decodeErr != nil {
 				t.Fatal(decodeErr)

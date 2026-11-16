@@ -154,9 +154,12 @@ func (l *Library) copyPackage(ctx context.Context, destination string, newIdenti
 		if err := copyLibraryFile(ctx, root, stage, asset.RelativePath, asset.ID, asset.Size); err != nil {
 			return err
 		}
-		thumb := filepath.ToSlash(filepath.Join("thumbnails", asset.ID+".png"))
-		if err := copyLibraryFile(ctx, root, stage, thumb, "", -1); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
+		// 缩略图可能是新的 .jpg 或旧的 .png，有哪个复制哪个，都没有就跳过。
+		for _, ext := range []string{".jpg", ".png"} {
+			thumb := "thumbnails/" + asset.ID + ext
+			if err := copyLibraryFile(ctx, root, stage, thumb, "", -1); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
 		}
 	}
 	if err := ctx.Err(); err != nil {

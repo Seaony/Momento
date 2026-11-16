@@ -42,7 +42,7 @@ type candidate struct {
 }
 type prepared struct {
 	asset               model.Asset
-	original, thumbnail string
+	original, thumbnail string // thumbnail 是暂存的缩略图，后缀 .jpg 或 .png
 }
 
 func Supported(path string) bool {
@@ -144,10 +144,14 @@ func (p *progressReporter) send(v model.ImportProgress, force bool) {
 	}
 }
 
-func parallel(ctx context.Context, count int, work func(context.Context, int) error, completed ...func(int)) error {
+// ioWorkers 是复制和算哈希这类读写文件任务的并发数。
+func ioWorkers() int { return min(max(runtime.NumCPU(), 2), 6) }
+
+// parallel 用最多 workers 个协程跑 count 个任务。completed 在调用方协程里逐个串行调用。
+func parallel(ctx context.Context, count, workers int, work func(context.Context, int) error, completed ...func(int)) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	workers := min(count, min(max(runtime.NumCPU(), 2), 6))
+	workers = min(count, workers)
 	if workers == 0 {
 		return ctx.Err()
 	}
@@ -243,7 +247,7 @@ type existingAsset struct {
 	rotation int
 }
 
-// Import 整批导入。单张图片读不了、解不开或太大时只跳过这一张，记进 result.Errors；
+// Import 整批导入。单张图片读不了、解不开或太大时只跳过这一张，记进 result.Errors，源文件路径同序记进 result.Failed；
 // 取消、数据库和写图库文件出错时整批回滚。
 func (s *Service) Import(ctx context.Context, request model.ImportRequest, callback func(model.ImportProgress)) (result model.ImportResult, err error) {
 	if !s.importing.TryLock() {
@@ -295,7 +299,7 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 		fileErrs[i] = i18n.WrapError(cause, "error_import_read", name)
 	}
 	hashed := 0
-	if err = parallel(ctx, total, func(ctx context.Context, i int) error {
+	if err = parallel(ctx, total, ioWorkers(), func(ctx context.Context, i int) error {
 		stageErr := stageHash(ctx, &candidates[i], stage, i)
 		var source sourceError
 		if errors.As(stageErr, &source) && ctx.Err() == nil {
@@ -410,10 +414,11 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 	prepareErrs := make([]error, len(toPrepare))
 	// 进度里的导入数统计已准备好的非重复素材，最终结果仍以整批提交为准。
 	report("importing", "", true)
-	if err = parallel(ctx, len(toPrepare), func(ctx context.Context, j int) error {
+	// 解码按内存预算排队，小图可以并行到 CPU 数，大图同时只解几张。
+	if err = parallel(ctx, len(toPrepare), decodeWorkers(), func(ctx context.Context, j int) error {
 		hash := toPrepare[j]
 		c := candidates[groups[hash][0]]
-		img, metadata, orientation, profile, err := s.prepareImage(c.staged)
+		img, err := s.prepareImage(ctx, c.staged)
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
@@ -421,31 +426,34 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 			prepareErrs[j] = err
 			return nil
 		}
-		thumb := filepath.Join(stage, c.hash+".png")
+		base := filepath.Join(stage, c.hash)
 		if repair[hash] {
 			// 补回的缩略图要带上图库里已有的旋转。
-			rotated, err := RotateImage(img, existing[hash].rotation)
+			rotated, err := RotateImage(img.thumbnail, existing[hash].rotation)
 			if err != nil {
 				return err
 			}
-			if err = WriteThumbnail(thumb, rotated); err != nil {
+			thumb, err := WriteThumbnail(base, rotated)
+			if err != nil {
 				return err
 			}
 			ready[j] = prepared{original: c.staged, thumbnail: thumb}
 			return nil
 		}
+		metadata := img.metadata
 		if !c.createdAt.IsZero() {
 			metadata["fileCreatedAt"] = c.createdAt.UTC().Format(time.RFC3339Nano)
 		} else {
 			delete(metadata, "fileCreatedAt")
 		}
-		if err = WriteThumbnail(thumb, img); err != nil {
+		thumb, err := WriteThumbnail(base, img.thumbnail)
+		if err != nil {
 			return err
 		}
 		name := filepath.Base(c.path)
 		name = strings.TrimSuffix(name, filepath.Ext(name))
 		now := time.Now().UTC()
-		ready[j] = prepared{asset: model.Asset{ID: c.hash, Name: name, OriginalFileName: filepath.Base(c.path), Extension: c.extension, MediaType: mediaType(c.extension), Size: c.size, Width: img.Bounds().Dx(), Height: img.Bounds().Dy(), Orientation: orientation, ColorProfile: profile, EXIF: metadata, SourceURL: request.SourceURL, RelativePath: filepath.ToSlash(filepath.Join("assets", c.hash[:2], c.hash+"."+c.extension)), CreatedAt: now, UpdatedAt: now, Colors: Palette(img)}, original: c.staged, thumbnail: thumb}
+		ready[j] = prepared{asset: model.Asset{ID: c.hash, Name: name, OriginalFileName: filepath.Base(c.path), Extension: c.extension, MediaType: mediaType(c.extension), Size: c.size, Width: img.width, Height: img.height, Orientation: img.orientation, ColorProfile: img.profile, EXIF: metadata, SourceURL: request.SourceURL, RelativePath: filepath.ToSlash(filepath.Join("assets", c.hash[:2], c.hash+"."+c.extension)), CreatedAt: now, UpdatedAt: now, Colors: Palette(img.thumbnail)}, original: c.staged, thumbnail: thumb}
 		return nil
 	}, func(j int) {
 		hash := toPrepare[j]
@@ -510,7 +518,7 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 			for _, file := range []struct {
 				source, relative string
 				original         bool
-			}{{p.original, p.asset.RelativePath, true}, {p.thumbnail, filepath.Join("thumbnails", c.hash+".png"), false}} {
+			}{{p.original, p.asset.RelativePath, true}, {p.thumbnail, thumbnailRelative(c.hash, p.thumbnail), false}} {
 				dst, placed, installErr := s.installFile(ctx, file.source, file.relative, c.hash, file.original)
 				if placed {
 					installed = append(installed, dst)
@@ -529,7 +537,7 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 				for _, file := range []struct {
 					source, relative string
 					original         bool
-				}{{p.original, relative, true}, {p.thumbnail, filepath.Join("thumbnails", c.hash+".png"), false}} {
+				}{{p.original, relative, true}, {p.thumbnail, thumbnailRelative(c.hash, p.thumbnail), false}} {
 					if _, _, err = s.installFile(ctx, file.source, file.relative, c.hash, file.original); err != nil {
 						return result, err
 					}
@@ -585,9 +593,11 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 		return result, err
 	}
 	committed = true
-	for _, fileErr := range fileErrs {
+	// Failed 和 Errors 按候选文件一一对应，重复内容一起失败时每个文件各占一条。
+	for i, fileErr := range fileErrs {
 		if fileErr != nil {
 			result.Errors = append(result.Errors, fileErr)
+			result.Failed = append(result.Failed, candidates[i].path)
 		}
 	}
 	progress.send(model.ImportProgress{Stage: "finishing", Total: total, Processed: total, Imported: total - result.Skipped - len(result.Errors), Skipped: result.Skipped}, true)
@@ -607,7 +617,11 @@ func (s *Service) installFile(ctx context.Context, staged, relative, hash string
 		if err = publishFile(staged, dst); err != nil {
 			return dst, false, err
 		}
-		return dst, true, nil
+		if !original {
+			// 换了格式的缩略图（比如旧的 .png 换成 .jpg）不留旧的那份。
+			err = removeOtherThumbnails(strings.TrimSuffix(dst, filepath.Ext(dst)), filepath.Ext(dst))
+		}
+		return dst, true, err
 	case statErr != nil:
 		return dst, false, statErr
 	case !info.Mode().IsRegular():
@@ -616,7 +630,7 @@ func (s *Service) installFile(ctx context.Context, staged, relative, hash string
 		if err = os.Rename(staged, dst); err != nil {
 			return dst, false, err
 		}
-		return dst, true, nil
+		return dst, true, removeOtherThumbnails(strings.TrimSuffix(dst, filepath.Ext(dst)), filepath.Ext(dst))
 	}
 	same, err := fileHashEquals(ctx, dst, hash)
 	if err != nil {
@@ -627,6 +641,11 @@ func (s *Service) installFile(ctx context.Context, staged, relative, hash string
 	}
 	slog.Info("图库里已有内容相同的原图，直接沿用", "path", relative)
 	return dst, false, nil
+}
+
+// thumbnailRelative 是暂存缩略图放进图库后的相对路径，沿用暂存文件的后缀。
+func thumbnailRelative(id, staged string) string {
+	return filepath.Join("thumbnails", id+filepath.Ext(staged))
 }
 
 func mediaType(ext string) string {

@@ -7,8 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"image"
-	_ "image/jpeg"
-	"image/png"
+	"image/jpeg"
 	"io"
 	"os"
 	"path/filepath"
@@ -68,11 +67,15 @@ func TestGeneratePortableLibraryWith14UniqueImages(t *testing.T) {
 		if img.Bounds().Dx() != asset.Width || img.Bounds().Dy() != asset.Height {
 			t.Fatal("原图尺寸记录错误")
 		}
-		thumbnail, err := os.ReadFile(filepath.Join(path, "thumbnails", asset.ID+".png"))
+		thumbnailPath, err := assets.ThumbnailPath(path, asset.ID)
+		if err != nil || filepath.Ext(thumbnailPath) != ".jpg" {
+			t.Fatalf("缩略图应为 JPEG：%s %v", thumbnailPath, err)
+		}
+		thumbnail, err := os.ReadFile(thumbnailPath)
 		if err != nil {
 			t.Fatal(err)
 		}
-		thumb, err := png.Decode(bytes.NewReader(thumbnail))
+		thumb, err := jpeg.Decode(bytes.NewReader(thumbnail))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -162,11 +165,15 @@ func TestGenerateLargeModeUsesUniquePortableJPEGs(t *testing.T) {
 		if img.Bounds().Dx() != asset.Width || img.Bounds().Dy() != asset.Height || max(asset.Width, asset.Height) > 64 {
 			t.Fatal("大库样本尺寸错误")
 		}
-		thumbnail, err := os.ReadFile(filepath.Join(path, "thumbnails", asset.ID+".png"))
+		thumbnailPath, err := assets.ThumbnailPath(path, asset.ID)
+		if err != nil || filepath.Ext(thumbnailPath) != ".jpg" {
+			t.Fatalf("缩略图应为 JPEG：%s %v", thumbnailPath, err)
+		}
+		thumbnail, err := os.ReadFile(thumbnailPath)
 		if err != nil {
 			t.Fatal(err)
 		}
-		thumb, err := png.Decode(bytes.NewReader(thumbnail))
+		thumb, err := jpeg.Decode(bytes.NewReader(thumbnail))
 		if err != nil || thumb.Bounds() != img.Bounds() {
 			t.Fatalf("大库缩略图错误：%v", err)
 		}

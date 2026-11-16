@@ -137,6 +137,13 @@ func newScreenshotFixture(t *testing.T) screenshotFixture {
 		t.Fatal(err)
 	}
 	snapshot, err := lib.Snapshot(ctx)
+	// 快照不带 EXIF（界面选中时才读）；截图是同步渲染的，先把 EXIF 填好。
+	for i := range snapshot.Assets {
+		if err != nil {
+			break
+		}
+		snapshot.Assets[i].EXIF, err = lib.AssetEXIF(ctx, snapshot.Assets[i].ID)
+	}
 	closeErr := lib.Close()
 	if err != nil || closeErr != nil {
 		t.Fatalf("读取截图样例：%v，关闭：%v", err, closeErr)
@@ -149,7 +156,7 @@ func newScreenshotFixture(t *testing.T) screenshotFixture {
 	fixture := screenshotFixture{root: root, manifest: lib.Manifest, snapshot: snapshot, bitmaps: make(map[string]*ui.Bitmap)}
 	for _, asset := range snapshot.Assets {
 		formats[asset.Extension]++
-		bitmap, _, err := decodeThumbnail(filepath.Join(root, "thumbnails", asset.ID+".png"))
+		bitmap, _, err := loadThumbnail(filepath.Join(root, "thumbnails", asset.ID))
 		if err != nil {
 			t.Fatal(err)
 		}

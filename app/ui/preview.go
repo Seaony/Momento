@@ -24,7 +24,7 @@ type previewState struct {
 	Pan                             ui.Point
 	targetRoot, targetID, errorText string
 	targetRotation                  int
-	pixelBitmap                     *ui.Bitmap
+	pixelated                       bool // 当前位图是不是按像素方块画的；设置改了就在后台重新生成
 	viewport                        ui.Rect
 	fitZoom                         float32
 	initialized, fitMode            bool
@@ -36,13 +36,15 @@ type previewState struct {
 }
 
 type previewAnimation struct {
-	decoder  ui.VideoDecoder
-	delay    time.Duration
-	rotation int
+	decoder   ui.VideoDecoder
+	delay     time.Duration
+	rotation  int
+	pixelated bool
 }
 type previewPicture struct {
-	bitmap, pixelBitmap *ui.Bitmap
-	animation           *previewAnimation
+	bitmap    *ui.Bitmap
+	pixelated bool
+	animation *previewAnimation
 }
 
 func (p *previewState) target(root, id string, rotation int) {
@@ -54,7 +56,7 @@ func (p *previewState) target(root, id string, rotation int) {
 	}
 	p.Generation++
 	p.targetRoot, p.targetID, p.targetRotation = root, id, rotation
-	p.Bitmap, p.pixelBitmap, p.animation, p.errorText = nil, nil, nil, ""
+	p.Bitmap, p.animation, p.errorText = nil, nil, ""
 	p.Loading, p.animationLoading, p.initialized = false, false, false
 	p.Zoom, p.Pan, p.fitZoom = 1, ui.Point{}, 1
 	p.nextFrameAt = time.Time{}
@@ -76,15 +78,21 @@ func (p *previewState) finish(generation uint64, bitmap *ui.Bitmap, err error) {
 func (p *previewState) finishPicture(generation uint64, picture previewPicture, err error) {
 	p.finish(generation, picture.bitmap, err)
 	if generation == p.Generation && p.Open && err == nil {
-		p.pixelBitmap, p.animation = picture.pixelBitmap, picture.animation
+		p.pixelated, p.animation = picture.pixelated, picture.animation
 	}
 }
-func previewBitmaps(img image.Image) (*ui.Bitmap, *ui.Bitmap) {
-	return ui.NewBitmap(img), ui.NewBitmap(img).Pixelated()
+
+// 只建一张位图：像素方块模式在缩小显示时本来就和平滑一样，不用再多存一份同样大的平滑版。
+func previewBitmap(img image.Image, pixelated bool) *ui.Bitmap {
+	bitmap := ui.NewBitmap(img)
+	if pixelated {
+		bitmap.Pixelated()
+	}
+	return bitmap
 }
 
-// GIF 只保留当前帧的两种采样位图，切到别的素材后不再解码。
-func readPreviewPicture(path string, rotation int) (previewPicture, error) {
+// GIF 只保留当前帧的位图，切到别的素材后不再解码。
+func readPreviewPicture(path string, rotation int, pixelated bool) (previewPicture, error) {
 	if strings.EqualFold(filepath.Ext(path), ".gif") {
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -102,8 +110,7 @@ func readPreviewPicture(path string, rotation int) (previewPicture, error) {
 		if err != nil {
 			return previewPicture{}, err
 		}
-		smooth, pixelated := previewBitmaps(img)
-		return previewPicture{smooth, pixelated, &previewAnimation{decoder, frame.Duration, rotation}}, nil
+		return previewPicture{previewBitmap(img, pixelated), pixelated, &previewAnimation{decoder, frame.Duration, rotation, pixelated}}, nil
 	}
 	img, _, _, _, err := assets.PrepareImage(path)
 	if err != nil {
@@ -113,8 +120,7 @@ func readPreviewPicture(path string, rotation int) (previewPicture, error) {
 	if err != nil {
 		return previewPicture{}, err
 	}
-	smooth, pixelated := previewBitmaps(img)
-	return previewPicture{bitmap: smooth, pixelBitmap: pixelated}, nil
+	return previewPicture{bitmap: previewBitmap(img, pixelated), pixelated: pixelated}, nil
 }
 func (animation *previewAnimation) next() (previewPicture, error) {
 	frame, err := animation.decoder.Next()
@@ -130,8 +136,7 @@ func (animation *previewAnimation) next() (previewPicture, error) {
 	if err != nil {
 		return previewPicture{}, err
 	}
-	smooth, pixelated := previewBitmaps(img)
-	return previewPicture{smooth, pixelated, &previewAnimation{animation.decoder, frame.Duration, animation.rotation}}, nil
+	return previewPicture{previewBitmap(img, animation.pixelated), animation.pixelated, &previewAnimation{animation.decoder, frame.Duration, animation.rotation, animation.pixelated}}, nil
 }
 
 // 图片占底栏以上、四周留白后的区域，图片和放大后的裁切框都是小圆角；可缩放、拖动，翻页时左右滑入。
@@ -178,9 +183,6 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 		}
 		p.clampPan()
 		viewport.Children(func() {
-			if a.Preferences.PreviewPixelated && p.pixelBitmap != nil {
-				bitmap = p.pixelBitmap
-			}
 			photo := previewPhoto(c.Key(struct{ ID string }{asset.ID}), bitmap, previewPhotoRadius, a.Preferences.PreviewChecker, ui.Contain).
 				Absolute().Label(asset.Name)
 			photoWidth, photoHeight := float32(bw)*p.Zoom, float32(bh)*p.Zoom
@@ -373,16 +375,24 @@ func (a *App) previewAsset(id string) (model.Asset, bool) {
 	}
 	return model.Asset{}, false
 }
+
+// 每个预览窗口同时只解一张原图：按住方向键快速翻页时，不给每张都开一个解码，等手上这张解完再解最新那张。
 func (w *previewWindow) load(a *App) {
 	p := &w.picture
-	p.Loading = true
-	generation, asset, root := p.Generation, w.asset, w.root
+	p.Loading, w.decoding = true, true
+	generation, asset, root, pixelated := p.Generation, w.asset, w.root, a.Preferences.PreviewPixelated
 	go func() {
-		picture, err := readPreviewPicture(filepath.Join(root, filepath.FromSlash(asset.RelativePath)), asset.Rotation)
+		picture, err := readPreviewPicture(filepath.Join(root, filepath.FromSlash(asset.RelativePath)), asset.Rotation, pixelated)
 		if err != nil {
 			slog.Error("原图预览加载失败", "asset", asset.ID, "error", err)
 		}
 		w.update(func() {
+			w.decoding = false
+			if generation != p.Generation {
+				// 解完时已经翻到别的图了：这张丢掉，下一帧去解当前那张。
+				p.Loading = false
+				return
+			}
 			p.finishPicture(generation, picture, err)
 			if generation == p.Generation && p.Open && err != nil {
 				p.errorText = a.Texts.Error(err)
@@ -419,7 +429,7 @@ func (w *previewWindow) animatePicture(c *ui.Context, a *App) {
 				p.errorText = a.Texts.Error(err)
 				return
 			}
-			p.Bitmap, p.pixelBitmap, p.animation = picture.bitmap, picture.pixelBitmap, picture.animation
+			p.Bitmap, p.pixelated, p.animation = picture.bitmap, picture.pixelated, picture.animation
 			p.nextFrameAt = time.Time{}
 		})
 	}()

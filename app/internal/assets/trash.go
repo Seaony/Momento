@@ -75,16 +75,24 @@ func (s *Service) deletePermanently(ctx context.Context, ids []string) (err erro
 		if !trashed {
 			return i18n.NewError("error_asset_not_trashed", id)
 		}
-		thumb, e := thumbnailRelative(id)
+		thumb, e := thumbnailBase(id)
 		if e != nil {
 			return e
 		}
-		// 暂存名带上素材 ID 和种类，中途崩溃后打开图库时能按名字挪回原处。
-		for _, file := range []struct{ rel, kind string }{{relative, "original"}, {thumb, "thumbnail"}} {
+		// 暂存名带上素材 ID 和种类（缩略图还带格式），中途崩溃后打开图库时能按名字挪回原处。
+		// 缩略图 .jpg、.png 两种都挪，通常只有一种存在。
+		files := []struct{ rel, kind string }{{relative, "original"}}
+		for _, ext := range thumbnailExtensions {
+			files = append(files, struct{ rel, kind string }{thumb + ext, "thumbnail" + ext})
+		}
+		thumbnails := 0
+		for _, file := range files {
 			rel := file.rel
 			from, e := s.assetPath(rel)
 			if os.IsNotExist(e) {
-				slog.Warn("永久删除时文件已不存在", "path", rel)
+				if file.kind == "original" {
+					slog.Warn("永久删除时文件已不存在", "path", rel)
+				}
 				continue
 			}
 			if e != nil {
@@ -95,6 +103,12 @@ func (s *Service) deletePermanently(ctx context.Context, ids []string) (err erro
 				return err
 			}
 			moved = append(moved, deletionFile{from: from, to: to})
+			if file.kind != "original" {
+				thumbnails++
+			}
+		}
+		if thumbnails == 0 {
+			slog.Warn("永久删除时缩略图已不存在", "id", id)
 		}
 		if _, err = tx.ExecContext(ctx, "DELETE FROM assets WHERE id=?", id); err != nil {
 			return err

@@ -237,6 +237,7 @@ var messages = map[string][3]string{
 	"import_stage_scanning":          {"正在扫描", "Scanning", "スキャン中"},
 	"import_stage_importing":         {"正在导入", "Importing", "読み込み中"},
 	"import_stage_finishing":         {"正在收尾", "Finishing", "仕上げ中"},
+	"import_stage_thumbnails":        {"正在重建缩略图", "Rebuilding Thumbnails", "サムネイルを再作成中"},
 	"untitled_library":               {"未命名图库", "Untitled Library", "名称未設定ライブラリ"},
 	"location":                       {"保存位置", "Location", "保存先"},
 	"choose_library_location":        {"选择图库保存位置", "Choose Library Location", "ライブラリの保存先を選択"},

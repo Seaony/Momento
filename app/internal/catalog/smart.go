@@ -46,12 +46,12 @@ func MatchesSmart(asset model.Asset, folder model.SmartFolder) bool {
 	if asset.Trashed || ValidateSmartFolder(folder) != nil {
 		return false
 	}
-	return matchesValidatedSmart(asset, folder)
+	return matchesValidatedSmart(&asset, &folder)
 }
 
-func matchesValidatedSmart(asset model.Asset, folder model.SmartFolder) bool {
-	for _, rule := range folder.Rules {
-		matched := matchesSmartRule(asset, rule)
+func matchesValidatedSmart(asset *model.Asset, folder *model.SmartFolder) bool {
+	for i := range folder.Rules {
+		matched := matchesSmartRule(asset, &folder.Rules[i])
 		if folder.Match == "all" && !matched {
 			return false
 		}
@@ -62,7 +62,7 @@ func matchesValidatedSmart(asset model.Asset, folder model.SmartFolder) bool {
 	return folder.Match == "all"
 }
 
-func matchesSmartRule(asset model.Asset, rule model.SmartRule) bool {
+func matchesSmartRule(asset *model.Asset, rule *model.SmartRule) bool {
 	value := strings.ToLower(strings.TrimSpace(rule.Value))
 	switch rule.Field {
 	case "name", "note":

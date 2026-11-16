@@ -2,6 +2,8 @@ package ui
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -30,6 +32,9 @@ type inspectorState struct {
 	FolderExpanded map[string]bool
 	// 最近一次写入失败的原因，放弃修改的确认框里给用户看。
 	SaveError string
+	// EXIF 不随图库一起读进内存，选中时才从库里取；只留当前这一张。
+	EXIFFor, EXIFLoading string
+	EXIF                 map[string]string
 }
 
 // 照旧版 macOS 检查器的规格。
@@ -396,7 +401,7 @@ func (a *App) inspectorNotes(c *ui.Context, asset model.Asset) {
 }
 
 func (a *App) inspectorEXIF(c *ui.Context, asset model.Asset) {
-	items := a.inspectorEXIFItems(asset.EXIF)
+	items := a.inspectorEXIFItems(a.assetEXIF(asset))
 	if len(items) == 0 {
 		return
 	}
@@ -902,7 +907,7 @@ func (a *App) ContinueInspectorEdits() {
 
 func (a *App) runInspectorEdit(edit inspectorEdit) {
 	lib := a.Library
-	a.Run("update_asset_details", func(ctx context.Context) error {
+	a.RunPatch("update_asset_details", []string{edit.ID}, func(ctx context.Context) error {
 		err := func() error {
 			if edit.Rename {
 				if err := lib.RenameAsset(ctx, edit.ID, edit.Name); err != nil {
@@ -936,10 +941,52 @@ func (a *App) runInspectorEdit(edit inspectorEdit) {
 			}
 		})
 		return err
+	}, func(asset *model.Asset) {
+		if edit.Rename {
+			asset.Name = edit.Name
+		}
+		if edit.Details {
+			asset.Note, asset.SourceURL = edit.Note, edit.Source
+		}
 	})
 }
 
 func (a *App) saveInspectorDetails() { a.saveInspectorEdits() }
+
+// 素材的 EXIF：快照里没带（打开图库时不读，省内存和时间）就在后台从库里取，取到之前先不显示这一块。
+func (a *App) assetEXIF(asset model.Asset) map[string]string {
+	if asset.EXIF != nil {
+		return asset.EXIF
+	}
+	state := &a.Inspector
+	if state.EXIFFor == asset.ID {
+		return state.EXIF
+	}
+	if a.Library == nil || a.Window == nil || state.EXIFLoading == asset.ID {
+		return nil
+	}
+	state.EXIFLoading = asset.ID
+	lib, id, gen := a.Library, asset.ID, a.generation
+	go func() {
+		exif, err := lib.AssetEXIF(a.ctx, id)
+		a.Window.Update(func() {
+			if gen != a.generation || a.Inspector.EXIFLoading != id {
+				return
+			}
+			a.Inspector.EXIFLoading = ""
+			if err != nil {
+				exif = map[string]string{}
+				// 素材刚被删掉时取不到是正常的；别的错误（比如库里的 EXIF 坏了）要让用户看到。
+				if !errors.Is(err, sql.ErrNoRows) {
+					slog.Error("读取 EXIF 失败", "asset", id, "error", err)
+					a.ShowError(err)
+				}
+			}
+			a.Inspector.EXIFFor, a.Inspector.EXIF = id, exif
+		})
+	}()
+	return nil
+}
 
 // 放弃还没写进图库的名称、备注和来源链接修改。内容先完整写进日志，用户事后还能从日志里找回。
 func (a *App) DiscardInspectorEdits(reason string) bool {

@@ -220,11 +220,11 @@ func TestPreviewTargetResetsZoomAndIgnoresStaleLoads(t *testing.T) {
 
 func TestPreviewGIFFramesLoopAndKeepSamplingVariants(t *testing.T) {
 	path := writePreviewGIF(t)
-	picture, err := readPreviewPicture(path, 0)
+	picture, err := readPreviewPicture(path, 0, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if picture.bitmap == nil || picture.pixelBitmap == nil || picture.animation == nil || picture.animation.delay != 100*time.Millisecond {
+	if picture.bitmap == nil || picture.animation == nil || picture.animation.delay != 100*time.Millisecond {
 		t.Fatal("没有准备GIF首帧")
 	}
 	first := renderPreviewPicture(picture)
@@ -247,7 +247,7 @@ func TestPreviewGIFFramesLoopAndKeepSamplingVariants(t *testing.T) {
 	p.target("library", "gif", 0)
 	p.finishPicture(p.Generation, picture, nil)
 	p.target("library", "another", 0)
-	if p.animation != nil || p.pixelBitmap != nil {
+	if p.animation != nil {
 		t.Fatal("切换素材没有释放动图")
 	}
 }
@@ -260,14 +260,16 @@ func TestPreviewCheckerAndSamplingChangeRenderedImage(t *testing.T) {
 			img.SetNRGBA(x, y, color.NRGBA{R: uint8(x), G: uint8(y), B: 240, A: 180})
 		}
 	}
-	a.Preview.active.picture.Bitmap, a.Preview.active.picture.pixelBitmap = previewBitmaps(img)
+	a.Preview.active.picture.Bitmap = previewBitmap(img, false)
 	tt := ui.NewTester(previewTestView(a), 1100, 640)
 	tt.Advance(5 * time.Millisecond)
 	a.Preview.active.picture.Zoom = 4
 	a.Preview.active.picture.initialized = true
 	tt.Frame()
 	smooth := append([]byte(nil), tt.Image().Pix...)
+	// 切换设置后后台按新模式重新生成位图；这里直接放入生成结果。
 	a.Preferences.PreviewPixelated = true
+	a.Preview.active.picture.Bitmap, a.Preview.active.picture.pixelated = previewBitmap(img, true), true
 	tt.Frame()
 	if bytes.Equal(smooth, tt.Image().Pix) {
 		t.Fatal("像素化没有改变放大后的采样")
@@ -292,7 +294,7 @@ func previewFixture(width, height int) *App {
 			img.SetNRGBA(x, y, color.NRGBA{R: uint8((x/9)%2*140 + 40), G: uint8((y/9)%2*100 + 70), B: uint8((x+y)%200 + 30), A: 255})
 		}
 	}
-	a.Preview.active.picture.Bitmap, a.Preview.active.picture.pixelBitmap = previewBitmaps(img)
+	a.Preview.active.picture.Bitmap = previewBitmap(img, false)
 	return a
 }
 

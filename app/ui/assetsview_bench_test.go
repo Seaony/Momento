@@ -245,3 +245,15 @@ func benchmarkAssetsView100K(b *testing.B, scroll bool) {
 		}
 	}
 }
+
+// 收藏一张图后只改内存、不整库重读，10 万张时的耗时。
+func BenchmarkAssetsView100KPatchFavorite(b *testing.B) {
+	f := newAssetsViewPerformanceFixture(b, 800, 0)
+	id := f.app.Visible[0].ID
+	value := false
+	b.ReportAllocs()
+	for b.Loop() {
+		value = !value
+		f.app.patchAssets([]string{id}, func(asset *model.Asset) { asset.Favorite = value })
+	}
+}

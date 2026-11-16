@@ -49,10 +49,15 @@ func TestImageOrientations(t *testing.T) {
 }
 
 func TestImageThumbnailLimitsAndAtomicReplacement(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "thumbnails", "one.png")
+	base := filepath.Join(t.TempDir(), "thumbnails", "one")
 	for _, size := range []image.Point{{1200, 600}, {3, 7}} {
-		if err := WriteThumbnail(path, image.NewNRGBA(image.Rect(0, 0, size.X, size.Y))); err != nil {
+		// 全透明的图要存 PNG。
+		path, err := WriteThumbnail(base, image.NewNRGBA(image.Rect(0, 0, size.X, size.Y)))
+		if err != nil {
 			t.Fatal(err)
+		}
+		if path != base+".png" {
+			t.Fatalf("透明缩略图没有存成 PNG：%s", path)
 		}
 		f, err := os.Open(path)
 		if err != nil {
@@ -70,7 +75,7 @@ func TestImageThumbnailLimitsAndAtomicReplacement(t *testing.T) {
 			t.Fatalf("small thumbnail: %+v", cfg)
 		}
 	}
-	matches, err := filepath.Glob(filepath.Join(filepath.Dir(path), ".thumbnail-*"))
+	matches, err := filepath.Glob(filepath.Join(filepath.Dir(base), ".thumbnail-*"))
 	if err != nil || len(matches) != 0 {
 		t.Fatalf("temporary files %v, %v", matches, err)
 	}
@@ -209,16 +214,20 @@ func TestImageEightFormatsProduceThumbnail(t *testing.T) {
 			if img.Bounds().Dx() <= 0 || img.Bounds().Dy() <= 0 {
 				t.Fatalf("empty image %v", img.Bounds())
 			}
-			out := filepath.Join(t.TempDir(), "thumbnail.png")
-			if err := WriteThumbnail(out, img); err != nil {
+			out, err := WriteThumbnail(filepath.Join(t.TempDir(), "thumbnail"), img)
+			if err != nil {
 				t.Fatal(err)
+			}
+			// 样例都不透明，应该存成 JPEG。
+			if filepath.Ext(out) != ".jpg" {
+				t.Fatalf("不透明缩略图没有存成 JPEG：%s", out)
 			}
 			f, err := os.Open(out)
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer f.Close()
-			cfg, err := png.DecodeConfig(f)
+			cfg, err := jpeg.DecodeConfig(f)
 			if err != nil {
 				t.Fatal(err)
 			}

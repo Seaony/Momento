@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -34,13 +35,13 @@ func TestWatcherWaitsForStableImageAndTrashesAfterImport(t *testing.T) {
 	root, folder, path := fixture(t)
 	var calls, trashed int
 	var events []Event
-	w := New(root, func(ctx context.Context, source, destination string) (model.ImportResult, error) {
+	w := New(root, func(ctx context.Context, sources []string, destination string) (model.ImportResult, error) {
 		calls++
 		expected, err := filepath.EvalSymlinks(path)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if source != expected || destination != "folder" || trashed != 0 {
+		if len(sources) != 1 || sources[0] != expected || destination != "folder" || trashed != 0 {
 			t.Fatal("导入目标或执行顺序不正确")
 		}
 		return model.ImportResult{Imported: 1}, nil
@@ -65,18 +66,21 @@ func TestWatcherWaitsForStableImageAndTrashesAfterImport(t *testing.T) {
 }
 
 func TestWatcherRetainsSourcesOnFailureAndRetriesWhenReenabled(t *testing.T) {
-	for _, failure := range []string{"import", "result", "empty", "trash", "changed"} {
+	for _, failure := range []string{"import", "result", "mismatch", "empty", "trash", "changed"} {
 		t.Run(failure, func(t *testing.T) {
 			root, folder, path := fixture(t)
 			var calls, trashed int
 			var events []Event
 			problem := errors.New("blocked")
-			w := New(root, func(context.Context, string, string) (model.ImportResult, error) {
+			w := New(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
 				calls++
 				switch failure {
 				case "import":
 					return model.ImportResult{}, problem
 				case "result":
+					return model.ImportResult{Errors: []error{problem}, Failed: sources}, nil
+				case "mismatch":
+					// 有错误却没说是哪个文件：分不清，整批保留。
 					return model.ImportResult{Imported: 1, Errors: []error{problem}}, nil
 				case "empty":
 					return model.ImportResult{}, nil
@@ -121,7 +125,7 @@ func TestWatcherRetainsSourcesOnFailureAndRetriesWhenReenabled(t *testing.T) {
 func TestWatcherRetriesBusyAndAllowsConfirmedDuplicate(t *testing.T) {
 	root, folder, path := fixture(t)
 	calls, trashed := 0, 0
-	w := New(root, func(context.Context, string, string) (model.ImportResult, error) {
+	w := New(root, func(context.Context, []string, string) (model.ImportResult, error) {
 		calls++
 		if calls == 1 {
 			return model.ImportResult{}, assets.ErrImportBusy
@@ -167,7 +171,7 @@ func TestWatcherRejectsLibraryPathsAndReportsMissingFolder(t *testing.T) {
 	}
 	missing := filepath.Join(folder, "missing")
 	var events []Event
-	w := New(root, func(context.Context, string, string) (model.ImportResult, error) {
+	w := New(root, func(context.Context, []string, string) (model.ImportResult, error) {
 		t.Fatal("不应导入")
 		return model.ImportResult{}, nil
 	}, func(string) error { t.Fatal("不应删除"); return nil }, func(e Event) { events = append(events, e) })
@@ -202,9 +206,9 @@ func TestWatcherSkipsHiddenLinksLibrariesAndOverlappingRules(t *testing.T) {
 	}
 	var imported []string
 	var events []Event
-	w := New(root, func(_ context.Context, path, _ string) (model.ImportResult, error) {
-		imported = append(imported, path)
-		return model.ImportResult{Imported: 1}, nil
+	w := New(root, func(_ context.Context, paths []string, _ string) (model.ImportResult, error) {
+		imported = append(imported, paths...)
+		return model.ImportResult{Imported: len(paths)}, nil
 	}, os.Remove, func(e Event) { events = append(events, e) })
 	w.Update([]Rule{{Path: folder, Enabled: true}, {Path: nested, Enabled: true}})
 	w.Scan(context.Background())
@@ -235,8 +239,8 @@ func TestWatcherRealImportCommitsBeforeRemovingSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	var count int
-	w := New(lib.Root, func(ctx context.Context, path, folder string) (model.ImportResult, error) {
-		return service.Import(ctx, model.ImportRequest{Paths: []string{path}, FolderID: folder}, nil)
+	w := New(lib.Root, func(ctx context.Context, paths []string, folder string) (model.ImportResult, error) {
+		return service.Import(ctx, model.ImportRequest{Paths: paths, FolderID: folder}, nil)
 	}, func(source string) error {
 		snapshot, err := lib.Snapshot(ctx)
 		if err != nil {
@@ -299,8 +303,8 @@ func TestWatcherRetainsSourceWhenRealTransactionCannotCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	var events []Event
-	w := New(lib.Root, func(ctx context.Context, path, folder string) (model.ImportResult, error) {
-		return service.Import(ctx, model.ImportRequest{Paths: []string{path}, FolderID: folder}, nil)
+	w := New(lib.Root, func(ctx context.Context, paths []string, folder string) (model.ImportResult, error) {
+		return service.Import(ctx, model.ImportRequest{Paths: paths, FolderID: folder}, nil)
 	}, func(string) error { t.Fatal("失败事务调用了废纸篓"); return nil }, func(e Event) { events = append(events, e) })
 	w.Update([]Rule{{Path: folder, Enabled: true}})
 	w.Scan(ctx)
@@ -319,7 +323,7 @@ func TestWatcherRetainsSourceWhenRealTransactionCannotCommit(t *testing.T) {
 
 func TestWatcherConfigurationCanChangeWhileScanning(t *testing.T) {
 	root, folder, _ := fixture(t)
-	w := New(root, func(context.Context, string, string) (model.ImportResult, error) {
+	w := New(root, func(context.Context, []string, string) (model.ImportResult, error) {
 		return model.ImportResult{}, assets.ErrImportBusy
 	}, func(string) error { t.Fatal("繁忙时不能删除"); return nil }, nil)
 	done := make(chan struct{})
@@ -334,4 +338,124 @@ func TestWatcherConfigurationCanChangeWhileScanning(t *testing.T) {
 		w.Scan(context.Background())
 	}
 	<-done
+}
+
+// 在 folder 里写几个文件，返回解析过符号链接的绝对路径（和监视器看到的一致）。
+func writeFiles(t *testing.T, folder string, names ...string) []string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var paths []string
+	for _, name := range names {
+		if err := os.WriteFile(filepath.Join(folder, name), []byte(name), 0600); err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, filepath.Join(resolved, name))
+	}
+	return paths
+}
+
+func TestWatcherBatchKeepsOnlyFailedFiles(t *testing.T) {
+	root, folder, _ := fixture(t)
+	if err := os.Remove(filepath.Join(folder, "image.png")); err != nil {
+		t.Fatal(err)
+	}
+	paths := writeFiles(t, folder, "a.png", "b.png", "c.png")
+	problem := errors.New("坏图")
+	var calls [][]string
+	var trashed []string
+	var events []Event
+	w := New(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
+		calls = append(calls, slices.Clone(sources))
+		// a 是新图，c 是图库里已有的重复图，b 解不开。
+		return model.ImportResult{Imported: 1, Skipped: 1, Errors: []error{problem}, Failed: []string{paths[1]}}, nil
+	}, func(source string) error { trashed = append(trashed, source); return os.Remove(source) }, func(e Event) { events = append(events, e) })
+	w.Update([]Rule{{Path: folder, FolderID: "f", Enabled: true}})
+	w.Scan(context.Background())
+	w.Scan(context.Background())
+	if len(calls) != 1 || !slices.Equal(calls[0], paths) {
+		t.Fatalf("没有合成一次导入：%v", calls)
+	}
+	if !slices.Equal(trashed, []string{paths[0], paths[2]}) {
+		t.Fatalf("移走的文件不对：%v", trashed)
+	}
+	if _, err := os.Stat(paths[1]); err != nil {
+		t.Fatal("失败的文件被移走了")
+	}
+	// 成功的先报、失败的最后报，按规则记错误的界面最后留下的是错误。
+	if len(events) != 3 || events[0].Err != nil || events[1].Err != nil || events[2].Path != paths[1] || !errors.Is(events[2].Err, problem) {
+		t.Fatalf("事件不对：%+v", events)
+	}
+	w.Scan(context.Background())
+	if len(calls) != 1 {
+		t.Fatal("失败文件没有变化却重复导入")
+	}
+}
+
+func TestWatcherBatchErrorKeepsEveryFile(t *testing.T) {
+	root, folder, _ := fixture(t)
+	paths := writeFiles(t, folder, "a.png", "b.png")
+	problem := errors.New("数据库写不进去")
+	calls := 0
+	var events []Event
+	w := New(root, func(context.Context, []string, string) (model.ImportResult, error) {
+		calls++
+		return model.ImportResult{}, problem
+	}, func(string) error { t.Fatal("整批失败时不能移走源文件"); return nil }, func(e Event) { events = append(events, e) })
+	w.Update([]Rule{{Path: folder, Enabled: true}})
+	w.Scan(context.Background())
+	w.Scan(context.Background())
+	if calls != 1 || len(events) != 3 {
+		t.Fatalf("导入 %d 次，事件 %+v", calls, events)
+	}
+	for _, event := range events {
+		if !errors.Is(event.Err, problem) {
+			t.Fatalf("每个文件都应报整批的错误：%+v", event)
+		}
+	}
+	for _, path := range paths {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatal("整批失败丢了源文件")
+		}
+	}
+}
+
+func TestWatcherGroupsBatchesByTargetFolder(t *testing.T) {
+	root, _, _ := fixture(t)
+	base := t.TempDir()
+	var folders []string
+	for _, name := range []string{"One", "Two", "Three"} {
+		folder := filepath.Join(base, name)
+		if err := os.Mkdir(folder, 0700); err != nil {
+			t.Fatal(err)
+		}
+		folders = append(folders, folder)
+	}
+	one := writeFiles(t, folders[0], "a.png", "b.png")
+	two := writeFiles(t, folders[1], "c.png")
+	three := writeFiles(t, folders[2], "d.png")
+	calls := map[string][]string{}
+	var order []string
+	w := New(root, func(_ context.Context, sources []string, folderID string) (model.ImportResult, error) {
+		if _, ok := calls[folderID]; ok {
+			t.Fatalf("同一目标文件夹导入了两次：%s", folderID)
+		}
+		order = append(order, folderID)
+		calls[folderID] = slices.Clone(sources)
+		return model.ImportResult{Imported: len(sources)}, nil
+	}, os.Remove, nil)
+	// 一、三两个规则导入到同一个文件夹，应合成一批。
+	w.Update([]Rule{{Path: folders[0], FolderID: "x", Enabled: true}, {Path: folders[1], FolderID: "y", Enabled: true}, {Path: folders[2], FolderID: "x", Enabled: true}})
+	w.Scan(context.Background())
+	w.Scan(context.Background())
+	if !slices.Equal(order, []string{"x", "y"}) || !slices.Equal(calls["x"], append(one, three...)) || !slices.Equal(calls["y"], two) {
+		t.Fatalf("分组不对：%v %v", order, calls)
+	}
+	for _, path := range append(append(one, two...), three...) {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("导入成功的源文件没有移走：%s", path)
+		}
+	}
 }

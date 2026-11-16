@@ -10,11 +10,21 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-const importProgressHeight float32 = 120
+const (
+	importProgressHeight    float32 = 120
+	thumbnailProgressHeight float32 = 54 // 重建缩略图只有标题、张数和进度条
+)
+
+func (a *App) progressHeight() float32 {
+	if a.Progress != nil && a.Progress.Stage == "thumbnails" {
+		return thumbnailProgressHeight
+	}
+	return importProgressHeight
+}
 
 func (a *App) contentTopInset() float32 {
 	if a.Progress != nil {
-		return MainToolbarHeight + importProgressHeight
+		return MainToolbarHeight + a.progressHeight()
 	}
 	return MainToolbarHeight
 }
@@ -470,14 +480,21 @@ func (a *App) importProgress(c *ui.Context) {
 	if p == nil {
 		return
 	}
-	ui.Column(c.Key("import-progress")).Transition(ui.ElementTransition{Animation: &motionSpring, Height: true, Enter: &ui.Motion{Y: -10, Collapse: true}, Exit: &ui.Motion{Y: -10, Collapse: true}}).Height(importProgressHeight).Shrink(0).Padding(space12, space16).Gap(space4).Background(toolbarColor(c.Theme())).Children(func() {
+	ui.Column(c.Key("import-progress")).Transition(ui.ElementTransition{Animation: &motionSpring, Height: true, Enter: &ui.Motion{Y: -10, Collapse: true}, Exit: &ui.Motion{Y: -10, Collapse: true}}).Height(a.progressHeight()).Shrink(0).Padding(space12, space16).Gap(space4).Background(toolbarColor(c.Theme())).Children(func() {
 		ui.Row(c).Children(func() {
 			ui.Text(c, a.T("import_stage_"+p.Stage)).FontSize(fontBody).FontWeight(600).TextColor(colors.Text)
 			ui.Spacer(c)
 			ui.Text(c, fmt.Sprintf("%d / %d", p.Processed, p.Total)).FontFeatures("tnum").FontSize(fontNumber).TextColor(colors.TextSecondary)
 		})
-		ui.Text(c, a.T("import_counts", p.Imported, p.Skipped)).FontSize(fontBody).TextColor(colors.TextSecondary)
-		ui.Text(c, filepath.Base(p.CurrentFile)).SingleLine().FontSize(fontSecondary).TextColor(colors.TextSecondary)
+		if p.Stage != "thumbnails" {
+			ui.Text(c, a.T("import_counts", p.Imported, p.Skipped)).FontSize(fontBody).TextColor(colors.TextSecondary)
+			// 扫描刚开始还没有当前文件，空着，不显示「.」。
+			file := ""
+			if p.CurrentFile != "" {
+				file = filepath.Base(p.CurrentFile)
+			}
+			ui.Text(c, file).SingleLine().FontSize(fontSecondary).TextColor(colors.TextSecondary)
+		}
 		progress := float64(0)
 		if p.Total > 0 {
 			progress = float64(p.Processed) / float64(p.Total)

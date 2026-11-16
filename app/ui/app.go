@@ -321,7 +321,20 @@ func (a *App) ShowEditLibrary() {
 	}
 }
 
-func (a *App) Run(label string, work func(context.Context) error) {
+func (a *App) Run(label string, work func(context.Context) error) { a.run(label, work, nil) }
+
+// 只改了几张素材的字段时用：写库成功后按同样的规则直接改内存里的数据，不再整库重读（十万张要一秒多）。
+// patch 为 nil 表示数据没变（比如导出），什么都不用刷新。
+func (a *App) RunPatch(label string, ids []string, work func(context.Context) error, patch func(*model.Asset)) {
+	a.run(label, work, &assetPatch{ids: ids, apply: patch})
+}
+
+type assetPatch struct {
+	ids   []string
+	apply func(*model.Asset)
+}
+
+func (a *App) run(label string, work func(context.Context) error, patch *assetPatch) {
 	if a.Library == nil || a.Busy {
 		return
 	}
@@ -334,7 +347,7 @@ func (a *App) Run(label string, work func(context.Context) error) {
 		slog.Info("操作开始", "operation", label)
 		err := work(a.ctx)
 		var snapshot model.Snapshot
-		if err == nil {
+		if err == nil && patch == nil {
 			snapshot, err = lib.Snapshot(a.ctx)
 		}
 		a.Window.Update(func() {
@@ -348,7 +361,11 @@ func (a *App) Run(label string, work func(context.Context) error) {
 				return
 			}
 			a.manifest = lib.Manifest
-			a.applySnapshot(snapshot)
+			if patch == nil {
+				a.applySnapshot(snapshot)
+			} else {
+				a.patchAssets(patch.ids, patch.apply)
+			}
 			if label == "edit_library" {
 				a.Window.SetTitle(a.manifest.DisplayName + " – Momento")
 				a.remember()
@@ -357,6 +374,46 @@ func (a *App) Run(label string, work func(context.Context) error) {
 			slog.Info("操作完成", "operation", label)
 		})
 	}()
+}
+
+// 按 ID 改内存里的素材再重建索引。旧切片可能还被索引和别处引用，所以复制一份再改，不原地改。
+func (a *App) patchAssets(ids []string, apply func(*model.Asset)) {
+	if apply == nil || len(ids) == 0 {
+		return
+	}
+	targets := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		targets[id] = true
+	}
+	snapshot := a.Snapshot
+	snapshot.Assets = slices.Clone(snapshot.Assets)
+	now := time.Now().UTC()
+	for i := range snapshot.Assets {
+		if asset := &snapshot.Assets[i]; targets[asset.ID] {
+			apply(asset)
+			asset.UpdatedAt = now
+		}
+	}
+	a.applySnapshot(snapshot)
+}
+
+// 和数据库里一样：成员 ID 去重并按升序排好。
+func setMembership(members, ids []string, add bool) []string {
+	out := slices.Clone(members)
+	for _, id := range ids {
+		if add {
+			if !slices.Contains(out, id) {
+				out = append(out, id)
+			}
+		} else {
+			out = slices.DeleteFunc(out, func(member string) bool { return member == id })
+		}
+	}
+	slices.Sort(out)
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func (a *App) applySnapshot(snapshot model.Snapshot) {
@@ -656,15 +713,19 @@ func (a *App) ImportPaths(paths []string) {
 
 func (a *App) SetFavorite(ids []string, value bool) {
 	lib := a.Library
-	a.Run("favorite", func(ctx context.Context) error { return lib.SetFavorite(ctx, ids, value) })
+	a.RunPatch("favorite", ids, func(ctx context.Context) error { return lib.SetFavorite(ctx, ids, value) }, func(asset *model.Asset) { asset.Favorite = value })
 }
 func (a *App) SetTags(ids, tagIDs []string, add bool) {
 	lib := a.Library
-	a.Run("tags", func(ctx context.Context) error { return lib.SetAssetTags(ctx, ids, tagIDs, add) })
+	a.RunPatch("tags", ids, func(ctx context.Context) error { return lib.SetAssetTags(ctx, ids, tagIDs, add) }, func(asset *model.Asset) {
+		asset.TagIDs = setMembership(asset.TagIDs, tagIDs, add)
+	})
 }
 func (a *App) SetFolders(ids, folderIDs []string, add bool) {
 	lib := a.Library
-	a.Run("folders", func(ctx context.Context) error { return lib.SetAssetFolders(ctx, ids, folderIDs, add) })
+	a.RunPatch("folders", ids, func(ctx context.Context) error { return lib.SetAssetFolders(ctx, ids, folderIDs, add) }, func(asset *model.Asset) {
+		asset.FolderIDs = setMembership(asset.FolderIDs, folderIDs, add)
+	})
 }
 func (a *App) RequestDelete(ids []string) {
 	service := a.Assets
@@ -676,12 +737,12 @@ func (a *App) RequestDelete(ids []string) {
 			a.Run("delete_permanently", func(ctx context.Context) error { return service.DeletePermanently(ctx, ids) })
 		})
 	} else {
-		a.Run("trash", func(ctx context.Context) error { return service.Trash(ctx, ids) })
+		a.RunPatch("trash", ids, func(ctx context.Context) error { return service.Trash(ctx, ids) }, func(asset *model.Asset) { asset.Trashed = true })
 	}
 }
 func (a *App) Restore(ids []string) {
 	service := a.Assets
-	a.Run("restore", func(ctx context.Context) error { return service.Restore(ctx, ids) })
+	a.RunPatch("restore", ids, func(ctx context.Context) error { return service.Restore(ctx, ids) }, func(asset *model.Asset) { asset.Trashed = false })
 }
 func (a *App) ExportSelected() {
 	if a.Selected.Len() > 0 {
@@ -691,10 +752,10 @@ func (a *App) ExportSelected() {
 func (a *App) ExportTo(destination string, format model.ExportFormat, quality float64) {
 	service := a.Assets
 	selected := a.SelectedAssets()
-	a.Run("export", func(ctx context.Context) error {
+	a.RunPatch("export", nil, func(ctx context.Context) error {
 		_, err := service.Export(ctx, selected, destination, format, quality)
 		return err
-	})
+	}, nil)
 }
 func (a *App) Bitmap(asset model.Asset) *ui.Bitmap {
 	if a.Thumbnails == nil || a.Library == nil {

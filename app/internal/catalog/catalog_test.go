@@ -208,10 +208,33 @@ func TestUsageUpdateKeepsSearchCountsAndSnapshotOwnership(t *testing.T) {
 	if !reflect.DeepEqual(counts, idx.Counts()) {
 		t.Fatal("更新使用时间改变了计数")
 	}
-	if !snapshot.Assets[0].LastUsedAt.IsZero() {
-		t.Fatal("索引改写了传入快照")
+	// 索引接管传入的素材切片，使用时间直接写在调用方的快照上。
+	if !snapshot.Assets[0].LastUsedAt.Equal(now) {
+		t.Fatal("索引没有接管传入的素材切片")
 	}
 	if !idx.Snapshot().Assets[0].LastUsedAt.Equal(now) {
 		t.Fatal("旧回调覆盖了更新的使用时间")
+	}
+}
+
+// 10 万张时模拟边打字边搜索：每敲一个字都查一次，排序沿用默认的添加时间倒序。
+func BenchmarkSearch100K(b *testing.B) {
+	index := New(benchmarkSnapshot(100000))
+	queries := []struct {
+		name string
+		q    Query
+	}{
+		{"全部排序", Query{}},
+		{"逐字搜索", Query{Search: "reference 1"}},
+		{"按名称搜索", Query{Search: "reference 12", Sort: "name"}},
+		{"筛选搜索", Query{Scope: "folder", FolderID: "nature", ColorFamilies: []string{"red"}, Search: "reference 9", Sort: "size", Descending: true}},
+	}
+	for _, query := range queries {
+		b.Run(query.name, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				benchmarkResult = index.Query(query.q)
+			}
+		})
 	}
 }

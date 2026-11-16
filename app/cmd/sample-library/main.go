@@ -124,11 +124,12 @@ func generate(ctx context.Context, path string, count int, out io.Writer) (err e
 		if err = os.WriteFile(filepath.Join(lib.Root, rel), original.Bytes(), 0600); err != nil {
 			return err
 		}
+		// 样本图都不透明且不超过 512，和应用一样存成质量 85 的 JPEG 缩略图。
 		var thumbnail bytes.Buffer
-		if err = pngEncoder.Encode(&thumbnail, img); err != nil {
+		if err = jpeg.Encode(&thumbnail, img, &jpeg.Options{Quality: 85}); err != nil {
 			return err
 		}
-		if err = os.WriteFile(filepath.Join(lib.Root, "thumbnails", id+".png"), thumbnail.Bytes(), 0600); err != nil {
+		if err = os.WriteFile(filepath.Join(lib.Root, "thumbnails", id+".jpg"), thumbnail.Bytes(), 0600); err != nil {
 			return err
 		}
 		stamp := baseDate.Add(time.Duration(i) * time.Second).Format(time.RFC3339Nano)

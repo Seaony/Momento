@@ -2,7 +2,10 @@ package ui
 
 import (
 	"container/list"
-	"image/png"
+	"errors"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -56,7 +59,7 @@ func newThumbnailCache(update func(func())) *thumbnailCache {
 		entries: make(map[thumbnailKey]*list.Element),
 		pending: make(map[thumbnailKey]uint64),
 		slots:   make(chan struct{}, thumbnailConcurrency),
-		decode:  decodeThumbnail,
+		decode:  loadThumbnail,
 	}
 }
 
@@ -87,7 +90,7 @@ func (c *thumbnailCache) Get(root string, asset model.Asset) *ui.Bitmap {
 	c.mu.Unlock()
 
 	go func() {
-		bitmap, size, err := c.decode(filepath.Join(key.root, "thumbnails", key.id+".png"))
+		bitmap, size, err := c.decode(filepath.Join(key.root, "thumbnails", key.id))
 		<-c.slots
 		c.update(func() {
 			c.mu.Lock()
@@ -162,13 +165,22 @@ func (c *thumbnailCache) remove(element *list.Element) {
 	c.order.Remove(element)
 }
 
+// base 是不带后缀的缩略图路径。新缩略图不透明的存 .jpg、带透明的存 .png，旧图库只有 .png，两种都认，优先 .jpg。
+func loadThumbnail(base string) (*ui.Bitmap, int64, error) {
+	bitmap, size, err := decodeThumbnail(base + ".jpg")
+	if errors.Is(err, os.ErrNotExist) {
+		return decodeThumbnail(base + ".png")
+	}
+	return bitmap, size, err
+}
+
 func decodeThumbnail(path string) (*ui.Bitmap, int64, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer f.Close()
-	config, err := png.DecodeConfig(f)
+	config, _, err := image.DecodeConfig(f)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -178,7 +190,7 @@ func decodeThumbnail(path string) (*ui.Bitmap, int64, error) {
 	if _, err := f.Seek(0, 0); err != nil {
 		return nil, 0, err
 	}
-	img, err := png.Decode(f)
+	img, _, err := image.Decode(f)
 	if err != nil {
 		return nil, 0, err
 	}

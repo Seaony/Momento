@@ -2,40 +2,22 @@ package assets
 
 import (
 	"image"
-	"image/color"
 
 	"github.com/Seaony/Momento/app/internal/i18n"
 )
 
 // RotateImage 按顺时针旋转，返回新图片，原图保持不动。
+// 顺时针 90°、180°、270° 分别等同 EXIF 方向 6、3、8，和转正共用同一套快速路径。
 func RotateImage(src image.Image, degrees int) (image.Image, error) {
 	rotation, err := normalizedRotation(degrees)
 	if err != nil {
 		return nil, err
 	}
-	if rotation == 0 {
+	orientation := map[int]int{90: 6, 180: 3, 270: 8}[rotation]
+	if orientation == 0 {
 		return src, nil
 	}
-	bounds := src.Bounds()
-	width, height := bounds.Dx(), bounds.Dy()
-	size := rotatedSize(width, height, rotation)
-	var dst interface {
-		image.Image
-		Set(int, int, color.Color)
-	}
-	switch src.ColorModel() {
-	case color.Gray16Model, color.RGBA64Model, color.NRGBA64Model:
-		dst = image.NewNRGBA64(image.Rect(0, 0, size.X, size.Y))
-	default:
-		dst = image.NewNRGBA(image.Rect(0, 0, size.X, size.Y))
-	}
-	for y := range height {
-		for x := range width {
-			point := rotatedPoint(x, y, width, height, rotation)
-			dst.Set(point.X, point.Y, src.At(bounds.Min.X+x, bounds.Min.Y+y))
-		}
-	}
-	return dst, nil
+	return orient(src, orientation), nil
 }
 
 func normalizedRotation(degrees int) (int, error) {

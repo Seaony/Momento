@@ -5,6 +5,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Seaony/Momento/app/internal/model"
@@ -33,21 +34,34 @@ type entry struct {
 	tagNames        []string
 }
 
+// 排好序的下标按这三样区分：排序字段、方向、是否先按最近使用排。
+type orderKey struct {
+	field      string
+	descending bool
+	recent     bool
+}
+
 // 结构变化后重建索引；使用时间不影响搜索项和计数，可直接更新。
 type Index struct {
 	snapshot model.Snapshot
 	entries  []entry
 	counts   Counts
+	// 每种排序方式第一次用到时把全部素材排一次，之后搜索、筛选只在这份顺序上过滤。
+	mu     sync.Mutex
+	orders map[orderKey][]int32
 }
 
+// New 直接接管 snapshot.Assets（不复制，省一份素材内存），调用方之后不能再改这个切片和其中的素材；
+// UpdateLastUsed 会原地改它。其他字段会复制。
 func New(snapshot model.Snapshot) *Index {
 	idx := &Index{
 		snapshot: model.Snapshot{
-			Assets: slices.Clone(snapshot.Assets), Folders: slices.Clone(snapshot.Folders), Tags: slices.Clone(snapshot.Tags),
+			Assets: snapshot.Assets, Folders: slices.Clone(snapshot.Folders), Tags: slices.Clone(snapshot.Tags),
 			SmartFolders: cloneSmartFolders(snapshot.SmartFolders), QuickAccess: slices.Clone(snapshot.QuickAccess),
 		},
 		entries: make([]entry, len(snapshot.Assets)),
 		counts:  Counts{Folders: make(map[string]int), Tags: make(map[string]int)},
+		orders:  map[orderKey][]int32{},
 	}
 	tagNames := make(map[string]string, len(snapshot.Tags))
 	for _, tag := range snapshot.Tags {
@@ -109,12 +123,15 @@ func (idx *Index) Query(q Query) []model.Asset {
 	for i, extension := range q.Extensions {
 		extensions[i] = normalizedExtension(extension)
 	}
-	selected := make([]int, 0, len(idx.snapshot.Assets))
-	for i, asset := range idx.snapshot.Assets {
-		if !inScope(asset, q) || (smart != nil && !matchesValidatedSmart(asset, *smart)) || !matchesColors(asset.Colors, q.ColorFamilies) || !matchesAny(asset.TagIDs, q.TagIDs) {
+	// 先按存放顺序过滤（顺着内存读，快），再沿排好的顺序挑出命中的素材。
+	matched := make([]bool, len(idx.snapshot.Assets))
+	count := 0
+	for i := range idx.snapshot.Assets {
+		asset := &idx.snapshot.Assets[i]
+		if !inScope(asset, q) || (smart != nil && !matchesValidatedSmart(asset, smart)) || !matchesColors(asset.Colors, q.ColorFamilies) || !matchesAny(asset.TagIDs, q.TagIDs) {
 			continue
 		}
-		e := idx.entries[i]
+		e := &idx.entries[i]
 		if len(extensions) > 0 && !slices.Contains(extensions, e.extension) {
 			continue
 		}
@@ -123,49 +140,84 @@ func (idx *Index) Query(q Query) []model.Asset {
 				continue
 			}
 		}
-		selected = append(selected, i)
+		matched[i] = true
+		count++
 	}
-	descending := q.Descending || q.Sort == ""
-	slices.SortFunc(selected, func(left, right int) int {
-		a, b := idx.snapshot.Assets[left], idx.snapshot.Assets[right]
-		var order int
-		if q.Scope == "recent" {
-			order = b.LastUsedAt.Compare(a.LastUsedAt)
-			if order != 0 {
-				return order
-			}
+	assets := make([]model.Asset, 0, count)
+	if count == 0 {
+		return assets
+	}
+	for _, i := range idx.order(q) {
+		if matched[i] {
+			assets = append(assets, idx.snapshot.Assets[i])
 		}
-		switch q.Sort {
-		case "name":
-			order = strings.Compare(idx.entries[left].name, idx.entries[right].name)
-		case "size":
-			order = cmp.Compare(a.Size, b.Size)
-		default:
-			order = a.CreatedAt.Compare(b.CreatedAt)
-		}
-		if order != 0 {
-			if descending {
-				return -order
-			}
-			return order
-		}
-		if order = strings.Compare(idx.entries[left].name, idx.entries[right].name); order != 0 {
-			return order
-		}
-		return strings.Compare(a.ID, b.ID)
-	})
-	assets := make([]model.Asset, len(selected))
-	for i, source := range selected {
-		assets[i] = idx.snapshot.Assets[source]
 	}
 	return assets
 }
 
+// order 返回按查询的排序方式排好的全部素材下标；排序是全序（最后按 ID 定），所以先排全部再过滤和先过滤再排结果一样。
+func (idx *Index) order(q Query) []int32 {
+	key := orderKey{field: "added", descending: q.Descending || q.Sort == "", recent: q.Scope == "recent"}
+	if q.Sort == "name" || q.Sort == "size" {
+		key.field = q.Sort
+	}
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	if order, ok := idx.orders[key]; ok {
+		return order
+	}
+	order := make([]int32, len(idx.snapshot.Assets))
+	for i := range order {
+		order[i] = int32(i)
+	}
+	slices.SortFunc(order, func(left, right int32) int {
+		a, b := &idx.snapshot.Assets[left], &idx.snapshot.Assets[right]
+		var result int
+		if key.recent {
+			if result = b.LastUsedAt.Compare(a.LastUsedAt); result != 0 {
+				return result
+			}
+		}
+		switch key.field {
+		case "name":
+			result = strings.Compare(idx.entries[left].name, idx.entries[right].name)
+		case "size":
+			result = cmp.Compare(a.Size, b.Size)
+		default:
+			result = a.CreatedAt.Compare(b.CreatedAt)
+		}
+		if result != 0 {
+			if key.descending {
+				return -result
+			}
+			return result
+		}
+		if result = strings.Compare(idx.entries[left].name, idx.entries[right].name); result != 0 {
+			return result
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+	idx.orders[key] = order
+	return order
+}
+
+// UpdateLastUsed 原地改素材的使用时间，New 时传入的切片（调用方手里的快照）会一起变。
+// 调用方可能已经先改过同一个切片，所以只要有 ids 就作废「最近使用」的排序，不看这里有没有改动。
 func (idx *Index) UpdateLastUsed(ids map[string]bool, at time.Time) {
+	if len(ids) == 0 {
+		return
+	}
 	for i := range idx.snapshot.Assets {
 		asset := &idx.snapshot.Assets[i]
 		if ids[asset.ID] && at.After(asset.LastUsedAt) {
 			asset.LastUsedAt = at
+		}
+	}
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	for key := range idx.orders {
+		if key.recent {
+			delete(idx.orders, key)
 		}
 	}
 }
@@ -184,7 +236,7 @@ func (idx *Index) Snapshot() model.Snapshot {
 	}
 }
 
-func inScope(asset model.Asset, q Query) bool {
+func inScope(asset *model.Asset, q Query) bool {
 	if q.Scope == "trash" {
 		return asset.Trashed
 	}

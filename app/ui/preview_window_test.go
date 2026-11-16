@@ -171,7 +171,7 @@ func TestPreviewDecodedOriginalKeepsPlaceholderGeometry(t *testing.T) {
 		return ui.NewBitmap(img)
 	}
 	w.placeholder = solid(80, 60)
-	p.Bitmap, p.pixelBitmap = nil, nil
+	p.Bitmap = nil
 	p.Loading = true
 	p.initialized = false
 	tt := ui.NewTester(previewTestView(a), 600, 500)
@@ -182,7 +182,7 @@ func TestPreviewDecodedOriginalKeepsPlaceholderGeometry(t *testing.T) {
 	generation, zoom, pan := p.Generation, p.Zoom, p.Pan
 	pixels := append([]byte(nil), tt.Image().Pix...)
 	original := solid(800, 600)
-	p.finishPicture(generation, previewPicture{bitmap: original, pixelBitmap: original.Pixelated()}, nil)
+	p.finishPicture(generation, previewPicture{bitmap: original}, nil)
 	tt.Frame()
 	after, ok := tt.AccessByRole(ui.RoleImage, w.asset.Name)
 	if !ok || before.Bounds != after.Bounds || p.Generation != generation || p.Zoom != zoom || p.Pan != pan || !p.initialized {
@@ -480,7 +480,7 @@ func TestPreviewFocusedWindowShortcutsWithoutElementFocus(t *testing.T) {
 	a := previewFixture(288, 192)
 	w := a.Preview.active
 	w.hasFocus = true
-	bitmap, pixels := w.picture.Bitmap, w.picture.pixelBitmap
+	bitmap := w.picture.Bitmap
 	w.items = append(w.items, model.Asset{ID: "two", Name: "第二张", Width: 288, Height: 192})
 	tt := ui.NewTester(func(c *ui.Context) { w.view(c, a) }, 600, 400)
 	tt.Key(0, ui.KeyRight)
@@ -491,7 +491,7 @@ func TestPreviewFocusedWindowShortcutsWithoutElementFocus(t *testing.T) {
 	if w.asset.ID != "one" {
 		t.Fatal("独立窗口无元素焦点时不能上一张")
 	}
-	w.picture.Bitmap, w.picture.pixelBitmap = bitmap, pixels
+	w.picture.Bitmap = bitmap
 	tt.Frame()
 	tt.Key(ui.Cmd, ui.KeyEqual)
 	if w.picture.Zoom != 1.25 {

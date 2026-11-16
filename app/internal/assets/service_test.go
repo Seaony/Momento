@@ -48,6 +48,17 @@ func snapshot(t *testing.T, ctx context.Context, lib *library.Library) model.Sna
 	}
 	return v
 }
+
+// thumbnailFile 返回素材当前的缩略图路径，没有就让测试失败。
+func thumbnailFile(t *testing.T, root, id string) string {
+	t.Helper()
+	path, err := ThumbnailPath(root, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func fixtureCopy(t *testing.T, ext, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("testdata", "sample."+ext))
@@ -296,11 +307,15 @@ func TestImportReusesSameOriginalLeftByInterruptedImport(t *testing.T) {
 	if err != nil || result.Imported != 1 {
 		t.Fatalf("已有同内容原图时导入失败：%+v %v", result, err)
 	}
-	f, err := os.Open(thumbnail)
+	// 残缺的旧 PNG 缩略图要换成新的 JPEG，不留两份。
+	if _, err = os.Stat(thumbnail); !os.IsNotExist(err) {
+		t.Fatalf("残缺的旧缩略图还在：%v", err)
+	}
+	f, err := os.Open(thumbnailFile(t, lib.Root, id))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = png.Decode(f)
+	_, _, err = image.Decode(f)
 	f.Close()
 	if err != nil {
 		t.Fatalf("残缺缩略图没有被覆盖：%v", err)
@@ -359,9 +374,9 @@ func TestOpenLibraryRestoresInterruptedDeletionAndCleansStaging(t *testing.T) {
 	}
 	moves := []struct{ from, to string }{
 		{filepath.Join(lib.Root, filepath.FromSlash(assets[0].RelativePath)), filepath.Join(deletion, assets[0].ID+".original")},
-		{filepath.Join(lib.Root, "thumbnails", assets[0].ID+".png"), filepath.Join(deletion, assets[0].ID+".thumbnail")},
+		{thumbnailFile(t, lib.Root, assets[0].ID), filepath.Join(deletion, assets[0].ID+".thumbnail.jpg")},
 		{filepath.Join(lib.Root, filepath.FromSlash(assets[1].RelativePath)), filepath.Join(legacy, "0")},
-		{filepath.Join(lib.Root, "thumbnails", assets[1].ID+".png"), filepath.Join(legacy, "1")},
+		{thumbnailFile(t, lib.Root, assets[1].ID), filepath.Join(legacy, "1")},
 	}
 	for _, move := range moves {
 		if err = os.Rename(move.from, move.to); err != nil {
@@ -408,8 +423,7 @@ func TestImportRepairsMissingOriginalOfExistingAsset(t *testing.T) {
 		t.Fatal(err)
 	}
 	original := filepath.Join(lib.Root, filepath.FromSlash(asset.RelativePath))
-	thumbnail := filepath.Join(lib.Root, "thumbnails", asset.ID+".png")
-	for _, path := range []string{original, thumbnail} {
+	for _, path := range []string{original, thumbnailFile(t, lib.Root, asset.ID)} {
 		if err := os.Remove(path); err != nil {
 			t.Fatal(err)
 		}
@@ -421,11 +435,11 @@ func TestImportRepairsMissingOriginalOfExistingAsset(t *testing.T) {
 	if missing, err := s.storedCopyMissing(ctx, asset.RelativePath, asset.ID); err != nil || missing {
 		t.Fatalf("补回的原图不对：%v %v", missing, err)
 	}
-	f, err := os.Open(thumbnail)
+	f, err := os.Open(thumbnailFile(t, lib.Root, asset.ID))
 	if err != nil {
 		t.Fatal(err)
 	}
-	thumb, err := png.Decode(f)
+	thumb, _, err := image.Decode(f)
 	f.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -625,18 +639,17 @@ func TestRefreshThumbnailAndColors(t *testing.T) {
 	ctx, lib, s := testLibrary(t)
 	importFixture(t, ctx, s, "png")
 	a := snapshot(t, ctx, lib).Assets[0]
-	thumb := filepath.Join(lib.Root, "thumbnails", a.ID+".png")
-	if err := os.Remove(thumb); err != nil {
+	if err := os.Remove(thumbnailFile(t, lib.Root, a.ID)); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.RefreshThumbnails(ctx, []model.Asset{a}); err != nil {
 		t.Fatal(err)
 	}
-	f, err := os.Open(thumb)
+	f, err := os.Open(thumbnailFile(t, lib.Root, a.ID))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = png.Decode(f)
+	_, _, err = image.Decode(f)
 	f.Close()
 	if err != nil {
 		t.Fatal(err)
@@ -728,7 +741,7 @@ func TestRelativePathsRejectEscape(t *testing.T) {
 		}
 	}
 	for _, id := range []string{"../outside", strings.Repeat("g", 64), ""} {
-		if _, err := thumbnailRelative(id); err == nil {
+		if _, err := thumbnailBase(id); err == nil {
 			t.Fatalf("接受非法标识：%q", id)
 		}
 	}
@@ -807,16 +820,21 @@ func TestImportEXIFPersistsAndKeepsSourceModificationTime(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := snapshot(t, ctx, lib).Assets[0]
-	if got.Width != 10 || got.Height != 20 || got.Orientation != 6 || got.EXIF["fileModifiedAt"] != modified.Format(time.RFC3339Nano) || got.EXIF["cameraMake"] != "Canon" || got.EXIF["flashFired"] != "false" {
-		t.Fatalf("元数据不完整：%+v", got)
+	// 快照不带 EXIF，单独读。
+	exif, err := lib.AssetEXIF(ctx, got.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Width != 10 || got.Height != 20 || got.Orientation != 6 || exif["fileModifiedAt"] != modified.Format(time.RFC3339Nano) || exif["cameraMake"] != "Canon" || exif["flashFired"] != "false" {
+		t.Fatalf("元数据不完整：%+v %v", got, exif)
 	}
 	reopened, err := library.Open(ctx, lib.Root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer reopened.Close()
-	if !reflect.DeepEqual(snapshot(t, ctx, reopened).Assets[0].EXIF, got.EXIF) {
-		t.Fatal("EXIF没有持久化")
+	if again, err := reopened.AssetEXIF(ctx, got.ID); err != nil || !reflect.DeepEqual(again, exif) {
+		t.Fatalf("EXIF没有持久化：%v", err)
 	}
 }
 
@@ -920,7 +938,7 @@ func TestRefreshThumbnailsAndColorsContinuePastBrokenOriginals(t *testing.T) {
 		}
 	}
 	good := items[6]
-	thumb := filepath.Join(lib.Root, "thumbnails", good.ID+".png")
+	thumb := thumbnailFile(t, lib.Root, good.ID)
 	if err := os.Remove(thumb); err != nil {
 		t.Fatal(err)
 	}

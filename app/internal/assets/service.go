@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Seaony/Momento/app/internal/i18n"
 	"github.com/Seaony/Momento/app/internal/model"
@@ -24,11 +25,11 @@ type Service struct {
 	db           *sql.DB
 	importing    sync.Mutex
 	mutation     sync.Mutex
-	prepareImage func(string) (image.Image, map[string]string, int, string, error)
+	prepareImage func(context.Context, string) (preparedImage, error)
 }
 
 func New(root string, db *sql.DB) *Service {
-	return &Service{root: root, db: db, prepareImage: PrepareImage}
+	return &Service{root: root, db: db, prepareImage: prepareThumbnail}
 }
 
 func (s *Service) assetPath(relative string) (string, error) {
@@ -77,18 +78,6 @@ func (s *Service) storageDestination(relative string) (string, error) {
 		}
 	}
 	return filepath.Join(s.root, filepath.FromSlash(relative)), nil
-}
-
-func thumbnailRelative(id string) (string, error) {
-	if len(id) != 64 || strings.ContainsAny(id, "/\\") {
-		return "", i18n.NewError("error_asset_id", id)
-	}
-	for _, r := range id {
-		if !strings.ContainsRune("0123456789abcdef", r) {
-			return "", i18n.NewError("error_asset_id", id)
-		}
-	}
-	return filepath.Join("thumbnails", id+".png"), nil
 }
 
 func copyFile(ctx context.Context, src, dst string) (err error) {
@@ -177,49 +166,90 @@ func (s *Service) Restore(ctx context.Context, ids []string) error {
 	return s.setTrashed(ctx, ids, false)
 }
 
-// RefreshThumbnails 逐张重建缩略图。某张原图丢了或解不开只跳过它，做完再一起报错；
-// 取消和写缩略图目录出错立即停下。
+// RefreshThumbnails 重建缩略图，不报进度。
 func (s *Service) RefreshThumbnails(ctx context.Context, items []model.Asset) error {
-	s.mutation.Lock()
-	defer s.mutation.Unlock()
-	var failures []assetFailure
-	for _, a := range items {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		img, err := s.loadForRefresh(a)
-		if err != nil {
-			slog.Warn("缩略图没能生成，跳过", "id", a.ID, "name", a.Name, "error", err)
-			failures = append(failures, assetFailure{name: a.Name, err: i18n.WrapError(err, "error_thumbnail_refresh", a.Name)})
-			continue
-		}
-		rel, err := thumbnailRelative(a.ID)
-		if err != nil {
-			return err
-		}
-		destination, err := s.storageDestination(rel)
-		if err != nil {
-			return err
-		}
-		if err = WriteThumbnail(destination, img); err != nil {
-			return err
-		}
-	}
-	slog.Info("刷新缩略图", "count", len(items)-len(failures), "failed", len(failures))
-	return summarizeFailures(failures, "error_thumbnails_failed", "error_thumbnails_failed_more")
+	return s.RefreshThumbnailsProgress(ctx, items, nil)
 }
 
-// loadForRefresh 读原图并按图库里的旋转转好，只涉及这一张。
-func (s *Service) loadForRefresh(a model.Asset) (image.Image, error) {
+// RefreshThumbnailsProgress 并行重建缩略图，同时解码的大图受内存预算限制。
+// 某张原图丢了或解不开只跳过它，做完再一起报错；取消和写缩略图目录出错立即停下。
+// progress 在调用方协程里串行调用，最多每 100ms 一次；返回前一定再报一次实际完成数，出错时可能小于 total。
+func (s *Service) RefreshThumbnailsProgress(ctx context.Context, items []model.Asset, progress func(done, total int)) error {
+	s.mutation.Lock()
+	defer s.mutation.Unlock()
+	done := 0
+	var last time.Time
+	report := func(force bool) {
+		if progress != nil && (force || time.Since(last) >= 100*time.Millisecond) {
+			progress(done, len(items))
+			last = time.Now()
+		}
+	}
+	defer report(true)
+	if len(items) == 0 {
+		return nil
+	}
+	// 先建好缩略图目录，免得并行时多个协程同时去建。
+	if _, err := s.storageDestination(filepath.Join("thumbnails", "x")); err != nil {
+		return err
+	}
+	failures := make([]*assetFailure, len(items))
+	err := parallel(ctx, len(items), decodeWorkers(), func(ctx context.Context, i int) error {
+		a := items[i]
+		base, err := thumbnailBase(a.ID)
+		if err != nil {
+			return err
+		}
+		img, err := s.loadForRefresh(ctx, a)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		if err != nil {
+			slog.Warn("缩略图没能生成，跳过", "id", a.ID, "name", a.Name, "error", err)
+			failures[i] = &assetFailure{name: a.Name, err: i18n.WrapError(err, "error_thumbnail_refresh", a.Name)}
+			return nil
+		}
+		destination, err := s.storageDestination(base)
+		if err != nil {
+			return err
+		}
+		_, err = WriteThumbnail(destination, img)
+		return err
+	}, func(int) {
+		done++
+		report(false)
+	})
+	if err != nil {
+		slog.Error("刷新缩略图中断", "done", done, "total", len(items), "error", err)
+		return err
+	}
+	failed := collectFailures(failures)
+	slog.Info("刷新缩略图", "count", len(items)-len(failed), "failed", len(failed))
+	return summarizeFailures(failed, "error_thumbnails_failed", "error_thumbnails_failed_more")
+}
+
+// loadForRefresh 读原图生成缩略图并按图库里的旋转转好，只涉及这一张。
+func (s *Service) loadForRefresh(ctx context.Context, a model.Asset) (image.Image, error) {
 	path, err := s.assetPath(a.RelativePath)
 	if err != nil {
 		return nil, err
 	}
-	img, _, _, _, err := PrepareImage(path)
+	img, err := prepareThumbnail(ctx, path)
 	if err != nil {
 		return nil, err
 	}
-	return RotateImage(img, a.Rotation)
+	return RotateImage(img.thumbnail, a.Rotation)
+}
+
+// collectFailures 按素材原来的顺序收起失败项。
+func collectFailures(items []*assetFailure) []assetFailure {
+	var out []assetFailure
+	for _, f := range items {
+		if f != nil {
+			out = append(out, *f)
+		}
+	}
+	return out
 }
 
 type assetFailure struct {
@@ -245,40 +275,45 @@ func summarizeFailures(failures []assetFailure, key, moreKey string) error {
 	return i18n.NewError(key, len(failures), strings.Join(names, ", "))
 }
 
-// ReanalyzeColors 逐张重算主色。解不开的跳过，其余照常写入，最后一起报错。
+// ReanalyzeColors 并行重算主色（用缩略图大小的图算）。解不开的跳过，其余照常写入，最后一起报错。
 func (s *Service) ReanalyzeColors(ctx context.Context, items []model.Asset) error {
 	s.mutation.Lock()
 	defer s.mutation.Unlock()
-	palettes := make(map[string][]model.Color, len(items))
-	var failures []assetFailure
-	for _, a := range items {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
+	palettes := make([][]model.Color, len(items))
+	failures := make([]*assetFailure, len(items))
+	err := parallel(ctx, len(items), decodeWorkers(), func(ctx context.Context, i int) error {
+		a := items[i]
 		path, err := s.assetPath(a.RelativePath)
-		var img image.Image
+		var img preparedImage
 		if err == nil {
-			img, _, _, _, err = PrepareImage(path)
+			img, err = prepareThumbnail(ctx, path)
+		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
 		}
 		if err != nil {
 			slog.Warn("颜色没能重新分析，跳过", "id", a.ID, "name", a.Name, "error", err)
-			failures = append(failures, assetFailure{name: a.Name, err: i18n.WrapError(err, "error_colors_refresh", a.Name)})
-			continue
+			failures[i] = &assetFailure{name: a.Name, err: i18n.WrapError(err, "error_colors_refresh", a.Name)}
+			return nil
 		}
-		palettes[a.ID] = Palette(img)
+		palettes[i] = Palette(img.thumbnail)
+		return nil
+	})
+	if err != nil {
+		return err
 	}
-	if len(palettes) > 0 {
+	failed := collectFailures(failures)
+	if len(failed) < len(items) {
 		tx, err := s.db.BeginTx(ctx, nil)
 		if err != nil {
 			return err
 		}
 		defer tx.Rollback()
-		for _, a := range items {
-			colors, ok := palettes[a.ID]
-			if !ok {
+		for i, a := range items {
+			if failures[i] != nil {
 				continue
 			}
-			if err = replaceColors(ctx, tx, a.ID, colors); err != nil {
+			if err = replaceColors(ctx, tx, a.ID, palettes[i]); err != nil {
 				return err
 			}
 		}
@@ -286,6 +321,6 @@ func (s *Service) ReanalyzeColors(ctx context.Context, items []model.Asset) erro
 			return err
 		}
 	}
-	slog.Info("重新分析颜色", "count", len(palettes), "failed", len(failures))
-	return summarizeFailures(failures, "error_colors_failed", "error_colors_failed_more")
+	slog.Info("重新分析颜色", "count", len(items)-len(failed), "failed", len(failed))
+	return summarizeFailures(failed, "error_colors_failed", "error_colors_failed_more")
 }

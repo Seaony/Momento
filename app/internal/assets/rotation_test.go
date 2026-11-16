@@ -125,11 +125,20 @@ func TestRotationRefreshesThumbnailAndExportsWithoutChangingOriginal(t *testing.
 		if err != nil {
 			t.Fatal(err)
 		}
-		thumbnail, err := Decode(filepath.Join(lib.Root, "thumbnails", asset.ID+".png"))
+		thumbnail, err := Decode(thumbnailFile(t, lib.Root, asset.ID))
 		if err != nil {
 			t.Fatal(err)
 		}
-		equalImage(t, thumbnail, expected)
+		// 不透明的缩略图存成有损 JPEG，拿转好的图走同一套写缩略图的流程来比。
+		want, err := WriteThumbnail(filepath.Join(t.TempDir(), "expected"), expected)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wantImage, err := Decode(want)
+		if err != nil {
+			t.Fatal(err)
+		}
+		equalImage(t, thumbnail, wantImage)
 		for _, format := range []model.ExportFormat{model.ExportOriginal, model.ExportPNG} {
 			paths, err := s.Export(ctx, []model.Asset{asset}, t.TempDir(), format, 0)
 			if err != nil {

@@ -179,8 +179,8 @@ func cleanStaging(ctx context.Context, root string, db *sql.DB) {
 	}
 }
 
-// restoreDeletion 把暂存里仍登记在库的文件挪回原处。文件名是「素材ID.original」或「素材ID.thumbnail」；
-// 老版本用序号命名，只能按内容哈希认出原图，认不出的缩略图交给之后重建。
+// restoreDeletion 把暂存里仍登记在库的文件挪回原处。文件名是「素材ID.original」、「素材ID.thumbnail.jpg」或「素材ID.thumbnail.png」，
+// 稍早的版本缩略图只有 PNG，名字是「素材ID.thumbnail」；更老的版本用序号命名，只能按内容哈希认出原图，认不出的缩略图交给之后重建。
 func restoreDeletion(ctx context.Context, root, dir string, db *sql.DB) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -192,7 +192,8 @@ func restoreDeletion(ctx context.Context, root, dir string, db *sql.DB) error {
 		}
 		path := filepath.Join(dir, entry.Name())
 		id, kind, _ := strings.Cut(entry.Name(), ".")
-		if kind != "original" && kind != "thumbnail" {
+		thumbnailExt := map[string]string{"thumbnail": ".png", "thumbnail.png": ".png", "thumbnail.jpg": ".jpg"}[kind]
+		if kind != "original" && thumbnailExt == "" {
 			if id, err = hashFile(path); err != nil {
 				return err
 			}
@@ -206,8 +207,8 @@ func restoreDeletion(ctx context.Context, root, dir string, db *sql.DB) error {
 		if err != nil {
 			return err
 		}
-		if kind == "thumbnail" {
-			relative = "thumbnails/" + id + ".png"
+		if thumbnailExt != "" {
+			relative = "thumbnails/" + id + thumbnailExt
 		}
 		target, err := packageDestination(root, relative)
 		if err != nil {

@@ -442,7 +442,23 @@ func TestRelativePathConstraintAndSnapshotMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := snapshot(t, l).Assets[0]
-	if a.EXIF["camera"] != "Camera" || a.Width != 2400 || a.Height != 1600 || a.SourceURL != "https://example.com" || !a.Trashed || len(a.Colors) != 1 || a.Colors[0].Family != "blue" {
+	// 快照不带 EXIF，选中时用 AssetEXIF 单独读。
+	if a.EXIF != nil {
+		t.Fatalf("快照不应读 EXIF：%v", a.EXIF)
+	}
+	if got, err := l.AssetEXIF(t.Context(), "a"); err != nil || got["camera"] != "Camera" {
+		t.Fatalf("EXIF %v %v", got, err)
+	}
+	if _, err := l.AssetEXIF(t.Context(), "missing"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("不存在的素材应返回 ErrNoRows：%v", err)
+	}
+	if _, err := l.DB.Exec("UPDATE assets SET exif_json='{bad' WHERE id='a'"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.AssetEXIF(t.Context(), "a"); err == nil {
+		t.Fatal("损坏的 EXIF 没有报错")
+	}
+	if a.Width != 2400 || a.Height != 1600 || a.SourceURL != "https://example.com" || !a.Trashed || len(a.Colors) != 1 || a.Colors[0].Family != "blue" {
 		t.Fatal(a)
 	}
 }

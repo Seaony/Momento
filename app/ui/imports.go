@@ -172,7 +172,7 @@ func (a *App) ConfigureAutoImport() {
 	lib, service, gen := a.Library, a.Assets, a.generation
 	ctx, cancel := context.WithCancel(a.ctx)
 	a.Import.WatchCancel = cancel
-	w := watch.New(lib.Root, func(ctx context.Context, path, folderID string) (model.ImportResult, error) {
+	w := watch.New(lib.Root, func(ctx context.Context, paths []string, folderID string) (model.ImportResult, error) {
 		ready := false
 		keywords := false
 		mygo.RunOnMain(func() {
@@ -185,7 +185,7 @@ func (a *App) ConfigureAutoImport() {
 		if !ready {
 			return model.ImportResult{}, assets.ErrImportBusy
 		}
-		return a.importFiles(ctx, service, lib, gen, model.ImportRequest{Paths: []string{path}, FolderID: folderID, ImportKeywords: keywords}, "auto-import")
+		return a.importFiles(ctx, service, lib, gen, model.ImportRequest{Paths: paths, FolderID: folderID, ImportKeywords: keywords}, "auto-import")
 	}, mygo.Shell.TrashItem, func(event watch.Event) {
 		a.Window.Update(func() {
 			if gen != a.generation {

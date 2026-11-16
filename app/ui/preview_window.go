@@ -63,6 +63,7 @@ type previewWindow struct {
 	hostAnimating, reduceMotion             bool
 	footerFor                               previewFooterKey
 	footerHeight                            float32
+	decoding                                bool // 后台正在解原图
 }
 
 type previewFooterKey struct {
@@ -591,7 +592,13 @@ func (w *previewWindow) view(c *ui.Context, a *App) {
 		w.placeholder = a.Thumbnails.Get(w.root, w.asset)
 	}
 	p := &w.picture
-	if p.Bitmap == nil && p.errorText == "" && !p.Loading && w.window != nil {
+	// 没图时去解；有图但像素方块设置改了，也在后台重新生成，生成好之前先显示旧的。读失败过就不再重试，免得一直读盘。
+	stale := p.Bitmap != nil && p.animation == nil && p.errorText == "" && p.pixelated != a.Preferences.PreviewPixelated
+	// 动图下一帧本来就要重新生成位图，直接改用新设置；后台正在解帧时不动，等它解完。
+	if p.animation != nil && !p.animationLoading && p.animation.pixelated != a.Preferences.PreviewPixelated {
+		p.animation.pixelated = a.Preferences.PreviewPixelated
+	}
+	if (p.Bitmap == nil && p.errorText == "" && !p.Loading || stale) && !w.decoding && w.window != nil {
 		w.load(a)
 	}
 	w.animatePicture(c, a)

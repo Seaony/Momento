@@ -66,8 +66,8 @@ func (a *App) importLibraryFrom(source string) {
 						if err != nil {
 							break
 						}
-						_, statErr := os.Stat(filepath.Join(imported.Root, "thumbnails", asset.ID+".png"))
-						if os.IsNotExist(statErr) {
+						_, statErr := assets.ThumbnailPath(imported.Root, asset.ID)
+						if errors.Is(statErr, os.ErrNotExist) {
 							missing = append(missing, asset)
 						} else if statErr != nil {
 							err = statErr
@@ -143,12 +143,20 @@ func (a *App) ClearLibraryCache() {
 	a.Run("clear_library_cache", func(ctx context.Context) error {
 		err := lib.ClearCache(ctx)
 		if err == nil {
-			err = service.RefreshThumbnails(ctx, items)
+			// 重建期间在工具栏下方显示进度；几万张要好几分钟，不能只转圈。
+			err = service.RefreshThumbnailsProgress(ctx, items, func(done, total int) {
+				a.Window.Update(func() {
+					if a.generation == gen {
+						a.Progress = &model.ImportProgress{Stage: "thumbnails", Processed: done, Total: total}
+					}
+				})
+			})
 		}
 		a.Window.Update(func() {
 			if a.generation != gen {
 				return
 			}
+			a.Progress = nil
 			if a.Thumbnails != nil {
 				a.Thumbnails.Clear()
 			}

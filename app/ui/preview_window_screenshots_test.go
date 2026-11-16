@@ -39,7 +39,7 @@ func TestPreviewWindowScreenshots(t *testing.T) {
 			a.ShowPreview(asset.ID, false)
 			w := a.Preview.active
 			w.asset = asset
-			picture, err := readPreviewPicture(filepath.Join(fixture.root, filepath.FromSlash(asset.RelativePath)), asset.Rotation)
+			picture, err := readPreviewPicture(filepath.Join(fixture.root, filepath.FromSlash(asset.RelativePath)), asset.Rotation, false)
 			if err != nil {
 				t.Fatal(err)
 			}

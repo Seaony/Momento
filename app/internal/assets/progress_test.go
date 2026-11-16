@@ -45,20 +45,20 @@ func TestImportReportsActualProcessingBeforeCommit(t *testing.T) {
 	var pngOnce, jpegOnce sync.Once
 	releaseAll := func() { pngOnce.Do(func() { close(releaseLastPNG) }); jpegOnce.Do(func() { close(releaseJPEG) }) }
 	pngDecoded := make(chan struct{}, 31)
-	s.prepareImage = func(path string) (image.Image, map[string]string, int, string, error) {
+	s.prepareImage = func(ctx context.Context, path string) (preparedImage, error) {
 		if filepath.Ext(path) == ".jpg" {
 			<-releaseJPEG
 		}
-		img, values, orientation, profile, err := PrepareImage(path)
+		img, err := prepareThumbnail(ctx, path)
 		if err == nil && filepath.Ext(path) == ".png" {
-			pixel := color.NRGBAModel.Convert(img.At(0, 0)).(color.NRGBA)
+			pixel := color.NRGBAModel.Convert(img.thumbnail.At(0, 0)).(color.NRGBA)
 			if pixel.R == 32 {
 				<-releaseLastPNG
 			} else {
 				pngDecoded <- struct{}{}
 			}
 		}
-		return img, values, orientation, profile, err
+		return img, err
 	}
 	events := make(chan model.ImportProgress, 64)
 	done := make(chan error, 1)
@@ -79,6 +79,21 @@ func TestImportReportsActualProcessingBeforeCommit(t *testing.T) {
 		case <-time.After(3 * time.Second):
 			t.Fatal("PNG解码没有完成")
 		}
+	}
+	// 解码完还要写缩略图才算完成；等 31 张缩略图都写进暂存目录，再越过节流窗口。
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		written, err := filepath.Glob(filepath.Join(lib.Root, ".import-*", "[0-9a-f]*.jpg"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(written) == 31 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("PNG缩略图没有写完：%d", len(written))
+		}
+		time.Sleep(time.Millisecond)
 	}
 	// 留住最后一张 PNG 和 JPEG，越过节流窗口后只放行 PNG。
 	timer := time.NewTimer(110 * time.Millisecond)

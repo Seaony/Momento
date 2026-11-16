@@ -102,6 +102,8 @@ type ImportResult struct {
 	Skipped  int
 	Restored int
 	Errors   []error
+	// 没能导入的源文件（绝对路径），和 Errors 一一对应；自动导入靠它决定哪些源文件不能移到废纸篓。
+	Failed []string
 }
 
 type ImportRequest struct {
