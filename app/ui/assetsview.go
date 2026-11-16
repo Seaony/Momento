@@ -33,6 +33,8 @@ func (a *App) assetArea(c *ui.Context) {
 	if a.Thumbnails != nil {
 		a.Thumbnails.NextFrame()
 	}
+	// 上一帧鼠标已经离开那张视频卡片就关掉悬停播放器（上一帧的 hovered 这时已经算完整）。
+	a.finishHoverVideo()
 	a.hovered = ""
 	scroll := ui.Scroll(c.Key("assets")).Scrollbars(false).Grow(1).FillWidth().TrackScroll(&a.scroll)
 	inset := scroll.AnimateTo("header-inset", a.contentTopInset(), motionSpring)
@@ -111,7 +113,7 @@ func (a *App) assetArea(c *ui.Context) {
 	if len(a.Visible) == 0 {
 		p := paletteFor(c.Theme())
 		art, title, hint := "scope-empty", a.T("scope_empty"), a.T("scope_empty_hint")
-		hasFilters := len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions) > 0
+		hasFilters := len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions)+len(a.Query.Kinds) > 0
 		emptyLibrary := len(a.Snapshot.Assets) == 0 && a.Query.Scope != "trash" && a.Query.Search == "" && !hasFilters
 		switch {
 		case a.Query.Search != "":
@@ -134,7 +136,7 @@ func (a *App) assetArea(c *ui.Context) {
 				}
 			case hasFilters:
 				if dialogPrimaryButton(c, a.T("clear_filters"), false).Clicked() {
-					a.Query.ColorFamilies, a.Query.TagIDs, a.Query.Extensions = nil, nil, nil
+					a.Query.ColorFamilies, a.Query.TagIDs, a.Query.Extensions, a.Query.Kinds = nil, nil, nil, nil
 					a.Refine()
 				}
 			case emptyLibrary:
@@ -334,6 +336,9 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 					if size != "" {
 						listInfo(c, "diskette", size)
 					}
+					if d := assetDuration(asset); isVideoAsset(asset) && d > 0 {
+						listInfo(c, "play", videoDuration(d))
+					}
 				})
 			})
 			// 最右边是导入时间：一个月内写「3 天前」，更早写日期，悬停看完整时间。
@@ -346,6 +351,18 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 				ui.Image(c.Key("thumbnail"), thumb).Fill().Fit(ui.Cover).Radius(radius)
 			} else {
 				ui.Box(c).Fill().Radius(radius).Background(p.Subtle)
+			}
+			a.hoverVideoOverlay(c, card, asset, hovered, radius)
+			// 视频右下角：播放标记加时长，和尺寸角标同一套样式。
+			if isVideoAsset(asset) {
+				ui.Row(c.Key("duration")).Absolute().Bottom(space8).Right(space8).Height(assetBadgeHeight).Padding(0, 5).Gap(3).AlignItems(ui.Center).
+					Radius(5).Background(ui.RGBA(0, 0, 0, .34)).PassThrough().Children(func() {
+					appIconSelected(c, "play", true).Size(8, 8).TextColor(ui.RGBA(255, 255, 255, .82))
+					// 读不出时长的视频（有些录屏 WebM 不写时长）只显示播放标记。
+					if d := assetDuration(asset); d > 0 {
+						ui.Text(c, videoDuration(d)).FontFeatures("tnum").FontSize(10).FontWeight(500).TextColor(ui.RGBA(255, 255, 255, .82))
+					}
+				})
 			}
 
 			// 尺寸角标照旧版：常驻右上角，黑色半透明底、白字。

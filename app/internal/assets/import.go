@@ -47,11 +47,12 @@ type prepared struct {
 }
 
 func Supported(path string) bool {
-	switch strings.ToLower(filepath.Ext(path)) {
+	switch ext := strings.ToLower(filepath.Ext(path)); ext {
 	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".tif", ".tiff", ".bmp", ".heic", ".heif", ".avif":
 		return true
+	default:
+		return isVideo(ext)
 	}
-	return false
 }
 func nowText() string { return time.Now().UTC().Format(time.RFC3339Nano) }
 
@@ -437,7 +438,8 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 				return result, err
 			}
 			c := candidates[groups[hash][0]]
-			if fileErrs[groups[hash][0]] != nil {
+			// 视频不读关键词（XMP 关键词只在图片里读）。
+			if fileErrs[groups[hash][0]] != nil || isVideo(c.extension) {
 				continue
 			}
 			// 关键词读不出来不影响图片本身，跳过这张的关键词即可。
@@ -478,7 +480,11 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 	if err = parallel(ctx, len(toPrepare), decodeWorkers(), func(ctx context.Context, j int) error {
 		hash := toPrepare[j]
 		c := candidates[groups[hash][0]]
-		img, err := s.prepareImage(ctx, c.staged)
+		prepare := s.prepareImage
+		if isVideo(c.extension) {
+			prepare = s.prepareVideo
+		}
+		img, err := prepare(ctx, c.staged)
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
@@ -513,7 +519,16 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 		name := filepath.Base(c.path)
 		name = strings.TrimSuffix(name, filepath.Ext(name))
 		now := time.Now().UTC()
-		ready[j] = prepared{asset: model.Asset{ID: c.hash, Name: name, OriginalFileName: filepath.Base(c.path), Extension: c.extension, MediaType: mediaType(c.extension), Size: c.size, Width: img.width, Height: img.height, Orientation: img.orientation, ColorProfile: img.profile, EXIF: metadata, SourceURL: request.SourceURL, RelativePath: filepath.ToSlash(filepath.Join("assets", c.hash[:2], c.hash+"."+c.extension)), CreatedAt: now, UpdatedAt: now, Colors: Palette(img.thumbnail)}, original: c.staged, thumbnail: thumb}
+		kind := img.kind
+		if kind == "" {
+			kind = model.KindImage
+		}
+		// 通用封面只是纯色底，取不出有意义的颜色，不参与按颜色筛选。
+		var colors []model.Color
+		if metadata["posterUnavailable"] == "" {
+			colors = Palette(img.thumbnail)
+		}
+		ready[j] = prepared{asset: model.Asset{ID: c.hash, Name: name, OriginalFileName: filepath.Base(c.path), Extension: c.extension, MediaType: mediaType(c.extension), Size: c.size, Width: img.width, Height: img.height, Orientation: img.orientation, ColorProfile: img.profile, EXIF: metadata, SourceURL: request.SourceURL, RelativePath: filepath.ToSlash(filepath.Join("assets", c.hash[:2], c.hash+"."+c.extension)), CreatedAt: now, UpdatedAt: now, Colors: colors, Kind: kind, DurationMS: img.durationMS}, original: c.staged, thumbnail: thumb}
 		return nil
 	}, func(j int) {
 		hash := toPrepare[j]
@@ -709,6 +724,9 @@ func thumbnailRelative(id, staged string) string {
 }
 
 func mediaType(ext string) string {
+	if isVideo(ext) {
+		return videoMediaType(ext)
+	}
 	switch ext {
 	case "jpg", "jpeg":
 		return "image/jpeg"
@@ -726,7 +744,11 @@ func insertAsset(ctx context.Context, tx *sql.Tx, a model.Asset) error {
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO assets(id,name,original_file_name,extension,media_type,size,width,height,orientation,color_profile,exif_json,note,source_url,relative_path,favorite,trashed,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, a.ID, a.Name, a.OriginalFileName, a.Extension, a.MediaType, a.Size, a.Width, a.Height, a.Orientation, a.ColorProfile, string(metadata), a.Note, a.SourceURL, a.RelativePath, a.Favorite, a.Trashed, a.CreatedAt.Format(time.RFC3339Nano), a.UpdatedAt.Format(time.RFC3339Nano))
+	kind := a.Kind
+	if kind == "" {
+		kind = model.KindImage
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO assets(id,name,original_file_name,extension,media_type,size,width,height,orientation,color_profile,exif_json,note,source_url,relative_path,favorite,trashed,created_at,updated_at,kind,duration_ms,motion_path) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, a.ID, a.Name, a.OriginalFileName, a.Extension, a.MediaType, a.Size, a.Width, a.Height, a.Orientation, a.ColorProfile, string(metadata), a.Note, a.SourceURL, a.RelativePath, a.Favorite, a.Trashed, a.CreatedAt.Format(time.RFC3339Nano), a.UpdatedAt.Format(time.RFC3339Nano), kind, a.DurationMS, a.MotionPath)
 	if err != nil {
 		return err
 	}

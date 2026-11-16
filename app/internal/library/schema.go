@@ -102,4 +102,19 @@ ALTER TABLE folders ADD COLUMN icon TEXT NOT NULL DEFAULT '';
 PRAGMA user_version = 3;
 `
 
-const schema = schemaV1 + migrationV2 + migrationV3
+// v4：视频和实况照片。kind 是 image、video 或 live；duration_ms 是视频（实况照片那段视频）的时长；
+// motion_path 是实况照片配对视频在包内的相对路径，和 relative_path 一样只能是包内的相对路径。
+const migrationV4 = `
+ALTER TABLE assets ADD COLUMN kind TEXT NOT NULL DEFAULT 'image' CHECK (kind IN ('image', 'video', 'live'));
+ALTER TABLE assets ADD COLUMN duration_ms INTEGER NOT NULL DEFAULT 0 CHECK (duration_ms >= 0);
+ALTER TABLE assets ADD COLUMN motion_path TEXT NOT NULL DEFAULT '' CHECK (
+ motion_path = '' OR (
+  substr(motion_path, 1, 1) NOT IN ('/', '\') AND instr(motion_path, '\') = 0 AND instr(motion_path, ':') = 0
+  AND motion_path <> '..' AND motion_path NOT LIKE '../%' AND motion_path NOT LIKE '%/../%' AND motion_path NOT LIKE '%/..'
+ )
+);
+CREATE INDEX assets_kind ON assets(kind);
+PRAGMA user_version = 4;
+`
+
+const schema = schemaV1 + migrationV2 + migrationV3 + migrationV4

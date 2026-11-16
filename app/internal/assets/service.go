@@ -26,10 +26,11 @@ type Service struct {
 	importing    sync.Mutex
 	mutation     sync.Mutex
 	prepareImage func(context.Context, string) (preparedImage, error)
+	prepareVideo func(context.Context, string) (preparedImage, error)
 }
 
 func New(root string, db *sql.DB) *Service {
-	return &Service{root: root, db: db, prepareImage: prepareThumbnail}
+	return &Service{root: root, db: db, prepareImage: prepareThumbnail, prepareVideo: prepareVideoThumbnail}
 }
 
 func (s *Service) assetPath(relative string) (string, error) {
@@ -234,7 +235,11 @@ func (s *Service) loadForRefresh(ctx context.Context, a model.Asset) (image.Imag
 	if err != nil {
 		return nil, err
 	}
-	img, err := prepareThumbnail(ctx, path)
+	prepare := prepareThumbnail
+	if isVideo(a.Extension) {
+		prepare = prepareVideoThumbnail
+	}
+	img, err := prepare(ctx, path)
 	if err != nil {
 		return nil, err
 	}

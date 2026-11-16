@@ -14,7 +14,7 @@ var inspectorEXIFKeys = []string{
 	"fileCreatedAt", "fileModifiedAt", "contentCreatedAt", "resolution",
 	"colorModel", "profileName", "cameraMake", "cameraModel", "lensModel", "exposureTime",
 	"focalLength", "isoSpeedRatings", "flashFired", "fNumber", "exposureProgram", "meteringMode",
-	"whiteBalance", "creator",
+	"whiteBalance", "creator", "videoCodec", "frameRate",
 }
 
 // 图库里存的是原始值（RFC3339 时间、秒数、毫米数、EXIF 枚举号），显示前在这里换成人看的格式。
@@ -57,6 +57,13 @@ func inspectorEXIFValue(texts i18n.Catalog, values map[string]string, key string
 		if raw == "true" || raw == "false" {
 			return texts.T("exif_flash_" + raw)
 		}
+	case "videoCodec":
+		return videoCodecName(raw)
+	case "frameRate":
+		if v := exifNumber(raw); v != "" && v != "0" {
+			return v + " fps"
+		}
+		return ""
 	case "exposureProgram", "meteringMode", "whiteBalance":
 		if n, err := strconv.Atoi(raw); err == nil {
 			if label, ok := exifEnumKey(key, n); ok {
@@ -117,4 +124,25 @@ func (a *App) inspectorEXIFItems(values map[string]string) [][2]string {
 		}
 	}
 	return items
+}
+
+// videoCodecName 把容器里的编码代号换成常见叫法（avc1 → H.264），不认识的原样显示。
+func videoCodecName(raw string) string {
+	switch strings.ToLower(raw) {
+	case "avc1", "avc3":
+		return "H.264"
+	case "hvc1", "hev1":
+		return "HEVC"
+	case "av01", "av1":
+		return "AV1"
+	case "vp09", "vp9":
+		return "VP9"
+	case "vp08", "vp8":
+		return "VP8"
+	case "mp4v":
+		return "MPEG-4"
+	case "ap4h", "apch", "apcn", "apcs", "apco":
+		return "ProRes"
+	}
+	return raw
 }

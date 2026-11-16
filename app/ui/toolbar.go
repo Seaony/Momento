@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Seaony/Momento/app/internal/media"
 	"github.com/Seaony/Momento/app/internal/model"
 	"github.com/egoist/mygo/ui"
 )
@@ -127,7 +128,7 @@ func (a *App) toolbar(c *ui.Context) {
 					toolbarDivider(c)
 				})
 		}
-		filtering := len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions) > 0
+		filtering := len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions)+len(a.Query.Kinds) > 0
 		filter := toolbarChip(c.Key("filter"), a.T("filter"), filtering || a.Toolbar.FilterOpen)
 		filter.Children(func() {
 			toolbarIcon(c, "filter")
@@ -566,7 +567,7 @@ func (a *App) viewSwitcher(c *ui.Context) {
 // 筛选弹层：标题栏（标题 + 清除）一条通栏分隔线，下面颜色、标签、文件类型三段只靠留白分开。
 func (a *App) filterPanel(c *ui.Context) {
 	p := paletteFor(c.Theme())
-	active := len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions) > 0
+	active := len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions)+len(a.Query.Kinds) > 0
 	ui.Column(c).FillWidth().Gap(0).Children(func() {
 		ui.Row(c).FillWidth().Height(popHeaderHeight).Padding(0, popInset-popClearPad, 0, popInset).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, a.T("filter")).FontSize(fontBody).FontWeight(600).Grow(1).MinWidth(0).SingleLine()
@@ -587,6 +588,7 @@ func (a *App) filterPanel(c *ui.Context) {
 				a.Query.ColorFamilies = nil
 				a.Query.TagIDs = nil
 				a.Query.Extensions = nil
+				a.Query.Kinds = nil
 				a.Refine()
 			}
 		})
@@ -641,6 +643,14 @@ func (a *App) filterPanel(c *ui.Context) {
 					return
 				}
 				ui.Row(c.Key("type-chips")).FillWidth().Wrap().Gap(popChipGap).Children(func() {
+					// 图库里有视频时，最前面放一个「视频」，一次选中所有视频格式。
+					if a.libraryHasKind(model.KindVideo) {
+						chosen := slices.Contains(a.Query.Kinds, model.KindVideo)
+						if popChip(c.Key("kind-video"), &chosen, "type-video", a.T("filter_kind_video")).Changed() {
+							a.Query.Kinds = toolbarToggle(a.Query.Kinds, model.KindVideo, chosen)
+							a.Refine()
+						}
+					}
 					for _, ext := range types {
 						chosen := slices.Contains(a.Query.Extensions, ext)
 						if popChip(c.Key("extension-"+ext), &chosen, extensionIcon(ext), strings.ToUpper(ext)).Changed() {
@@ -723,13 +733,16 @@ func popChip(c *ui.Context, on *bool, icon, label string) ui.Element {
 	})
 }
 
-// extensionIcon 按图片种类给文件类型配图标：照片、图像、动图。
+// extensionIcon 按种类给文件类型配图标：照片、图像、动图、视频。
 func extensionIcon(ext string) string {
 	switch ext {
 	case "jpg", "jpeg", "heic", "heif", "avif":
 		return "type-photo"
 	case "gif":
 		return "type-motion"
+	}
+	if media.IsVideoExtension(ext) {
+		return "type-video"
 	}
 	return "type-image"
 }
@@ -975,4 +988,14 @@ func (a *App) thumbnailRuler(c *ui.Context) {
 		ui.Text(c.Key("columns"), a.T("toolbar_columns", strconv.Itoa(masonryColumns(a.layoutWidth, a.thumbnailScale())))).FontSize(toolbarFont).FontFeatures("tnum").
 			TextColor(toolbarInk(p, .86)).SingleLine().Shrink(0).Padding(0, 11, 0, 10)
 	})
+}
+
+// libraryHasKind 判断当前图库里有没有这种素材（不看回收站外的筛选范围，和文件类型列表一致）。
+func (a *App) libraryHasKind(kind string) bool {
+	for i := range a.Snapshot.Assets {
+		if a.Snapshot.Assets[i].Kind == kind {
+			return true
+		}
+	}
+	return false
 }

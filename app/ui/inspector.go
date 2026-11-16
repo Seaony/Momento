@@ -325,6 +325,9 @@ func (a *App) inspectorDetails(c *ui.Context, asset model.Asset) {
 		if width, height := assetDisplaySize(asset); width > 0 && height > 0 {
 			inspectorInfo(c, a.T("dimensions"), fmt.Sprintf("%d × %d", width, height))
 		}
+		if d := assetDuration(asset); d > 0 {
+			inspectorInfo(c, a.T("asset_duration"), videoDuration(d))
+		}
 		if asset.Size > 0 {
 			inspectorInfo(c, a.T("file_size"), fileSize(asset.Size))
 		}

@@ -17,7 +17,7 @@ func DefaultPreferences() Preferences {
 		Language: "system", Theme: "system", UIZoom: 1, AutoCheckUpdates: true, BrowserExtensionEnabled: true,
 		CloseAction: "background", TrayIcon: true, DockWhenHidden: true, SidebarCounts: true,
 		FolderDoubleClick: "expand", DoubleClick: "preview", SpaceKey: "preview", PreviewWheel: "navigate",
-		PreviewFit: "smart", PreviewChecker: true, SelectImported: true,
+		PreviewFit: "smart", PreviewChecker: true, HoverPlayVideos: true, SelectImported: true,
 		AutoImport: map[string][]AutoImportRule{}, Shortcuts: map[string]string{},
 		Notify: true, NotifyEvents: []string{"extension", "auto-import", "duplicate"}, NotifySound: true, ThumbnailSize: 1,
 		Sort: "added", SortDescending: true, SidebarVisible: true, SidebarWidth: 236,

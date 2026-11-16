@@ -238,3 +238,25 @@ func BenchmarkSearch100K(b *testing.B) {
 		})
 	}
 }
+
+// 「视频」和具体扩展名同属文件类型一组：勾任一个就算命中。
+func TestKindsJoinExtensionsAsOneFilterGroup(t *testing.T) {
+	day := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	index := New(model.Snapshot{Assets: []model.Asset{
+		{ID: "p", Extension: "png", Kind: model.KindImage, CreatedAt: day},
+		{ID: "m", Extension: "mp4", Kind: model.KindVideo, CreatedAt: day.Add(time.Hour)},
+		{ID: "w", Extension: "webm", Kind: model.KindVideo, CreatedAt: day.Add(2 * time.Hour)},
+	}})
+	for _, test := range []struct {
+		q    Query
+		want []string
+	}{
+		{Query{Kinds: []string{model.KindVideo}}, []string{"w", "m"}},
+		{Query{Kinds: []string{model.KindVideo}, Extensions: []string{"png"}}, []string{"w", "m", "p"}},
+		{Query{Extensions: []string{"mp4"}}, []string{"m"}},
+	} {
+		if got := assetIDs(index.Query(test.q)); !slices.Equal(got, test.want) {
+			t.Fatalf("%+v：得到 %v，期望 %v", test.q, got, test.want)
+		}
+	}
+}

@@ -279,6 +279,10 @@ func (a *App) pickExportDestination() {
 func exportDialogFileName(asset model.Asset, format model.ExportFormat) string {
 	name := strings.TrimSuffix(libraryPackageName(asset.Name), ".momento")
 	extension := asset.Extension
+	// 视频总是原样导出，保存框里的默认文件名也用视频自己的扩展名。
+	if isVideoAsset(asset) {
+		format = model.ExportOriginal
+	}
 	if format == model.ExportOriginal && asset.OriginalFileName != "" {
 		return asset.OriginalFileName
 	}

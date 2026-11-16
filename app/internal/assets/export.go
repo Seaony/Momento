@@ -99,7 +99,7 @@ func (s *Service) Export(ctx context.Context, items []model.Asset, destination s
 		if _, e := normalizedRotation(asset.Rotation); e != nil {
 			return nil, e
 		}
-		if format == model.ExportOriginal {
+		if format == model.ExportOriginal && !isVideo(asset.Extension) {
 			if e := originalRotationSupported(asset); e != nil {
 				return nil, e
 			}
@@ -109,6 +109,11 @@ func (s *Service) Export(ctx context.Context, items []model.Asset, destination s
 		if err = ctx.Err(); err != nil {
 			return paths, err
 		}
+		// 视频没有「转成 JPEG/PNG」这回事，一律原样导出原文件。
+		format := format
+		if isVideo(a.Extension) {
+			format, a.Rotation = model.ExportOriginal, 0
+		}
 		source, e := s.assetPath(a.RelativePath)
 		if e != nil {
 			return paths, e
@@ -116,6 +121,13 @@ func (s *Service) Export(ctx context.Context, items []model.Asset, destination s
 		requested := destination
 		if directory {
 			requested = filepath.Join(destination, exportName(a, format))
+		} else if isVideo(a.Extension) && !strings.EqualFold(strings.TrimPrefix(filepath.Ext(requested), "."), a.Extension) {
+			// 保存框里的名字带着别的后缀（比如选了 JPEG 格式）：视频内容不会变，换成视频自己的后缀，免得打不开。
+			switch strings.ToLower(filepath.Ext(requested)) {
+			case ".jpg", ".jpeg", ".png":
+				requested = strings.TrimSuffix(requested, filepath.Ext(requested))
+			}
+			requested += "." + strings.ToLower(a.Extension)
 		}
 		temp, e := os.CreateTemp(filepath.Dir(requested), ".momento-export-*")
 		if e != nil {

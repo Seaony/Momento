@@ -155,6 +155,10 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 	if p.slideDirection != 0 {
 		viewport.ChildExit(ui.Motion{X: -64 * p.slideDirection, Scale: .98})
 	}
+	if isVideoAsset(asset) {
+		w.videoViewport(c, a, viewport)
+		return
+	}
 	bitmap := p.Bitmap
 	if bitmap == nil && p.errorText == "" {
 		bitmap = w.placeholder
@@ -187,18 +191,7 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 				Absolute().Label(asset.Name)
 			photoWidth, photoHeight := float32(bw)*p.Zoom, float32(bh)*p.Zoom
 			photo.Left((p.viewport.W-photoWidth)/2+p.Pan.X).Top((p.viewport.H-photoHeight)/2+p.Pan.Y).Size(photoWidth, photoHeight)
-			transition := ui.ElementTransition{Animation: &motionSpring, Colors: true, ScaleContent: true,
-				Enter: &ui.Motion{Opacity: 1}, Exit: &ui.Motion{Scale: .94}}
-			if p.slideDirection != 0 {
-				transition.Enter = &ui.Motion{X: 64 * p.slideDirection, Scale: .98}
-				transition.Exit = &ui.Motion{X: -64 * p.slideDirection, Scale: .98}
-				p.slideFrames++
-				if p.slideFrames > 1 && !photo.Transitioning() {
-					p.slideDirection, p.slideFrames = 0, 0
-					c.Invalidate()
-				}
-			}
-			photo.Transition(transition)
+			w.slideTransition(c, photo)
 		})
 		if p.canPan() {
 			viewport.Cursor(ui.CursorGrab)

@@ -106,6 +106,9 @@ type preparedImage struct {
 	metadata      map[string]string
 	orientation   int
 	profile       string
+	// kind 和 durationMS 只有视频会填；图片的 kind 留空，按图片处理。
+	kind       string
+	durationMS int64
 }
 
 // prepareThumbnail 解码后先缩小再转正，避免对全尺寸大图做转正和多次高质量缩放。

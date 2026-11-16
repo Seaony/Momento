@@ -316,8 +316,8 @@ func TestUpgradeV2AddsFolderIcons(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer opened.Close()
-	if databaseVersion(t, opened.DB) != 3 || opened.Manifest.SchemaVersion != 3 {
-		t.Fatal("v2 没有升到 v3")
+	if databaseVersion(t, opened.DB) != model.SchemaVersion || opened.Manifest.SchemaVersion != model.SchemaVersion {
+		t.Fatal("v2 没有升到最新版本")
 	}
 	if folders := snapshot(t, opened).Folders; len(folders) != 1 || folders[0].Name != "旧文件夹" || folders[0].Icon != "" {
 		t.Fatalf("升级改变了文件夹：%+v", folders)
@@ -335,5 +335,57 @@ func TestUpgradeV2AddsFolderIcons(t *testing.T) {
 	}
 	if icons["f"] != "star" || icons[created.ID] != "camera" {
 		t.Fatalf("文件夹图标没有存下：%v", icons)
+	}
+}
+
+// v3 的图库升到 v4：已有素材都算图片，时长为 0、没有配对视频；之后能存视频的种类和时长。
+func TestUpgradeV3MarksExistingAssetsAsImages(t *testing.T) {
+	old := legacyLibrary(t)
+	for _, migration := range []string{migrationV2, migrationV3} {
+		if _, err := old.DB.Exec(migration); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old.Manifest.SchemaVersion = 3
+	if err := writeJSON(filepath.Join(old.Root, "manifest.json"), old.Manifest); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := old.DB.Exec("INSERT INTO assets(id,name,relative_path,created_at,updated_at) VALUES('old','旧图','assets/ol/old.png',?,?)", now, now); err != nil {
+		t.Fatal(err)
+	}
+	before := len(snapshot(t, old).Assets)
+	old.Close()
+	opened, err := Open(t.Context(), old.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	if databaseVersion(t, opened.DB) != 4 || opened.Manifest.SchemaVersion != 4 {
+		t.Fatal("v3 没有升到 v4")
+	}
+	assets := snapshot(t, opened).Assets
+	if len(assets) != before || before == 0 {
+		t.Fatalf("升级前后素材数不同：%d → %d", before, len(assets))
+	}
+	for _, asset := range assets {
+		if asset.Kind != model.KindImage || asset.DurationMS != 0 || asset.MotionPath != "" {
+			t.Fatalf("旧素材没有按图片处理：%+v", asset)
+		}
+	}
+	id := assets[0].ID
+	if _, err := opened.DB.Exec("UPDATE assets SET kind='live',duration_ms=2500,motion_path='assets/ab/x.mov' WHERE id=?", id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := opened.DB.Exec("UPDATE assets SET motion_path='../x.mov' WHERE id=?", id); err == nil {
+		t.Fatal("配对视频路径能写成包外路径")
+	}
+	if _, err := opened.DB.Exec("UPDATE assets SET kind='audio' WHERE id=?", id); err == nil {
+		t.Fatal("种类能写成不认识的值")
+	}
+	for _, asset := range snapshot(t, opened).Assets {
+		if asset.ID == id && (asset.Kind != model.KindLive || asset.DurationMS != 2500 || asset.MotionPath != "assets/ab/x.mov") {
+			t.Fatalf("新列读写不对：%+v", asset)
+		}
 	}
 }

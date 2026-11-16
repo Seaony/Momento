@@ -65,6 +65,7 @@ type previewWindow struct {
 	footerFor                               previewFooterKey
 	footerHeight                            float32
 	decoding                                bool // 后台正在解原图
+	video                                   previewVideo
 }
 
 type previewFooterKey struct {
@@ -190,6 +191,11 @@ func (a *App) ReconcilePreviewKeys(c *ui.Context) {
 			a.markPreviewInput()
 			return
 		}
+	}
+	if w.videoShortcut(c.Shortcut, c.Now()) {
+		w.invalidate()
+		a.markPreviewInput()
+		return
 	}
 	for _, action := range []string{"preview_zoom_in", "preview_zoom_out", "preview_fit", "preview_actual"} {
 		mods, key, ok := parseShortcut(a.Shortcut(action))
@@ -470,6 +476,7 @@ func (w *previewWindow) close(a *App, now time.Time) {
 	w.closedRingOpacity = min(1, max(0, float32(now.Sub(w.pressedAt)-previewPeekThreshold)/float32(120*time.Millisecond)))
 	w.closing, w.closedAt = true, now
 	w.picture.Held = false
+	w.stopVideo()
 	if w.window != nil {
 		w.frame = w.window.Bounds()
 		w.closeScale = 1
@@ -490,6 +497,7 @@ func (w *previewWindow) destroyWindows() {
 	}
 }
 func (w *previewWindow) dispose() {
+	w.closeVideo()
 	w.disposed = true
 	w.picture.Open = false
 	w.picture.target("", "", 0)
@@ -533,6 +541,10 @@ func (w *previewWindow) setAsset(a *App, asset model.Asset) {
 				w.window.SetBounds(w.frame)
 			}
 		}
+	}
+	// 换了素材就关掉旧播放器，不在后台接着出声。
+	if asset.ID != w.asset.ID {
+		w.closeVideo()
 	}
 	w.asset = asset
 	w.picture.target(w.root, asset.ID, asset.Rotation)
@@ -628,15 +640,14 @@ func (w *previewWindow) view(c *ui.Context, a *App) {
 		w.placeholder = a.Thumbnails.Get(w.root, w.asset)
 	}
 	p := &w.picture
-	// 没图时去解；有图但像素方块设置改了，也在后台重新生成，生成好之前先显示旧的。读失败过就不再重试，免得一直读盘。
-	stale := p.Bitmap != nil && p.animation == nil && p.errorText == "" && p.pixelated != a.Preferences.PreviewPixelated
 	// 动图下一帧本来就要重新生成位图，直接改用新设置；后台正在解帧时不动，等它解完。
 	if p.animation != nil && !p.animationLoading && p.animation.pixelated != a.Preferences.PreviewPixelated {
 		p.animation.pixelated = a.Preferences.PreviewPixelated
 	}
-	if (p.Bitmap == nil && p.errorText == "" && !p.Loading || stale) && !w.decoding && w.window != nil {
+	if w.window != nil && w.needsPicture(a) {
 		w.load(a)
 	}
+	w.syncVideo(a, now)
 	w.animatePicture(c, a)
 	surface := previewCard(c, "preview-window-surface", previewCardRadius)
 	if w.pinned {
@@ -649,6 +660,17 @@ func (w *previewWindow) view(c *ui.Context, a *App) {
 	if w.hasFocus {
 		w.handleKeys(c, a, now)
 	}
+}
+
+// needsPicture 判断要不要在后台解原图：没图时去解；有图但像素方块设置改了，也重新生成，生成好之前先显示旧的。
+// 读失败过就不再重试，免得一直读盘。视频由播放器显示，不走图片解码。
+func (w *previewWindow) needsPicture(a *App) bool {
+	p := &w.picture
+	if isVideoAsset(w.asset) || w.decoding {
+		return false
+	}
+	stale := p.Bitmap != nil && p.animation == nil && p.errorText == "" && p.pixelated != a.Preferences.PreviewPixelated
+	return p.Bitmap == nil && p.errorText == "" && !p.Loading || stale
 }
 
 // 底栏：完整文件名和尺寸靠左两行，右边一个不抢眼的关闭按钮；按住空格时关闭按钮的位置换成小圆环进度。
@@ -673,6 +695,9 @@ func (w *previewWindow) footer(c *ui.Context, a *App, now time.Time) {
 					}
 					if size != "" {
 						previewInfo(c, "diskette", size)
+					}
+					if isVideoAsset(w.asset) && w.asset.DurationMS > 0 {
+						previewInfo(c, "play", videoDuration(assetDuration(w.asset)))
 					}
 				})
 			}
@@ -815,6 +840,7 @@ func (w *previewWindow) handleKeys(c *ui.Context, a *App, now time.Time) {
 		w.move(a, -1)
 	case a.previewShortcut(root, "preview_next"):
 		w.move(a, 1)
+	case w.videoShortcut(c.Shortcut, now):
 	case a.previewShortcut(root, "preview_zoom_in"):
 		p.zoomAt(1.25, p.viewport.W/2, p.viewport.H/2)
 	case a.previewShortcut(root, "preview_zoom_out"):

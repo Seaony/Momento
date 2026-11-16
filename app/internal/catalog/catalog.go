@@ -19,9 +19,11 @@ type Query struct {
 	ColorFamilies []string
 	TagIDs        []string
 	Extensions    []string
-	Search        string
-	Sort          string
-	Descending    bool
+	// Kinds 按素材种类筛（model.KindVideo 等），和 Extensions 是同一组「文件类型」条件：命中任一个就算。
+	Kinds      []string
+	Search     string
+	Sort       string
+	Descending bool
 }
 
 type Counts struct {
@@ -132,7 +134,7 @@ func (idx *Index) Query(q Query) []model.Asset {
 			continue
 		}
 		e := &idx.entries[i]
-		if len(extensions) > 0 && !slices.Contains(extensions, e.extension) {
+		if len(extensions)+len(q.Kinds) > 0 && !slices.Contains(extensions, e.extension) && !slices.Contains(q.Kinds, asset.Kind) {
 			continue
 		}
 		if search != "" && !strings.Contains(e.name, search) && !strings.Contains(e.extension, search) {

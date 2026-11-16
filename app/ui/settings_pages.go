@@ -199,6 +199,9 @@ func (a *App) previewSettings(c *ui.Context) {
 		settingsSeparator(c)
 		a.boolSetting(c, "preview_transparency", &a.Preferences.PreviewChecker, true, "preview_checker", "preview_solid")
 	})
+	settingsSection(c, "", "", func() {
+		a.switchSetting(c, "hover_play_videos", &a.Preferences.HoverPlayVideos, false)
+	})
 }
 
 func (a *App) importSettings(c *ui.Context) {

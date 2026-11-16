@@ -51,6 +51,7 @@ type Preferences struct {
 	PreviewFit              string                      `json:"previewFit"`
 	PreviewPixelated        bool                        `json:"previewPixelated"`
 	PreviewChecker          bool                        `json:"previewChecker"`
+	HoverPlayVideos         bool                        `json:"hoverPlayVideos"` // 鼠标停在视频卡片上时静音播放
 	SelectImported          bool                        `json:"selectImported"`
 	ImportKeywords          bool                        `json:"importKeywords"`
 	ExtensionPicker         bool                        `json:"extensionPicker"`
@@ -112,6 +113,7 @@ type App struct {
 	PreferencesChanged                                        func()
 	WindowShown                                               func()
 	Recent                                                    []library.Recent
+	hoverVideoState                                           hoverVideo
 	RecentMissing                                             map[string]bool // 打不开的图库（外接盘没插、被移走），菜单里显示成灰色「找不到」
 	Sidebar                                                   sidebarState
 	Toolbar                                                   toolbarState
@@ -603,6 +605,7 @@ func (a *App) OpenLibrary(path string) {
 			a.Selected.Clear()
 			a.TagPage = false
 			a.ClosePreview()
+			a.closeHoverVideo()
 			a.Thumbnails.Clear()
 			// 新图库从顶部开始看，不沿用上一个图库的滚动位置。
 			a.scroll = ui.ScrollState{}
@@ -732,6 +735,7 @@ func (a *App) DeleteLibrary() {
 func (a *App) closeLibrary(reason string) bool {
 	discarded := a.DiscardInspectorEdits(reason)
 	a.ClosePreview()
+	a.closeHoverVideo()
 	a.cancelExtensionPicker()
 	if a.Import.WatchCancel != nil {
 		a.Import.WatchCancel()

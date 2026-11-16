@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-const SchemaVersion = 3
+const SchemaVersion = 4
 
 type Manifest struct {
 	SchemaVersion int    `json:"schemaVersion"`
@@ -44,7 +44,19 @@ type Asset struct {
 	Colors           []Color           `json:"colors"`
 	FolderIDs        []string          `json:"folderIDs"`
 	TagIDs           []string          `json:"tagIDs"`
+	// Kind 是素材种类：KindImage、KindVideo、KindLive（实况照片：一张图配一段短视频）。
+	Kind string `json:"kind"`
+	// DurationMS 是视频时长（实况照片是那段视频的时长），图片为 0。
+	DurationMS int64 `json:"durationMS"`
+	// MotionPath 是实况照片那段视频在图库包里的相对路径，其他素材为空。
+	MotionPath string `json:"motionPath"`
 }
+
+const (
+	KindImage = "image"
+	KindVideo = "video"
+	KindLive  = "live"
+)
 
 type Folder struct {
 	ID        string `json:"id"`

@@ -42,6 +42,12 @@ func (l *Library) Snapshot(ctx context.Context) (snapshot model.Snapshot, err er
 	if l.Manifest.SchemaVersion < 2 {
 		extra = ",'',0"
 	}
+	// 只读打开的旧图库（备份、导入图库的来源）没升级过，没有视频那几列，按图片算。
+	if l.Manifest.SchemaVersion >= 4 {
+		extra += ",kind,duration_ms,motion_path"
+	} else {
+		extra += ",'image',0,''"
+	}
 	// 不加 ORDER BY：按 id 排要走索引逐行回表，10 万张时比顺序扫表慢得多。
 	rows, err := tx.QueryContext(ctx, "SELECT id,name,original_file_name,extension,media_type,size,width,height,orientation,color_profile,note,source_url,relative_path,favorite,trashed,created_at,updated_at"+extra+" FROM assets")
 	if err != nil {
@@ -50,13 +56,14 @@ func (l *Library) Snapshot(ctx context.Context) (snapshot model.Snapshot, err er
 	byID := make(map[string]int32, total)
 	for rows.Next() {
 		var asset model.Asset
-		var extension, mediaType, colorProfile, created, updated, lastUsed string
-		if err = rows.Scan(&asset.ID, &asset.Name, &asset.OriginalFileName, &extension, &mediaType, &asset.Size, &asset.Width, &asset.Height, &asset.Orientation, &colorProfile, &asset.Note, &asset.SourceURL, &asset.RelativePath, &asset.Favorite, &asset.Trashed, &created, &updated, &lastUsed, &asset.Rotation); err != nil {
+		var extension, mediaType, colorProfile, created, updated, lastUsed, kind string
+		if err = rows.Scan(&asset.ID, &asset.Name, &asset.OriginalFileName, &extension, &mediaType, &asset.Size, &asset.Width, &asset.Height, &asset.Orientation, &colorProfile, &asset.Note, &asset.SourceURL, &asset.RelativePath, &asset.Favorite, &asset.Trashed, &created, &updated, &lastUsed, &asset.Rotation, &kind, &asset.DurationMS, &asset.MotionPath); err != nil {
 			rows.Close()
 			return snapshot, err
 		}
-		asset.Extension, asset.MediaType, asset.ColorProfile = strs.get(extension), strs.get(mediaType), strs.get(colorProfile)
-		if !filepath.IsLocal(asset.RelativePath) || strings.ContainsAny(asset.RelativePath, "\\:") {
+		asset.Extension, asset.MediaType, asset.ColorProfile, asset.Kind = strs.get(extension), strs.get(mediaType), strs.get(colorProfile), strs.get(kind)
+		if !filepath.IsLocal(asset.RelativePath) || strings.ContainsAny(asset.RelativePath, "\\:") ||
+			asset.MotionPath != "" && (!filepath.IsLocal(asset.MotionPath) || strings.ContainsAny(asset.MotionPath, "\\:")) {
 			rows.Close()
 			return snapshot, i18n.NewError("error_asset_path", asset.ID)
 		}
