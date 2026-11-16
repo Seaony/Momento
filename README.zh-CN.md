@@ -44,7 +44,9 @@ Momento 用来收集和整理参考图、截图、照片和短视频。所有文
 
 ## 安装
 
-还没有发布安装包，目前需要从源码运行。安装 Go 1.27.3 或更高版本，然后：
+从 [最新版本](https://github.com/Seaony/Momento/releases/latest) 下载对应平台的安装包：macOS 用 DMG，Windows 用 setup 安装程序，Linux 用 DEB、RPM 或 tar.gz。macOS 版已签名并通过公证；Windows 版还没有代码签名，第一次打开时 SmartScreen 会提示，点「更多信息」再「仍要运行」即可。应用会自己检查更新。
+
+也可以从源码运行。安装 Go 1.27.3 或更高版本，然后：
 
 ```sh
 git clone https://github.com/Seaony/Momento.git
@@ -149,7 +151,7 @@ go tool mygo build -platform darwin/universal,windows/amd64,windows/arm64,linux/
 2. 配置仓库密钥：`MYGO_UPDATER_PRIVATE_KEY`；`MACOS_CERTIFICATE`、`MACOS_CERTIFICATE_PASSWORD`、`APPLE_ID`、`APPLE_TEAM_ID`、`APPLE_APP_PASSWORD`；`WINDOWS_CERTIFICATE`、`WINDOWS_CERTIFICATE_PASSWORD`。
 3. 验证签名安装、macOS 公证和签名更新；在 Windows、Linux 真机上检查安装、标题栏、窗口按钮、导入导出、往文件管理器拖文件，以及三个平台的开机启动。
 
-目前更新公钥还没配置，上面这些验证都还没做过。交叉编译成功或离线截图正常，不能代替真机验证。
+1.0.0 是在 Mac 上本地构建的：macOS 版用 Developer ID 签名并公证，Windows 版没有代码签名，三个平台的更新包都用上面的更新密钥签名。Windows 和 Linux 的真机检查还没做；交叉编译成功或离线截图正常，不能代替真机验证。
 
 ## 许可证
 

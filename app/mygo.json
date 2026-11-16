@@ -57,5 +57,9 @@
         }
       ]
     }
+  },
+  "updates": {
+    "publicKey": "ggWfIzv9B7vr9zTbBuj9uRBkgdED1CeNk/a/3ef0qYM=",
+    "github": "Seaony/Momento"
   }
 }

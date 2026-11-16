@@ -44,7 +44,9 @@ The whole app is one Go codebase. It uses [mygo](https://github.com/egoist/mygo)
 
 ## Install
 
-There are no installers yet, so run it from source. Install Go 1.27.3 or later, then:
+Download the package for your platform from the [latest release](https://github.com/Seaony/Momento/releases/latest): a DMG for macOS, a setup program for Windows, and DEB, RPM or tar.gz for Linux. The macOS app is signed and notarized. The Windows build is not code-signed yet, so SmartScreen warns the first time you open it; choose More info, then Run anyway. The app checks for updates by itself.
+
+You can also run it from source. Install Go 1.27.3 or later, then:
 
 ```sh
 git clone https://github.com/Seaony/Momento.git
@@ -149,7 +151,7 @@ Before the first real release:
 2. Add the repository secrets `MYGO_UPDATER_PRIVATE_KEY`; `MACOS_CERTIFICATE`, `MACOS_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD`; and `WINDOWS_CERTIFICATE`, `WINDOWS_CERTIFICATE_PASSWORD`.
 3. Check signed installation, macOS notarization and signed updates. On real Windows and Linux machines, check installation, title bars, window buttons, import and export, dragging files out to the file manager, and launch at login on all three platforms.
 
-The update public key is not set yet, and none of these checks have been run. A clean cross-build or offline screenshot does not replace testing on real machines.
+Version 1.0.0 was built locally on a Mac: the macOS app is signed with a Developer ID and notarized, the Windows build is not code-signed, and the updates of all three platforms are signed with the update key above. Windows and Linux have not been checked on real machines yet; a clean cross-build or offline screenshot does not replace that.
 
 ## License
 
