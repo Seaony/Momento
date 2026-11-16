@@ -79,7 +79,18 @@ func (a *App) arrowTarget(key ui.Key) (int, bool) {
 			return 0, true
 		}
 	}
-	if a.ViewMode == 2 || a.layout == nil {
+	if a.ViewMode == 1 && a.justified.layout != nil && len(a.justified.layout.items) == len(a.Visible) {
+		switch key {
+		case ui.KeyLeft:
+			return current - 1, current > 0
+		case ui.KeyRight:
+			return current + 1, current+1 < len(a.Visible)
+		case ui.KeyUp, ui.KeyDown:
+			return a.justified.layout.neighbor(current, key == ui.KeyUp)
+		}
+		return 0, false
+	}
+	if a.ViewMode != 0 || a.layout == nil {
 		switch key {
 		case ui.KeyUp:
 			return current - 1, current > 0
@@ -132,6 +143,12 @@ func (a *App) assetRect(index int) (float32, float32, bool) {
 	if a.ViewMode == 2 {
 		if index+1 < len(a.list.tops) {
 			return a.list.tops[index], a.list.tops[index+1] - a.list.tops[index], true
+		}
+		return 0, 0, false
+	}
+	if a.ViewMode == 1 {
+		if l := a.justified.layout; l != nil && index >= 0 && index < len(l.items) {
+			return l.items[index].Y, l.items[index].Height, true
 		}
 		return 0, 0, false
 	}

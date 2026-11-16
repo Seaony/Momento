@@ -243,7 +243,8 @@ func menuItems(a *appui.App, platform string) []*mygo.MenuItem {
 	inspector := item("inspector", "CmdOrCtrl+Alt+I", a.ToggleInspector)
 	inspector.Disabled = !a.InspectorAvailable()
 	return []*mygo.MenuItem{appMenu, {Label: a.T("menu_file"), Submenu: fileItems}, {Label: a.T("menu_edit"), Submenu: edit}, {Label: a.T("menu_view"), Submenu: []*mygo.MenuItem{
-		item("view_masonry", "CmdOrCtrl+1", func() { a.ViewMode = 0 }), item("view_list", "CmdOrCtrl+2", func() { a.ViewMode = 2 }), mygo.Separator(),
+		item("view_masonry", "CmdOrCtrl+1", func() { a.ViewMode = 0 }), item("view_justified", "CmdOrCtrl+3", func() { a.ViewMode = 1 }), item("view_list", "CmdOrCtrl+2", func() { a.ViewMode = 2 }), mygo.Separator(),
+		item("slideshow", "", a.StartSlideshowFromSelection), mygo.Separator(),
 		item("thumbnail_larger", "CmdOrCtrl+=", func() { a.StepThumbnailSize(1) }), item("thumbnail_smaller", "CmdOrCtrl+-", func() { a.StepThumbnailSize(-1) }), mygo.Separator(),
 		item("search", "CmdOrCtrl+K", a.FocusSearch), item("filter", "CmdOrCtrl+Alt+F", a.ToggleFilter), item("sort", "CmdOrCtrl+Alt+S", a.ToggleSort), inspector, item("sidebar", "", func() { a.SidebarVisible = !a.SidebarVisible }), mygo.Separator(), role("fullscreen", "shortcut_fullscreen", mygo.RoleToggleFullScreen),
 	}}, {Label: a.T("preview"), Submenu: []*mygo.MenuItem{

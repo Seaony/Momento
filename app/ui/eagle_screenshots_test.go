@@ -23,7 +23,7 @@ func TestEagleFeatureScreenshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixture := newScreenshotFixture(t)
-	states := []string{"single", "multiple", "filter", "sort", "smart", "rename-format", "rename-replace", "subfolders", "recent", "smart-more", "preview-flip", "similar", "similar-progress", "export-resize", "export-invalid", "annotate-edit", "annotate-hover", "inspector-annotations"}
+	states := []string{"single", "multiple", "filter", "sort", "smart", "rename-format", "rename-replace", "subfolders", "recent", "smart-more", "preview-flip", "similar", "similar-progress", "export-resize", "export-invalid", "annotate-edit", "annotate-hover", "inspector-annotations", "justified", "slideshow"}
 	if only := os.Getenv("MOMENTO_STAGE8_ONLY"); only != "" {
 		states = strings.Split(only, ",")
 	}
@@ -104,6 +104,8 @@ func TestEagleFeatureScreenshots(t *testing.T) {
 				if state == "export-invalid" {
 					a.Dialog.MaxEdge = "0"
 				}
+			case "justified":
+				a.ViewMode = 1
 			case "similar-progress":
 				a.Progress = &model.ImportProgress{Stage: "similar", Processed: 1234, Total: 5000}
 			case "subfolders":
@@ -152,6 +154,18 @@ func TestEagleFeatureScreenshots(t *testing.T) {
 				view = func(c *ui.Context) { w.view(c, a) }
 				w.openedAt = time.Now().Add(-time.Second)
 			}
+			if state == "slideshow" {
+				a.StartSlideshow(a.Visible[2].ID)
+				show := a.Slideshow
+				for _, item := range show.items {
+					img, err := assets.PreviewImage(filepath.Join(fixture.root, filepath.FromSlash(item.RelativePath)))
+					if err != nil {
+						t.Fatal(err)
+					}
+					show.bitmaps[item.ID] = ui.NewBitmap(img)
+				}
+				view = func(c *ui.Context) { show.view(c, a) }
+			}
 			tt := ui.NewTester(view, width, height)
 			tt.SetLocale(a.Texts.Locale())
 			tt.SetDark(theme == "dark")
@@ -163,6 +177,12 @@ func TestEagleFeatureScreenshots(t *testing.T) {
 			tt.SetWindowActive(true)
 			tt.Frame()
 			tt.Advance(time.Second)
+			if state == "slideshow" {
+				// 指针动一下，底部控制条出来。
+				a.Slideshow.shownAt = tt.Now()
+				tt.Move(500, 400)
+				tt.Frame()
+			}
 			if state == "annotate-hover" {
 				// 指针停在第二个框上，框下面显示它的文字。
 				photo := a.Preview.active.picture.imageRect(a.Preview.active.picture.viewport)

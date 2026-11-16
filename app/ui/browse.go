@@ -111,8 +111,8 @@ func (a *App) browseAssets(query catalog.Query) []model.Asset {
 	return result
 }
 
-// 视图只有瀑布流（0）和列表（2），2 沿用列表原来的编号。
-var viewModes = []int{0, 2}
+// 视图：瀑布流（0）、等高行（1）、列表（2）。1 原来是网格，旧偏好里的网格现在打开是等高行。
+var viewModes = []int{0, 1, 2}
 
 // 缩略图大小只有这几档，滑块、菜单和快捷键都按档走。
 var thumbnailSteps = []float32{.5, .75, 1, 1.5, 2}

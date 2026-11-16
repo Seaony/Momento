@@ -175,10 +175,7 @@ func (a *App) toolbar(c *ui.Context) {
 		}
 		floatingPopover(c.Key("sorting"), sort, &a.Toolbar.SortOpen, func() { a.sortPanel(c) }).Width(popSortWidth).Padding(popSortPadding)
 		if width < 360 {
-			icon := "masonry"
-			if a.ViewMode == 2 {
-				icon = "list"
-			}
+			icon := []string{"masonry", "justified", "list"}[a.ViewMode]
 			view := toolbarChip(c.Key("view-menu"), a.T("view_mode"), a.Toolbar.ViewOpen)
 			view.Children(func() { toolbarIcon(c, icon) })
 			if view.Clicked() {
@@ -222,7 +219,7 @@ func (a *App) toolbarFit(c *ui.Context, width float32) (inlineRuler, labels, tit
 	titleWidth := min(measure(name, toolbarTitleSize, 650), toolbarTitleWidth) + space8 + measure(a.T("toolbar_item_count", formatTagCount(count)), toolbarCountSize, 400)
 	// 搜索框能缩到最小宽度，提示文字放不下时截断，所以按最小宽度算。
 	search := float32(toolbarSearchMin)
-	ruler := rulerWidth + 1 + 21 + measure(a.T("toolbar_columns", strconv.Itoa(masonryColumns(a.layoutWidth, a.thumbnailScale()))), toolbarFont, 400)
+	ruler := rulerWidth + 1 + 21 + measure(a.thumbnailLabel(), toolbarFont, 400)
 	chip := func(text string, extra float32) float32 {
 		return toolbarChipPadding + 16 + toolbarChipGap + measure(text, toolbarFont, 400) + space12 + extra
 	}
@@ -253,7 +250,7 @@ func (a *App) toolbarFit(c *ui.Context, width float32) (inlineRuler, labels, tit
 			return total+float32(items-1)*space12 <= width
 		}
 		// 固定会有：搜索、弹簧、刻度尺或它的按钮、两条竖线、筛选、排序、视图切换、导入；列表视图没有刻度尺和它后面那条竖线。
-		total, items := search+2*(1+4)+2*toolbarSegmentInset+2*toolbarSegmentWidth+2, 9
+		total, items := search+2*(1+4)+2*toolbarSegmentInset+3*toolbarSegmentWidth+2*2, 9
 		list := a.ViewMode == 2
 		if list {
 			total, items = total-(1+4), items-2
@@ -539,14 +536,16 @@ func (a *App) toolbarSearch(c *ui.Context, hint string) ui.Element {
 
 func (a *App) viewSwitcher(c *ui.Context) {
 	p := paletteFor(c.Theme())
-	// 只有瀑布流和列表两种视图；分段序号 0、1 对应视图 0、2（2 沿用列表原来的编号，旧偏好不用迁移）。
+	// 瀑布流、等高行、列表；分段序号就是视图编号。
 	modes := []struct {
 		ID, Label string
 		Mode      int
-	}{{"masonry", "view_masonry", 0}, {"list", "view_list", 2}}
+	}{{"masonry", "view_masonry", 0}, {"justified", "view_justified", 1}, {"list", "view_list", 2}}
 	index := 0
-	if a.ViewMode == 2 {
-		index = 1
+	for i, mode := range modes {
+		if mode.Mode == a.ViewMode {
+			index = i
+		}
 	}
 	seg := ui.SegmentedBase(c.Key("view-mode"), &index, len(modes))
 	seg.Track.Height(toolbarControlHeight).Padding(toolbarSegmentInset).Gap(2).Radius(toolbarRadius).Background(toolbarFill(p, toolbarChipFill)).Shrink(0).AlignItems(ui.Center).Label(a.T("view_mode")).Children(func() {
@@ -1113,7 +1112,7 @@ func (a *App) thumbnailRuler(c *ui.Context) {
 		})
 		ui.Box(c).Size(1, rulerNeedle).Shrink(0).Background(toolbarFill(p, .08))
 		// 右边写现在是几列，比百分比直观。
-		ui.Text(c.Key("columns"), a.T("toolbar_columns", strconv.Itoa(masonryColumns(a.layoutWidth, a.thumbnailScale())))).FontSize(toolbarFont).FontFeatures("tnum").
+		ui.Text(c.Key("columns"), a.thumbnailLabel()).FontSize(toolbarFont).FontFeatures("tnum").
 			TextColor(toolbarInk(p, .86)).SingleLine().Shrink(0).Padding(0, 11, 0, 10)
 	})
 }
@@ -1126,4 +1125,12 @@ func (a *App) libraryHasKind(kind string) bool {
 		}
 	}
 	return false
+}
+
+// thumbnailLabel 是刻度尺右边的字：瀑布流写几列，等高行写行高。
+func (a *App) thumbnailLabel() string {
+	if a.ViewMode == 1 {
+		return a.T("toolbar_row_height", strconv.Itoa(int(justifiedRowHeight*a.thumbnailScale())))
+	}
+	return a.T("toolbar_columns", strconv.Itoa(masonryColumns(a.layoutWidth, a.thumbnailScale())))
 }

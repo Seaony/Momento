@@ -66,22 +66,28 @@ func (a *App) assetArea(c *ui.Context) {
 	state := ui.Local(scroll, "asset-layout", func() assetLayoutState { return assetLayoutState{} })
 	var items []MasonryItem
 	var contentHeight float32
+	ratios := func() []float32 {
+		if state.ratios == nil || state.ratiosVersion != a.visibleVersion {
+			state.ratios = make([]float32, len(a.Visible))
+			for i, asset := range a.Visible {
+				w, h := assetDisplaySize(asset)
+				if h > 0 {
+					state.ratios[i] = float32(w) / float32(h)
+				}
+			}
+			state.ratiosVersion = a.visibleVersion
+		}
+		return state.ratios
+	}
 	switch a.ViewMode {
-	case 1, 2:
+	case 2:
 		items, contentHeight = a.assetRows(width, top, bottom)
+	case 1:
+		layout := a.justifiedLayout(ratios, width)
+		items, contentHeight = layout.Visible(top, bottom), layout.Height()
 	default:
 		if a.layout == nil || a.layoutVersion != a.visibleVersion || a.layoutWidth != width {
-			if state.ratios == nil || state.ratiosVersion != a.visibleVersion {
-				state.ratios = make([]float32, len(a.Visible))
-				for i, asset := range a.Visible {
-					w, h := assetDisplaySize(asset)
-					if h > 0 {
-						state.ratios[i] = float32(w) / float32(h)
-					}
-				}
-				state.ratiosVersion = a.visibleVersion
-			}
-			a.layout = NewMasonryScaled(state.ratios, width, a.thumbnailScale())
+			a.layout = NewMasonryScaled(ratios(), width, a.thumbnailScale())
 			a.layoutWidth, a.layoutVersion = width, a.visibleVersion
 		}
 		items, contentHeight = a.layout.Visible(top, bottom), a.layout.Height()
@@ -493,6 +499,9 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 		}
 		if !isVideoAsset(asset) && !asset.Trashed && m.Item(a.T("add_annotation")).Chosen() {
 			a.AnnotateAsset(asset.ID, "")
+		}
+		if !isVideoAsset(asset) && m.Item(a.T("start_slideshow_here")).Chosen() {
+			a.StartSlideshow(asset.ID)
 		}
 		if m.Item(a.T("open_default_app")).Chosen() {
 			a.OpenAssetExternally(asset)

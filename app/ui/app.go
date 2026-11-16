@@ -72,6 +72,7 @@ type Preferences struct {
 	SubfolderContents       bool                        `json:"subfolderContents"` // 父文件夹里也显示子文件夹的素材
 	EXIFCollapsed           bool                        `json:"exifCollapsed"`
 	ExportPresets           []ExportPreset              `json:"exportPresets,omitempty"`
+	SlideshowSeconds        int                         `json:"slideshowSeconds,omitempty"` // 放映间隔，0 是默认 5 秒
 }
 
 type App struct {
@@ -103,7 +104,9 @@ type App struct {
 	SettingsOpen, NewLibraryOpen, EditLibraryOpen, ExportOpen bool
 	Rename                                                    renameState
 	Similar                                                   similarState
-	libraryOpening                                            bool             // 正在后台打开另一个图库
+	libraryOpening                                            bool       // 正在后台打开另一个图库
+	Slideshow                                                 *slideshow // 正在全屏放映
+	justified                                                 justifiedCache
 	annotationSaves                                           []annotationSave // 还没确认写进图库的批注改动
 	annotationKey                                             int
 	Preferences                                               Preferences
@@ -622,6 +625,7 @@ func (a *App) OpenLibrary(path string) {
 			a.Query = catalog.Query{Sort: a.Preferences.Sort, Descending: a.Preferences.SortDescending}
 			a.Selected.Clear()
 			a.TagPage = false
+			a.StopSlideshow()
 			a.ClosePreview()
 			a.closeHoverVideo()
 			a.Thumbnails.Clear()
@@ -753,6 +757,7 @@ func (a *App) DeleteLibrary() {
 func (a *App) closeLibrary(reason string) bool {
 	discarded := a.DiscardInspectorEdits(reason)
 	// 图库没了，关预览时不能再发起批注写入（写不进去，还会让 Busy 一直挂着）。
+	a.StopSlideshow()
 	if a.dropPreviewAnnotationDrafts(reason) {
 		discarded = true
 	}
@@ -941,7 +946,7 @@ func (a *App) shortcuts(c *ui.Context) {
 	if a.PreviewOpen() {
 		return
 	}
-	for _, action := range []string{"new_library", "open_library", "import", "import_folder", "export", "settings", "search", "filter", "sort", "inspector", "sidebar", "thumbnail_larger", "thumbnail_smaller", "view_masonry", "view_list"} {
+	for _, action := range []string{"new_library", "open_library", "import", "import_folder", "export", "settings", "search", "filter", "sort", "inspector", "sidebar", "thumbnail_larger", "thumbnail_smaller", "view_masonry", "view_justified", "view_list", "slideshow"} {
 		if !a.ActionShortcut(c, action) {
 			continue
 		}
@@ -974,8 +979,12 @@ func (a *App) shortcuts(c *ui.Context) {
 			a.StepThumbnailSize(-1)
 		case "view_masonry":
 			a.ViewMode = 0
+		case "view_justified":
+			a.ViewMode = 1
 		case "view_list":
 			a.ViewMode = 2
+		case "slideshow":
+			a.StartSlideshowFromSelection()
 		}
 	}
 	if c.FocusTakesText() {

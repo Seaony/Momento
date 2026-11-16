@@ -291,17 +291,19 @@ func TestSmartFoldersPreferenceDefaultsOff(t *testing.T) {
 	}
 }
 
-// 网格视图已去掉：旧偏好里的网格回到瀑布流，网格的快捷键一起清掉。
-func TestOldGridPreferenceFallsBackToMasonry(t *testing.T) {
-	p := DefaultPreferences()
-	p.ViewMode = 1
-	p.Shortcuts = map[string]string{"view_grid": "CmdOrCtrl+9", "view_list": "CmdOrCtrl+3"}
-	p = NormalizePreferences(p)
-	if p.ViewMode != 0 {
-		t.Fatalf("网格没有回到瀑布流：%d", p.ViewMode)
-	}
-	if _, ok := p.Shortcuts["view_grid"]; ok || p.Shortcuts["view_list"] != "CmdOrCtrl+3" {
-		t.Fatalf("快捷键：%v", p.Shortcuts)
+// 视图编号 0、1、2 是瀑布流、等高行、列表，原样保留；异常值回到瀑布流。旧网格的快捷键清掉。
+func TestViewModePreferenceNormalized(t *testing.T) {
+	for mode, want := range map[int]int{0: 0, 1: 1, 2: 2, 7: 0, -1: 0} {
+		p := DefaultPreferences()
+		p.ViewMode = mode
+		p.Shortcuts = map[string]string{"view_grid": "CmdOrCtrl+9", "view_list": "CmdOrCtrl+4"}
+		p = NormalizePreferences(p)
+		if p.ViewMode != want {
+			t.Fatalf("视图 %d 应变成 %d，实际 %d", mode, want, p.ViewMode)
+		}
+		if _, ok := p.Shortcuts["view_grid"]; ok || p.Shortcuts["view_list"] != "CmdOrCtrl+4" {
+			t.Fatalf("快捷键：%v", p.Shortcuts)
+		}
 	}
 }
 

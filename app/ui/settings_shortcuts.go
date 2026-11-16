@@ -39,6 +39,8 @@ var ShortcutDefinitions = []ShortcutDefinition{
 	{"delete", "delete", "edit", "Backspace", false},
 	{"view_masonry", "view_masonry", "view", "CmdOrCtrl+1", false},
 	{"view_list", "view_list", "view", "CmdOrCtrl+2", false},
+	{"view_justified", "view_justified", "view", "CmdOrCtrl+3", false},
+	{"slideshow", "slideshow", "view", "", false},
 	{"search", "search", "view", "CmdOrCtrl+K", false},
 	{"filter", "filter", "view", "CmdOrCtrl+Alt+F", false},
 	{"sort", "sort", "view", "CmdOrCtrl+Alt+S", false},

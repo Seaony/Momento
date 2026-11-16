@@ -109,8 +109,8 @@ func NormalizePreferences(p Preferences) Preferences {
 		p.ThumbnailSize = 1
 	}
 	p.ThumbnailSize = max(.5, min(2, p.ThumbnailSize))
-	// 视图只有瀑布流（0）和列表（2）；以前存的网格（1）和异常值都回到瀑布流，网格的快捷键一起清掉。
-	if p.ViewMode != 2 {
+	// 视图有瀑布流（0）、等高行（1）、列表（2）；以前存的网格（1）现在是等高行，异常值回到瀑布流。网格的快捷键清掉。
+	if p.ViewMode < 0 || p.ViewMode > 2 {
 		p.ViewMode = 0
 	}
 	delete(p.Shortcuts, "view_grid")

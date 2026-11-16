@@ -53,6 +53,7 @@ func (a *App) LockNow() {
 	a.clearPasswordSecrets()
 	a.Lock.ErrorKey, a.Lock.Detail = "", ""
 	a.CloseAllPreviewWindows()
+	a.StopSlideshow()
 	a.PromptOpen, a.ConfirmOpen, a.NewLibraryOpen, a.EditLibraryOpen, a.ExportOpen = false, false, false, false, false
 	a.SettingsOpen = false
 	if a.SettingsWindow != nil {
