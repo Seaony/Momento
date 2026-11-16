@@ -1,6 +1,6 @@
 <div align="center">
 
-<a href="https://github.com/Seaony/Momento/releases/latest"><img src="app/resources/icon.png" width="112" alt="Momento"></a>
+<a href="https://github.com/Seaony/Momento/releases/latest"><img src=".github/assets/icon-512.png" width="128" alt="Momento"></a>
 
 # Momento
 
