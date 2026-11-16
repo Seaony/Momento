@@ -182,7 +182,7 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 	}
 }
 
-var smartFields = []string{"name", "extension", "tag", "color", "width", "height", "size", "duration", "added", "note"}
+var smartFields = []string{"name", "extension", "tag", "color", "rating", "width", "height", "size", "duration", "added", "note"}
 
 // smartRuleUnits 是编辑时的单位换成存储单位的倍数：大小编辑用 MB、存字节，时长编辑用秒、存毫秒。
 var smartRuleUnits = map[string]int64{"size": 1 << 20, "duration": 1000}
@@ -191,7 +191,7 @@ func smartOperators(field string) []string {
 	switch field {
 	case "name", "note":
 		return []string{"contains", "equals"}
-	case "width", "height", "size":
+	case "width", "height", "size", "rating":
 		return []string{"gte", "lte", "eq"}
 	case "duration":
 		// 时长存的是毫秒，「等于」几乎不会命中，只给大于等于、小于等于。
@@ -281,6 +281,14 @@ func (a *App) smartRuleValue(c *ui.Context, rule *model.SmartRule, index int) {
 			ids = append(ids, family.ID)
 		}
 		smartSelect(c, &rule.Value, ids, func(id string) string { return a.T("color_" + id) }).Grow(1).MinWidth(0).Label(label).Disabled(a.GBrowsing.Saving)
+		return
+	}
+	if rule.Field == "rating" {
+		// 空星是 0，也就是没评分；刚换到评分时值是空的，按 0 存。
+		stars, _ := strconv.Atoi(rule.Value)
+		ratingStars(c, &stars, label).Disabled(a.GBrowsing.Saving)
+		rule.Value = strconv.Itoa(stars)
+		ui.Spacer(c)
 		return
 	}
 	placeholder := ""

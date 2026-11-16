@@ -117,4 +117,10 @@ CREATE INDEX assets_kind ON assets(kind);
 PRAGMA user_version = 4;
 `
 
-const schema = schemaV1 + migrationV2 + migrationV3 + migrationV4
+// v5：星级评分，0 是没评分，1～5 星。
+const migrationV5 = `
+ALTER TABLE assets ADD COLUMN rating INTEGER NOT NULL DEFAULT 0 CHECK (rating BETWEEN 0 AND 5);
+PRAGMA user_version = 5;
+`
+
+const schema = schemaV1 + migrationV2 + migrationV3 + migrationV4 + migrationV5

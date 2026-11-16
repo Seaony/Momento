@@ -87,7 +87,7 @@ func NormalizePreferences(p Preferences) Preferences {
 	// "smart" 只为兼容旧数据保留；智能文件夹是否显示只看 SmartFolders。
 	hidden := make([]string, 0, len(p.SidebarHidden))
 	for _, key := range p.SidebarHidden {
-		if slices.Contains([]string{"favorites", "unfiled", "untagged", "random", "folders", "quick", "smart"}, key) && !slices.Contains(hidden, key) {
+		if slices.Contains([]string{"favorites", "recent", "unfiled", "untagged", "random", "folders", "quick", "smart"}, key) && !slices.Contains(hidden, key) {
 			hidden = append(hidden, key)
 		}
 	}
@@ -115,7 +115,7 @@ func NormalizePreferences(p Preferences) Preferences {
 	}
 	delete(p.Shortcuts, "view_grid")
 	switch p.Sort {
-	case "added", "name", "size":
+	case "added", "name", "size", "rating":
 	default:
 		p.Sort, p.SortDescending = "added", true
 	}

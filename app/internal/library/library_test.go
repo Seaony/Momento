@@ -365,6 +365,18 @@ func TestInvalidFolderParentAndBatchRelationsRollback(t *testing.T) {
 	if snapshot(t, l).Assets[0].Favorite {
 		t.Fatal("批量收藏失败未回滚")
 	}
+	before := snapshot(t, l).Assets[0].Name
+	for _, names := range []map[string]string{{"a": "新名", "missing": "x"}, {"a": "新名", "b": "  "}} {
+		if err := l.RenameAssets(t.Context(), names); err == nil {
+			t.Fatal("批量改名有一个失败时没有报错", names)
+		}
+		if snapshot(t, l).Assets[0].Name != before {
+			t.Fatal("批量改名失败未回滚")
+		}
+	}
+	if err := l.RenameAssets(t.Context(), map[string]string{"a": " 新名 "}); err != nil || snapshot(t, l).Assets[0].Name != "新名" {
+		t.Fatal("批量改名没有生效", err)
+	}
 }
 
 func TestTagDedupeRenameDeleteAndBatchEdit(t *testing.T) {

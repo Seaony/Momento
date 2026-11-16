@@ -104,3 +104,59 @@ func TestExportDialogFileNameForVideo(t *testing.T) {
 		t.Fatalf("视频默认文件名：%s", got)
 	}
 }
+
+// 上半红、下半蓝的横画面，用来看旋转方向。
+type twoColorDecoder struct{ done bool }
+
+func (d *twoColorDecoder) Next() (ui.VideoFrame, error) {
+	if d.done {
+		return ui.VideoFrame{}, io.EOF
+	}
+	d.done = true
+	img := image.NewRGBA(image.Rect(0, 0, 16, 9))
+	for y := range 9 {
+		for x := range 16 {
+			c := color.RGBA{R: 255, A: 255}
+			if y >= 5 {
+				c = color.RGBA{B: 255, A: 255}
+			}
+			img.Set(x, y, c)
+		}
+	}
+	return ui.VideoFrame{Image: img, Duration: time.Second}, nil
+}
+func (d *twoColorDecoder) Rewind() error           { d.done = false; return nil }
+func (d *twoColorDecoder) Duration() time.Duration { return time.Second }
+
+// 存了 90° 旋转的素材，悬停播放的画面也要顺时针转 90°：原来的上半（红）到右边，下半（蓝）到左边。
+func TestHoverPlaybackFollowsRotation(t *testing.T) {
+	previous := openHoverVideo
+	openHoverVideo = func(string) (*ui.VideoPlayer, error) { return ui.NewVideoPlayer(&twoColorDecoder{}) }
+	t.Cleanup(func() { openHoverVideo = previous })
+	a := &App{Preferences: DefaultPreferences(), Library: &library.Library{Root: "/lib"}}
+	asset := model.Asset{ID: "v", Kind: model.KindVideo, RelativePath: "v.mp4", DurationMS: 1000, Rotation: 90}
+	tt := ui.NewTester(func(c *ui.Context) {
+		a.finishHoverVideo()
+		card := ui.Box(c.Key("card")).Size(90, 160)
+		card.Children(func() {
+			a.hovered = asset.ID
+			a.hoverVideoOverlay(c, card, asset, true, 0)
+		})
+	}, 90, 160)
+	tt.Frame()
+	tt.Advance(hoverVideoDelay + 50*time.Millisecond)
+	for range 4 {
+		tt.Frame()
+		tt.Advance(50 * time.Millisecond)
+	}
+	img := tt.Image()
+	scale := float64(img.Bounds().Dx()) / 90
+	at := func(x, y float64) color.RGBA {
+		r, g, b, _ := img.At(int(x*scale), int(y*scale)).RGBA()
+		return color.RGBA{uint8(r >> 8), uint8(g >> 8), uint8(b >> 8), 255}
+	}
+	left, right := at(15, 40), at(75, 40)
+	if left.B < 200 || left.R > 60 || right.R < 200 || right.B > 60 {
+		t.Fatalf("画面没有跟着旋转：左 %v，右 %v", left, right)
+	}
+}

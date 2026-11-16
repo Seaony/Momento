@@ -61,8 +61,8 @@ func TestSmartEditorChangesFieldsAndPreservesInvalidDraft(t *testing.T) {
 		t.Fatal(err)
 	}
 	// 窗口矮时下拉列表在下方滚动，先滚到底再选。
-	if item, ok := tt.Find(a.T("smart_field_size")); ok {
-		tt.Scroll(item.X+item.W/2, item.Y+item.H/2, 0, 400)
+	if item, ok := tt.Find(a.T("smart_field_color")); ok {
+		tt.Scroll(item.X+item.W/2, item.Y+item.H/2, 0, 800)
 		tt.Advance(300 * time.Millisecond)
 	}
 	if err := tt.Click(a.T("smart_field_added")); err != nil {

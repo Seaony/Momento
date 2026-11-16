@@ -20,7 +20,15 @@ type Query struct {
 	TagIDs        []string
 	Extensions    []string
 	// Kinds 按素材种类筛（model.KindVideo 等），和 Extensions 是同一组「文件类型」条件：命中任一个就算。
-	Kinds      []string
+	Kinds []string
+	// Shapes 按形状和比例筛（ShapeLandscape 等，或 "16:9" 这种比例，不分横竖），命中任一个就算。
+	Shapes []string
+	// Ratings 按星级筛，0 是没评分，命中任一个就算。
+	Ratings []int
+	// IncludeSubfolders 为 true 时，文件夹范围也包括它下面各层子文件夹里的素材。
+	IncludeSubfolders bool
+	// folderSet 是 IncludeSubfolders 时算出的文件夹和全部子孙文件夹。
+	folderSet  map[string]bool
 	Search     string
 	Sort       string
 	Descending bool
@@ -33,7 +41,32 @@ type Counts struct {
 
 type entry struct {
 	name, extension string
-	tagNames        []string
+	// note、source 是小写的备注和来源链接，搜索也查这两项；为空时不占内存。
+	note, source string
+	tagNames     []string
+}
+
+func normalizedExtensions(values []string) []string {
+	extensions := make([]string, len(values))
+	for i, extension := range values {
+		extensions[i] = normalizedExtension(extension)
+	}
+	return extensions
+}
+
+// matchesFilters 是文件类型和搜索两项条件（范围、颜色、标签、形状另外判断）。
+func (idx *Index) matchesFilters(i int, extensions, kinds []string, search string) bool {
+	e := &idx.entries[i]
+	if len(extensions)+len(kinds) > 0 && !slices.Contains(extensions, e.extension) && !slices.Contains(kinds, idx.snapshot.Assets[i].Kind) {
+		return false
+	}
+	return search == "" || e.matches(search)
+}
+
+// matches 看名称、扩展名、备注、来源链接、标签里有没有搜索词。
+func (e *entry) matches(search string) bool {
+	return strings.Contains(e.name, search) || strings.Contains(e.extension, search) || strings.Contains(e.note, search) ||
+		strings.Contains(e.source, search) || slices.ContainsFunc(e.tagNames, func(name string) bool { return strings.Contains(name, search) })
 }
 
 // 排好序的下标按这三样区分：排序字段、方向、是否先按最近使用排。
@@ -74,7 +107,7 @@ func New(snapshot model.Snapshot) *Index {
 		idx.counts.Folders[folder.ID] = 0
 	}
 	for i, asset := range snapshot.Assets {
-		e := entry{name: strings.ToLower(asset.Name), extension: normalizedExtension(asset.Extension)}
+		e := entry{name: strings.ToLower(asset.Name), extension: normalizedExtension(asset.Extension), note: strings.ToLower(asset.Note), source: strings.ToLower(asset.SourceURL)}
 		for _, id := range asset.TagIDs {
 			e.tagNames = append(e.tagNames, tagNames[id])
 		}
@@ -105,6 +138,27 @@ func New(snapshot model.Snapshot) *Index {
 
 // Query 按范围、筛选、搜索、排序处理；空排序采用添加时间倒序。
 func (idx *Index) Query(q Query) []model.Asset {
+	// 先按存放顺序过滤（顺着内存读，快），再沿排好的顺序挑出命中的素材。
+	matched := make([]bool, len(idx.snapshot.Assets))
+	count := 0
+	idx.eachMatching(q, func(i int) {
+		matched[i] = true
+		count++
+	})
+	assets := make([]model.Asset, 0, count)
+	if count == 0 {
+		return assets
+	}
+	for _, i := range idx.order(q) {
+		if matched[i] {
+			assets = append(assets, idx.snapshot.Assets[i])
+		}
+	}
+	return assets
+}
+
+// eachMatching 按存放顺序对命中查询全部条件的素材下标调用 fn；智能文件夹找不到或条件无效时一个都不算。
+func (idx *Index) eachMatching(q Query, fn func(int)) {
 	search := strings.ToLower(strings.TrimSpace(q.Search))
 	if q.Now.IsZero() {
 		q.Now = time.Now()
@@ -118,49 +172,29 @@ func (idx *Index) Query(q Query) []model.Asset {
 			}
 		}
 		if smart == nil || ValidateSmartFolder(*smart) != nil {
-			return []model.Asset{}
+			return
 		}
 	}
-	extensions := make([]string, len(q.Extensions))
-	for i, extension := range q.Extensions {
-		extensions[i] = normalizedExtension(extension)
+	if q.Scope == "folder" && q.IncludeSubfolders {
+		q.folderSet = FolderTree(idx.snapshot.Folders, q.FolderID)
 	}
-	// 先按存放顺序过滤（顺着内存读，快），再沿排好的顺序挑出命中的素材。
-	matched := make([]bool, len(idx.snapshot.Assets))
-	count := 0
+	extensions := normalizedExtensions(q.Extensions)
 	for i := range idx.snapshot.Assets {
 		asset := &idx.snapshot.Assets[i]
 		if !inScope(asset, q) || (smart != nil && !matchesValidatedSmart(asset, smart)) || !matchesColors(asset.Colors, q.ColorFamilies) || !matchesAny(asset.TagIDs, q.TagIDs) {
 			continue
 		}
-		e := &idx.entries[i]
-		if len(extensions)+len(q.Kinds) > 0 && !slices.Contains(extensions, e.extension) && !slices.Contains(q.Kinds, asset.Kind) {
+		if !idx.matchesFilters(i, extensions, q.Kinds, search) || !matchesShapes(asset, q.Shapes) || (len(q.Ratings) > 0 && !slices.Contains(q.Ratings, asset.Rating)) {
 			continue
 		}
-		if search != "" && !strings.Contains(e.name, search) && !strings.Contains(e.extension, search) {
-			if !slices.ContainsFunc(e.tagNames, func(name string) bool { return strings.Contains(name, search) }) {
-				continue
-			}
-		}
-		matched[i] = true
-		count++
+		fn(i)
 	}
-	assets := make([]model.Asset, 0, count)
-	if count == 0 {
-		return assets
-	}
-	for _, i := range idx.order(q) {
-		if matched[i] {
-			assets = append(assets, idx.snapshot.Assets[i])
-		}
-	}
-	return assets
 }
 
 // order 返回按查询的排序方式排好的全部素材下标；排序是全序（最后按 ID 定），所以先排全部再过滤和先过滤再排结果一样。
 func (idx *Index) order(q Query) []int32 {
 	key := orderKey{field: "added", descending: q.Descending || q.Sort == "", recent: q.Scope == "recent"}
-	if q.Sort == "name" || q.Sort == "size" {
+	if q.Sort == "name" || q.Sort == "size" || q.Sort == "rating" {
 		key.field = q.Sort
 	}
 	idx.mu.Lock()
@@ -185,6 +219,8 @@ func (idx *Index) order(q Query) []int32 {
 			result = strings.Compare(idx.entries[left].name, idx.entries[right].name)
 		case "size":
 			result = cmp.Compare(a.Size, b.Size)
+		case "rating":
+			result = cmp.Compare(a.Rating, b.Rating)
 		default:
 			result = a.CreatedAt.Compare(b.CreatedAt)
 		}
@@ -259,10 +295,34 @@ func inScope(asset *model.Asset, q Query) bool {
 	case "untagged":
 		return len(asset.TagIDs) == 0
 	case "folder":
+		if q.folderSet != nil {
+			return slices.ContainsFunc(asset.FolderIDs, func(id string) bool { return q.folderSet[id] })
+		}
 		return slices.Contains(asset.FolderIDs, q.FolderID)
 	default:
 		return false
 	}
+}
+
+// FolderTree 是这个文件夹和它下面各层子文件夹的 ID。
+func FolderTree(folders []model.Folder, id string) map[string]bool {
+	children := map[string][]string{}
+	for _, folder := range folders {
+		children[folder.ParentID] = append(children[folder.ParentID], folder.ID)
+	}
+	tree := map[string]bool{}
+	pending := []string{id}
+	for len(pending) > 0 {
+		current := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
+		// 数据里万一有环，访问过的不再展开。
+		if current == "" || tree[current] {
+			continue
+		}
+		tree[current] = true
+		pending = append(pending, children[current]...)
+	}
+	return tree
 }
 
 func matchesAny(values, selected []string) bool {

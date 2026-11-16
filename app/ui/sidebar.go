@@ -61,6 +61,10 @@ func (a *App) sidebar(c *ui.Context) {
 				if !a.sidebarHidden("favorites") {
 					a.sidebarScope(c, "favorites", "favorites", "喜欢", counts.Favorites)
 				}
+				// 最近 30 天预览、打开、复制过的素材，按使用时间排。
+				if !a.sidebarHidden("recent") {
+					a.sidebarScope(c, "recent", "recently_used", "recent", -1)
+				}
 				if !a.sidebarHidden("unfiled") {
 					a.sidebarScope(c, "uncategorized", "uncategorized", "unfiled", counts.Uncategorized)
 				}

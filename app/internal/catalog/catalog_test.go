@@ -18,8 +18,8 @@ func sampleSnapshot() model.Snapshot {
 		Assets: []model.Asset{
 			{ID: "a", Name: "Amber", Extension: "JPG", Size: 1024, Favorite: true, CreatedAt: day(1), TagIDs: []string{"warm"}, Colors: []model.Color{{Family: "red"}, {Family: "orange"}}},
 			{ID: "b", Name: "Mountain 山水", Extension: "png", Size: 512, CreatedAt: day(2), FolderIDs: []string{"parent"}, TagIDs: []string{"landscape"}, Colors: []model.Color{{Family: "green"}}},
-			{ID: "c", Name: "Moon", Extension: "webp", Size: 512, Favorite: true, CreatedAt: day(2), FolderIDs: []string{"child"}, Colors: []model.Color{{Family: "blue"}}},
-			{ID: "d", Name: "Unfiled", Extension: "gif", Size: 256, CreatedAt: day(3)},
+			{ID: "c", Name: "Moon", Extension: "webp", Size: 512, Favorite: true, CreatedAt: day(2), SourceURL: "https://www.Behance.net/gallery/1", FolderIDs: []string{"child"}, Colors: []model.Color{{Family: "blue"}}},
+			{ID: "d", Name: "Unfiled", Extension: "gif", Size: 256, CreatedAt: day(3), Note: "黄昏的 Sketch 参考"},
 			{ID: "e", Name: "Removed", Extension: "jpg", Size: 2048, Favorite: true, Trashed: true, CreatedAt: day(4), FolderIDs: []string{"parent"}, TagIDs: []string{"warm"}, Colors: []model.Color{{Family: "red"}}},
 		},
 	}
@@ -64,6 +64,8 @@ func TestScopeFiltersSearch(t *testing.T) {
 		{"回收站保留筛选搜索", Query{Scope: "trash", TagIDs: []string{"warm"}, Search: "removed"}, []string{"e"}},
 		{"空白搜索等于无搜索", Query{Search: " \n\t "}, []string{"d", "c", "b", "a"}},
 		{"无匹配结果", Query{Search: "missing"}, []string{}},
+		{"备注搜索", Query{Search: "sketch"}, []string{"d"}},
+		{"来源链接搜索", Query{Search: "behance.net"}, []string{"c"}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -258,5 +260,81 @@ func TestKindsJoinExtensionsAsOneFilterGroup(t *testing.T) {
 		if got := assetIDs(index.Query(test.q)); !slices.Equal(got, test.want) {
 			t.Fatalf("%+v：得到 %v，期望 %v", test.q, got, test.want)
 		}
+	}
+}
+
+func TestShapes(t *testing.T) {
+	index := New(model.Snapshot{Assets: []model.Asset{
+		{ID: "wide", Width: 1920, Height: 1080},
+		{ID: "tall", Width: 1080, Height: 1920},
+		{ID: "square", Width: 1000, Height: 1010},
+		{ID: "pano", Width: 6000, Height: 2000},
+		{ID: "photo", Width: 4032, Height: 3024},
+		{ID: "rotated", Width: 3000, Height: 2000, Rotation: 90},
+		{ID: "unknown"},
+	}})
+	tests := []struct {
+		shapes []string
+		want   []string
+	}{
+		{[]string{ShapeLandscape}, []string{"wide", "pano", "photo"}},
+		{[]string{ShapePortrait}, []string{"tall", "rotated"}},
+		{[]string{ShapeSquare}, []string{"square"}},
+		{[]string{ShapePanorama}, []string{"pano"}},
+		{[]string{"16:9"}, []string{"wide", "tall"}},
+		{[]string{"4:3", "3:2"}, []string{"photo", "rotated"}},
+	}
+	for _, test := range tests {
+		got := assetIDs(index.Query(Query{Shapes: test.shapes, Sort: "name"}))
+		slices.Sort(got)
+		want := slices.Clone(test.want)
+		slices.Sort(want)
+		if !slices.Equal(got, want) {
+			t.Fatalf("%v: %v，期望 %v", test.shapes, got, want)
+		}
+	}
+	counts := index.ShapeCounts(Query{Shapes: []string{ShapeSquare}})
+	if counts[ShapeLandscape] != 3 || counts[ShapePortrait] != 2 || counts["16:9"] != 2 || counts[ShapeSquare] != 1 {
+		t.Fatalf("数量不对：%v", counts)
+	}
+}
+
+func TestRatingFilterAndSort(t *testing.T) {
+	index := New(model.Snapshot{Assets: []model.Asset{
+		{ID: "none", Name: "a"},
+		{ID: "three", Name: "b", Rating: 3},
+		{ID: "five", Name: "c", Rating: 5},
+		{ID: "one", Name: "d", Rating: 1},
+	}})
+	if got := assetIDs(index.Query(Query{Ratings: []int{0, 5}, Sort: "name"})); !slices.Equal(got, []string{"none", "five"}) {
+		t.Fatalf("评分筛选：%v", got)
+	}
+	if got := assetIDs(index.Query(Query{Sort: "rating", Descending: true})); !slices.Equal(got, []string{"five", "three", "one", "none"}) {
+		t.Fatalf("按评分排序：%v", got)
+	}
+	if counts := index.RatingCounts(Query{Ratings: []int{5}}); counts != [6]int{1, 1, 0, 1, 0, 1} {
+		t.Fatalf("评分数量：%v", counts)
+	}
+}
+
+func TestIncludeSubfolders(t *testing.T) {
+	index := New(model.Snapshot{
+		Folders: []model.Folder{{ID: "top"}, {ID: "child", ParentID: "top"}, {ID: "grand", ParentID: "child"}, {ID: "other"}, {ID: "loop-a", ParentID: "loop-b"}, {ID: "loop-b", ParentID: "loop-a"}},
+		Assets: []model.Asset{
+			{ID: "direct", Name: "a", FolderIDs: []string{"top"}},
+			{ID: "nested", Name: "b", FolderIDs: []string{"grand"}},
+			{ID: "both", Name: "c", FolderIDs: []string{"top", "child"}},
+			{ID: "outside", Name: "d", FolderIDs: []string{"other"}},
+			{ID: "looped", Name: "e", FolderIDs: []string{"loop-b"}},
+		},
+	})
+	if got := assetIDs(index.Query(Query{Scope: "folder", FolderID: "top", Sort: "name"})); !slices.Equal(got, []string{"direct", "both"}) {
+		t.Fatalf("只看本文件夹：%v", got)
+	}
+	if got := assetIDs(index.Query(Query{Scope: "folder", FolderID: "top", IncludeSubfolders: true, Sort: "name"})); !slices.Equal(got, []string{"direct", "nested", "both"}) {
+		t.Fatalf("包括子文件夹：%v", got)
+	}
+	if got := assetIDs(index.Query(Query{Scope: "folder", FolderID: "loop-a", IncludeSubfolders: true, Sort: "name"})); !slices.Equal(got, []string{"looped"}) {
+		t.Fatalf("有环的文件夹：%v", got)
 	}
 }

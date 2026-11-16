@@ -54,6 +54,7 @@ func (a *App) dialogs(c *ui.Context) {
 	a.editLibraryDialog(c)
 	a.folderDialog(c)
 	a.exportDialog(c)
+	a.renameDialog(c)
 	a.promptDialog(c)
 	a.confirmationDialog(c)
 	a.errorDialog(c)

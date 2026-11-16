@@ -200,12 +200,45 @@ func (l *Library) SetFavorite(ctx context.Context, assetIDs []string, value bool
 	})
 }
 
+// SetRating 给素材打星，0 是清除评分。
+func (l *Library) SetRating(ctx context.Context, assetIDs []string, rating int) error {
+	if rating < 0 || rating > 5 {
+		return i18n.NewError("error_rating")
+	}
+	return l.transaction(ctx, func(tx *sql.Tx) error {
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		for _, id := range assetIDs {
+			if err := changed(tx.ExecContext(ctx, "UPDATE assets SET rating=?,updated_at=? WHERE id=?", rating, now, id)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func (l *Library) RenameAsset(ctx context.Context, id, name string) error {
 	name, err := cleanName(name)
 	if err != nil {
 		return err
 	}
 	return changed(l.DB.ExecContext(ctx, "UPDATE assets SET name=?,updated_at=? WHERE id=?", name, time.Now().UTC().Format(time.RFC3339Nano), id))
+}
+
+// RenameAssets 一次改多个素材的名称（素材 ID → 新名称），任何一个失败整批都不改。
+func (l *Library) RenameAssets(ctx context.Context, names map[string]string) error {
+	return l.transaction(ctx, func(tx *sql.Tx) error {
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		for id, name := range names {
+			name, err := cleanName(name)
+			if err != nil {
+				return err
+			}
+			if err := changed(tx.ExecContext(ctx, "UPDATE assets SET name=?,updated_at=? WHERE id=?", name, now, id)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func changed(result sql.Result, err error) error {

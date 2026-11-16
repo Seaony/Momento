@@ -151,6 +151,8 @@ func TestInvalidSmartRulesFailClosed(t *testing.T) {
 		{Field: "name", Operator: "contains", Value: " "},
 		{Field: "extension", Operator: "contains", Value: "png"},
 		{Field: "added", Operator: "before", Value: "2026-99-99"},
+		{Field: "rating", Operator: "gte", Value: "6"},
+		{Field: "rating", Operator: "contains", Value: "3"},
 	}
 	for _, rule := range invalid {
 		folder := model.SmartFolder{ID: "invalid", Match: "all", Rules: []model.SmartRule{rule}}
@@ -216,6 +218,18 @@ func TestSmartDurationOnlyMatchesMotion(t *testing.T) {
 		}
 		if got := MatchesSmart(tc.asset, long); got != tc.long {
 			t.Errorf("%s 时长 ≥ 3 秒：%v", tc.asset.ID, got)
+		}
+	}
+}
+
+func TestSmartRating(t *testing.T) {
+	folder := model.SmartFolder{Match: "all", Rules: []model.SmartRule{{Field: "rating", Operator: "gte", Value: "4"}}}
+	if err := ValidateSmartFolder(folder); err != nil {
+		t.Fatal(err)
+	}
+	for rating, want := range []bool{false, false, false, false, true, true} {
+		if got := MatchesSmart(model.Asset{Rating: rating}, folder); got != want {
+			t.Errorf("%d 星 ≥ 4：%v", rating, got)
 		}
 	}
 }

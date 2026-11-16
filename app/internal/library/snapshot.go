@@ -48,6 +48,11 @@ func (l *Library) Snapshot(ctx context.Context) (snapshot model.Snapshot, err er
 	} else {
 		extra += ",'image',0,''"
 	}
+	if l.Manifest.SchemaVersion >= 5 {
+		extra += ",rating"
+	} else {
+		extra += ",0"
+	}
 	// 不加 ORDER BY：按 id 排要走索引逐行回表，10 万张时比顺序扫表慢得多。
 	rows, err := tx.QueryContext(ctx, "SELECT id,name,original_file_name,extension,media_type,size,width,height,orientation,color_profile,note,source_url,relative_path,favorite,trashed,created_at,updated_at"+extra+" FROM assets")
 	if err != nil {
@@ -57,7 +62,7 @@ func (l *Library) Snapshot(ctx context.Context) (snapshot model.Snapshot, err er
 	for rows.Next() {
 		var asset model.Asset
 		var extension, mediaType, colorProfile, created, updated, lastUsed, kind string
-		if err = rows.Scan(&asset.ID, &asset.Name, &asset.OriginalFileName, &extension, &mediaType, &asset.Size, &asset.Width, &asset.Height, &asset.Orientation, &colorProfile, &asset.Note, &asset.SourceURL, &asset.RelativePath, &asset.Favorite, &asset.Trashed, &created, &updated, &lastUsed, &asset.Rotation, &kind, &asset.DurationMS, &asset.MotionPath); err != nil {
+		if err = rows.Scan(&asset.ID, &asset.Name, &asset.OriginalFileName, &extension, &mediaType, &asset.Size, &asset.Width, &asset.Height, &asset.Orientation, &colorProfile, &asset.Note, &asset.SourceURL, &asset.RelativePath, &asset.Favorite, &asset.Trashed, &created, &updated, &lastUsed, &asset.Rotation, &kind, &asset.DurationMS, &asset.MotionPath, &asset.Rating); err != nil {
 			rows.Close()
 			return snapshot, err
 		}

@@ -1,8 +1,11 @@
 package ui
 
 import (
+	"encoding/binary"
 	"log/slog"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Seaony/Momento/app/internal/model"
@@ -18,16 +21,83 @@ var openHoverVideo = video.Open
 
 // hoverVideo 是网格里正在悬停播放的那一个视频：同一时间只有一个，鼠标离开就关掉。
 type hoverVideo struct {
-	id     string
-	since  time.Time
-	player *ui.VideoPlayer
-	failed bool    // 这个视频打不开或播放出错，悬停期间不再重试
-	lastX  float32 // 上一帧鼠标在卡片里的横坐标，变了才拖进度；-1 表示刚进来
+	id      string
+	since   time.Time
+	player  *ui.VideoPlayer
+	failed  bool    // 这个视频打不开或播放出错，悬停期间不再重试
+	opening bool    // 动图正在后台读文件和解码
+	lastX   float32 // 上一帧鼠标在卡片里的横坐标，变了才拖进度；-1 表示刚进来
+}
+
+// 动图超过这么大就不在网格里悬停播放：GIF 要整个解码进内存。
+const maxHoverAnimationBytes = 64 << 20
+
+// hoverAnimation 判断图片是不是可以悬停播放的动图（GIF、APNG），返回它的格式。
+func hoverAnimation(asset model.Asset) string {
+	switch strings.ToLower(asset.Extension) {
+	case "gif":
+		return "gif"
+	case "png", "apng":
+		return "png"
+	}
+	return ""
+}
+
+// openHoverAnimation 在后台读出动图做成播放器；不是动画的 PNG 返回 nil。
+func openHoverAnimation(path, format string) (*ui.VideoPlayer, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if info.Size() > maxHoverAnimationBytes {
+		return nil, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var decoder ui.VideoDecoder
+	if format == "gif" {
+		decoder, err = ui.NewGIFDecoder(data)
+	} else {
+		if !isAnimatedPNG(data) {
+			return nil, nil
+		}
+		decoder, err = ui.NewAPNGDecoder(data)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return ui.NewVideoPlayer(decoder)
+}
+
+// isAnimatedPNG 看 PNG 在图像数据之前有没有动画控制块（acTL），有才是 APNG。
+func isAnimatedPNG(data []byte) bool {
+	if len(data) < 8 || string(data[:8]) != "\x89PNG\r\n\x1a\n" {
+		return false
+	}
+	for at := 8; at+8 <= len(data); {
+		length := int(binary.BigEndian.Uint32(data[at:]))
+		switch string(data[at+4 : at+8]) {
+		case "acTL":
+			return true
+		case "IDAT", "IEND":
+			return false
+		}
+		at += 12 + length
+	}
+	return false
 }
 
 // hoverVideoOverlay 在视频（和实况照片）卡片的缩略图上叠播放画面和底部细进度条：静音循环播放，左右移动鼠标就拖动进度。
 func (a *App) hoverVideoOverlay(c *ui.Context, card ui.Element, asset model.Asset, hovered bool, radius float32) {
-	relative := motionVideo(asset)
+	relative, animation := motionVideo(asset), ""
+	if relative == "" {
+		// GIF、APNG 动图也悬停播放，播放的是文件本身。
+		if animation = hoverAnimation(asset); animation != "" {
+			relative = asset.RelativePath
+		}
+	}
 	if !hovered || !a.Preferences.HoverPlayVideos || relative == "" || a.Library == nil {
 		return
 	}
@@ -45,6 +115,37 @@ func (a *App) hoverVideoOverlay(c *ui.Context, card ui.Element, asset model.Asse
 			return
 		}
 		path := filepath.Join(a.Library.Root, filepath.FromSlash(relative))
+		if animation != "" {
+			// 动图在后台读和解码，大 GIF 不卡界面；读好时鼠标已经移走就直接关掉。
+			if !h.opening {
+				h.opening = true
+				id := asset.ID
+				go func() {
+					player, err := openHoverAnimation(path, animation)
+					a.Window.Update(func() {
+						if a.hoverVideoState.id != id || !a.hoverVideoState.opening {
+							if player != nil {
+								player.Close()
+							}
+							return
+						}
+						a.hoverVideoState.opening = false
+						switch {
+						case err != nil:
+							slog.Warn("悬停播放打不开动图", "id", id, "error", err)
+							a.hoverVideoState.failed = true
+						case player == nil:
+							// 不是动画（普通 PNG）或太大，不播。
+							a.hoverVideoState.failed = true
+						default:
+							player.SetMuted(true).SetLoop(true)
+							a.hoverVideoState.player = player
+						}
+					})
+				}()
+			}
+			return
+		}
 		player, err := openHoverVideo(path)
 		if err != nil {
 			slog.Warn("悬停播放打不开视频", "id", asset.ID, "error", err)
@@ -69,7 +170,17 @@ func (a *App) hoverVideoOverlay(c *ui.Context, card ui.Element, asset model.Asse
 		h.lastX = x
 	}
 	// 播放器一建好就交给视频控件：系统播放器要被显示才开始播；出画面前是透明的，底下的封面照常露着。
-	ui.Video(c.Key("hover-video"), player).Absolute().Top(0).Left(0).Right(0).Bottom(0).Fit(ui.Cover).Radius(radius).PassThrough()
+	// 素材存了旋转角度时，画面和缩略图一样转过去：转 90° 或 270° 时先按宽高互换的框铺满，再绕中心转，转完正好盖住卡片。
+	video := ui.Video(c.Key("hover-video"), player).Absolute().Fit(ui.Cover).Radius(radius).PassThrough()
+	switch rotation := asset.Rotation % 360; rotation {
+	case 90, 270:
+		box := card.Bounds()
+		video.Size(box.H, box.W).Left((box.W - box.H) / 2).Top((box.H - box.W) / 2).Rotate(float32(rotation))
+	case 180:
+		video.Top(0).Left(0).Right(0).Bottom(0).Rotate(180)
+	default:
+		video.Top(0).Left(0).Right(0).Bottom(0)
+	}
 	if duration > 0 {
 		progress := float32(float64(player.Position()) / float64(duration))
 		width := card.Bounds().W * min(max(progress, 0), 1)

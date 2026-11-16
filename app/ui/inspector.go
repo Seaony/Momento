@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -87,6 +88,7 @@ func (a *App) inspector(c *ui.Context) {
 						a.inspectorPreview(c, asset)
 						a.inspectorColors(c, asset)
 						a.inspectorTitle(c, asset)
+						a.inspectorRating(c, selected)
 					})
 					a.inspectorDetails(c, asset)
 					a.inspectorTags(c, selected)
@@ -100,6 +102,7 @@ func (a *App) inspector(c *ui.Context) {
 			a.Inspector.AssetID, a.Inspector.Editing = "", ""
 			ui.Column(c.Key("inspector-multiple")).FillWidth().Gap(space12).Children(func() {
 				a.inspectorStack(c, selected)
+				a.inspectorRating(c, selected)
 				a.inspectorTags(c, selected)
 				a.inspectorFolders(c, selected)
 			})
@@ -234,6 +237,35 @@ func (a *App) inspectorTitle(c *ui.Context, asset model.Asset) {
 	}, func() { a.Inspector.Editing = "title" })
 }
 
+// 星级评分：多选时星级都一样才亮出来，不一样显示空星，点一下给全部打同样的星。
+func (a *App) inspectorRating(c *ui.Context, selected []model.Asset) {
+	value := selected[0].Rating
+	for _, asset := range selected[1:] {
+		if asset.Rating != value {
+			value = 0
+			break
+		}
+	}
+	if ratingStars(c.Key("rating"), &value, a.T("rating")).Margin(0, 0, 0, 6).Changed() {
+		ids := make([]string, len(selected))
+		for i, asset := range selected {
+			ids[i] = asset.ID
+		}
+		a.SetRating(ids, value)
+	}
+}
+
+// ratingStars 是 mygo 的评分星星，实心星换成品牌色（组件默认取主题的警示色，浅色下是棕色）。
+func ratingStars(c *ui.Context, value *int, label string) ui.Element {
+	theme := *c.Theme()
+	theme.Warning = paletteFor(c.Theme()).Accent
+	var stars ui.Element
+	ui.Themed(c, &theme).Background(ui.Transparent).Children(func() {
+		stars = ui.Rating(c, value, 5).Label(label)
+	})
+	return stars
+}
+
 // 可原地编辑的文字：悬停铺浅底和细边，点一下进入编辑。
 func (a *App) inspectorEditable(c *ui.Context, key, label string, content func(p *designPalette), edit func()) ui.Element {
 	p := paletteFor(c.Theme())
@@ -333,6 +365,10 @@ func (a *App) inspectorDetails(c *ui.Context, asset model.Asset) {
 		}
 		if !asset.CreatedAt.IsZero() {
 			inspectorInfo(c, a.T("date_added"), a.Texts.DateTime(asset.CreatedAt.Local()))
+		}
+		// 和旧版一样显示文件在磁盘上的完整路径，可以选中复制。
+		if a.Library != nil && asset.RelativePath != "" {
+			inspectorInfo(c, a.T("file_path"), filepath.Join(a.Library.Root, filepath.FromSlash(asset.RelativePath)))
 		}
 		// 和旧版一样，没有链接就不显示这一行。
 		if strings.TrimSpace(a.Inspector.SourceURL) != "" || a.Inspector.Editing == "source" {

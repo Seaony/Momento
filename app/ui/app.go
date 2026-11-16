@@ -69,6 +69,7 @@ type Preferences struct {
 	SidebarVisible          bool                        `json:"sidebarVisible"`
 	SidebarWidth            float32                     `json:"sidebarWidth"`
 	SmartFolders            bool                        `json:"smartFolders"`
+	SubfolderContents       bool                        `json:"subfolderContents"` // 父文件夹里也显示子文件夹的素材
 	EXIFCollapsed           bool                        `json:"exifCollapsed"`
 }
 
@@ -98,6 +99,7 @@ type App struct {
 	Progress                                                  *model.ImportProgress
 	Error, Notice                                             string
 	SettingsOpen, NewLibraryOpen, EditLibraryOpen, ExportOpen bool
+	Rename                                                    renameState
 	Preferences                                               Preferences
 	Browse                                                    browseState
 	GBrowsing                                                 gBrowsingState
@@ -151,6 +153,9 @@ type App struct {
 	selectedIndex                                             int
 	anchor                                                    int
 	hovered                                                   string
+	subfolders                                                subfolderCache
+	assetLead                                                 float32 // 素材上面子文件夹卡片区占的高度
+	indexVersion                                              uint64  // 图库数据每变一次加一，筛选数量、子文件夹卡片的缓存按它失效
 	assetClickID, pendingAssetActivation                      string
 	assetClickBounds                                          ui.Rect
 	layout                                                    *MasonryLayout
@@ -439,6 +444,7 @@ func (a *App) applySnapshot(snapshot model.Snapshot) {
 	a.Snapshot = snapshot
 	a.snapshotVersion++
 	a.Index = catalog.New(snapshot)
+	a.indexVersion++
 	a.assetByID = make(map[string]model.Asset, len(snapshot.Assets))
 	for _, asset := range snapshot.Assets {
 		a.assetByID[asset.ID] = asset
@@ -797,6 +803,10 @@ func (a *App) ImportPaths(paths []string) {
 func (a *App) SetFavorite(ids []string, value bool) {
 	lib := a.Library
 	a.RunPatch("favorite", ids, func(ctx context.Context) error { return lib.SetFavorite(ctx, ids, value) }, func(asset *model.Asset) { asset.Favorite = value })
+}
+func (a *App) SetRating(ids []string, rating int) {
+	lib := a.Library
+	a.RunPatch("rating", ids, func(ctx context.Context) error { return lib.SetRating(ctx, ids, rating) }, func(asset *model.Asset) { asset.Rating = rating })
 }
 func (a *App) SetTags(ids, tagIDs []string, add bool) {
 	lib := a.Library

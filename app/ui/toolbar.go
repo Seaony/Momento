@@ -1,12 +1,14 @@
 package ui
 
 import (
+	"fmt"
 	"math"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/Seaony/Momento/app/internal/catalog"
 	"github.com/Seaony/Momento/app/internal/media"
 	"github.com/Seaony/Momento/app/internal/model"
 	"github.com/egoist/mygo/ui"
@@ -23,6 +25,10 @@ type toolbarState struct {
 	ScrubStart    float32  // 按下刻度尺时指针在刻度区里的横坐标
 	ScrubBase     float32  // 按下时拖动层的位移（可能还在弹回途中）
 	ScrubOffset   ui.Point // 透明拖动层跟着指针的位移，松手弹回 0
+	shapeKey      string
+	shapeCount    map[string]int
+	ratingKey     string
+	ratingCount   [6]int
 }
 
 var toolbarFamilies = []struct{ ID, Hex string }{
@@ -128,7 +134,7 @@ func (a *App) toolbar(c *ui.Context) {
 					toolbarDivider(c)
 				})
 		}
-		filtering := len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions)+len(a.Query.Kinds) > 0
+		filtering := a.filtering()
 		filter := toolbarChip(c.Key("filter"), a.T("filter"), filtering || a.Toolbar.FilterOpen)
 		filter.Children(func() {
 			toolbarIcon(c, "filter")
@@ -334,6 +340,8 @@ func (a *App) browseTitle() (string, int) {
 		return a.T(a.Query.Scope), count
 	case "random":
 		return a.T("random_browse"), count
+	case "recent":
+		return a.T("recently_used"), count
 	}
 	return a.T("all"), count
 }
@@ -567,7 +575,7 @@ func (a *App) viewSwitcher(c *ui.Context) {
 // 筛选弹层：标题栏（标题 + 清除）一条通栏分隔线，下面颜色、标签、文件类型三段只靠留白分开。
 func (a *App) filterPanel(c *ui.Context) {
 	p := paletteFor(c.Theme())
-	active := len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions)+len(a.Query.Kinds) > 0
+	active := a.filtering()
 	ui.Column(c).FillWidth().Gap(0).Children(func() {
 		ui.Row(c).FillWidth().Height(popHeaderHeight).Padding(0, popInset-popClearPad, 0, popInset).AlignItems(ui.Center).Children(func() {
 			ui.Text(c, a.T("filter")).FontSize(fontBody).FontWeight(600).Grow(1).MinWidth(0).SingleLine()
@@ -585,10 +593,7 @@ func (a *App) filterPanel(c *ui.Context) {
 			animateColors(clear, background, text)
 			clear.Children(func() { ui.Text(c, a.T("clear_filters")).FontSize(fontGroup).SingleLine() })
 			if clear.Clicked() {
-				a.Query.ColorFamilies = nil
-				a.Query.TagIDs = nil
-				a.Query.Extensions = nil
-				a.Query.Kinds = nil
+				a.clearFilters()
 				a.Refine()
 			}
 		})
@@ -667,6 +672,47 @@ func (a *App) filterPanel(c *ui.Context) {
 					}
 				})
 			})
+			popSection(c, a.T("filter_shapes"), func() {
+				counts := a.shapeCounts()
+				ui.Row(c.Key("shape-chips")).FillWidth().Wrap().Gap(popChipGap).Children(func() {
+					for _, shape := range catalog.Shapes {
+						chosen := slices.Contains(a.Query.Shapes, shape)
+						// 没有素材的形状不列出来，已经选上的照常显示，免得取消不了。
+						if counts[shape] == 0 && !chosen {
+							continue
+						}
+						label := shape
+						if !strings.Contains(shape, ":") {
+							label = a.T("shape_" + shape)
+						}
+						if popCountChip(c.Key("shape-"+shape), &chosen, label, counts[shape]).Changed() {
+							a.Query.Shapes = toolbarToggle(a.Query.Shapes, shape, chosen)
+							a.Refine()
+						}
+					}
+				})
+			})
+			// 一张都没打过星时不显示评分这一段。
+			if counts := a.ratingCounts(); counts != [6]int{counts[0]} || len(a.Query.Ratings) > 0 {
+				popSection(c, a.T("filter_rating"), func() {
+					ui.Row(c.Key("rating-chips")).FillWidth().Wrap().Gap(popChipGap).Children(func() {
+						for rating := 5; rating >= 0; rating-- {
+							chosen := slices.Contains(a.Query.Ratings, rating)
+							if counts[rating] == 0 && !chosen {
+								continue
+							}
+							if popCountChip(c.Key(fmt.Sprint("rating-", rating)), &chosen, a.ratingLabel(rating), counts[rating]).Changed() {
+								if chosen {
+									a.Query.Ratings = append(a.Query.Ratings, rating)
+								} else {
+									a.Query.Ratings = slices.DeleteFunc(slices.Clone(a.Query.Ratings), func(r int) bool { return r == rating })
+								}
+								a.Refine()
+							}
+						}
+					})
+				})
+			}
 		})
 	})
 }
@@ -740,6 +786,26 @@ func popChip(c *ui.Context, on *bool, icon, label string) ui.Element {
 	})
 }
 
+// popCountChip 是带数量的筛选胶囊，数量用淡一级的颜色跟在名字后面。
+func popCountChip(c *ui.Context, on *bool, label string, count int) ui.Element {
+	p := paletteFor(c.Theme())
+	chip := ui.ToggleBase(c, on).Label(fmt.Sprintf("%s %d", label, count)).Height(popChipHeight).Padding(0, space8+1).Gap(space4).Radius(popChipRadius).Cursor(ui.CursorPointer).AlignItems(ui.Center).MaxWidth(popChipMaxWidth)
+	background, text := popFill(p, .05), p.Text
+	switch {
+	case *on:
+		background, text = p.Text, p.Raised
+	case chip.Pressed():
+		background = popFill(p, .12)
+	case chip.Hovered():
+		background = popFill(p, .085)
+	}
+	animateColors(chip, background, text)
+	return chip.Children(func() {
+		ui.Text(c, label).FontSize(fontSecondary).SingleLine().MinWidth(0)
+		ui.Text(c, fmt.Sprint(count)).FontSize(fontSecondary).FontFeatures("tnum").TextColor(text.Alpha(.55)).SingleLine().Shrink(0)
+	})
+}
+
 // extensionIcon 按种类给文件类型配图标：照片、图像、动图、视频。
 func extensionIcon(ext string) string {
 	switch ext {
@@ -769,7 +835,7 @@ func popFill(p *designPalette, amount float32) ui.Color { return p.Raised.Mix(p.
 // 点别的字段就换过去，再点当前字段就反转方向。弹层不收起，方便连着点。
 func (a *App) sortPanel(c *ui.Context) {
 	ui.Column(c).FillWidth().Gap(0).Children(func() {
-		for _, item := range []struct{ ID, Label string }{{"added", "sort_added"}, {"name", "sort_name"}, {"size", "sort_size"}} {
+		for _, item := range []struct{ ID, Label string }{{"added", "sort_added"}, {"name", "sort_name"}, {"size", "sort_size"}, {"rating", "sort_rating"}} {
 			chosen := a.Query.Sort == item.ID || a.Query.Sort == "" && item.ID == "added"
 			direction := ""
 			if chosen {
@@ -831,7 +897,8 @@ func (a *App) changeSort(field string) {
 		a.Query.Descending = !a.Query.Descending
 	} else {
 		a.Query.Sort = field
-		a.Query.Descending = field == "added"
+		// 时间和评分默认新的、高的在前。
+		a.Query.Descending = field == "added" || field == "rating"
 	}
 	a.Refine()
 }
@@ -850,6 +917,57 @@ func (a *App) toolbarExtensions() []string {
 	}
 	slices.Sort(out)
 	return out
+}
+
+// filtering 表示有没有颜色、标签、类型、形状筛选条件。
+func (a *App) filtering() bool {
+	return len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions)+len(a.Query.Kinds)+len(a.Query.Shapes)+len(a.Query.Ratings) > 0
+}
+
+func (a *App) clearFilters() {
+	a.Query.ColorFamilies, a.Query.TagIDs, a.Query.Extensions, a.Query.Kinds, a.Query.Shapes, a.Query.Ratings = nil, nil, nil, nil, nil, nil
+}
+
+// ratingLabel 是评分筛选的文字：0 是「未评分」，其余是几星。
+func (a *App) ratingLabel(rating int) string {
+	switch rating {
+	case 0:
+		return a.T("rating_none")
+	case 1:
+		return a.T("rating_one_star")
+	}
+	return a.T("rating_stars", rating)
+}
+
+// countKey 是筛选面板数量缓存的键：图库或任何条件变了就重算。
+func (a *App) countKey(q catalog.Query) string {
+	return fmt.Sprintf("%d|%s|%s|%s|%v|%v|%v|%v|%v|%v|%v|%s", a.indexVersion, q.Scope, q.FolderID, q.SmartFolderID, q.ColorFamilies, q.TagIDs, q.Extensions, q.Kinds, q.Shapes, q.Ratings, q.IncludeSubfolders, q.Search)
+}
+
+// shapeCounts 是筛选面板里各形状的数量，条件和图库没变就用上次算的。
+func (a *App) shapeCounts() map[string]int {
+	if a.Index == nil {
+		return nil
+	}
+	q := a.browseQuery(a.Query)
+	q.Shapes = nil
+	if key := a.countKey(q); a.Toolbar.shapeKey != key {
+		a.Toolbar.shapeKey, a.Toolbar.shapeCount = key, a.Index.ShapeCounts(q)
+	}
+	return a.Toolbar.shapeCount
+}
+
+// ratingCounts 是筛选面板里 0～5 星各自的数量，缓存方式同 shapeCounts。
+func (a *App) ratingCounts() [6]int {
+	if a.Index == nil {
+		return [6]int{}
+	}
+	q := a.browseQuery(a.Query)
+	q.Ratings = nil
+	if key := a.countKey(q); a.Toolbar.ratingKey != key {
+		a.Toolbar.ratingKey, a.Toolbar.ratingCount = key, a.Index.RatingCounts(q)
+	}
+	return a.Toolbar.ratingCount
 }
 
 func toolbarToggle(values []string, value string, on bool) []string {

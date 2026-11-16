@@ -18,6 +18,7 @@ var appIconAliases = map[string]string{
 	"preview":            "images",
 	"favorite":           "heart",
 	"random":             "shuffle",
+	"recent":             "clock-counter-clockwise",
 	"unfiled":            "tray",
 	"untagged":           "tag-simple",
 	"tags":               "tag",

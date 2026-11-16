@@ -52,7 +52,11 @@ func (a *App) assetArea(c *ui.Context) {
 		height = 640
 	}
 	width = a.settledAssetWidth(c, width)
-	viewportTop := a.scroll.Y - inset - space16
+	// 文件夹页先排子文件夹卡片，素材整体往下挪 lead；视口换算和键盘滚动都要算上它。
+	subfolders := a.subfolderCards()
+	lead := subfolderStripHeight(len(subfolders), width)
+	a.assetLead = lead
+	viewportTop := a.scroll.Y - inset - space16 - lead
 	top, bottom := max(0, viewportTop-height), viewportTop+2*height
 	state := ui.Local(scroll, "asset-layout", func() assetLayoutState { return assetLayoutState{} })
 	var items []MasonryItem
@@ -78,7 +82,12 @@ func (a *App) assetArea(c *ui.Context) {
 		items, contentHeight = a.layout.Visible(top, bottom), a.layout.Height()
 	}
 	reflow := state.prepare(a.ViewMode, width, a.thumbnailScale())
+	var openFolder string
+	var subfolderToggled bool
 	scroll.Children(func() {
+		if len(subfolders) > 0 {
+			openFolder, subfolderToggled = a.subfolderStrip(c, subfolders, width)
+		}
 		mode := ui.Box(c.Key(assetModeID{a.ViewMode})).Height(contentHeight).FillWidth().Shrink(0).
 			Transition(ui.ElementTransition{Duration: assetEnterDuration, ExitDuration: assetExitDuration, Colors: true,
 				Enter: &ui.Motion{Scale: .98}, Exit: &ui.Motion{}})
@@ -108,22 +117,33 @@ func (a *App) assetArea(c *ui.Context) {
 	if scroll.Clicked() {
 		a.clearAssetSelection()
 	}
+	if subfolderToggled {
+		a.queuePreferences()
+		a.Refine()
+	}
+	if openFolder != "" {
+		a.SetScope("folder", openFolder)
+	}
 	a.assetPreviewShortcut(c, scroll)
 	a.assetArrowKeys(c, inset, height)
+	a.assetRatingKeys(c, inset, height)
 	if len(a.Visible) == 0 {
 		p := paletteFor(c.Theme())
 		art, title, hint := "scope-empty", a.T("scope_empty"), a.T("scope_empty_hint")
-		hasFilters := len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions)+len(a.Query.Kinds) > 0
+		hasFilters := a.filtering()
 		emptyLibrary := len(a.Snapshot.Assets) == 0 && a.Query.Scope != "trash" && a.Query.Search == "" && !hasFilters
 		switch {
 		case a.Query.Search != "":
 			art, title, hint = "search-empty", a.T("search_empty", a.Query.Search), a.T("search_empty_hint")
 		case a.Query.Scope == "trash":
 			art, title, hint = "trash-empty", a.T("trash_empty_title"), a.T("trash_empty_hint")
+		case a.Query.Scope == "recent" && !hasFilters:
+			// 说明什么算「用过」，不然看不出为什么是空的。
+			hint = a.T("recent_empty_hint")
 		case emptyLibrary:
 			art, title, hint = "empty-library", a.T("drop_images"), a.T("drop_images_hint")
 		}
-		fadeMotion(ui.Column(c.Key("asset-empty")).Absolute().Top(inset).Left(space24).Right(space24).Bottom(space24).
+		fadeMotion(ui.Column(c.Key("asset-empty")).Absolute().Top(inset + lead).Left(space24).Right(space24).Bottom(space24).
 			Center().Gap(space12).PassThrough()).Children(func() {
 			emptyArt(c.Key("empty-art"), art, emptyArtLarge).Margin(0, 0, space4, 0)
 			ui.Text(c.Key("empty-title"), title).FontSize(fontTitle).FontWeight(600).TextColor(p.Text).TextAlign(ui.Center)
@@ -136,7 +156,7 @@ func (a *App) assetArea(c *ui.Context) {
 				}
 			case hasFilters:
 				if dialogPrimaryButton(c, a.T("clear_filters"), false).Clicked() {
-					a.Query.ColorFamilies, a.Query.TagIDs, a.Query.Extensions, a.Query.Kinds = nil, nil, nil, nil
+					a.clearFilters()
 					a.Refine()
 				}
 			case emptyLibrary:
@@ -473,6 +493,9 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 			a.ExportSelected()
 		}
 		if !asset.Trashed {
+			if m.Item(a.T("rename_assets")).Chosen() {
+				a.OpenRename(a.orderedIDs(ids))
+			}
 			if m.Item(a.T("refresh_thumbnail")).Chosen() {
 				service := a.Assets
 				a.Run("refresh_thumbnail", func(ctx context.Context) error {
@@ -503,6 +526,27 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 			}
 		}
 	})
+}
+
+// orderedIDs 把 ID 按当前列表顺序排好，批量重命名的序号跟着看到的顺序走。
+func (a *App) orderedIDs(ids []string) []string {
+	wanted := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		wanted[id] = true
+	}
+	ordered := make([]string, 0, len(ids))
+	for _, asset := range a.Visible {
+		if wanted[asset.ID] {
+			ordered = append(ordered, asset.ID)
+			delete(wanted, asset.ID)
+		}
+	}
+	for _, id := range ids {
+		if wanted[id] {
+			ordered = append(ordered, id)
+		}
+	}
+	return ordered
 }
 
 func (a *App) importProgress(c *ui.Context) {

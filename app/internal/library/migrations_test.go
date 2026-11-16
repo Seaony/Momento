@@ -361,8 +361,8 @@ func TestUpgradeV3MarksExistingAssetsAsImages(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer opened.Close()
-	if databaseVersion(t, opened.DB) != 4 || opened.Manifest.SchemaVersion != 4 {
-		t.Fatal("v3 没有升到 v4")
+	if databaseVersion(t, opened.DB) != model.SchemaVersion || opened.Manifest.SchemaVersion != model.SchemaVersion {
+		t.Fatal("v3 没有升到最新版本")
 	}
 	assets := snapshot(t, opened).Assets
 	if len(assets) != before || before == 0 {
@@ -386,6 +386,61 @@ func TestUpgradeV3MarksExistingAssetsAsImages(t *testing.T) {
 	for _, asset := range snapshot(t, opened).Assets {
 		if asset.ID == id && (asset.Kind != model.KindLive || asset.DurationMS != 2500 || asset.MotionPath != "assets/ab/x.mov") {
 			t.Fatalf("新列读写不对：%+v", asset)
+		}
+	}
+}
+
+// v4 的图库升到 v5：旧素材评分为 0，之后能打 1～5 星，超出范围的值写不进去。
+func TestUpgradeV4AddsRating(t *testing.T) {
+	old := legacyLibrary(t)
+	for _, migration := range []string{migrationV2, migrationV3, migrationV4} {
+		if _, err := old.DB.Exec(migration); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old.Manifest.SchemaVersion = 4
+	if err := writeJSON(filepath.Join(old.Root, "manifest.json"), old.Manifest); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := old.DB.Exec("INSERT INTO assets(id,name,relative_path,created_at,updated_at) VALUES('old','旧图','assets/ol/old.png',?,?)", now, now); err != nil {
+		t.Fatal(err)
+	}
+	before := len(snapshot(t, old).Assets)
+	old.Close()
+	opened, err := Open(t.Context(), old.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	if databaseVersion(t, opened.DB) != 5 || opened.Manifest.SchemaVersion != 5 {
+		t.Fatal("v4 没有升到 v5")
+	}
+	assets := snapshot(t, opened).Assets
+	if len(assets) != before || before == 0 {
+		t.Fatalf("升级前后素材数不同：%d → %d", before, len(assets))
+	}
+	for _, asset := range assets {
+		if asset.Rating != 0 {
+			t.Fatalf("旧素材评分不是 0：%+v", asset)
+		}
+	}
+	id := assets[0].ID
+	if err := opened.SetRating(t.Context(), []string{id}, 4); err != nil {
+		t.Fatal(err)
+	}
+	if err := opened.SetRating(t.Context(), []string{id}, 6); err == nil {
+		t.Fatal("评分能设成 6")
+	}
+	if _, err := opened.DB.Exec("UPDATE assets SET rating=9 WHERE id=?", id); err == nil {
+		t.Fatal("数据库能存超出范围的评分")
+	}
+	if err := opened.SetRating(t.Context(), []string{id, "missing"}, 2); err == nil {
+		t.Fatal("包含不存在的素材时没有报错")
+	}
+	for _, asset := range snapshot(t, opened).Assets {
+		if asset.ID == id && asset.Rating != 4 {
+			t.Fatalf("评分没存对，或失败的批量改动没有整体回滚：%+v", asset)
 		}
 	}
 }

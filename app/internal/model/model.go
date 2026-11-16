@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-const SchemaVersion = 4
+const SchemaVersion = 5
 
 type Manifest struct {
 	SchemaVersion int    `json:"schemaVersion"`
@@ -50,6 +50,8 @@ type Asset struct {
 	DurationMS int64 `json:"durationMS"`
 	// MotionPath 是实况照片那段视频在图库包里的相对路径，其他素材为空。
 	MotionPath string `json:"motionPath"`
+	// Rating 是星级评分，0 是没评分，1～5 星。
+	Rating int `json:"rating"`
 }
 
 const (

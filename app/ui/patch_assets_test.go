@@ -70,6 +70,10 @@ func TestAssetPatchesMatchDatabase(t *testing.T) {
 		patch func(*model.Asset)
 	}{
 		{"favorite", func() error { return lib.SetFavorite(ctx, ids, true) }, func(x *model.Asset) { x.Favorite = true }},
+		{"rating", func() error { return lib.SetRating(ctx, ids, 4) }, func(x *model.Asset) { x.Rating = 4 }},
+		{"rename", func() error { return lib.RenameAssets(ctx, map[string]string{ids[0]: "First", ids[1]: "Second"}) }, func(x *model.Asset) {
+			x.Name = map[string]string{ids[0]: "First", ids[1]: "Second"}[x.ID]
+		}},
 		{"tags-add", func() error { return lib.SetAssetTags(ctx, ids, []string{tagB, tagA}, true) }, func(x *model.Asset) { x.TagIDs = setMembership(x.TagIDs, []string{tagB, tagA}, true) }},
 		{"tags-remove", func() error { return lib.SetAssetTags(ctx, ids[:1], []string{tagA}, false) }, nil},
 		{"folders", func() error { return lib.SetAssetFolders(ctx, ids, []string{folder}, true) }, func(x *model.Asset) { x.FolderIDs = setMembership(x.FolderIDs, []string{folder}, true) }},
@@ -103,7 +107,7 @@ func TestAssetPatchesMatchDatabase(t *testing.T) {
 		for i, want := range fresh.Assets {
 			got := a.Snapshot.Assets[i]
 			got.UpdatedAt, want.UpdatedAt = want.UpdatedAt, got.UpdatedAt
-			if got.ID != want.ID || got.Name != want.Name || got.Note != want.Note || got.SourceURL != want.SourceURL || got.Favorite != want.Favorite || got.Trashed != want.Trashed || !slices.Equal(got.TagIDs, want.TagIDs) || !slices.Equal(got.FolderIDs, want.FolderIDs) {
+			if got.ID != want.ID || got.Name != want.Name || got.Note != want.Note || got.SourceURL != want.SourceURL || got.Favorite != want.Favorite || got.Rating != want.Rating || got.Trashed != want.Trashed || !slices.Equal(got.TagIDs, want.TagIDs) || !slices.Equal(got.FolderIDs, want.FolderIDs) {
 				t.Fatalf("%s 之后内存和数据库不一致：\n内存 %+v\n库里 %+v", step.name, got, want)
 			}
 		}

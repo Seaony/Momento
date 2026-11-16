@@ -77,15 +77,25 @@ func (a *App) shuffleBrowse() {
 	}
 }
 
-func (a *App) browseAssets(query catalog.Query) []model.Asset {
+// browseQuery 把界面上的浏览位置换成目录查询：标签页按标签筛，随便看看先取全部再打乱，文件夹按设置决定带不带子文件夹。
+func (a *App) browseQuery(query catalog.Query) catalog.Query {
 	if query.Scope == "tag" {
 		query.Scope = "all"
 		query.TagIDs = []string{a.Browse.TagID}
 	}
-	if query.Scope != "random" {
+	if query.Scope == "random" {
+		query.Scope = "all"
+	}
+	query.IncludeSubfolders = a.Preferences.SubfolderContents
+	return query
+}
+
+func (a *App) browseAssets(query catalog.Query) []model.Asset {
+	random := query.Scope == "random"
+	query = a.browseQuery(query)
+	if !random {
 		return a.Index.Query(query)
 	}
-	query.Scope = "all"
 	if a.Browse.RandomOrder == nil {
 		a.shuffleBrowse()
 	}

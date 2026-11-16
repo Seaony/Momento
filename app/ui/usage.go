@@ -38,6 +38,8 @@ func (a *App) MarkAssetsUsed(ids []string) {
 				}
 			}
 			a.Index.UpdateLastUsed(used, at)
+			// 「最近使用」的范围变了，筛选面板里的数量要重算。
+			a.indexVersion++
 		})
 	}()
 }

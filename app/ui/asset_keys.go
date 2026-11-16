@@ -37,6 +37,39 @@ func (a *App) assetArrowKeys(c *ui.Context, inset, height float32) {
 	}
 }
 
+var ratingKeys = []ui.Key{ui.Key0, ui.Key1, ui.Key2, ui.Key3, ui.Key4, ui.Key5}
+
+// 数字键给选中的素材打星（没选中时给鼠标下那张），0 清除；按住 Shift 打完跳到下一张，方便一张张过。
+func (a *App) assetRatingKeys(c *ui.Context, inset, height float32) {
+	if a.Library == nil || c.FocusTakesText() || a.IsLocked() || a.Settings.RecordingShortcut != "" || a.TagPage {
+		return
+	}
+	for rating, key := range ratingKeys {
+		next := c.Shortcut(ui.Shift, key)
+		if !next && !c.Shortcut(0, key) {
+			continue
+		}
+		ids := a.selectedIDs()
+		if len(ids) == 0 && a.hovered != "" {
+			ids = []string{a.hovered}
+		}
+		if len(ids) == 0 {
+			return
+		}
+		a.SetRating(ids, rating)
+		if next && len(ids) == 1 {
+			if index := slices.IndexFunc(a.Visible, func(asset model.Asset) bool { return asset.ID == ids[0] }); index >= 0 && index+1 < len(a.Visible) {
+				a.selectAsset(a.Visible[index+1].ID, index+1, 0)
+				a.focusAssetID = a.Visible[index+1].ID
+				if y, h, ok := a.assetRect(index + 1); ok {
+					a.revealAssetRect(y, h, inset, height)
+				}
+			}
+		}
+		return
+	}
+}
+
 func (a *App) arrowTarget(key ui.Key) (int, bool) {
 	current := a.selectedIndex
 	if current < 0 || current >= len(a.Visible) || !a.Selected.Has(a.Visible[current].ID) {
@@ -115,6 +148,8 @@ func (a *App) assetRect(index int) (float32, float32, bool) {
 
 // 选中的素材被页头挡住或在视口外时滚过去，上下各留 16。
 func (a *App) revealAssetRect(y, h, inset, height float32) {
+	// 素材上面有子文件夹卡片时，画布坐标整体往下挪。
+	y += a.assetLead
 	// 画布坐标里，页头下沿是 scroll.Y - 16，视口下沿是 scroll.Y - inset - 16 + height。
 	if y < a.scroll.Y {
 		a.scroll.Y = max(0, y)
