@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -27,7 +28,10 @@ func (s *Service) ImportURLWithRequest(ctx context.Context, imageURL, pageURL st
 		return result, i18n.NewError("error_image_url")
 	}
 	slog.Info("下载图片", "host", parsed.Host)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, imageURL, nil)
+	// 下载用单独的可取消上下文：30 秒没收到新数据就取消。
+	downloadCtx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	req, err := http.NewRequestWithContext(downloadCtx, http.MethodGet, imageURL, nil)
 	if err != nil {
 		return result, err
 	}
@@ -39,7 +43,12 @@ func (s *Service) ImportURLWithRequest(ctx context.Context, imageURL, pageURL st
 	if pageURL != "" {
 		req.Header.Set("Referer", pageURL)
 	}
-	client := &http.Client{Timeout: 60 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = (&net.Dialer{Timeout: downloadConnectTimeout, KeepAlive: 30 * time.Second}).DialContext
+	transport.TLSHandshakeTimeout = downloadConnectTimeout
+	transport.ResponseHeaderTimeout = downloadIdleTimeout
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
 			return i18n.NewError("error_redirect_limit")
 		}
@@ -79,9 +88,21 @@ func (s *Service) ImportURLWithRequest(ctx context.Context, imageURL, pageURL st
 	if err != nil {
 		return result, err
 	}
-	_, err = io.Copy(f, contextReader{ctx: ctx, r: response.Body})
+	tooLarge := i18n.NewError("error_download_too_large", maxDownloadBytes>>20)
+	if response.ContentLength > maxDownloadBytes {
+		return result, errors.Join(tooLarge, f.Close())
+	}
+	idle := time.AfterFunc(downloadIdleTimeout, func() { cancel(errDownloadStalled) })
+	written, err := io.Copy(f, idleReader{r: io.LimitReader(contextReader{ctx: downloadCtx, r: response.Body}, maxDownloadBytes+1), timer: idle})
+	idle.Stop()
+	if err != nil && errors.Is(context.Cause(downloadCtx), errDownloadStalled) {
+		err = i18n.NewError("error_download_stalled", int(downloadIdleTimeout/time.Second))
+	} else if err == nil && written > maxDownloadBytes {
+		err = tooLarge
+	}
 	err = errors.Join(err, f.Close())
 	if err != nil {
+		slog.Warn("下载图片失败", "host", parsed.Host, "error", err)
 		return result, err
 	}
 	source := pageURL
@@ -89,5 +110,32 @@ func (s *Service) ImportURLWithRequest(ctx context.Context, imageURL, pageURL st
 		source = imageURL
 	}
 	request.Paths, request.SourceURL = []string{path}, source
-	return s.Import(ctx, request, nil)
+	result, err = s.Import(ctx, request, nil)
+	// 只导一张图，这张没导进去就是失败，不能让浏览器扩展以为成功了。
+	if err == nil && len(result.Errors) > 0 {
+		return model.ImportResult{}, errors.Join(result.Errors...)
+	}
+	return result, err
+}
+
+// 下载上限与超时，测试里可以调小。
+var (
+	maxDownloadBytes       int64 = 200 << 20
+	downloadConnectTimeout       = 15 * time.Second
+	downloadIdleTimeout          = 30 * time.Second
+	errDownloadStalled           = errors.New("download stalled")
+)
+
+// idleReader 每读到新数据就把空闲计时重新开始。
+type idleReader struct {
+	r     io.Reader
+	timer *time.Timer
+}
+
+func (r idleReader) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	if n > 0 {
+		r.timer.Reset(downloadIdleTimeout)
+	}
+	return n, err
 }

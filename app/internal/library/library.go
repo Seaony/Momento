@@ -2,10 +2,13 @@ package library
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"github.com/Seaony/Momento/app/internal/i18n"
+	"io"
 	"log/slog"
 	"net/url"
 	"os"
@@ -140,9 +143,128 @@ func Open(ctx context.Context, path string) (_ *Library, err error) {
 	if err = upgrade(ctx, db, root, &manifest); err != nil {
 		return nil, err
 	}
+	cleanStaging(ctx, root, db)
 
 	slog.Info("打开图库", "path", root, "libraryID", manifest.LibraryID)
 	return &Library{Root: root, DB: db, Manifest: manifest}, nil
+}
+
+// cleanStaging 清掉上次导入或永久删除中途退出留下的 .import-*、.delete-* 暂存目录。
+// 永久删除没提交时数据库里还有记录，先把暂存里的原图和缩略图挪回原处，避免丢图。
+// 清理出错只记日志，不影响打开图库。
+func cleanStaging(ctx context.Context, root string, db *sql.DB) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		slog.Error("读取图库目录失败，没能清理暂存", "path", root, "error", err)
+		return
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		deletion := strings.HasPrefix(name, ".delete-")
+		if !entry.IsDir() || !deletion && !strings.HasPrefix(name, ".import-") {
+			continue
+		}
+		dir := filepath.Join(root, name)
+		if deletion {
+			if err := restoreDeletion(ctx, root, dir, db); err != nil {
+				slog.Error("挪回中断删除的文件失败，保留暂存目录", "path", dir, "error", err)
+				continue
+			}
+		}
+		if err := os.RemoveAll(dir); err != nil {
+			slog.Error("清理残留暂存目录失败", "path", dir, "error", err)
+			continue
+		}
+		slog.Info("清理残留暂存目录", "path", dir)
+	}
+}
+
+// restoreDeletion 把暂存里仍登记在库的文件挪回原处。文件名是「素材ID.original」或「素材ID.thumbnail」；
+// 老版本用序号命名，只能按内容哈希认出原图，认不出的缩略图交给之后重建。
+func restoreDeletion(ctx context.Context, root, dir string, db *sql.DB) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if !entry.Type().IsRegular() {
+			continue
+		}
+		path := filepath.Join(dir, entry.Name())
+		id, kind, _ := strings.Cut(entry.Name(), ".")
+		if kind != "original" && kind != "thumbnail" {
+			if id, err = hashFile(path); err != nil {
+				return err
+			}
+			kind = "original"
+		}
+		var relative string
+		err := db.QueryRowContext(ctx, "SELECT relative_path FROM assets WHERE id=?", id).Scan(&relative)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if kind == "thumbnail" {
+			relative = "thumbnails/" + id + ".png"
+		}
+		target, err := packageDestination(root, relative)
+		if err != nil {
+			return err
+		}
+		if _, err := os.Lstat(target); err == nil {
+			continue
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+		if err := os.Rename(path, target); err != nil {
+			return err
+		}
+		slog.Warn("挪回中断删除的文件", "id", id, "path", relative)
+	}
+	return nil
+}
+
+// 包内相对路径对应的位置。逐级检查上层目录，缺的就建，碰到符号链接或普通文件就拒绝，不会把文件写到图库包外面。
+func packageDestination(root, relative string) (string, error) {
+	if relative == "" || !filepath.IsLocal(filepath.FromSlash(relative)) {
+		return "", i18n.NewError("error_asset_relative_path", relative)
+	}
+	current := root
+	for _, part := range strings.Split(filepath.Dir(filepath.FromSlash(relative)), string(filepath.Separator)) {
+		if part == "." {
+			continue
+		}
+		current = filepath.Join(current, part)
+		info, err := os.Lstat(current)
+		if os.IsNotExist(err) {
+			if err = os.Mkdir(current, 0700); err != nil {
+				return "", err
+			}
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return "", i18n.NewError("error_storage_directory", current)
+		}
+	}
+	return filepath.Join(root, filepath.FromSlash(relative)), nil
+}
+
+func hashFile(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 func connect(ctx context.Context, path string, create bool) (*sql.DB, error) {

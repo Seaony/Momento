@@ -2,12 +2,14 @@ package ui
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
+	"time"
 )
 
 func DefaultPreferences() Preferences {
@@ -184,11 +186,41 @@ func (a *App) captureUIState() bool {
 	return true
 }
 
+// 读启动时的偏好。文件坏了（手改写错、同步冲突）就把原文件改名留着、改用默认设置并告诉用户，不能悄悄用默认值把它覆盖掉。
+// 返回要给用户看的提示；语言要等偏好读完才定下来，所以由调用方再翻译。
+func (a *App) loadPreferences() (message func() string) {
+	path := filepath.Join(a.configDir, "preferences.json")
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err == nil {
+		p := DefaultPreferences()
+		if err = json.Unmarshal(data, &p); err == nil {
+			a.Preferences = p
+			return nil
+		}
+		backup := path + ".bad"
+		if _, statErr := os.Lstat(backup); statErr == nil {
+			backup = path + "." + time.Now().Format("20060102-150405") + ".bad"
+		}
+		renameErr := os.Rename(path, backup)
+		if renameErr == nil {
+			slog.Error("偏好文件无法解析，已改名保留并改用默认设置", "backup", backup, "error", err)
+			return func() string { return a.T("preferences_reset", filepath.Base(backup)) }
+		}
+		err = errors.Join(err, renameErr)
+	}
+	slog.Error("偏好文件读取失败，本次运行不保存设置", "error", err)
+	a.preferencesBlocked = err
+	return func() string { return a.T("preferences_unreadable", a.Texts.Error(err)) }
+}
+
 func (a *App) queuePreferences() {
 	if a.PasswordSavePending() {
 		return
 	}
-	if a.configDir == "" {
+	if a.configDir == "" || a.preferencesBlocked != nil {
 		return
 	}
 	p, version := clonePreferences(a.Preferences), a.prefVersion.Add(1)
@@ -202,7 +234,7 @@ func (a *App) queuePreferences() {
 // 退出前同步写入最新状态，旧的后台写入不能在它之后覆盖文件。
 func (a *App) FlushPreferences() error {
 	a.captureUIState()
-	if a.configDir == "" {
+	if a.configDir == "" || a.preferencesBlocked != nil {
 		return nil
 	}
 	err := a.writePreferences(a.Preferences, a.prefVersion.Add(1))
@@ -217,6 +249,9 @@ func (a *App) writePreferences(p Preferences, version uint64) error {
 	defer a.prefMu.Unlock()
 	if version != a.prefVersion.Load() {
 		return nil
+	}
+	if a.preferencesBlocked != nil {
+		return a.preferencesBlocked
 	}
 	data, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {

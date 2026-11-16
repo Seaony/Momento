@@ -12,8 +12,19 @@ import (
 // 同一图库内的文件夹和素材拖动共用一个类型，目标行才能同时接收两者。
 type AssetsDrag struct {
 	LibraryID string
-	IDs       []string
 	FolderID  string
+	// 拖素材时才有。放下时才取 ID：全选十万张时，不能每帧给每张卡片都复制一遍选中项。
+	assets func() []string
+}
+
+// 拖的是不是素材；悬停时只用它判断，不取 ID。
+func (d AssetsDrag) HasAssets() bool { return d.assets != nil }
+
+func (d AssetsDrag) IDs() []string {
+	if d.assets == nil {
+		return nil
+	}
+	return d.assets()
 }
 
 type sidebarState struct {
@@ -399,15 +410,15 @@ func (a *App) sidebarFolderDrop(c *ui.Context, row ui.Element, folder model.Fold
 					row.Background(paletteFor(c.Theme()).Selected).TextColor(paletteFor(c.Theme()).Text)
 				}
 			}
-		} else if len(drag.IDs) > 0 {
+		} else if drag.HasAssets() {
 			row.Background(paletteFor(c.Theme()).Selected).TextColor(paletteFor(c.Theme()).Text)
 		}
 	}
 	if drag, ok := ui.Drop[AssetsDrag](row); ok && a.sidebarCanDrop(drag) {
 		if drag.FolderID != "" {
 			a.sidebarMoveFolder(drag, folder.ID, position)
-		} else if len(drag.IDs) > 0 {
-			a.SetFolders(drag.IDs, []string{folder.ID}, true)
+		} else if ids := drag.IDs(); len(ids) > 0 {
+			a.SetFolders(ids, []string{folder.ID}, true)
 		}
 	}
 }

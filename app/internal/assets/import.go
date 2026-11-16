@@ -195,12 +195,12 @@ func parallel(ctx context.Context, count int, work func(context.Context, int) er
 func stageHash(ctx context.Context, c *candidate, stage string, index int) (err error) {
 	in, err := os.Open(c.path)
 	if err != nil {
-		return err
+		return sourceError{err}
 	}
 	defer in.Close()
 	info, err := in.Stat()
 	if err != nil {
-		return err
+		return sourceError{err}
 	}
 	c.createdAt, _ = sourceCreatedAt(info)
 	c.staged = filepath.Join(stage, fmt.Sprintf("source-%d.%s", index, c.extension))
@@ -209,7 +209,7 @@ func stageHash(ctx context.Context, c *candidate, stage string, index int) (err 
 		return err
 	}
 	h := sha256.New()
-	c.size, err = io.Copy(io.MultiWriter(out, h), contextReader{ctx: ctx, r: in})
+	c.size, err = io.Copy(io.MultiWriter(out, h), contextReader{ctx: ctx, r: sourceReader{in}})
 	err = errors.Join(err, out.Close())
 	if err != nil {
 		return err
@@ -221,6 +221,30 @@ func stageHash(ctx context.Context, c *candidate, stage string, index int) (err 
 	return nil
 }
 
+// sourceError 标记读源文件时出的错：只跳过这一张，不影响整批。
+type sourceError struct{ err error }
+
+func (e sourceError) Error() string { return e.err.Error() }
+func (e sourceError) Unwrap() error { return e.err }
+
+type sourceReader struct{ r io.Reader }
+
+func (r sourceReader) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	if err != nil && err != io.EOF {
+		err = sourceError{err}
+	}
+	return n, err
+}
+
+type existingAsset struct {
+	trashed  bool
+	relative string
+	rotation int
+}
+
+// Import 整批导入。单张图片读不了、解不开或太大时只跳过这一张，记进 result.Errors；
+// 取消、数据库和写图库文件出错时整批回滚。
 func (s *Service) Import(ctx context.Context, request model.ImportRequest, callback func(model.ImportProgress)) (result model.ImportResult, err error) {
 	if !s.importing.TryLock() {
 		return result, ErrImportBusy
@@ -233,7 +257,7 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 		if err != nil {
 			slog.Error("导入失败", "error", err)
 		} else {
-			slog.Info("导入完成", "imported", result.Imported, "restored", result.Restored, "skipped", result.Skipped)
+			slog.Info("导入完成", "imported", result.Imported, "restored", result.Restored, "skipped", result.Skipped, "failed", len(result.Errors))
 		}
 	}()
 	progress := progressReporter{callback: callback}
@@ -253,82 +277,168 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 		return result, err
 	}
 	defer func() { err = errors.Join(err, os.RemoveAll(stage)) }()
+	// 每个候选文件自己的失败原因，非空的这张不导入。
+	fileErrs := make([]error, total)
+	fail := func(i int, cause error) {
+		name := filepath.Base(candidates[i].path)
+		slog.Warn("导入时跳过一张图片", "file", name, "error", cause)
+		// 解码错误里带的是暂存文件名（source-3.heic），用户看不懂；去掉这一层，只留原因，文件名由外层给出。
+		var decode *i18n.LocalizedError
+		if errors.As(cause, &decode) && decode.Key == "error_decode_image" && decode.Cause != nil {
+			var limit *i18n.LocalizedError
+			if errors.As(decode.Cause, &limit) {
+				cause = decode.Cause
+			} else {
+				cause = i18n.WrapError(decode.Cause, "error_image_unreadable")
+			}
+		}
+		fileErrs[i] = i18n.WrapError(cause, "error_import_read", name)
+	}
 	hashed := 0
-	if err = parallel(ctx, total, func(ctx context.Context, i int) error { return stageHash(ctx, &candidates[i], stage, i) }, func(i int) {
+	if err = parallel(ctx, total, func(ctx context.Context, i int) error {
+		stageErr := stageHash(ctx, &candidates[i], stage, i)
+		var source sourceError
+		if errors.As(stageErr, &source) && ctx.Err() == nil {
+			fail(i, source.err)
+			return nil
+		}
+		return stageErr
+	}, func(i int) {
 		hashed++
 		progress.send(model.ImportProgress{Stage: "scanning", Total: total, Processed: hashed, CurrentFile: filepath.Base(candidates[i].path)}, false)
 	}); err != nil {
 		return result, err
 	}
-	existing := map[string]bool{}
-	rows, err := s.db.QueryContext(ctx, "SELECT id,trashed FROM assets")
+	existing := map[string]existingAsset{}
+	rows, err := s.db.QueryContext(ctx, "SELECT id,trashed,relative_path,rotation FROM assets")
 	if err != nil {
 		return result, err
 	}
 	for rows.Next() {
 		var id string
-		var trashed bool
-		if err = rows.Scan(&id, &trashed); err != nil {
+		var a existingAsset
+		if err = rows.Scan(&id, &a.trashed, &a.relative, &a.rotation); err != nil {
 			rows.Close()
 			return result, err
 		}
-		existing[id] = trashed
+		existing[id] = a
 	}
 	err = errors.Join(rows.Err(), rows.Close())
 	if err != nil {
 		return result, err
 	}
 	groups := map[string][]int{}
-	var fresh []int
+	var hashes []string
 	for i, c := range candidates {
+		if fileErrs[i] != nil {
+			continue
+		}
 		if len(groups[c.hash]) == 0 {
-			if _, exists := existing[c.hash]; !exists {
-				fresh = append(fresh, i)
-			}
+			hashes = append(hashes, c.hash)
 		}
 		groups[c.hash] = append(groups[c.hash], i)
 	}
+	failGroup := func(hash string, cause error) {
+		for _, i := range groups[hash] {
+			fail(i, cause)
+		}
+	}
+	// 已在图库里的先核对原图：缺了就用这次的文件补回，内容不对只跳过这一组。
+	repair := map[string]bool{}
+	var toPrepare []string
+	for _, hash := range hashes {
+		old, exists := existing[hash]
+		if !exists {
+			toPrepare = append(toPrepare, hash)
+			continue
+		}
+		missing, checkErr := s.storedCopyMissing(ctx, old.relative, hash)
+		if err = ctx.Err(); err != nil {
+			return result, err
+		}
+		if checkErr != nil {
+			failGroup(hash, checkErr)
+			continue
+		}
+		if missing {
+			slog.Warn("图库里缺少原图，用这次导入的文件补回", "id", hash, "path", old.relative)
+			repair[hash] = true
+			toPrepare = append(toPrepare, hash)
+		}
+	}
 	keywordsByHash := map[string][]string{}
 	if request.ImportKeywords {
-		for hash, indices := range groups {
+		for _, hash := range hashes {
 			if err = ctx.Err(); err != nil {
 				return result, err
 			}
-			c := candidates[indices[0]]
-			keywordsByHash[hash], err = ReadKeywords(c.staged)
-			if err != nil {
-				return result, i18n.WrapError(err, "error_import_read", filepath.Base(c.path))
+			c := candidates[groups[hash][0]]
+			if fileErrs[groups[hash][0]] != nil {
+				continue
 			}
+			// 关键词读不出来不影响图片本身，跳过这张的关键词即可。
+			words, readErr := ReadKeywords(c.staged)
+			if readErr != nil {
+				slog.Warn("读取图片关键词失败，跳过这张的关键词", "file", filepath.Base(c.path), "error", readErr)
+				continue
+			}
+			keywordsByHash[hash] = words
 		}
 	}
-	processed, skipped := 0, 0
-	for hash, indices := range groups {
-		if trashed, exists := existing[hash]; exists {
-			processed += len(indices)
-			skipped += len(indices)
-			if trashed {
-				skipped--
-			}
+	processed, skipped, failed := 0, 0, 0
+	for i := range candidates {
+		if fileErrs[i] != nil {
+			processed++
+			failed++
 		}
 	}
-	ready := make([]prepared, len(fresh))
+	for _, hash := range hashes {
+		old, exists := existing[hash]
+		if !exists || repair[hash] || fileErrs[groups[hash][0]] != nil {
+			continue
+		}
+		processed += len(groups[hash])
+		skipped += len(groups[hash])
+		if old.trashed {
+			skipped--
+		}
+	}
+	report := func(stage, file string, force bool) {
+		progress.send(model.ImportProgress{Stage: stage, Total: total, Processed: processed, Imported: processed - skipped - failed, Skipped: skipped, CurrentFile: file}, force)
+	}
+	ready := make([]prepared, len(toPrepare))
+	prepareErrs := make([]error, len(toPrepare))
 	// 进度里的导入数统计已准备好的非重复素材，最终结果仍以整批提交为准。
-	progress.send(model.ImportProgress{Stage: "importing", Total: total, Processed: processed, Imported: processed - skipped, Skipped: skipped}, true)
-	if err = parallel(ctx, len(fresh), func(ctx context.Context, j int) error {
-		c := candidates[fresh[j]]
+	report("importing", "", true)
+	if err = parallel(ctx, len(toPrepare), func(ctx context.Context, j int) error {
+		hash := toPrepare[j]
+		c := candidates[groups[hash][0]]
 		img, metadata, orientation, profile, err := s.prepareImage(c.staged)
-		if err != nil {
-			return i18n.WrapError(err, "error_import_read", filepath.Base(c.path))
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
 		}
-		if err = ctx.Err(); err != nil {
-			return err
+		if err != nil {
+			prepareErrs[j] = err
+			return nil
+		}
+		thumb := filepath.Join(stage, c.hash+".png")
+		if repair[hash] {
+			// 补回的缩略图要带上图库里已有的旋转。
+			rotated, err := RotateImage(img, existing[hash].rotation)
+			if err != nil {
+				return err
+			}
+			if err = WriteThumbnail(thumb, rotated); err != nil {
+				return err
+			}
+			ready[j] = prepared{original: c.staged, thumbnail: thumb}
+			return nil
 		}
 		if !c.createdAt.IsZero() {
 			metadata["fileCreatedAt"] = c.createdAt.UTC().Format(time.RFC3339Nano)
 		} else {
 			delete(metadata, "fileCreatedAt")
 		}
-		thumb := filepath.Join(stage, c.hash+".png")
 		if err = WriteThumbnail(thumb, img); err != nil {
 			return err
 		}
@@ -338,20 +448,31 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 		ready[j] = prepared{asset: model.Asset{ID: c.hash, Name: name, OriginalFileName: filepath.Base(c.path), Extension: c.extension, MediaType: mediaType(c.extension), Size: c.size, Width: img.Bounds().Dx(), Height: img.Bounds().Dy(), Orientation: orientation, ColorProfile: profile, EXIF: metadata, SourceURL: request.SourceURL, RelativePath: filepath.ToSlash(filepath.Join("assets", c.hash[:2], c.hash+"."+c.extension)), CreatedAt: now, UpdatedAt: now, Colors: Palette(img)}, original: c.staged, thumbnail: thumb}
 		return nil
 	}, func(j int) {
-		c := candidates[fresh[j]]
-		count := len(groups[c.hash])
+		hash := toPrepare[j]
+		count := len(groups[hash])
 		processed += count
-		skipped += count - 1
-		progress.send(model.ImportProgress{Stage: "importing", Total: total, Processed: processed, Imported: processed - skipped, Skipped: skipped, CurrentFile: filepath.Base(c.path)}, false)
+		if prepareErrs[j] != nil {
+			failed += count
+		} else {
+			skipped += count - 1
+			if repair[hash] && !existing[hash].trashed {
+				skipped++
+			}
+		}
+		report("importing", filepath.Base(candidates[groups[hash][0]].path), false)
 	}); err != nil {
 		return result, err
 	}
-	progress.send(model.ImportProgress{Stage: "importing", Total: total, Processed: processed, Imported: processed - skipped, Skipped: skipped}, true)
-	progress.send(model.ImportProgress{Stage: "finishing", Total: total, Processed: processed, Imported: processed - skipped, Skipped: skipped}, true)
 	byHash := make(map[string]prepared, len(ready))
-	for _, p := range ready {
-		byHash[p.asset.ID] = p
+	for j, hash := range toPrepare {
+		if prepareErrs[j] != nil {
+			failGroup(hash, prepareErrs[j])
+			continue
+		}
+		byHash[hash] = ready[j]
 	}
+	report("importing", "", true)
+	report("finishing", "", true)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return result, err
@@ -368,46 +489,53 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 		}
 	}()
 	folderCache := map[string]string{}
-	verified := map[string]bool{}
+	repaired := map[string]bool{}
 	resultIDs := map[string]bool{}
-	for _, c := range candidates {
+	for i, c := range candidates {
+		if fileErrs[i] != nil {
+			continue
+		}
 		var trashed bool
 		var source, relative string
 		lookupErr := tx.QueryRowContext(ctx, "SELECT trashed,source_url,relative_path FROM assets WHERE id=?", c.hash).Scan(&trashed, &source, &relative)
 		switch {
 		case errors.Is(lookupErr, sql.ErrNoRows):
 			p, ok := byHash[c.hash]
-			if !ok {
+			if !ok || repair[c.hash] {
 				return result, i18n.NewError("error_import_record_changed", c.hash)
 			}
 			if err = insertAsset(ctx, tx, p.asset); err != nil {
 				return result, err
 			}
-			for _, file := range []struct{ source, relative string }{{p.original, p.asset.RelativePath}, {p.thumbnail, filepath.Join("thumbnails", c.hash+".png")}} {
-				dst, destinationErr := s.storageDestination(file.relative)
-				if destinationErr != nil {
-					return result, destinationErr
+			for _, file := range []struct {
+				source, relative string
+				original         bool
+			}{{p.original, p.asset.RelativePath, true}, {p.thumbnail, filepath.Join("thumbnails", c.hash+".png"), false}} {
+				dst, placed, installErr := s.installFile(ctx, file.source, file.relative, c.hash, file.original)
+				if placed {
+					installed = append(installed, dst)
 				}
-				if _, statErr := os.Lstat(dst); statErr == nil {
-					return result, i18n.NewError("error_import_unregistered_file", file.relative)
-				} else if !os.IsNotExist(statErr) {
-					return result, statErr
+				if installErr != nil {
+					return result, installErr
 				}
-				if err = publishFile(file.source, dst); err != nil {
-					return result, err
-				}
-				installed = append(installed, dst)
 			}
 			result.Imported++
-			verified[c.hash] = true
 		case lookupErr != nil:
 			return result, lookupErr
 		default:
-			if !verified[c.hash] {
-				if err = s.verifyDuplicate(ctx, relative, c.hash); err != nil {
-					return result, i18n.WrapError(err, "error_import_read", filepath.Base(c.path))
+			if repair[c.hash] && !repaired[c.hash] {
+				// 记录本来就在，补回的文件即使这批回滚也留着。
+				p := byHash[c.hash]
+				for _, file := range []struct {
+					source, relative string
+					original         bool
+				}{{p.original, relative, true}, {p.thumbnail, filepath.Join("thumbnails", c.hash+".png"), false}} {
+					if _, _, err = s.installFile(ctx, file.source, file.relative, c.hash, file.original); err != nil {
+						return result, err
+					}
 				}
-				verified[c.hash] = true
+				repaired[c.hash] = true
+				slog.Info("已补回图库缺失的原图和缩略图", "id", c.hash, "path", relative)
 			}
 			if trashed {
 				result.Imported++
@@ -451,14 +579,54 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 				return result, err
 			}
 		}
-		progress.send(model.ImportProgress{Stage: "finishing", Total: total, Processed: processed, Imported: processed - skipped, Skipped: skipped, CurrentFile: filepath.Base(c.path)}, false)
+		report("finishing", filepath.Base(c.path), false)
 	}
 	if err = tx.Commit(); err != nil {
 		return result, err
 	}
 	committed = true
-	progress.send(model.ImportProgress{Stage: "finishing", Total: total, Processed: total, Imported: result.Imported, Skipped: result.Skipped}, true)
+	for _, fileErr := range fileErrs {
+		if fileErr != nil {
+			result.Errors = append(result.Errors, fileErr)
+		}
+	}
+	progress.send(model.ImportProgress{Stage: "finishing", Total: total, Processed: total, Imported: total - result.Skipped - len(result.Errors), Skipped: result.Skipped}, true)
 	return result, nil
+}
+
+// installFile 把暂存文件放进图库，placed 表示这次新放进去的（回滚时要删）。
+// 原图已存在且内容一致，说明上次导入中途中断留下了它，直接沿用；缩略图可再生，已存在就覆盖。
+func (s *Service) installFile(ctx context.Context, staged, relative, hash string, original bool) (dst string, placed bool, err error) {
+	dst, err = s.storageDestination(relative)
+	if err != nil {
+		return "", false, err
+	}
+	info, statErr := os.Lstat(dst)
+	switch {
+	case os.IsNotExist(statErr):
+		if err = publishFile(staged, dst); err != nil {
+			return dst, false, err
+		}
+		return dst, true, nil
+	case statErr != nil:
+		return dst, false, statErr
+	case !info.Mode().IsRegular():
+		return dst, false, i18n.NewError("error_import_unregistered_file", relative)
+	case !original:
+		if err = os.Rename(staged, dst); err != nil {
+			return dst, false, err
+		}
+		return dst, true, nil
+	}
+	same, err := fileHashEquals(ctx, dst, hash)
+	if err != nil {
+		return dst, false, err
+	}
+	if !same {
+		return dst, false, i18n.NewError("error_import_unregistered_file", relative)
+	}
+	slog.Info("图库里已有内容相同的原图，直接沿用", "path", relative)
+	return dst, false, nil
 }
 
 func mediaType(ext string) string {

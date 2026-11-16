@@ -327,7 +327,7 @@ func (a *App) chooseAutoImportFolder() {
 			if a.Preferences.AutoImport == nil {
 				a.Preferences.AutoImport = make(map[string][]AutoImportRule)
 			}
-			a.Preferences.AutoImport[libraryID] = append(rules, AutoImportRule{Path: path, Enabled: true})
+			a.Preferences.AutoImport[libraryID] = append(rules, AutoImportRule{Path: path, Enabled: true, Library: a.Library.Root})
 			slog.Info("添加自动导入文件夹", "path", path, "library", libraryID)
 			a.SavePreferences()
 		})

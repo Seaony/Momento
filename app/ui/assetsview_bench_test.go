@@ -96,9 +96,24 @@ func (f *assetsViewPerformanceFixture) preload(y float32) {
 	h := float32(f.height)
 	top := y - a.contentTopInset() - 16
 	items := a.layout.Visible(max(0, top-h), top+2*h)
+	// 多选时检查器顶部的叠放卡片也要画缩略图。
+	indexes := make([]int, 0, len(items)+8)
+	for _, item := range items {
+		indexes = append(indexes, item.Index)
+	}
+	byID := make(map[string]int, len(a.Visible))
+	if a.Selected.Len() > 3 {
+		for i, asset := range a.Visible {
+			byID[asset.ID] = i
+		}
+		for _, asset := range a.SelectedAssets()[:8] {
+			indexes = append(indexes, byID[asset.ID])
+		}
+	}
 	a.Thumbnails.mu.Lock()
 	defer a.Thumbnails.mu.Unlock()
-	for _, item := range items {
+	for _, index := range indexes {
+		item := struct{ Index int }{index}
 		asset := a.Visible[item.Index]
 		key := thumbnailKey{root: a.Library.Root, id: asset.ID}
 		if element := a.Thumbnails.entries[key]; element != nil {
@@ -186,7 +201,7 @@ func BenchmarkAssetsView100KScroll(b *testing.B) {
 }
 
 func BenchmarkAssetsView100KSelectedAssets(b *testing.B) {
-	for _, count := range []int{0, 3} {
+	for _, count := range []int{0, 3, 100_000} {
 		b.Run(fmt.Sprintf("selected-%d", count), func(b *testing.B) {
 			f := newAssetsViewPerformanceFixture(b, 800, count)
 			var selected []model.Asset
@@ -203,7 +218,8 @@ func BenchmarkAssetsView100KSelectedAssets(b *testing.B) {
 
 func benchmarkAssetsView100K(b *testing.B, scroll bool) {
 	for _, height := range []int{800, 640} {
-		for _, selected := range []int{0, 3} {
+		// 全选 10 万张时每帧不能再复制选中项（以前一帧 1.6 秒）。
+		for _, selected := range []int{0, 3, 100_000} {
 			b.Run(fmt.Sprintf("1100x%d/selected-%d", height, selected), func(b *testing.B) {
 				f := newAssetsViewPerformanceFixture(b, height, selected)
 				middle := f.app.layout.Height() / 2

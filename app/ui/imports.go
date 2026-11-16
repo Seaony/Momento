@@ -152,7 +152,7 @@ func (a *App) importFiles(ctx context.Context, service *assets.Service, lib *lib
 
 func (a *App) ConfigureAutoImport() {
 	libraryID := a.libraryID()
-	rules := a.Preferences.AutoImport[libraryID]
+	rules := a.bindAutoImportRules(libraryID)
 	if a.Import.watching(libraryID, a.generation, rules) {
 		return
 	}
@@ -209,6 +209,63 @@ func (a *App) ConfigureAutoImport() {
 	}
 	w.Update(configs)
 	go w.Run(ctx)
+}
+
+// 只返回属于当前这个图库包的规则。规则记的图库位置还在、但不是当前位置，说明当前打开的是一份副本：副本不监视，在设置里说明原因。
+// 原位置已经不存在就当作图库被移动了，改记到当前位置；旧规则没记位置的，记上当前位置。
+func (a *App) bindAutoImportRules(libraryID string) []AutoImportRule {
+	rules := a.Preferences.AutoImport[libraryID]
+	if a.Library == nil || len(rules) == 0 {
+		return rules
+	}
+	root := a.Library.Root
+	var active []AutoImportRule
+	changed := false
+	for i, rule := range rules {
+		if rule.Library != "" && !samePath(rule.Library, root) {
+			// 只有确认原位置已经没有图库才算移动；读不到（权限、外接盘没响应）时按副本处理，宁可不监视也不能让副本接管。
+			if _, err := os.Stat(filepath.Join(rule.Library, "manifest.json")); !os.IsNotExist(err) {
+				if a.Settings.AutoImportErrors == nil {
+					a.Settings.AutoImportErrors = map[string]string{}
+				}
+				a.Settings.AutoImportErrors[rule.Path] = a.T("auto_import_other_copy", rule.Library)
+				slog.Warn("当前图库是另一份图库的副本，不监视它的自动导入文件夹", "rule", rule.Path, "owner", rule.Library, "current", root, "error", err)
+				continue
+			}
+			slog.Info("图库已移动，自动导入规则改到新位置", "rule", rule.Path, "from", rule.Library, "to", root)
+			rule.Library = ""
+		}
+		// 之前在副本里留下的说明，回到原库后不再显示；真正的导入错误不动。
+		if copyNote := a.T("auto_import_other_copy", rule.Library); rule.Library != "" && a.Settings.AutoImportErrors[rule.Path] == copyNote {
+			delete(a.Settings.AutoImportErrors, rule.Path)
+		}
+		if rule.Library == "" {
+			if !changed {
+				rules = slices.Clone(rules)
+				changed = true
+			}
+			rule.Library = root
+			rules[i] = rule
+		}
+		active = append(active, rule)
+	}
+	if changed {
+		a.Preferences.AutoImport[libraryID] = rules
+		a.queuePreferences()
+	}
+	return active
+}
+
+func samePath(a, b string) bool {
+	if filepath.Clean(a) == filepath.Clean(b) {
+		return true
+	}
+	left, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	right, err := os.Stat(b)
+	return err == nil && os.SameFile(left, right)
 }
 
 func (a *App) remoteImportChoice(ctx context.Context) (importChoice, error) {

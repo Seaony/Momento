@@ -3,7 +3,9 @@ package assets
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"hash/crc32"
@@ -14,10 +16,12 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Seaony/Momento/app/internal/i18n"
 	"github.com/Seaony/Momento/app/internal/library"
 	"github.com/Seaony/Momento/app/internal/model"
 )
@@ -193,23 +197,241 @@ func TestImportFoldersPreservesHierarchySkipsHiddenAndRoot(t *testing.T) {
 	}
 }
 
-func TestImportDecodeFailureLeavesNoFilesOrRows(t *testing.T) {
+func TestImportSkipsBrokenImageAndImportsTheRest(t *testing.T) {
 	ctx, lib, s := testLibrary(t)
 	input := t.TempDir()
 	fixtureCopy(t, "png", filepath.Join(input, "a.png"))
+	fixtureCopy(t, "gif", filepath.Join(input, "c.gif"))
 	if err := os.WriteFile(filepath.Join(input, "b.jpg"), []byte("not an image"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	result, err := s.Import(ctx, model.ImportRequest{Paths: []string{input}}, nil)
-	if err == nil {
-		t.Fatal("损坏图片导入未失败")
+	if err != nil {
+		t.Fatalf("单张坏图让整批失败：%v", err)
 	}
-	if result.Imported != 0 || len(snapshot(t, ctx, lib).Assets) != 0 || len(storedFiles(t, lib.Root)) != 0 {
-		t.Fatal("失败导入留下部分数据")
+	if result.Imported != 2 || result.Skipped != 0 || len(result.Errors) != 1 || len(result.AssetIDs) != 2 {
+		t.Fatalf("导入结果不对：%+v", result)
+	}
+	if !strings.Contains(result.Errors[0].Error(), "b.jpg") {
+		t.Fatalf("错误里没有文件名：%v", result.Errors[0])
+	}
+	if len(snapshot(t, ctx, lib).Assets) != 2 || len(storedFiles(t, lib.Root)) != 4 {
+		t.Fatal("好图没有完整导入")
 	}
 	stages, err := filepath.Glob(filepath.Join(lib.Root, ".import-*"))
 	if err != nil || len(stages) != 0 {
 		t.Fatalf("暂存未清理：%v %v", stages, err)
+	}
+}
+
+func TestImportSkipsUnreadableAndDuplicateBrokenFilesWithConsistentCounts(t *testing.T) {
+	ctx, lib, s := testLibrary(t)
+	importFixture(t, ctx, s, "png")
+	input := t.TempDir()
+	fixtureCopy(t, "png", filepath.Join(input, "again.png"))
+	fixtureCopy(t, "jpg", filepath.Join(input, "fresh.jpg"))
+	fixtureCopy(t, "jpg", filepath.Join(input, "fresh-copy.jpg"))
+	for _, name := range []string{"broken-1.jpg", "broken-2.jpg"} {
+		if err := os.WriteFile(filepath.Join(input, name), []byte("not an image"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	candidates := 5
+	if runtime.GOOS != "windows" && os.Geteuid() != 0 {
+		locked := fixtureCopy(t, "gif", filepath.Join(input, "locked.gif"))
+		if err := os.Chmod(locked, 0); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Chmod(locked, 0600) })
+		candidates++
+	}
+	var last model.ImportProgress
+	result, err := s.Import(ctx, model.ImportRequest{Paths: []string{input}}, func(p model.ImportProgress) { last = p })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Imported != 1 || result.Skipped != 2 || len(result.Errors) != candidates-3 {
+		t.Fatalf("导入结果不对：%+v", result)
+	}
+	if result.Imported+result.Skipped+len(result.Errors) != candidates {
+		t.Fatalf("计数和候选总数对不上：%+v", result)
+	}
+	if last.Processed != candidates || last.Total != candidates || last.Imported+last.Skipped+len(result.Errors) != candidates {
+		t.Fatalf("最终进度不对：%+v", last)
+	}
+	if len(snapshot(t, ctx, lib).Assets) != 2 {
+		t.Fatal("好图没有导入")
+	}
+}
+
+func TestImportReusesSameOriginalLeftByInterruptedImport(t *testing.T) {
+	ctx, lib, s := testLibrary(t)
+	source := filepath.Join("testdata", "sample.png")
+	data, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(data)
+	id := hex.EncodeToString(sum[:])
+	original := filepath.Join(lib.Root, "assets", id[:2], id+".png")
+	thumbnail := filepath.Join(lib.Root, "thumbnails", id+".png")
+	// 模拟上次导入时文件已放好、事务没提交就断电。
+	if err = os.MkdirAll(filepath.Dir(original), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(original, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(thumbnail, []byte("half written"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	// 这次也失败回滚时，不能删掉不是这次放进去的原图。
+	if _, err = s.Import(ctx, model.ImportRequest{Paths: []string{source}, TagIDs: []string{"missing"}}, nil); err == nil {
+		t.Fatal("缺失标签应让事务失败")
+	}
+	if _, err = os.Stat(original); err != nil {
+		t.Fatalf("回滚删掉了已有原图：%v", err)
+	}
+	result, err := s.Import(ctx, model.ImportRequest{Paths: []string{source}}, nil)
+	if err != nil || result.Imported != 1 {
+		t.Fatalf("已有同内容原图时导入失败：%+v %v", result, err)
+	}
+	f, err := os.Open(thumbnail)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = png.Decode(f)
+	f.Close()
+	if err != nil {
+		t.Fatalf("残缺缩略图没有被覆盖：%v", err)
+	}
+	if err = os.WriteFile(filepath.Join(lib.Root, "assets", id[:2], id+".gif"), []byte("other content"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	gif := fixtureCopy(t, "gif", filepath.Join(t.TempDir(), "other.gif"))
+	gifData, err := os.ReadFile(gif)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gifSum := sha256.Sum256(gifData)
+	gifID := hex.EncodeToString(gifSum[:])
+	conflict := filepath.Join(lib.Root, "assets", gifID[:2], gifID+".gif")
+	if err = os.MkdirAll(filepath.Dir(conflict), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(conflict, []byte("different"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Import(ctx, model.ImportRequest{Paths: []string{gif}}, nil); err == nil {
+		t.Fatal("同名但内容不同的文件被当作已装好")
+	}
+	if kept, _ := os.ReadFile(conflict); string(kept) != "different" {
+		t.Fatal("覆盖了内容不同的已有文件")
+	}
+}
+
+func TestOpenLibraryRestoresInterruptedDeletionAndCleansStaging(t *testing.T) {
+	ctx := context.Background()
+	lib, err := library.Create(ctx, filepath.Join(t.TempDir(), "Test.momento"), "Test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := New(lib.Root, lib.DB)
+	for _, ext := range []string{"png", "gif", "jpg"} {
+		importFixture(t, ctx, s, ext)
+	}
+	assets := snapshot(t, ctx, lib).Assets
+	if err = s.Trash(ctx, []string{assets[0].ID, assets[1].ID, assets[2].ID}); err != nil {
+		t.Fatal(err)
+	}
+	// 第 3 张真的删掉了：记录没了，文件留在暂存里。
+	gone := assets[2]
+	if err = s.DeletePermanently(ctx, []string{gone.ID}); err != nil {
+		t.Fatal(err)
+	}
+	// 模拟永久删除挪走文件后、提交前崩溃：新命名和老版本的序号命名各一个。
+	deletion := filepath.Join(lib.Root, ".delete-123")
+	legacy := filepath.Join(lib.Root, ".delete-456")
+	for _, dir := range []string{deletion, legacy, filepath.Join(lib.Root, ".import-789")} {
+		if err = os.Mkdir(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	moves := []struct{ from, to string }{
+		{filepath.Join(lib.Root, filepath.FromSlash(assets[0].RelativePath)), filepath.Join(deletion, assets[0].ID+".original")},
+		{filepath.Join(lib.Root, "thumbnails", assets[0].ID+".png"), filepath.Join(deletion, assets[0].ID+".thumbnail")},
+		{filepath.Join(lib.Root, filepath.FromSlash(assets[1].RelativePath)), filepath.Join(legacy, "0")},
+		{filepath.Join(lib.Root, "thumbnails", assets[1].ID+".png"), filepath.Join(legacy, "1")},
+	}
+	for _, move := range moves {
+		if err = os.Rename(move.from, move.to); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fixtureCopy(t, "jpg", filepath.Join(deletion, gone.ID+".original"))
+	if err = os.WriteFile(filepath.Join(lib.Root, ".import-789", "source-0.png"), []byte("staged"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err = lib.Close(); err != nil {
+		t.Fatal(err)
+	}
+	lib, err = library.Open(ctx, lib.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lib.Close()
+	for _, path := range []string{moves[0].from, moves[1].from, moves[2].from} {
+		if _, err = os.Stat(path); err != nil {
+			t.Fatalf("没有挪回中断删除的文件：%v", err)
+		}
+	}
+	if _, err = os.Stat(filepath.Join(lib.Root, filepath.FromSlash(gone.RelativePath))); !os.IsNotExist(err) {
+		t.Fatalf("已提交删除的原图被挪了回来：%v", err)
+	}
+	left, err := filepath.Glob(filepath.Join(lib.Root, ".[di][em]*-*"))
+	if err != nil || len(left) != 0 {
+		t.Fatalf("残留暂存没有清掉：%v %v", left, err)
+	}
+	if got := snapshot(t, ctx, lib).Assets; len(got) != 2 {
+		t.Fatalf("记录数不对：%d", len(got))
+	}
+}
+
+func TestImportRepairsMissingOriginalOfExistingAsset(t *testing.T) {
+	ctx, lib, s := testLibrary(t)
+	importFixture(t, ctx, s, "png")
+	asset := snapshot(t, ctx, lib).Assets[0]
+	if err := lib.SetRotation(ctx, []string{asset.ID}, 90); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Trash(ctx, []string{asset.ID}); err != nil {
+		t.Fatal(err)
+	}
+	original := filepath.Join(lib.Root, filepath.FromSlash(asset.RelativePath))
+	thumbnail := filepath.Join(lib.Root, "thumbnails", asset.ID+".png")
+	for _, path := range []string{original, thumbnail} {
+		if err := os.Remove(path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	result, err := s.Import(ctx, model.ImportRequest{Paths: []string{filepath.Join("testdata", "sample.png")}}, nil)
+	if err != nil || result.Imported != 1 || result.Restored != 1 || len(result.Errors) != 0 {
+		t.Fatalf("缺原图的素材没有补回：%+v %v", result, err)
+	}
+	if missing, err := s.storedCopyMissing(ctx, asset.RelativePath, asset.ID); err != nil || missing {
+		t.Fatalf("补回的原图不对：%v %v", missing, err)
+	}
+	f, err := os.Open(thumbnail)
+	if err != nil {
+		t.Fatal(err)
+	}
+	thumb, err := png.Decode(f)
+	f.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b := thumb.Bounds(); b.Dx() >= b.Dy() {
+		t.Fatalf("补回的缩略图没有带上旋转：%v", b)
 	}
 }
 
@@ -606,5 +828,174 @@ func TestExportUsesEditedTitleAndOriginalExtension(t *testing.T) {
 	paths, err := s.Export(ctx, []model.Asset{a}, t.TempDir(), model.ExportOriginal, 0)
 	if err != nil || len(paths) != 1 || filepath.Base(paths[0]) != "Edited title.png" {
 		t.Fatalf("%v %v", paths, err)
+	}
+}
+
+func TestImportURLStopsOversizedAndStalledDownloads(t *testing.T) {
+	previousSize, previousIdle := maxDownloadBytes, downloadIdleTimeout
+	maxDownloadBytes, downloadIdleTimeout = 1024, 200*time.Millisecond
+	t.Cleanup(func() { maxDownloadBytes, downloadIdleTimeout = previousSize, previousIdle })
+	ctx, lib, s := testLibrary(t)
+	data, err := os.ReadFile(filepath.Join("testdata", "sample.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(data) <= 1024 {
+		t.Fatal("样例图片太小，测不到大小上限")
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		switch r.URL.Path {
+		case "/declared":
+			_, _ = w.Write(data)
+		case "/chunked":
+			// 不带长度，边下边数才能发现超限。
+			for i := 0; i < len(data); i += 256 {
+				_, _ = w.Write(data[i:min(i+256, len(data))])
+				w.(http.Flusher).Flush()
+			}
+		case "/stalled":
+			_, _ = w.Write(data[:100])
+			w.(http.Flusher).Flush()
+			select {
+			case <-r.Context().Done():
+			case <-time.After(5 * time.Second):
+			}
+		}
+	}))
+	defer server.Close()
+	for path, key := range map[string]string{"/declared": "error_download_too_large", "/chunked": "error_download_too_large", "/stalled": "error_download_stalled"} {
+		started := time.Now()
+		_, err := s.ImportURL(ctx, server.URL+path, "")
+		var localized *i18n.LocalizedError
+		if !errors.As(err, &localized) || localized.Key != key {
+			t.Fatalf("%s 应返回 %s：%v", path, key, err)
+		}
+		if time.Since(started) > 3*time.Second {
+			t.Fatalf("%s 没有及时停止", path)
+		}
+	}
+	if len(snapshot(t, ctx, lib).Assets) != 0 {
+		t.Fatal("下载失败污染图库")
+	}
+}
+
+func TestImportURLReportsSkippedFileAsError(t *testing.T) {
+	ctx, _, s := testLibrary(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write([]byte("broken"))
+	}))
+	defer server.Close()
+	result, err := s.ImportURL(ctx, server.URL+"/broken.png", "")
+	if err == nil || result.Imported != 0 || len(result.AssetIDs) != 0 {
+		t.Fatalf("坏图下载被当作成功：%+v %v", result, err)
+	}
+}
+
+func TestRefreshThumbnailsAndColorsContinuePastBrokenOriginals(t *testing.T) {
+	ctx, lib, s := testLibrary(t)
+	input := t.TempDir()
+	for _, ext := range []string{"png", "gif", "jpg", "bmp", "tiff", "webp", "avif"} {
+		fixtureCopy(t, ext, filepath.Join(input, "sample."+ext))
+	}
+	if _, err := s.Import(ctx, model.ImportRequest{Paths: []string{input}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	items := snapshot(t, ctx, lib).Assets
+	if len(items) != 7 {
+		t.Fatalf("样例数量不对：%d", len(items))
+	}
+	// 前 6 张原图一张丢失、其余损坏，最后一张完好。
+	for i, a := range items[:6] {
+		path := filepath.Join(lib.Root, filepath.FromSlash(a.RelativePath))
+		var err error
+		if i == 0 {
+			err = os.Remove(path)
+		} else {
+			err = os.WriteFile(path, []byte("broken"), 0600)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	good := items[6]
+	thumb := filepath.Join(lib.Root, "thumbnails", good.ID+".png")
+	if err := os.Remove(thumb); err != nil {
+		t.Fatal(err)
+	}
+	err := s.RefreshThumbnails(ctx, items)
+	var localized *i18n.LocalizedError
+	if !errors.As(err, &localized) || localized.Key != "error_thumbnails_failed_more" || localized.Args[0] != 6 {
+		t.Fatalf("缩略图汇总错误不对：%v", err)
+	}
+	if !strings.Contains(err.Error(), items[0].Name) {
+		t.Fatalf("汇总错误里没有文件名：%v", err)
+	}
+	if _, err = os.Stat(thumb); err != nil {
+		t.Fatalf("坏图后面的缩略图没有生成：%v", err)
+	}
+	err = s.RefreshThumbnails(ctx, items[:1])
+	if !errors.As(err, &localized) || localized.Key != "error_thumbnail_refresh" {
+		t.Fatalf("单张失败应给出具体原因：%v", err)
+	}
+	if _, err = lib.DB.ExecContext(ctx, "DELETE FROM asset_colors WHERE asset_id=?", good.ID); err != nil {
+		t.Fatal(err)
+	}
+	err = s.ReanalyzeColors(ctx, items[4:])
+	if !errors.As(err, &localized) || localized.Key != "error_colors_failed" || localized.Args[0] != 2 {
+		t.Fatalf("颜色汇总错误不对：%v", err)
+	}
+	for _, a := range snapshot(t, ctx, lib).Assets {
+		if a.ID == good.ID && !reflect.DeepEqual(a.Colors, good.Colors) {
+			t.Fatal("坏图后面的颜色没有重算")
+		}
+	}
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	if err = s.RefreshThumbnails(cancelled, items); !errors.Is(err, context.Canceled) {
+		t.Fatalf("取消后应立即返回：%v", err)
+	}
+}
+
+// 图库包里的上层目录被换成指向包外的符号链接时，挪回中断删除的文件不能写到包外。
+func TestInterruptedDeletionRestoreRefusesSymlinkedDirectory(t *testing.T) {
+	ctx := context.Background()
+	lib, err := library.Create(ctx, filepath.Join(t.TempDir(), "Test.momento"), "Test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := New(lib.Root, lib.DB)
+	importFixture(t, ctx, s, "png")
+	asset := snapshot(t, ctx, lib).Assets[0]
+	original := filepath.Join(lib.Root, filepath.FromSlash(asset.RelativePath))
+	deletion := filepath.Join(lib.Root, ".delete-1")
+	if err = os.Mkdir(deletion, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Rename(original, filepath.Join(deletion, asset.ID+".original")); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	parent := filepath.Dir(original)
+	if err = os.RemoveAll(parent); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Symlink(outside, parent); err != nil {
+		t.Fatal(err)
+	}
+	if err = lib.Close(); err != nil {
+		t.Fatal(err)
+	}
+	lib, err = library.Open(ctx, lib.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lib.Close()
+	if entries, _ := os.ReadDir(outside); len(entries) != 0 {
+		t.Fatalf("文件被写到了图库包外：%v", entries)
+	}
+	if _, err = os.Stat(filepath.Join(deletion, asset.ID+".original")); err != nil {
+		t.Fatalf("拒绝挪回时暂存里的文件应原样保留：%v", err)
 	}
 }

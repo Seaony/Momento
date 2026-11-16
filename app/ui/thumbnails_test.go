@@ -124,9 +124,11 @@ func TestThumbnailLRUEvictsAt512Items(t *testing.T) {
 	bitmap := thumbnailTestBitmap()
 	c.decode = func(string) (*ui.Bitmap, int64, error) { return bitmap, 1024, nil }
 	for i := 0; i < thumbnailItemLimit; i++ {
+		c.NextFrame()
 		c.Get("library", model.Asset{ID: fmt.Sprint(i)})
 		waitThumbnail(t, completed)
 	}
+	c.NextFrame()
 	c.Get("library", model.Asset{ID: "0"})
 	c.Get("library", model.Asset{ID: "new"})
 	waitThumbnail(t, completed)
@@ -148,9 +150,11 @@ func TestThumbnailLRUEvictsAt96MB(t *testing.T) {
 	bitmap := thumbnailTestBitmap()
 	c.decode = func(string) (*ui.Bitmap, int64, error) { return bitmap, 32 << 20, nil }
 	for _, id := range []string{"a", "b", "c"} {
+		c.NextFrame()
 		c.Get("library", model.Asset{ID: id})
 		waitThumbnail(t, completed)
 	}
+	c.NextFrame()
 	c.Get("library", model.Asset{ID: "a"})
 	c.Get("library", model.Asset{ID: "d"})
 	waitThumbnail(t, completed)
@@ -161,6 +165,38 @@ func TestThumbnailLRUEvictsAt96MB(t *testing.T) {
 	}
 	if _, ok := c.entries[thumbnailKey{"library", "b"}]; ok {
 		t.Fatal("超过预算后未淘汰最旧条目")
+	}
+}
+
+// 大窗口一屏的卡片比上限还多时，当前帧要画的缩略图都留着，不能刚解码完就被挤掉、下一帧又重新解码。
+func TestThumbnailKeepsEverythingDrawnThisFrame(t *testing.T) {
+	c, completed := thumbnailTestCache()
+	bitmap := thumbnailTestBitmap()
+	decodes := 0
+	c.decode = func(string) (*ui.Bitmap, int64, error) { decodes++; return bitmap, 32 << 20, nil }
+	ids := []string{"a", "b", "c", "d", "e"}
+	c.NextFrame()
+	for _, id := range ids {
+		c.Get("library", model.Asset{ID: id})
+		waitThumbnail(t, completed)
+	}
+	c.NextFrame()
+	for _, id := range ids {
+		if c.Get("library", model.Asset{ID: id}) == nil {
+			t.Fatalf("屏幕上的 %s 被挤出缓存", id)
+		}
+	}
+	if decodes != len(ids) {
+		t.Fatalf("同一屏重复解码 %d 次", decodes)
+	}
+	// 滚走以后，新的一屏进来时才淘汰旧的，内存回到上限以内。
+	c.NextFrame()
+	c.Get("library", model.Asset{ID: "f"})
+	waitThumbnail(t, completed)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.bytes > thumbnailByteLimit {
+		t.Fatalf("不在屏幕上的缩略图没有淘汰：%d 字节", c.bytes)
 	}
 }
 

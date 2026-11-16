@@ -69,8 +69,9 @@ func ImportLibrary(ctx context.Context, source, destinationDir string) (_ *Libra
 }
 
 // destination 是新目录包的完整路径，已有位置不会被覆盖。
+// 导出的副本换一个新的图库 ID：沿用原 ID 的话，打开副本时原库的自动导入规则会在副本上生效，新图导进副本、源文件却被移到废纸篓。
 func (l *Library) ExportLibrary(ctx context.Context, destination string) error {
-	err := l.copyPackage(ctx, destination, false)
+	err := l.copyPackage(ctx, destination, true)
 	if err != nil {
 		slog.Error("导出图库失败", "destination", destination, "error", err)
 		return err

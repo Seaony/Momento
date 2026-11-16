@@ -3,6 +3,7 @@ package assets
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"hash/crc32"
 	"image"
 	"image/color"
@@ -11,7 +12,11 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
+
+	"github.com/Seaony/Momento/app/internal/i18n"
+	"github.com/Seaony/Momento/app/internal/model"
 )
 
 func TestImageOrientations(t *testing.T) {
@@ -250,5 +255,43 @@ func TestImagePNGWithEXIFOrientation(t *testing.T) {
 	}
 	if metadata["whiteBalance"] != "0" || metadata["flashFired"] != "false" {
 		t.Fatalf("zero-value metadata %+v", metadata)
+	}
+}
+
+func TestImageOverPixelLimitIsRejectedBeforeDecoding(t *testing.T) {
+	previous := maxImagePixels
+	maxImagePixels = 96*64 - 1
+	t.Cleanup(func() { maxImagePixels = previous })
+	// 样例都是 96×64，上限少一个像素就该全部拒绝，HEIC 和 AVIF 也要能先读到尺寸。
+	for _, extension := range []string{"jpg", "png", "gif", "webp", "tiff", "bmp", "heic", "avif"} {
+		_, _, _, _, err := PrepareImage(filepath.Join("testdata", "sample."+extension))
+		var localized *i18n.LocalizedError
+		if !errors.As(err, &localized) || localized.Key != "error_decode_image" {
+			t.Fatalf("%s 没有按像素上限拒绝：%v", extension, err)
+		}
+		if cause, ok := localized.Cause.(*i18n.LocalizedError); !ok || cause.Key != "error_image_too_large" {
+			t.Fatalf("%s 的错误原因不对：%v", extension, err)
+		}
+	}
+	ctx, lib, s := testLibrary(t)
+	input := t.TempDir()
+	fixtureCopy(t, "png", filepath.Join(input, "huge.png"))
+	small := image.NewNRGBA(image.Rect(0, 0, 10, 10))
+	f, err := os.Create(filepath.Join(input, "small.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = png.Encode(f, small); err != nil {
+		t.Fatal(err)
+	}
+	if err = f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	result, err := s.Import(ctx, model.ImportRequest{Paths: []string{input}}, nil)
+	if err != nil || result.Imported != 1 || len(result.Errors) != 1 || !strings.Contains(result.Errors[0].Error(), "huge.png") {
+		t.Fatalf("超大图片没有单独跳过：%+v %v", result, err)
+	}
+	if len(snapshot(t, ctx, lib).Assets) != 1 {
+		t.Fatal("小图没有导入")
 	}
 }

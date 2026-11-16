@@ -26,6 +26,7 @@ type thumbnailEntry struct {
 	bitmap *ui.Bitmap
 	bytes  int64
 	err    error
+	used   uint64 // 最近一次被画到的帧
 }
 
 type thumbnailCache struct {
@@ -37,7 +38,16 @@ type thumbnailCache struct {
 	nextTicket uint64
 	slots      chan struct{}
 	bytes      int64
+	frame      uint64
 	decode     func(string) (*ui.Bitmap, int64, error)
+}
+
+// 每帧画素材之前调用一次。当前帧要画的缩略图不会被挤出缓存：大窗口一屏就有几百张，超过上限时宁可多占一些，
+// 也不能刚解码完就被挤掉、下一帧又重新解码（会一直占 CPU、反复闪灰）。
+func (c *thumbnailCache) NextFrame() {
+	c.mu.Lock()
+	c.frame++
+	c.mu.Unlock()
 }
 
 func newThumbnailCache(update func(func())) *thumbnailCache {
@@ -55,9 +65,11 @@ func (c *thumbnailCache) Get(root string, asset model.Asset) *ui.Bitmap {
 	c.mu.Lock()
 	if element, ok := c.entries[key]; ok {
 		c.order.MoveToFront(element)
-		bitmap := element.Value.(thumbnailEntry).bitmap
+		entry := element.Value.(thumbnailEntry)
+		entry.used = c.frame
+		element.Value = entry
 		c.mu.Unlock()
-		return bitmap
+		return entry.bitmap
 	}
 	if _, waiting := c.pending[key]; waiting {
 		c.mu.Unlock()
@@ -88,12 +100,10 @@ func (c *thumbnailCache) Get(root string, asset model.Asset) *ui.Bitmap {
 				slog.Error("读取缩略图失败", "library", key.root, "asset", key.id, "error", err)
 				bitmap, size = nil, 0
 			}
-			entry := thumbnailEntry{key: key, bitmap: bitmap, bytes: size, err: err}
+			entry := thumbnailEntry{key: key, bitmap: bitmap, bytes: size, err: err, used: c.frame}
 			c.entries[key] = c.order.PushFront(entry)
 			c.bytes += size
-			for len(c.entries) > thumbnailItemLimit || c.bytes > thumbnailByteLimit {
-				c.remove(c.order.Back())
-			}
+			c.trim()
 		})
 	}()
 	return nil
@@ -131,6 +141,17 @@ func (c *thumbnailCache) Invalidate(value string) {
 		if key.id == value || key.root == root {
 			delete(c.pending, key)
 		}
+	}
+}
+
+// 超出上限时从最久没画过的开始淘汰；列表按最近使用排序，碰到当前帧用过的就说明剩下的都在屏幕上，停下。
+func (c *thumbnailCache) trim() {
+	for len(c.entries) > thumbnailItemLimit || c.bytes > thumbnailByteLimit {
+		back := c.order.Back()
+		if back == nil || back.Value.(thumbnailEntry).used >= c.frame {
+			return
+		}
+		c.remove(back)
 	}
 }
 

@@ -3,7 +3,6 @@ package assets
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/Seaony/Momento/app/internal/i18n"
 	"log/slog"
 	"os"
@@ -80,7 +79,9 @@ func (s *Service) deletePermanently(ctx context.Context, ids []string) (err erro
 		if e != nil {
 			return e
 		}
-		for _, rel := range []string{relative, thumb} {
+		// 暂存名带上素材 ID 和种类，中途崩溃后打开图库时能按名字挪回原处。
+		for _, file := range []struct{ rel, kind string }{{relative, "original"}, {thumb, "thumbnail"}} {
+			rel := file.rel
 			from, e := s.assetPath(rel)
 			if os.IsNotExist(e) {
 				slog.Warn("永久删除时文件已不存在", "path", rel)
@@ -89,7 +90,7 @@ func (s *Service) deletePermanently(ctx context.Context, ids []string) (err erro
 			if e != nil {
 				return e
 			}
-			to := filepath.Join(stage, fmt.Sprint(len(moved)))
+			to := filepath.Join(stage, id+"."+file.kind)
 			if err = os.Rename(from, to); err != nil {
 				return err
 			}

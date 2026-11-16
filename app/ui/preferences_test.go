@@ -304,3 +304,59 @@ func TestOldGridPreferenceFallsBackToMasonry(t *testing.T) {
 		t.Fatalf("快捷键：%v", p.Shortcuts)
 	}
 }
+
+func TestBrokenPreferencesAreKeptAndReplacedByDefaults(t *testing.T) {
+	a := preferenceTestApp(t)
+	path := filepath.Join(a.configDir, "preferences.json")
+	broken := []byte(`{"passwordHash": "abc", "theme": `)
+	if err := os.WriteFile(path, broken, 0600); err != nil {
+		t.Fatal(err)
+	}
+	message := a.loadPreferences()
+	if message == nil || !strings.Contains(message(), "preferences.json.bad") {
+		t.Fatal("偏好文件损坏时没有告诉用户原文件保存在哪")
+	}
+	kept, err := os.ReadFile(path + ".bad")
+	if err != nil || string(kept) != string(broken) {
+		t.Fatalf("损坏的原文件没有原样保留：%q，%v", kept, err)
+	}
+	if a.Preferences.Theme != DefaultPreferences().Theme || a.preferencesBlocked != nil {
+		t.Fatalf("没有改用默认设置继续：%+v，%v", a.Preferences, a.preferencesBlocked)
+	}
+	// 再坏一次时不能覆盖上一份保留的文件。
+	if err := os.WriteFile(path, []byte("{"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if a.loadPreferences() == nil {
+		t.Fatal("第二次损坏没有提示")
+	}
+	if kept, _ := os.ReadFile(path + ".bad"); string(kept) != string(broken) {
+		t.Fatal("第二次损坏覆盖了之前保留的文件")
+	}
+	matches, _ := filepath.Glob(path + ".*.bad")
+	if len(matches) != 1 {
+		t.Fatalf("第二次损坏的文件没有另存：%v", matches)
+	}
+}
+
+func TestUnreadablePreferencesAreNeverOverwritten(t *testing.T) {
+	a := preferenceTestApp(t)
+	path := filepath.Join(a.configDir, "preferences.json")
+	// 读的时候是目录，模拟读不出来又挪不走的情况。
+	if err := os.Mkdir(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "keep"), []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if a.loadPreferences() == nil || a.preferencesBlocked == nil {
+		t.Fatal("读不出偏好时没有提示，也没有停止写回")
+	}
+	a.ViewMode = 2
+	if err := a.FlushPreferences(); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Stat(path); err != nil || !info.IsDir() {
+		t.Fatal("读不出来的偏好被覆盖了")
+	}
+}

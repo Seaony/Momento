@@ -6,6 +6,7 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	"image/png"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,6 +26,9 @@ func Decode(path string) (image.Image, error) {
 	return img, err
 }
 
+// maxImagePixels 是能解码的最大像素数（2 亿），测试里可以调小。
+var maxImagePixels int64 = 200_000_000
+
 func PrepareImage(path string) (image.Image, map[string]string, int, string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -33,6 +37,23 @@ func PrepareImage(path string) (image.Image, map[string]string, int, string, err
 	defer f.Close()
 	var img image.Image
 	ext := strings.ToLower(filepath.Ext(path))
+	// 先只读尺寸，像素太多的图解码会吃掉几个 GB 内存，直接拒绝。
+	// 读不出尺寸时照常解码，由解码器给出真正的错误。
+	var config image.Config
+	switch ext {
+	case ".heic", ".heif":
+		config, err = heic.DecodeConfig(f)
+	case ".avif":
+		config, err = avif.DecodeConfig(f)
+	default:
+		config, _, err = image.DecodeConfig(f)
+	}
+	if err == nil && int64(config.Width)*int64(config.Height) > maxImagePixels {
+		return nil, nil, 0, "", i18n.WrapError(i18n.NewError("error_image_too_large", config.Width, config.Height), "error_decode_image", filepath.Base(path))
+	}
+	if _, err = f.Seek(0, io.SeekStart); err != nil {
+		return nil, nil, 0, "", err
+	}
 	switch ext {
 	case ".heic", ".heif":
 		img, err = heic.Decode(f)

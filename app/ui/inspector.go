@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 
@@ -27,6 +28,8 @@ type inspectorState struct {
 	EditKey ui.Key
 	// 文件夹选择器里展开的父文件夹。
 	FolderExpanded map[string]bool
+	// 最近一次写入失败的原因，放弃修改的确认框里给用户看。
+	SaveError string
 }
 
 // 照旧版 macOS 检查器的规格。
@@ -46,6 +49,8 @@ const (
 	inspectorFolderRowH     = 26
 	inspectorFolderIndent   = 22
 	inspectorSectionTitleSz = 10
+	inspectorEditLineHeight = 1.4 // 可编辑文字显示态和输入框用同一个行高，点进编辑时高度不变，下面的内容不跳
+	inspectorTitleWeight    = 600 // 图片标题比正文大一号、加粗，一眼能和下面的信息分开
 )
 
 func (a *App) inspector(c *ui.Context) {
@@ -212,22 +217,22 @@ func inspectorColorTip(color model.Color) string {
 // 标题平时只是文字，悬停才出浅底和细边，点一下才变成输入框；回车或失焦保存，Esc 放弃。
 func (a *App) inspectorTitle(c *ui.Context, asset model.Asset) {
 	if a.Inspector.Editing == "title" {
-		a.inspectorEditor(c, "asset_title_"+asset.ID, &a.Inspector.Title, a.T("edit_title"), "", fontBody, 6, true, func(cancel bool) {
+		a.inspectorEditor(c, "asset_title_"+asset.ID, &a.Inspector.Title, a.T("edit_title"), "", fontLead, 6, true, func(cancel bool) {
 			if cancel || strings.TrimSpace(a.Inspector.Title) == "" {
 				a.Inspector.Title = a.Inspector.SourceTitle
 			}
-		})
+		}).FontWeight(inspectorTitleWeight)
 		return
 	}
 	a.inspectorEditable(c, "title-display", a.T("edit_title"), func(p *designPalette) {
-		ui.Text(c, a.Inspector.Title).FontSize(fontBody).TextColor(p.Text).FillWidth()
+		ui.Text(c, a.Inspector.Title).FontSize(fontLead).FontWeight(inspectorTitleWeight).TextColor(p.Text).FillWidth()
 	}, func() { a.Inspector.Editing = "title" })
 }
 
 // 可原地编辑的文字：悬停铺浅底和细边，点一下进入编辑。
 func (a *App) inspectorEditable(c *ui.Context, key, label string, content func(p *designPalette), edit func()) ui.Element {
 	p := paletteFor(c.Theme())
-	button := ui.ButtonBase(c.Key(key)).Label(label).FillWidth().Padding(space4, 6).Radius(inspectorEditRadius).Cursor(ui.CursorPointer).AlignItems(ui.Start)
+	button := ui.ButtonBase(c.Key(key)).Label(label).FillWidth().Padding(space4, 6).LineHeight(inspectorEditLineHeight).Radius(inspectorEditRadius).Cursor(ui.CursorPointer).AlignItems(ui.Start)
 	background, border := ui.Transparent, ui.Transparent
 	if button.Hovered() || button.Focused() {
 		background, border = p.Text.Alpha(themeValue(c, .045, .06)), p.BorderSubtle
@@ -242,10 +247,10 @@ func (a *App) inspectorEditable(c *ui.Context, key, label string, content func(p
 
 // 编辑中的输入框：和显示态同样的内边距和字号，品牌色细边；按行数长高（去掉 TextArea 自带的 80 最小高度）。
 // single 为真时回车结束编辑（标题、链接），否则回车换行（备注）。
-func (a *App) inspectorEditor(c *ui.Context, key string, value *string, label, placeholder string, size float32, lines int, single bool, done func(cancel bool)) {
+func (a *App) inspectorEditor(c *ui.Context, key string, value *string, label, placeholder string, size float32, lines int, single bool, done func(cancel bool)) ui.Element {
 	p := paletteFor(c.Theme())
 	input := ui.TextArea(c.Key(key), value).Lines(1, lines).Label(label).Placeholder(placeholder).PlaceholderColor(placeholderColor(c)).
-		FillWidth().MinHeight(0).Padding(space4, 6).FontSize(size).Radius(inspectorEditRadius).Background(p.Raised).Border(1, p.Accent.Alpha(.65)).
+		FillWidth().MinHeight(0).Padding(space4, 6).FontSize(size).LineHeight(inspectorEditLineHeight).Radius(inspectorEditRadius).Background(p.Raised).Border(1, p.Accent.Alpha(.65)).
 		FocusRing(false).Scrollbars(false).AutoFocus().Disabled(a.Busy)
 	// 回车、Esc 在输入框处理之前拦下，记下来留到下一帧处理：单行字段回车不插换行，光标停在哪都不改内容。
 	input.OnTextKey(func(k ui.TextKey) bool {
@@ -274,6 +279,7 @@ func (a *App) inspectorEditor(c *ui.Context, key string, value *string, label, p
 	case a.Inspector.EditKey == ui.KeyEnter, input.FocusLeft():
 		finish(false)
 	}
+	return input
 }
 
 // 浅色、深色各取一个值（多为叠在底色上的正文色比例）。
@@ -291,7 +297,7 @@ func inspectorSection(c *ui.Context, key, title string, body func()) {
 		ui.Box(c).Height(1).FillWidth().Background(p.hairline())
 		// 备注不要小标题，占位文字「添加备注」已经说明了用途。
 		if title != "" {
-			ui.Text(c, strings.ToUpper(title)).FontSize(inspectorSectionTitleSz).FontWeight(600).TextColor(p.TextTertiary)
+			ui.Text(c, strings.ToUpper(title)).FontSize(inspectorSectionTitleSz).FontWeight(600).TextColor(inspectorSectionInk(c, p))
 		}
 		body()
 	})
@@ -401,7 +407,7 @@ func (a *App) inspectorEXIF(c *ui.Context, asset model.Asset) {
 		ui.Box(c).Height(1).FillWidth().Background(p.hairline())
 		header := ui.ButtonBase(c.Key("exif-toggle")).Label(a.T("exif")).Expanded(open).FillWidth().Height(space32).Padding(0).
 			AlignItems(ui.Center).Gap(space4).Cursor(ui.CursorPointer)
-		ink := p.TextTertiary
+		ink := inspectorSectionInk(c, p)
 		if header.Hovered() {
 			ink = p.TextSecondary
 		}
@@ -484,14 +490,15 @@ func (a *App) inspectorFolders(c *ui.Context, selected []model.Asset) {
 
 // 标签、文件夹区：已加入的显示成药丸，悬停时前面的图标换成移除按钮；最后是加号药丸，点开选择器。
 func (a *App) inspectorMemberships(c *ui.Context, selected []model.Asset, items []inspectorMembership, folder bool) {
-	ids := inspectorIDs(selected)
 	kind, plural, icon := "tag", "tags", "hashtag"
 	open := &a.Inspector.TagsOpen
 	if folder {
 		kind, plural, icon = "folder", "folders", "folder"
 		open = &a.Inspector.FoldersOpen
 	}
+	// 点了才取 ID，不在每帧复制全部选中项。
 	set := func(id string, add bool) {
+		ids := inspectorIDs(selected)
 		if folder {
 			a.SetFolders(ids, []string{id}, add)
 		} else {
@@ -502,7 +509,7 @@ func (a *App) inspectorMemberships(c *ui.Context, selected []model.Asset, items 
 	inspectorSection(c, "inspector_"+plural, a.T(plural), func() {
 		ui.Row(c.Key("chips")).FillWidth().Wrap().Gap(6).Children(func() {
 			for _, item := range items {
-				count := inspectorMembershipCount(selected, item.ID, folder)
+				count := a.selectionMembers(item.ID, folder)
 				if count == 0 {
 					continue
 				}
@@ -596,7 +603,7 @@ func (a *App) inspectorTagPicker(c *ui.Context, selected []model.Asset, items []
 			exact = item.ID
 		}
 	}
-	all := func(id string) bool { return inspectorMembershipCount(selected, id, false) == len(selected) }
+	all := func(id string) bool { return a.selectionMembers(id, false) == len(selected) }
 	choose := func(id string) {
 		if a.Busy {
 			return
@@ -626,7 +633,7 @@ func (a *App) inspectorTagPicker(c *ui.Context, selected []model.Asset, items []
 			ui.Text(c, fmt.Sprintf("%s (%d)", a.T("all_tags"), len(matches))).FontSize(fontGroup).FontWeight(600).TextColor(p.TextSecondary).Padding(0, 2)
 			ui.Row(c.Key("choices")).FillWidth().Wrap().Gap(6).Children(func() {
 				for _, item := range matches {
-					count := inspectorMembershipCount(selected, item.ID, false)
+					count := a.selectionMembers(item.ID, false)
 					done := count == len(selected)
 					label := item.Name
 					if count > 0 && !done {
@@ -716,7 +723,7 @@ func (a *App) inspectorFolderPicker(c *ui.Context, selected []model.Asset, items
 
 func (a *App) inspectorFolderRow(c *ui.Context, selected []model.Asset, items []inspectorMembership, item inspectorMembership, depth int, hasChildren, expanded bool, set func(string, bool)) {
 	p := paletteFor(c.Theme())
-	count := inspectorMembershipCount(selected, item.ID, true)
+	count := a.selectionMembers(item.ID, true)
 	checked := count == len(selected)
 	row := ui.Row(c.Key("folder-"+item.ID)).FillWidth().Height(inspectorFolderRowH).Padding(0, 9, 0, float32(depth*inspectorFolderIndent)).Gap(2).Radius(11).AlignItems(ui.Center)
 	background := ui.Transparent
@@ -835,20 +842,6 @@ func inspectorIDs(selected []model.Asset) []string {
 	return ids
 }
 
-func inspectorMembershipCount(selected []model.Asset, id string, folder bool) int {
-	count := 0
-	for _, asset := range selected {
-		members := asset.TagIDs
-		if folder {
-			members = asset.FolderIDs
-		}
-		if slices.Contains(members, id) {
-			count++
-		}
-	}
-	return count
-}
-
 func (a *App) inspectorDraft() (inspectorEdit, bool) {
 	state := a.Inspector
 	name, source := strings.TrimSpace(state.Title), strings.TrimSpace(state.SourceURL)
@@ -923,6 +916,7 @@ func (a *App) runInspectorEdit(edit inspectorEdit) {
 		}()
 		a.Window.Update(func() {
 			if err != nil {
+				a.Inspector.SaveError = a.Texts.Error(err)
 				for i, pending := range a.Inspector.Pending {
 					if pending.ID == edit.ID {
 						a.Inspector.Pending[i].Failed = true
@@ -946,6 +940,25 @@ func (a *App) runInspectorEdit(edit inspectorEdit) {
 }
 
 func (a *App) saveInspectorDetails() { a.saveInspectorEdits() }
+
+// 放弃还没写进图库的名称、备注和来源链接修改。内容先完整写进日志，用户事后还能从日志里找回。
+func (a *App) DiscardInspectorEdits(reason string) bool {
+	edits := slices.Clone(a.Inspector.Pending)
+	// 输入框里还没提交的内容可能比排队的那份更新，两份都记下。
+	if draft, dirty := a.inspectorDraft(); dirty && !slices.Contains(edits, draft) {
+		edits = append(edits, draft)
+	}
+	for _, edit := range edits {
+		slog.Warn("放弃未保存的检查器修改", "reason", reason, "asset", edit.ID, "name", edit.Name, "note", edit.Note, "source", edit.Source)
+	}
+	a.Inspector = inspectorState{}
+	return len(edits) > 0
+}
+
+// 分组标题比下面的字段名（类型、尺寸……）再浅一档，一眼能分出是标题还是字段。
+func inspectorSectionInk(c *ui.Context, p *designPalette) ui.Color {
+	return p.TextTertiary.Alpha(themeValue(c, .62, .7))
+}
 
 func inspectorIconButton(c *ui.Context, label, icon string) ui.Element {
 	button := ui.ButtonBase(c).Label(label).Tooltip(label).Size(controlSmall, controlSmall).Padding(0).Radius(radiusControl).Cursor(ui.CursorPointer)

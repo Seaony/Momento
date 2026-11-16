@@ -104,8 +104,8 @@ func TestExportLibraryCopiesLiveWALAndRemainsPortable(t *testing.T) {
 	if got := snapshot(t, backup); !reflect.DeepEqual(got, before) {
 		t.Fatalf("导出数据不一致：%+v / %+v", got, before)
 	}
-	if backup.Manifest != l.Manifest {
-		t.Fatal("导出备份改变了清单")
+	if backup.Manifest.LibraryID == l.Manifest.LibraryID || backup.Manifest.DisplayName != l.Manifest.DisplayName || backup.Manifest.Icon != l.Manifest.Icon || backup.Manifest.SchemaVersion != l.Manifest.SchemaVersion {
+		t.Fatalf("导出副本应换新 ID、其余清单字段不变：%+v / %+v", backup.Manifest, l.Manifest)
 	}
 	original, err := os.ReadFile(filepath.Join(destination, filepath.FromSlash(asset.RelativePath)))
 	if err != nil {

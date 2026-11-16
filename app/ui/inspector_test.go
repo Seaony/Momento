@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
@@ -474,5 +475,39 @@ func TestFolderDialogClosesWhenLibraryChanges(t *testing.T) {
 	a.saveFolderDialog("Moodboard")
 	if a.Busy {
 		t.Fatal("换图库后保存仍然开始写入")
+	}
+}
+
+// 改名或备注写不进图库时，切换图库要给「放弃修改」的出口，不能一直卡住。
+func TestFailedInspectorEditsOfferDiscard(t *testing.T) {
+	a := inspectorTestApp(model.Asset{ID: "a"})
+	a.Inspector.Pending = []inspectorEdit{{ID: "a", Note: "draft", Details: true, Failed: true}}
+	a.Inspector.SaveError = "disk full"
+	a.Error = "disk full"
+	a.pendingLibraryAfterEdits = "/other.momento"
+	a.completeInspectorTransitions()
+	if !a.ConfirmOpen || a.ConfirmAction == nil || a.Error != "" || !strings.Contains(a.ConfirmDetail, "disk full") {
+		t.Fatalf("写入失败后没有给出放弃修改的出口：open=%v detail=%q error=%q", a.ConfirmOpen, a.ConfirmDetail, a.Error)
+	}
+	if a.pendingLibraryAfterEdits != "" {
+		t.Fatal("不确认就不能继续打开别的图库")
+	}
+	if !a.DiscardInspectorEdits("test") || a.InspectorEditsPending() {
+		t.Fatal("放弃后还有待保存的修改")
+	}
+}
+
+// 排队的修改和输入框里更新的草稿是同一张图时，两份都要记进日志再清掉。
+func TestDiscardInspectorEditsKeepsNewerDraft(t *testing.T) {
+	a := inspectorTestApp(model.Asset{ID: "a"})
+	a.Inspector.Pending = []inspectorEdit{{ID: "a", Note: "old", Details: true, Failed: true}}
+	a.Inspector.AssetID, a.Inspector.SourceNote, a.Inspector.Note = "a", "", "newer"
+	var buf strings.Builder
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	defer slog.SetDefault(previous)
+	a.DiscardInspectorEdits("test")
+	if !strings.Contains(buf.String(), "note=old") || !strings.Contains(buf.String(), "note=newer") {
+		t.Fatalf("日志里没有同时留下两份修改：%s", buf.String())
 	}
 }

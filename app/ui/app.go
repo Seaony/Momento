@@ -2,12 +2,12 @@ package ui
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -28,6 +28,8 @@ type AutoImportRule struct {
 	Path     string `json:"path"`
 	FolderID string `json:"folderID"`
 	Enabled  bool   `json:"enabled"`
+	// 规则所属图库包的位置。用 Finder 直接复制的图库包和原库 ID 相同，靠位置区分，免得副本也去监视同一个文件夹。
+	Library string `json:"library,omitempty"`
 }
 
 type Preferences struct {
@@ -82,7 +84,7 @@ type App struct {
 	Index                                                     *catalog.Index
 	Query                                                     catalog.Query
 	Visible                                                   []model.Asset
-	Selected                                                  ui.Selection[string]
+	Selected                                                  assetSelection
 	ViewMode                                                  int
 	TagPage                                                   bool
 	SidebarVisible, InspectorVisible                          bool
@@ -131,6 +133,7 @@ type App struct {
 	pendingImports                                            [][2]string
 	assetByID                                                 map[string]model.Asset
 	configDir                                                 string
+	preferencesBlocked                                        error // 偏好文件读不出来又没法挪走时，本次运行不写回，免得覆盖用户原来的设置
 	recents                                                   *library.RecentStore
 	ctx                                                       context.Context
 	cancel                                                    context.CancelFunc
@@ -150,25 +153,21 @@ type App struct {
 	list                                                      listLayout
 	focusAssetID                                              string // 方向键移动选择后，下一帧把键盘焦点交给这张卡片
 	visibleVersion                                            uint64
+	snapshotVersion                                           uint64
+	selection                                                 selectionCache
 }
 
 func New() *App {
 	ctx, cancel := context.WithCancel(context.Background())
 	a := &App{ctx: ctx, cancel: cancel, SidebarVisible: true, SidebarWidth: 236, selectedIndex: -1, anchor: -1, Preferences: DefaultPreferences(), Query: catalog.Query{Sort: "added", Descending: true}}
+	var preferencesProblem func() string
 	dir, err := library.ConfigDir()
 	if err != nil {
 		a.Error = a.Texts.Error(err)
 	} else {
 		a.configDir = dir
 		a.recents = library.NewRecentStore(dir)
-		data, err := os.ReadFile(filepath.Join(dir, "preferences.json"))
-		if err == nil {
-			if err = json.Unmarshal(data, &a.Preferences); err != nil {
-				a.Error = a.Texts.Error(err)
-			}
-		} else if !os.IsNotExist(err) {
-			a.Error = a.Texts.Error(err)
-		}
+		preferencesProblem = a.loadPreferences()
 		a.Recent, err = a.recents.List()
 		if err != nil {
 			a.Error = a.Texts.Error(err)
@@ -180,6 +179,9 @@ func New() *App {
 		a.Texts.SystemLanguage = preferred[0]
 	}
 	a.applyLocale()
+	if preferencesProblem != nil {
+		a.Error = preferencesProblem()
+	}
 	a.applyAppearance()
 	a.InitPasswordLock()
 	return a
@@ -359,12 +361,43 @@ func (a *App) Run(label string, work func(context.Context) error) {
 
 func (a *App) applySnapshot(snapshot model.Snapshot) {
 	a.Snapshot = snapshot
+	a.snapshotVersion++
 	a.Index = catalog.New(snapshot)
 	a.assetByID = make(map[string]model.Asset, len(snapshot.Assets))
 	for _, asset := range snapshot.Assets {
 		a.assetByID[asset.ID] = asset
 	}
 	a.refine(false)
+	a.pruneAutoImportTargets()
+}
+
+// 自动导入规则指向的文件夹被删掉（连同父文件夹一起删也算）后，改回导入到图库根目录；不然每次自动导入都失败，设置页却显示成根目录。
+func (a *App) pruneAutoImportTargets() {
+	libraryID := a.libraryID()
+	rules := a.Preferences.AutoImport[libraryID]
+	if len(rules) == 0 {
+		return
+	}
+	exists := make(map[string]bool, len(a.Snapshot.Folders))
+	for _, folder := range a.Snapshot.Folders {
+		exists[folder.ID] = true
+	}
+	var next []AutoImportRule
+	for i, rule := range rules {
+		// 只改属于当前这个图库包的规则；在副本里删了文件夹，不能改到原库的规则。
+		if rule.FolderID == "" || exists[rule.FolderID] || rule.Library != "" && a.Library != nil && !samePath(rule.Library, a.Library.Root) {
+			continue
+		}
+		if next == nil {
+			next = slices.Clone(rules)
+		}
+		slog.Warn("自动导入的目标文件夹已不存在，改为导入到图库根目录", "path", rule.Path, "folder", rule.FolderID)
+		next[i].FolderID = ""
+	}
+	if next != nil {
+		a.Preferences.AutoImport[libraryID] = next
+		a.SavePreferences()
+	}
 }
 func (a *App) Refine() { a.refine(true) }
 func (a *App) refine(resetScroll bool) {
@@ -393,31 +426,6 @@ func (a *App) Refresh() { a.Run("reload", func(ctx context.Context) error { retu
 func (a *App) SetScope(scope, folderID string) {
 	a.navigateScope(scope, folderID, false)
 }
-func (a *App) SelectedAssets() []model.Asset {
-	var out []model.Asset
-	if a.assetByID != nil {
-		for id := range a.Selected.All() {
-			if asset, ok := a.assetByID[id]; ok {
-				out = append(out, asset)
-			}
-		}
-		return out
-	}
-	for _, asset := range a.Visible {
-		if a.Selected.Has(asset.ID) {
-			out = append(out, asset)
-		}
-	}
-	return out
-}
-func (a *App) selectedIDs() []string {
-	var ids []string
-	for _, v := range a.SelectedAssets() {
-		ids = append(ids, v.ID)
-	}
-	return ids
-}
-
 func (a *App) ChooseOpenLibrary() {
 	go func() {
 		paths, err := mygo.Dialog.Open(libraryOpenOptions(a.Window, a.T("open_library")))
@@ -605,6 +613,7 @@ func (a *App) DeleteLibrary() {
 					a.ShowError(err)
 					return
 				}
+				a.DiscardInspectorEdits("library_deleted")
 				a.Library = nil
 				a.Assets = nil
 				a.Index = nil
@@ -726,6 +735,10 @@ func (a *App) watchLibrary() {
 					}
 					a.Recent, _ = a.recents.List()
 					a.Error = a.T("library_missing")
+					// 图库没了，没保存的修改也写不回去了：内容记进日志后清掉，不然打开别的图库和退出都会一直等它。
+					if a.DiscardInspectorEdits("library_missing") {
+						a.Error += "\n" + a.T("inspector_edits_discarded")
+					}
 				}
 			})
 		}

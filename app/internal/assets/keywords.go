@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,7 +36,7 @@ func ReadKeywords(path string) ([]string, error) {
 			return nil, err
 		}
 		if metadata.IPTC != nil {
-			keywords = append(keywords, metadata.IPTC.Keywords...)
+			keywords = append(keywords, iptcKeywords(metadata.IPTC.CodedCharacterSet, metadata.IPTC.Keywords)...)
 		}
 	}
 	if _, err = f.Seek(0, io.SeekStart); err != nil {
@@ -68,6 +69,27 @@ func ReadKeywords(path string) ([]string, error) {
 		}
 	}
 	return result, nil
+}
+
+// iptcKeywords 处理老软件写的关键词：没声明 UTF-8 又不是合法 UTF-8 时，按 Latin-1 转成 UTF-8。
+// 声明了 UTF-8 的保持原样，后面照常检查编码。
+func iptcKeywords(charset string, values []string) []string {
+	if charset == "\x1b%G" {
+		return values
+	}
+	out := make([]string, len(values))
+	for i, value := range values {
+		if utf8.ValidString(value) {
+			out[i] = value
+			continue
+		}
+		runes := make([]rune, len(value))
+		for j := range len(value) {
+			runes[j] = rune(value[j])
+		}
+		out[i] = string(runes)
+	}
+	return out
 }
 
 func pngKeywords(r io.ReadSeeker) (xmp.XMP, error) {
@@ -147,22 +169,34 @@ func attachKeywords(ctx context.Context, tx *sql.Tx, assetID string, keywords []
 	return nil
 }
 
-func (s *Service) verifyDuplicate(ctx context.Context, relative, expected string) error {
+// storedCopyMissing 核对图库里已有的原图：缺了返回 true，让导入用新文件补回；内容对不上返回错误。
+func (s *Service) storedCopyMissing(ctx context.Context, relative, expected string) (bool, error) {
 	path, err := s.assetPath(relative)
-	if err != nil {
-		return i18n.WrapError(err, "error_duplicate_copy")
+	if errors.Is(err, fs.ErrNotExist) {
+		return true, nil
 	}
+	if err != nil {
+		return false, i18n.WrapError(err, "error_duplicate_copy")
+	}
+	same, err := fileHashEquals(ctx, path, expected)
+	if err != nil {
+		return false, err
+	}
+	if !same {
+		return false, i18n.NewError("error_duplicate_damaged")
+	}
+	return false, nil
+}
+
+func fileHashEquals(ctx context.Context, path, expected string) (bool, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer f.Close()
 	actual, err := hashReader(ctx, f)
 	if err != nil {
-		return err
+		return false, err
 	}
-	if actual != expected {
-		return i18n.NewError("error_duplicate_damaged")
-	}
-	return nil
+	return actual == expected, nil
 }

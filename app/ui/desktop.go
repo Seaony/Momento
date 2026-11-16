@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"runtime"
 	"slices"
+	"strings"
 
 	"github.com/Seaony/Momento/app/internal/model"
 	"github.com/egoist/mygo"
@@ -44,6 +45,10 @@ func (a *App) importFeedback(event string, result model.ImportResult) {
 		a.selectImportResult(result.AssetIDs)
 	}
 	message := a.T("import_complete", result.Imported, result.Skipped)
+	if len(result.Errors) > 0 {
+		message = a.T("import_complete_failed", result.Imported, result.Skipped, len(result.Errors))
+		a.showImportFailures(result.Errors)
+	}
 	a.Notify(message)
 	if !a.Preferences.Notify || a.Window == nil || a.Window.IsFocused() || a.SettingsWindow != nil && a.SettingsWindow.IsFocused() {
 		return
@@ -76,6 +81,22 @@ func (a *App) importFeedback(event string, result model.ImportResult) {
 			})
 		}
 	}()
+}
+
+// 坏图被跳过时，导入结束后列出失败的文件和原因；太多时只列前 20 条，全部写进日志。
+func (a *App) showImportFailures(errs []error) {
+	const shown = 20
+	lines := []string{a.T("import_failed_files", len(errs))}
+	for i, err := range errs {
+		slog.Error("导入时跳过文件", "error", err)
+		if i < shown {
+			lines = append(lines, a.Texts.Error(err))
+		}
+	}
+	if len(errs) > shown {
+		lines = append(lines, a.T("import_failed_more", len(errs)-shown))
+	}
+	a.Error = strings.Join(lines, "\n")
 }
 
 func (a *App) selectImportResult(ids []string) {
@@ -114,6 +135,18 @@ func (a *App) PrepareInspectorQuit() bool {
 }
 func (a *App) completeInspectorTransitions() {
 	if a.InspectorEditsFailed() {
+		// 写不进去（磁盘满、只读卷）时，给一个放弃修改的出口，不然既打不开别的图库也退不出去。
+		if quit, path := a.quitAfterInspector, a.pendingLibraryAfterEdits; quit || path != "" {
+			a.Error = "" // 原因放进确认框里，不叠两个弹窗
+			a.Confirm(a.T("inspector_save_failed"), a.T("inspector_save_failed_detail", a.Inspector.SaveError), a.T("discard_changes"), func() {
+				a.DiscardInspectorEdits("save_failed")
+				if quit {
+					mygo.App.Quit()
+				} else {
+					a.OpenLibrary(path)
+				}
+			})
+		}
 		a.quitAfterInspector = false
 		a.pendingLibraryAfterEdits = ""
 		return

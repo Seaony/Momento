@@ -35,7 +35,7 @@ var appIconAliases = map[string]string{
 	"thumbnail":          "frame-corners",
 	"sidebar":            "sidebar-simple",
 	"inspector":          "sidebar-simple",
-	"collapse-inspector": "caret-double-right",
+	"collapse-inspector": "sidebar-simple",
 	"link":               "link-simple",
 	"external-link":      "arrow-square-out",
 	"library":            "images-square",

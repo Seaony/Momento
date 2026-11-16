@@ -19,12 +19,22 @@ const keywordPacket = `<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="h
 
 func jpegWithKeywords(t *testing.T) string {
 	t.Helper()
+	return jpegWithIPTC(t, nil, []string{"design", " Photo ", "参考"}, true)
+}
+
+// jpegWithIPTC 往样例 JPEG 里写 IPTC 关键词；charset 非空时写入 1:90 字符集声明。
+func jpegWithIPTC(t *testing.T, charset []byte, words []string, withXMP bool) string {
+	t.Helper()
 	source, err := os.ReadFile(filepath.Join("testdata", "sample.jpg"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	iptc := []byte{}
-	for _, word := range []string{"design", " Photo ", "参考"} {
+	if charset != nil {
+		iptc = append(iptc, 0x1c, 1, 90, byte(len(charset)>>8), byte(len(charset)))
+		iptc = append(iptc, charset...)
+	}
+	for _, word := range words {
 		iptc = append(iptc, 0x1c, 2, 25, byte(len(word)>>8), byte(len(word)))
 		iptc = append(iptc, word...)
 	}
@@ -40,7 +50,9 @@ func jpegWithKeywords(t *testing.T) string {
 	}
 	data := append([]byte{}, source[:2]...)
 	data = append(data, segment(0xed, photoshop)...)
-	data = append(data, segment(0xe1, append([]byte("http://ns.adobe.com/xap/1.0/\x00"), []byte(keywordPacket)...))...)
+	if withXMP {
+		data = append(data, segment(0xe1, append([]byte("http://ns.adobe.com/xap/1.0/\x00"), []byte(keywordPacket)...))...)
+	}
 	data = append(data, source[2:]...)
 	path := filepath.Join(t.TempDir(), "keywords.jpg")
 	if err = os.WriteFile(path, data, 0600); err != nil {
@@ -175,53 +187,79 @@ func TestKeywordReadingKeepsAllEightFormatsImportable(t *testing.T) {
 	}
 }
 
-func TestDuplicateRequiresAnIntactStoredCopy(t *testing.T) {
-	for _, failure := range []string{"missing", "damaged"} {
-		t.Run(failure, func(t *testing.T) {
-			ctx, lib, s := testLibrary(t)
-			path := pngWithKeywords(t, false)
-			if _, err := s.Import(ctx, model.ImportRequest{Paths: []string{path}}, nil); err != nil {
-				t.Fatal(err)
-			}
-			asset := snapshot(t, ctx, lib).Assets[0]
-			stored := filepath.Join(lib.Root, filepath.FromSlash(asset.RelativePath))
-			if failure == "missing" {
-				if err := os.Remove(stored); err != nil {
-					t.Fatal(err)
-				}
-			} else {
-				if err := os.WriteFile(stored, []byte("damaged"), 0600); err != nil {
-					t.Fatal(err)
-				}
-			}
-			result, err := s.Import(ctx, model.ImportRequest{Paths: []string{path}, ImportKeywords: true}, nil)
-			if err == nil || result.Skipped != 0 || len(result.AssetIDs) != 0 {
-				t.Fatalf("缺少完整副本仍被当作成功重复: %+v %v", result, err)
-			}
-			if _, err := os.Stat(path); err != nil {
-				t.Fatal("失败修改了源文件")
-			}
-			if len(snapshot(t, ctx, lib).Tags) != 0 {
-				t.Fatal("失败仍写入标签")
-			}
-		})
-	}
-}
-
-func TestMalformedKeywordsFailWithoutChangingLibrary(t *testing.T) {
+func TestDuplicateWithDamagedStoredCopyIsSkippedWithError(t *testing.T) {
 	ctx, lib, s := testLibrary(t)
-	path := jpegWithKeywords(t)
-	data, err := os.ReadFile(path)
-	if err != nil {
+	path := pngWithKeywords(t, false)
+	if _, err := s.Import(ctx, model.ImportRequest{Paths: []string{path}}, nil); err != nil {
 		t.Fatal(err)
 	}
-	data = bytes.Replace(data, []byte("参考"), []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff}, 1)
-	if err = os.WriteFile(path, data, 0600); err != nil {
+	asset := snapshot(t, ctx, lib).Assets[0]
+	stored := filepath.Join(lib.Root, filepath.FromSlash(asset.RelativePath))
+	if err := os.WriteFile(stored, []byte("damaged"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	result, err := s.Import(ctx, model.ImportRequest{Paths: []string{path}, ImportKeywords: true}, nil)
-	if err == nil || result.Imported != 0 || len(snapshot(t, ctx, lib).Assets) != 0 {
-		t.Fatalf("错误关键字没有阻止导入: %+v %v", result, err)
+	if err != nil || result.Skipped != 0 || len(result.AssetIDs) != 0 || len(result.Errors) != 1 {
+		t.Fatalf("损坏副本仍被当作成功重复: %+v %v", result, err)
+	}
+	if kept, _ := os.ReadFile(stored); string(kept) != "damaged" {
+		t.Fatal("覆盖了图库里内容对不上的文件")
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal("失败修改了源文件")
+	}
+	if len(snapshot(t, ctx, lib).Tags) != 0 {
+		t.Fatal("失败仍写入标签")
+	}
+}
+
+func TestDuplicateWithMissingStoredCopyIsRepaired(t *testing.T) {
+	ctx, lib, s := testLibrary(t)
+	path := pngWithKeywords(t, false)
+	if _, err := s.Import(ctx, model.ImportRequest{Paths: []string{path}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	asset := snapshot(t, ctx, lib).Assets[0]
+	if err := os.Remove(filepath.Join(lib.Root, filepath.FromSlash(asset.RelativePath))); err != nil {
+		t.Fatal(err)
+	}
+	result, err := s.Import(ctx, model.ImportRequest{Paths: []string{path}, ImportKeywords: true}, nil)
+	if err != nil || result.Skipped != 1 || len(result.Errors) != 0 || !reflect.DeepEqual(result.AssetIDs, []string{asset.ID}) {
+		t.Fatalf("缺原图的重复没有补回: %+v %v", result, err)
+	}
+	if missing, err := s.storedCopyMissing(ctx, asset.RelativePath, asset.ID); err != nil || missing {
+		t.Fatalf("补回的原图不对: %v %v", missing, err)
+	}
+	if len(snapshot(t, ctx, lib).Tags) != 3 {
+		t.Fatal("补回后没有写入关键词")
+	}
+}
+
+func TestUnreadableKeywordsSkipOnlyKeywords(t *testing.T) {
+	ctx, lib, s := testLibrary(t)
+	// 声明了 UTF-8 却不是合法 UTF-8，关键词读不出来，但图片照常导入。
+	path := jpegWithIPTC(t, []byte("\x1b%G"), []string{"Caf\xe9"}, false)
+	result, err := s.Import(ctx, model.ImportRequest{Paths: []string{path}, ImportKeywords: true}, nil)
+	if err != nil || result.Imported != 1 || len(result.Errors) != 0 {
+		t.Fatalf("关键词出错阻止了导入: %+v %v", result, err)
+	}
+	if got := snapshot(t, ctx, lib); len(got.Assets) != 1 || len(got.Tags) != 0 {
+		t.Fatalf("坏关键词不该写入标签: %+v", got.Tags)
+	}
+}
+
+func TestLatin1IPTCKeywordsBecomeUTF8(t *testing.T) {
+	path := jpegWithIPTC(t, nil, []string{"Caf\xe9", "参考"}, false)
+	words, err := ReadKeywords(path)
+	if err != nil || !reflect.DeepEqual(words, []string{"Café", "参考"}) {
+		t.Fatalf("Latin-1 关键词没有转成 UTF-8: %q %v", words, err)
+	}
+	ctx, lib, s := testLibrary(t)
+	if _, err = s.Import(ctx, model.ImportRequest{Paths: []string{path}, ImportKeywords: true}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got := snapshot(t, ctx, lib).Tags; len(got) != 2 || got[0].Name != "Café" && got[1].Name != "Café" {
+		t.Fatalf("标签不对: %+v", got)
 	}
 }
 

@@ -20,6 +20,9 @@ func (a *App) contentTopInset() float32 {
 }
 
 func (a *App) assetArea(c *ui.Context) {
+	if a.Thumbnails != nil {
+		a.Thumbnails.NextFrame()
+	}
 	a.hovered = ""
 	scroll := ui.Scroll(c.Key("assets")).Scrollbars(false).Grow(1).FillWidth().TrackScroll(&a.scroll)
 	inset := scroll.AnimateTo("header-inset", a.contentTopInset(), motionSpring)
@@ -400,11 +403,12 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 		a.ActivateAsset(asset.ID, false)
 	}
 	if a.Library != nil {
-		ids := a.selectedIDs()
-		if !a.Selected.Has(asset.ID) {
-			ids = []string{asset.ID}
-		}
-		card.Drag(AssetsDrag{LibraryID: a.libraryID(), IDs: ids})
+		card.Drag(AssetsDrag{LibraryID: a.libraryID(), assets: func() []string {
+			if a.Selected.Has(asset.ID) {
+				return a.selectedIDs()
+			}
+			return []string{asset.ID}
+		}})
 		root := a.Library.Root
 		AttachFileDrag(card, root, func() []model.Asset {
 			if a.Selected.Has(asset.ID) {

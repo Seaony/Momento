@@ -82,14 +82,14 @@ func TestSidebarLibraryMenuAndNewLibrary(t *testing.T) {
 
 func TestSidebarRejectsOtherLibraryDrag(t *testing.T) {
 	app := sidebarTestApp()
-	if !app.sidebarCanDrop(AssetsDrag{LibraryID: "test", IDs: []string{"a"}}) {
+	if !app.sidebarCanDrop(AssetsDrag{LibraryID: "test", assets: func() []string { return []string{"a"} }}) {
 		t.Fatal("同库素材被拒绝")
 	}
-	if app.sidebarCanDrop(AssetsDrag{LibraryID: "other", IDs: []string{"a"}}) {
+	if app.sidebarCanDrop(AssetsDrag{LibraryID: "other", assets: func() []string { return []string{"a"} }}) {
 		t.Fatal("接收了其他图库素材")
 	}
 	app.Busy = true
-	if app.sidebarCanDrop(AssetsDrag{LibraryID: "test", IDs: []string{"a"}}) {
+	if app.sidebarCanDrop(AssetsDrag{LibraryID: "test", assets: func() []string { return []string{"a"} }}) {
 		t.Fatal("忙碌时仍接收写入")
 	}
 }
