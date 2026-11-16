@@ -86,6 +86,14 @@ func TestEagleFeatureScreenshots(t *testing.T) {
 				a.EditSmartFolder("")
 				a.GBrowsing.SmartName = "竖版海报"
 				a.GBrowsing.SmartRules = []model.SmartRule{{Field: "height", Operator: "between", Value: "1200,4000"}, {Field: "source", Operator: "not_contains", Value: "pinterest"}}
+			case "similar":
+				v := a.Visible
+				a.Similar = similarState{Open: true, Groups: []similarGroup{
+					{IDs: []string{v[0].ID, v[1].ID, v[2].ID}, Keep: v[1].ID},
+					{IDs: []string{v[3].ID, v[4].ID}, Keep: v[3].ID},
+				}}
+			case "similar-progress":
+				a.Progress = &model.ImportProgress{Stage: "similar", Processed: 1234, Total: 5000}
 			case "subfolders":
 				a.SetScope("folder", "travel")
 			case "recent":

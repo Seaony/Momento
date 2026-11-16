@@ -18,6 +18,7 @@ var libraryMenuIconAliases = map[string]string{
 	"export-library": "upload-simple",
 	"rename":         "pencil-simple",
 	"reload":         "arrow-clockwise",
+	"similar":        "images-square",
 	"delete":         "trash",
 	"remove":         "x",
 }

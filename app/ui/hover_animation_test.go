@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Seaony/Momento/app/internal/assets"
 	"github.com/Seaony/Momento/app/internal/model"
 )
 
@@ -60,7 +61,7 @@ func TestOpenHoverAnimation(t *testing.T) {
 	if player, err := openHoverAnimation(pngPath, "png"); err != nil || player != nil {
 		t.Fatalf("普通 PNG 被当成动画：%v %v", player, err)
 	}
-	if isAnimatedPNG(still.Bytes()) {
+	if animated, _ := assets.IsAnimatedImage(bytes.NewReader(still.Bytes())); animated {
 		t.Fatal("普通 PNG 被认成 APNG")
 	}
 	// 在 IHDR 后面插一个 acTL 块就是 APNG 的标志。
@@ -72,7 +73,7 @@ func TestOpenHoverAnimation(t *testing.T) {
 	binary.BigEndian.PutUint32(chunk[8:], 1)
 	binary.BigEndian.PutUint32(chunk[16:], crc32.ChecksumIEEE(chunk[4:16]))
 	apng := append(append(append([]byte{}, data[:ihdrEnd]...), chunk...), data[ihdrEnd:]...)
-	if !isAnimatedPNG(apng) {
+	if animated, _ := assets.IsAnimatedImage(bytes.NewReader(apng)); !animated {
 		t.Fatal("没认出 APNG")
 	}
 }

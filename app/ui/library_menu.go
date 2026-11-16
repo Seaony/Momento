@@ -209,6 +209,7 @@ func (a *App) libraryMoreMenu(c *ui.Context, recent library.Recent, current, mis
 		if current {
 			choose(libraryMenuItem(c, menu, a.T("edit_library"), "edit", false).Disabled(a.Busy).Clicked(), a.ShowEditLibrary)
 			choose(libraryMenuItem(c, menu, a.T("reveal_library"), "reveal", false).Clicked(), a.RevealLibrary)
+			choose(libraryMenuItem(c, menu, a.T("find_similar"), "similar", false).Disabled(a.Busy).Clicked(), a.FindSimilar)
 			choose(libraryMenuItem(c, menu, a.T("clear_library_cache"), "reload", false).Disabled(a.Busy).Clicked(), a.ClearLibraryCache)
 			ui.Divider(c).Margin(space4, 0)
 			choose(libraryMenuItem(c, menu, a.T("delete_library"), "delete", true).Disabled(a.Busy).Clicked(), a.DeleteLibrary)

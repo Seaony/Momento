@@ -163,3 +163,52 @@ func TestMultiDetailsFlushOnQuit(t *testing.T) {
 		t.Fatalf("退出前没有把多选编辑存下：%+v", a.queuedRuns)
 	}
 }
+
+// 相似图对话框：点别的缩略图换成保留它，合并这一组排进写入队列，保留的那张拿到其余的标签，其余进回收站；
+// 这一组马上从对话框里拿掉，剩下的组还在。
+func TestSimilarDialogMerge(t *testing.T) {
+	a := assetViewFixture()
+	a.Library = &library.Library{}
+	a.Busy = true
+	snapshot := a.Snapshot
+	snapshot.Assets[1].TagIDs = []string{"t1"}
+	snapshot.Assets[2].Rating = 4
+	a.applySnapshot(snapshot)
+	a.Similar = similarState{Open: true, Groups: []similarGroup{
+		{IDs: []string{"0", "1", "2"}, Keep: "0"},
+		{IDs: []string{"3", "4"}, Keep: "3"},
+	}}
+	tt := ui.NewTester(a.similarDialog, 800, 760)
+	if !tt.HasText(a.T("similar_title", 2)) {
+		t.Fatal("没有显示组数")
+	}
+	if err := tt.Click("Photo 1"); err != nil {
+		t.Fatal(err)
+	}
+	if a.Similar.Groups[0].Keep != "1" {
+		t.Fatalf("点缩略图没有换成保留它：%q", a.Similar.Groups[0].Keep)
+	}
+	// 点第一组的「合并」：合并要等这一帧画完再做，不能边画边删组（原来在这里越界）。
+	if err := tt.Click(a.T("similar_merge")); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if len(a.queuedRuns) != 1 || a.queuedRuns[0].label != "merge_similar" {
+		t.Fatalf("合并没有排进写入队列：%+v", a.queuedRuns)
+	}
+	if len(a.Similar.Groups) != 1 || a.Similar.Groups[0].Keep != "3" {
+		t.Fatalf("合并的组应从对话框拿掉：%+v", a.Similar.Groups)
+	}
+	run := a.queuedRuns[0]
+	a.patchAssets(run.patch.ids, run.patch.apply)
+	keep, other := a.assetByID["1"], a.assetByID["2"]
+	if keep.Trashed || keep.Rating != 4 || len(keep.TagIDs) != 1 || !other.Trashed || !a.assetByID["0"].Trashed || a.assetByID["3"].Trashed {
+		t.Fatalf("合并结果不对：保留 %+v，其余 %+v", keep, other)
+	}
+	// 剩下一组里有一张进了回收站，只剩一张，就没有可合并的了，对话框自己关掉。
+	a.patchAssets([]string{"4"}, func(asset *model.Asset) { asset.Trashed = true })
+	tt.Frame()
+	if a.Similar.Open {
+		t.Fatal("没有可合并的组时对话框应关掉")
+	}
+}

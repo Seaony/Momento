@@ -1,13 +1,14 @@
 package ui
 
 import (
-	"encoding/binary"
+	"bytes"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/Seaony/Momento/app/internal/assets"
 	"github.com/Seaony/Momento/app/internal/model"
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/video"
@@ -60,7 +61,7 @@ func openHoverAnimation(path, format string) (*ui.VideoPlayer, error) {
 	if format == "gif" {
 		decoder, err = ui.NewGIFDecoder(data)
 	} else {
-		if !isAnimatedPNG(data) {
+		if animated, _ := assets.IsAnimatedImage(bytes.NewReader(data)); !animated {
 			return nil, nil
 		}
 		decoder, err = ui.NewAPNGDecoder(data)
@@ -69,24 +70,6 @@ func openHoverAnimation(path, format string) (*ui.VideoPlayer, error) {
 		return nil, err
 	}
 	return ui.NewVideoPlayer(decoder)
-}
-
-// isAnimatedPNG 看 PNG 在图像数据之前有没有动画控制块（acTL），有才是 APNG。
-func isAnimatedPNG(data []byte) bool {
-	if len(data) < 8 || string(data[:8]) != "\x89PNG\r\n\x1a\n" {
-		return false
-	}
-	for at := 8; at+8 <= len(data); {
-		length := int(binary.BigEndian.Uint32(data[at:]))
-		switch string(data[at+4 : at+8]) {
-		case "acTL":
-			return true
-		case "IDAT", "IEND":
-			return false
-		}
-		at += 12 + length
-	}
-	return false
 }
 
 // hoverVideoOverlay 在视频（和实况照片）卡片的缩略图上叠播放画面和底部细进度条：静音循环播放，左右移动鼠标就拖动进度。

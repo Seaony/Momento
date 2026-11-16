@@ -101,6 +101,7 @@ type App struct {
 	tagClipboard                                              []string // ⌘⇧C 复制下来的标签，⌘⇧V 加到选中的素材上
 	SettingsOpen, NewLibraryOpen, EditLibraryOpen, ExportOpen bool
 	Rename                                                    renameState
+	Similar                                                   similarState
 	Preferences                                               Preferences
 	Browse                                                    browseState
 	GBrowsing                                                 gBrowsingState

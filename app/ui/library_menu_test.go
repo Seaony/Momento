@@ -98,10 +98,10 @@ func moreMenuItems(t *testing.T, a *App, path string, keys []string) []string {
 }
 
 func TestLibraryMoreMenuDiffersForCurrentLibrary(t *testing.T) {
-	keys := []string{"edit_library", "reveal_library", "clear_library_cache", "delete_library", "remove_recent_library"}
+	keys := []string{"edit_library", "reveal_library", "find_similar", "clear_library_cache", "delete_library", "remove_recent_library"}
 	a := libraryMenuTestApp(t)
 	current := moreMenuItems(t, a, a.Library.Root, keys)
-	if want := []string{"edit_library", "reveal_library", "clear_library_cache", "delete_library"}; !slices.Equal(current, want) {
+	if want := []string{"edit_library", "reveal_library", "find_similar", "clear_library_cache", "delete_library"}; !slices.Equal(current, want) {
 		t.Fatalf("当前图库菜单项 %v，应为 %v", current, want)
 	}
 	a = libraryMenuTestApp(t)

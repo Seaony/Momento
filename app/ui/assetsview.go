@@ -12,11 +12,16 @@ import (
 
 const (
 	importProgressHeight    float32 = 120
-	thumbnailProgressHeight float32 = 54 // 重建缩略图只有标题、张数和进度条
+	thumbnailProgressHeight float32 = 54 // compactProgress 的高度
 )
 
+// 重建缩略图、查找相似图片只有标题、张数和进度条，没有导入的计数和当前文件。
+func compactProgress(p *model.ImportProgress) bool {
+	return p != nil && (p.Stage == "thumbnails" || p.Stage == "similar")
+}
+
 func (a *App) progressHeight() float32 {
-	if a.Progress != nil && a.Progress.Stage == "thumbnails" {
+	if compactProgress(a.Progress) {
 		return thumbnailProgressHeight
 	}
 	return importProgressHeight
@@ -582,7 +587,7 @@ func (a *App) importProgress(c *ui.Context) {
 			ui.Spacer(c)
 			ui.Text(c, fmt.Sprintf("%d / %d", p.Processed, p.Total)).FontFeatures("tnum").FontSize(fontNumber).TextColor(colors.TextSecondary)
 		})
-		if p.Stage != "thumbnails" {
+		if !compactProgress(p) {
 			ui.Text(c, a.T("import_counts", p.Imported, p.Skipped)).FontSize(fontBody).TextColor(colors.TextSecondary)
 			// 扫描刚开始还没有当前文件，空着，不显示「.」。
 			file := ""
