@@ -135,7 +135,7 @@ func main() {
 		if pendingURL != "" {
 			openURL(pendingURL)
 		}
-		app.Extension = browser.NewService(ctx, browser.New(app.ImportRemote), func(browser.Status) {
+		app.Extension = browser.NewService(ctx, browser.New(browser.Options{Version: mygo.App.Version(), Import: app.ImportRemote}), func(browser.Status) {
 			app.Window.Update(func() {
 				app.ExtensionStatus = app.Extension.Status()
 				app.InvalidateWindows()

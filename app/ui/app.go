@@ -136,6 +136,7 @@ type App struct {
 	pendingImports                                            [][2]string
 	queuedRuns                                                []queuedRun
 	remoteImporting                                           bool // 正在处理一条深度链接导入
+	remoteBatches                                             map[string]*remoteBatch
 	assetByID                                                 map[string]model.Asset
 	configDir                                                 string
 	preferencesBlocked                                        error // 偏好文件读不出来又没法挪走时，本次运行不写回，免得覆盖用户原来的设置
@@ -1020,68 +1021,6 @@ func fileSize(n int64) string {
 func (a *App) ToggleFilter() { a.Toolbar.FilterOpen = !a.Toolbar.FilterOpen }
 func (a *App) ToggleSort()   { a.Toolbar.SortOpen = !a.Toolbar.SortOpen }
 
-// 扩展请求等待真实导入结果，不能在排队后就返回成功。
-func (a *App) ImportRemote(ctx context.Context, imageURL, pageURL string) error {
-	choice := importChoice{}
-	picker := false
-	mygo.RunOnMain(func() { picker = a.Preferences.ExtensionPicker && !a.IsLocked() })
-	if picker {
-		var err error
-		choice, err = a.remoteImportChoice(ctx)
-		if err != nil {
-			return err
-		}
-	}
-	var service *assets.Service
-	var lib *library.Library
-	var gen uint64
-	var request model.ImportRequest
-	readyErr := error(context.Canceled)
-	mygo.RunOnMain(func() {
-		if a.Library == nil {
-			readyErr = i18n.NewError("library_required")
-			return
-		}
-		if a.Busy {
-			readyErr = i18n.NewError("busy")
-			return
-		}
-		readyErr = nil
-		a.Busy = true
-		service = a.Assets
-		lib = a.Library
-		gen = a.generation
-		request = model.ImportRequest{FolderID: choice.FolderID, TagIDs: choice.TagIDs, ImportKeywords: a.Preferences.ImportKeywords}
-	})
-	if readyErr != nil {
-		return readyErr
-	}
-	return a.performRemote(ctx, service, lib, gen, imageURL, pageURL, request)
-}
-func (a *App) performRemote(ctx context.Context, service *assets.Service, lib *library.Library, gen uint64, imageURL, pageURL string, request model.ImportRequest) error {
-	a.workMu.Lock()
-	defer a.workMu.Unlock()
-	result, err := service.ImportURLWithRequest(ctx, imageURL, pageURL, request)
-	var snapshot model.Snapshot
-	if err == nil {
-		snapshot, err = lib.Snapshot(ctx)
-	}
-	a.Window.Update(func() {
-		if gen != a.generation {
-			return
-		}
-		a.Busy = false
-		if err != nil {
-			a.ShowError(err)
-		} else {
-			a.applySnapshot(snapshot)
-			a.importFeedback("extension", result)
-		}
-		a.drainPending()
-	})
-	return err
-}
-
 func (a *App) libraryID() string {
 	if a.manifest.LibraryID != "" {
 		return a.manifest.LibraryID
@@ -1141,7 +1080,7 @@ func (a *App) drainPending() {
 	a.pendingImports = a.pendingImports[1:]
 	a.remoteImporting = true
 	go func() {
-		err := a.ImportRemote(a.ctx, next[0], next[1])
+		err := a.ImportRemote(a.ctx, browser.Request{URL: next[0], PageURL: next[1]})
 		var localized *i18n.LocalizedError
 		busy := errors.As(err, &localized) && localized.Key == "busy"
 		if err != nil {

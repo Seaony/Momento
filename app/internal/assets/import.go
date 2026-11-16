@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/Seaony/Momento/app/internal/i18n"
+	"github.com/Seaony/Momento/app/internal/library"
 	"github.com/Seaony/Momento/app/internal/media"
 	"github.com/Seaony/Momento/app/internal/model"
 )
@@ -558,7 +559,11 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 		if metadata["posterUnavailable"] == "" {
 			colors = Palette(img.thumbnail)
 		}
-		ready[j] = prepared{asset: model.Asset{ID: c.hash, Name: name, OriginalFileName: filepath.Base(c.path), Extension: c.extension, MediaType: mediaType(c.extension), Size: c.size, Width: img.width, Height: img.height, Orientation: img.orientation, ColorProfile: img.profile, EXIF: metadata, SourceURL: request.SourceURL, RelativePath: filepath.ToSlash(filepath.Join("assets", c.hash[:2], c.hash+"."+c.extension)), CreatedAt: now, UpdatedAt: now, Colors: colors, Kind: kind, DurationMS: durationMS, MotionPath: motionPath}, original: c.staged, thumbnail: thumb}
+		// 网页标题可能带换行，名称压成一行。
+		if custom := strings.Join(strings.Fields(request.Name), " "); custom != "" {
+			name = custom
+		}
+		ready[j] = prepared{asset: model.Asset{ID: c.hash, Name: name, Note: strings.TrimSpace(request.Note), OriginalFileName: filepath.Base(c.path), Extension: c.extension, MediaType: mediaType(c.extension), Size: c.size, Width: img.width, Height: img.height, Orientation: img.orientation, ColorProfile: img.profile, EXIF: metadata, SourceURL: request.SourceURL, RelativePath: filepath.ToSlash(filepath.Join("assets", c.hash[:2], c.hash+"."+c.extension)), CreatedAt: now, UpdatedAt: now, Colors: colors, Kind: kind, DurationMS: durationMS, MotionPath: motionPath}, original: c.staged, thumbnail: thumb}
 		return nil
 	}, func(j int) {
 		hash := toPrepare[j]
@@ -602,6 +607,16 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 		}
 	}()
 	folderCache := map[string]string{}
+	// 按名字传来的标签：去掉首尾空白和空名字，同名（忽略大小写）只留一个。
+	var tagNames []string
+	seenTags := map[string]bool{}
+	for _, name := range request.TagNames {
+		name = strings.TrimSpace(name)
+		if key := library.NormalizeTag(name); name != "" && !seenTags[key] {
+			seenTags[key] = true
+			tagNames = append(tagNames, name)
+		}
+	}
 	// 配对视频单独出的问题（图库里这张图已配了别的视频），图片本身照常算导入或重复。
 	motionFailed := map[int]error{}
 	repaired := map[string]bool{}
@@ -713,6 +728,9 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 			}
 		}
 		if err = attachKeywords(ctx, tx, c.hash, keywordsByHash[c.hash]); err != nil {
+			return result, err
+		}
+		if err = attachKeywords(ctx, tx, c.hash, tagNames); err != nil {
 			return result, err
 		}
 		parent := request.FolderID

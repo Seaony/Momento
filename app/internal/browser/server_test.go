@@ -39,7 +39,7 @@ func decodeResponse(t *testing.T, w *httptest.ResponseRecorder) response {
 }
 
 func TestStatus(t *testing.T) {
-	w := request(t, New(nil), "GET", "/api/v1/status", "", "")
+	w := request(t, New(Options{}), "GET", "/api/v1/status", "", "")
 	got := decodeResponse(t, w)
 	if w.Code != http.StatusOK || !got.OK || got.Status != "ready" || got.Error != "" {
 		t.Fatalf("%d: %+v", w.Code, got)
@@ -54,7 +54,8 @@ func TestImportPayload(t *testing.T) {
 	} {
 		t.Run(body, func(t *testing.T) {
 			calls := 0
-			h := New(func(ctx context.Context, imageURL, pageURL string) error {
+			h := New(Options{Import: func(ctx context.Context, r Request) error {
+				imageURL, pageURL := r.URL, r.PageURL
 				calls++
 				if ctx == nil || imageURL != "https://example.com/image.png" {
 					t.Fatalf("%v %q", ctx, imageURL)
@@ -63,12 +64,12 @@ func TestImportPayload(t *testing.T) {
 					t.Fatalf("来源链接为 %q", pageURL)
 				}
 				return nil
-			})
-			w := request(t, h, "POST", "/api/v1/import/image", body, "chrome-extension://example/")
+			}})
+			w := request(t, h, "POST", "/api/v1/import/image", body, "chrome-extension://bdholohelelbeepbpdapldbibidacaoo/")
 			if got := decodeResponse(t, w); w.Code != http.StatusOK || !got.OK || calls != 1 {
 				t.Fatalf("%d %+v, 调用 %d 次", w.Code, got, calls)
 			}
-			if w.Header().Get("Access-Control-Allow-Origin") != "chrome-extension://example/" {
+			if w.Header().Get("Access-Control-Allow-Origin") != "chrome-extension://bdholohelelbeepbpdapldbibidacaoo/" {
 				t.Fatal("缺少扩展来源响应头")
 			}
 		})
@@ -76,14 +77,14 @@ func TestImportPayload(t *testing.T) {
 }
 
 func TestOriginValidation(t *testing.T) {
-	for _, origin := range []string{"", "chrome-extension://example", "chrome-extension://example/"} {
-		w := request(t, New(nil), "GET", "/api/v1/status", "", origin)
+	for _, origin := range []string{"", "chrome-extension://bdholohelelbeepbpdapldbibidacaoo", "chrome-extension://bdholohelelbeepbpdapldbibidacaoo/"} {
+		w := request(t, New(Options{}), "GET", "/api/v1/status", "", origin)
 		if w.Code != http.StatusOK {
 			t.Fatalf("允许来源 %q 返回 %d", origin, w.Code)
 		}
 	}
-	for _, origin := range []string{"https://example.com", "null", "moz-extension://example", "https://chrome-extension://example"} {
-		w := request(t, New(nil), "GET", "/api/v1/status", "", origin)
+	for _, origin := range []string{"https://example.com", "null", "moz-extension://example", "https://chrome-extension://bdholohelelbeepbpdapldbibidacaoo"} {
+		w := request(t, New(Options{}), "GET", "/api/v1/status", "", origin)
 		if got := decodeResponse(t, w); w.Code != http.StatusForbidden || got.OK || got.Error == "" {
 			t.Fatalf("拒绝来源 %q: %d %+v", origin, w.Code, got)
 		}
@@ -92,10 +93,10 @@ func TestOriginValidation(t *testing.T) {
 		}
 	}
 	r := httptest.NewRequest("GET", "/api/v1/status", nil)
-	r.Header.Add("Origin", "chrome-extension://example")
+	r.Header.Add("Origin", "chrome-extension://bdholohelelbeepbpdapldbibidacaoo")
 	r.Header.Add("Origin", "https://example.com")
 	w := httptest.NewRecorder()
-	New(nil).ServeHTTP(w, r)
+	New(Options{}).ServeHTTP(w, r)
 	if w.Code != http.StatusForbidden {
 		t.Fatal("多个 Origin 被接受")
 	}
@@ -114,7 +115,7 @@ func TestRoutesAndPreflight(t *testing.T) {
 		{"OPTIONS", "/api/v1/import/image", http.StatusNoContent, "POST, OPTIONS"},
 		{"OPTIONS", "/api/v1/status", http.StatusNoContent, "GET, OPTIONS"},
 	} {
-		w := request(t, New(nil), tc.method, tc.path, "", "chrome-extension://example")
+		w := request(t, New(Options{}), tc.method, tc.path, "", "chrome-extension://bdholohelelbeepbpdapldbibidacaoo")
 		if w.Code != tc.code || w.Header().Get("Allow") != tc.allow {
 			t.Fatalf("%s %s: %d %s", tc.method, tc.path, w.Code, w.Header().Get("Allow"))
 		}
@@ -130,7 +131,7 @@ func TestRoutesAndPreflight(t *testing.T) {
 
 func TestRejectsInvalidPayloadWithoutImport(t *testing.T) {
 	calls := 0
-	h := New(func(context.Context, string, string) error { calls++; return nil })
+	h := New(Options{Import: func(context.Context, Request) error { calls++; return nil }})
 	for _, body := range []string{
 		"", "null", "[]", "{}", "{", `{"url":"https://example.com/image.png"} {}`,
 		`{"url":1}`, `{"url":""}`, `{"url":"relative.png"}`,
@@ -151,7 +152,7 @@ func TestRejectsInvalidPayloadWithoutImport(t *testing.T) {
 func TestBodyLimitIncludingChunkedRequest(t *testing.T) {
 	base := `{"url":"https://example.com/image.png"}`
 	calls := 0
-	h := New(func(context.Context, string, string) error { calls++; return nil })
+	h := New(Options{Import: func(context.Context, Request) error { calls++; return nil }})
 	for _, chunked := range []bool{false, true} {
 		for _, length := range []int{MaxBodySize, MaxBodySize + 1} {
 			r := httptest.NewRequest("POST", "/api/v1/import/image", strings.NewReader(base+strings.Repeat(" ", length-len(base))))
@@ -184,7 +185,7 @@ func TestBodyReadFailure(t *testing.T) {
 	r := httptest.NewRequest("POST", "/api/v1/import/image", nil)
 	r.Body = brokenBody{}
 	w := httptest.NewRecorder()
-	New(nil).ServeHTTP(w, r)
+	New(Options{Import: func(context.Context, Request) error { return nil }}).ServeHTTP(w, r)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("读取失败返回 %d", w.Code)
 	}
@@ -192,11 +193,11 @@ func TestBodyReadFailure(t *testing.T) {
 
 func TestImportFailureAndNotReady(t *testing.T) {
 	body := `{"url":"https://example.com/image.png"}`
-	w := request(t, New(nil), "POST", "/api/v1/import/image", body, "")
+	w := request(t, New(Options{}), "POST", "/api/v1/import/image", body, "")
 	if got := decodeResponse(t, w); w.Code != http.StatusServiceUnavailable || got.OK || got.Error == "" {
 		t.Fatalf("%d %+v", w.Code, got)
 	}
-	w = request(t, New(func(context.Context, string, string) error { return errors.New("没有打开图库") }), "POST", "/api/v1/import/image", body, "")
+	w = request(t, New(Options{Import: func(context.Context, Request) error { return errors.New("没有打开图库") }}), "POST", "/api/v1/import/image", body, "")
 	if got := decodeResponse(t, w); w.Code != http.StatusInternalServerError || got.OK || got.Error != "没有打开图库" {
 		t.Fatalf("%d %+v", w.Code, got)
 	}
@@ -207,9 +208,9 @@ func TestRequestLogOmitsImageURLsAndQueries(t *testing.T) {
 	previous := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
 	defer slog.SetDefault(previous)
-	h := New(func(context.Context, string, string) error {
+	h := New(Options{Import: func(context.Context, Request) error {
 		return errors.New("download https://example.com/image.png?secret=private-token failed")
-	})
+	}})
 	request(t, h, "POST", "/api/v1/import/image?request-secret=private-token", `{"url":"https://example.com/image.png?secret=private-token"}`, "")
 	if strings.Contains(logs.String(), "private-token") || strings.Contains(logs.String(), "example.com") {
 		t.Fatalf("日志暴露链接: %s", logs.String())
@@ -229,11 +230,11 @@ func TestServerStopsAndCancelsImport(t *testing.T) {
 	started := make(chan struct{})
 	served := make(chan error, 1)
 	go func() {
-		served <- serve(ctx, listener, New(func(ctx context.Context, _, _ string) error {
+		served <- serve(ctx, listener, New(Options{Import: func(ctx context.Context, _ Request) error {
 			close(started)
 			<-ctx.Done()
 			return ctx.Err()
-		}))
+		}}))
 	}()
 	clientDone := make(chan error, 1)
 	go func() {

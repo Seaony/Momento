@@ -126,6 +126,10 @@ type ImportRequest struct {
 	Paths          []string
 	SourceURL      string
 	FolderID       string
+	// TagNames 按名字打标签，没有就新建（浏览器扩展传来的标签）。
+	TagNames []string
+	// Name、Note 只写给这次新入库的素材；图库里已有的不改。
+	Name, Note string
 }
 
 type ExportFormat string

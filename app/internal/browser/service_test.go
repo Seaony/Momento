@@ -15,7 +15,7 @@ func TestServiceToggleAndRestart(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	changes := make(chan Status, 8)
-	service := newService(ctx, "127.0.0.1:0", New(nil), func(status Status) { changes <- status })
+	service := newService(ctx, "127.0.0.1:0", New(Options{}), func(status Status) { changes <- status })
 	defer service.SetEnabled(false)
 	if got := service.Status(); got.State != Disabled || got.Err != nil {
 		t.Fatalf("初始状态错误：%+v", got)
@@ -35,7 +35,7 @@ func TestServiceToggleAndRestart(t *testing.T) {
 		}
 		body, readErr := io.ReadAll(res.Body)
 		res.Body.Close()
-		if readErr != nil || res.StatusCode != http.StatusOK || string(body) != "{\"ok\":true,\"status\":\"ready\"}\n" {
+		if readErr != nil || res.StatusCode != http.StatusOK || !strings.HasPrefix(string(body), "{\"ok\":true,\"status\":\"ready\"") {
 			t.Fatalf("HTTP契约变化：%d %q %v", res.StatusCode, body, readErr)
 		}
 		if err := service.SetEnabled(true); err != nil || service.Status().Address != running.Address {
@@ -59,7 +59,7 @@ func TestServicePortOccupiedAndRetry(t *testing.T) {
 	defer listener.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	service := newService(ctx, listener.Addr().String(), New(nil), nil)
+	service := newService(ctx, listener.Addr().String(), New(Options{}), nil)
 	defer service.SetEnabled(false)
 	if err := service.SetEnabled(true); err == nil {
 		t.Fatal("端口被占用却报告启动成功")
@@ -88,11 +88,11 @@ func TestServiceStopCancelsImport(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	started := make(chan struct{})
-	service := newService(ctx, "127.0.0.1:0", New(func(ctx context.Context, _, _ string) error {
+	service := newService(ctx, "127.0.0.1:0", New(Options{Import: func(ctx context.Context, _ Request) error {
 		close(started)
 		<-ctx.Done()
 		return ctx.Err()
-	}), nil)
+	}}), nil)
 	defer service.SetEnabled(false)
 	if err := service.SetEnabled(true); err != nil {
 		t.Fatal(err)
@@ -127,7 +127,7 @@ func TestServiceContextCancellation(t *testing.T) {
 	defer cancel()
 	changes := make(chan Status, 4)
 	var service *Service
-	service = newService(ctx, "127.0.0.1:0", New(nil), func(status Status) {
+	service = newService(ctx, "127.0.0.1:0", New(Options{}), func(status Status) {
 		_ = service.Status()
 		changes <- status
 	})
@@ -151,7 +151,7 @@ func TestServiceContextCancellation(t *testing.T) {
 }
 
 func TestServiceStartupErrorIsNotPortOccupied(t *testing.T) {
-	service := newService(context.Background(), "invalid-address", New(nil), nil)
+	service := newService(context.Background(), "invalid-address", New(Options{}), nil)
 	if err := service.SetEnabled(true); err == nil {
 		t.Fatal("非法地址却报告启动成功")
 	}
