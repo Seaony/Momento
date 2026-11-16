@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1
+
+- The macOS app icon now has rounded corners in the Dock and Finder.
+
+- macOS 的应用图标在 Dock 和访达里改为圆角。
+
 ## 1.0.0
 
 First release of Momento for macOS, Windows and Linux.
