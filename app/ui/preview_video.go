@@ -91,6 +91,7 @@ func (w *previewWindow) closeVideo() {
 
 // stopVideo 在窗口开始播关闭动画时停掉声音，画面停在当前帧陪窗口淡出。
 func (w *previewWindow) stopVideo() {
+	w.closeLive()
 	v := &w.video
 	if v.player != nil && !v.closed {
 		v.player.Close()

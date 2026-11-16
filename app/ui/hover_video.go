@@ -25,9 +25,10 @@ type hoverVideo struct {
 	lastX  float32 // 上一帧鼠标在卡片里的横坐标，变了才拖进度；-1 表示刚进来
 }
 
-// hoverVideoOverlay 在视频卡片的缩略图上叠播放画面和底部细进度条：静音循环播放，左右移动鼠标就拖动进度。
+// hoverVideoOverlay 在视频（和实况照片）卡片的缩略图上叠播放画面和底部细进度条：静音循环播放，左右移动鼠标就拖动进度。
 func (a *App) hoverVideoOverlay(c *ui.Context, card ui.Element, asset model.Asset, hovered bool, radius float32) {
-	if !hovered || !a.Preferences.HoverPlayVideos || !isVideoAsset(asset) || a.Library == nil {
+	relative := motionVideo(asset)
+	if !hovered || !a.Preferences.HoverPlayVideos || relative == "" || a.Library == nil {
 		return
 	}
 	h := &a.hoverVideoState
@@ -43,7 +44,7 @@ func (a *App) hoverVideoOverlay(c *ui.Context, card ui.Element, asset model.Asse
 			c.After(wait)
 			return
 		}
-		path := filepath.Join(a.Library.Root, filepath.FromSlash(asset.RelativePath))
+		path := filepath.Join(a.Library.Root, filepath.FromSlash(relative))
 		player, err := openHoverVideo(path)
 		if err != nil {
 			slog.Warn("悬停播放打不开视频", "id", asset.ID, "error", err)

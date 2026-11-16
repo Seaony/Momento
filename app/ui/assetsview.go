@@ -339,6 +339,9 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 					if d := assetDuration(asset); isVideoAsset(asset) && d > 0 {
 						listInfo(c, "play", videoDuration(d))
 					}
+					if isLiveAsset(asset) {
+						listInfo(c, "live-photo", a.T("live_photo"))
+					}
 				})
 			})
 			// 最右边是导入时间：一个月内写「3 天前」，更早写日期，悬停看完整时间。
@@ -362,6 +365,15 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 					if d := assetDuration(asset); d > 0 {
 						ui.Text(c, videoDuration(d)).FontFeatures("tnum").FontSize(10).FontWeight(500).TextColor(ui.RGBA(255, 255, 255, .82))
 					}
+				})
+			}
+
+			// 实况照片右下角：实况标记加「实况」，和视频时长同一个位置、同一套样式。
+			if isLiveAsset(asset) {
+				ui.Row(c.Key("live")).Absolute().Bottom(space8).Right(space8).Height(assetBadgeHeight).Padding(0, 5).Gap(3).AlignItems(ui.Center).
+					Radius(5).Background(ui.RGBA(0, 0, 0, .34)).PassThrough().Children(func() {
+					appIcon(c, "live-photo").Size(12, 12).TextColor(ui.RGBA(255, 255, 255, .82))
+					ui.Text(c, a.T("live_photo")).FontSize(10).FontWeight(500).TextColor(ui.RGBA(255, 255, 255, .82))
 				})
 			}
 

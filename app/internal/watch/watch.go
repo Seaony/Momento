@@ -310,7 +310,14 @@ func checkResult(result model.ImportResult, paths []string, failed map[string]er
 		failed[path] = result.Errors[i]
 	}
 	// 每个没失败的文件都应算进导入或重复跳过；少了说明有文件被悄悄跳过，分不清是哪个，整批保留。
-	if confirmed := result.Imported + result.Skipped + len(failed); confirmed != len(paths) {
+	// 配进实况照片的视频跟着图片走，不单独计数。
+	for _, path := range result.Motion {
+		if !slices.Contains(paths, path) {
+			slog.Error("导入结果里的实况视频不在这批里", "path", path)
+			return ErrNotImported
+		}
+	}
+	if confirmed := result.Imported + result.Skipped + len(failed) + len(result.Motion); confirmed != len(paths) {
 		slog.Error("导入结果没有覆盖这批的每个文件", "files", len(paths), "confirmed", confirmed)
 		return ErrNotImported
 	}

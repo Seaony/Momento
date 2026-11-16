@@ -60,6 +60,11 @@ func TestSmartEditorChangesFieldsAndPreservesInvalidDraft(t *testing.T) {
 	if err := tt.Click(a.T("smart_rule_field", 2)); err != nil {
 		t.Fatal(err)
 	}
+	// 窗口矮时下拉列表在下方滚动，先滚到底再选。
+	if item, ok := tt.Find(a.T("smart_field_size")); ok {
+		tt.Scroll(item.X+item.W/2, item.Y+item.H/2, 0, 400)
+		tt.Advance(300 * time.Millisecond)
+	}
 	if err := tt.Click(a.T("smart_field_added")); err != nil {
 		t.Fatal(err)
 	}
@@ -423,5 +428,28 @@ func TestQuickAccessMoveSkipsHiddenSmartEntries(t *testing.T) {
 		if got := quickAccessMoveIndex(all, all, 1, to); got != to {
 			t.Fatalf("全部可见时位置应不变：%d → %d", to, got)
 		}
+	}
+}
+
+// 时长条件按秒编辑、按毫秒保存，重新打开换回秒；只给大于等于和小于等于。
+func TestSmartDurationEditsSecondsAndStoresMilliseconds(t *testing.T) {
+	a := smartTestApp()
+	a.EditSmartFolder("")
+	a.GBrowsing.SmartName = "Short clips"
+	a.GBrowsing.SmartRules = []model.SmartRule{{Field: "duration", Operator: "lte", Value: "2.5"}}
+	folder, err := a.smartDraft()
+	if err != nil || folder.Rules[0].Value != "2500" {
+		t.Fatalf("2.5 秒没有换算成毫秒：%+v，%v", folder, err)
+	}
+	if !catalog.MatchesSmart(model.Asset{Kind: model.KindLive, DurationMS: 1600}, folder) || catalog.MatchesSmart(model.Asset{Kind: model.KindVideo, DurationMS: 2501}, folder) {
+		t.Fatal("时长条件筛得不对")
+	}
+	a.Snapshot.SmartFolders[0].Rules = folder.Rules
+	a.EditSmartFolder("smart-a")
+	if got := a.GBrowsing.SmartRules[0].Value; got != "2.5" {
+		t.Fatalf("重新打开没有换回秒：%s", got)
+	}
+	if ops := smartOperators("duration"); len(ops) != 2 || ops[0] != "gte" || ops[1] != "lte" {
+		t.Fatalf("时长的比较方式不对：%v", ops)
 	}
 }

@@ -188,7 +188,7 @@ func cleanStaging(ctx context.Context, root string, db *sql.DB) {
 	}
 }
 
-// restoreDeletion 把暂存里仍登记在库的文件挪回原处。文件名是「素材ID.original」、「素材ID.thumbnail.jpg」或「素材ID.thumbnail.png」，
+// restoreDeletion 把暂存里仍登记在库的文件挪回原处。文件名是「素材ID.original」、「素材ID.motion」（实况照片的视频）、「素材ID.thumbnail.jpg」或「素材ID.thumbnail.png」，
 // 稍早的版本缩略图只有 PNG，名字是「素材ID.thumbnail」；更老的版本用序号命名，只能按内容哈希认出原图，认不出的缩略图交给之后重建。
 func restoreDeletion(ctx context.Context, root, dir string, db *sql.DB) error {
 	entries, err := os.ReadDir(dir)
@@ -202,14 +202,19 @@ func restoreDeletion(ctx context.Context, root, dir string, db *sql.DB) error {
 		path := filepath.Join(dir, entry.Name())
 		id, kind, _ := strings.Cut(entry.Name(), ".")
 		thumbnailExt := map[string]string{"thumbnail": ".png", "thumbnail.png": ".png", "thumbnail.jpg": ".jpg"}[kind]
-		if kind != "original" && thumbnailExt == "" {
+		if kind != "original" && kind != "motion" && thumbnailExt == "" {
 			if id, err = hashFile(path); err != nil {
 				return err
 			}
 			kind = "original"
 		}
 		var relative string
-		err := db.QueryRowContext(ctx, "SELECT relative_path FROM assets WHERE id=?", id).Scan(&relative)
+		column := "relative_path"
+		if kind == "motion" {
+			// 实况照片的视频挪回 motion_path。
+			column = "motion_path"
+		}
+		err := db.QueryRowContext(ctx, "SELECT "+column+" FROM assets WHERE id=?", id).Scan(&relative)
 		if errors.Is(err, sql.ErrNoRows) {
 			continue
 		}
@@ -218,6 +223,9 @@ func restoreDeletion(ctx context.Context, root, dir string, db *sql.DB) error {
 		}
 		if thumbnailExt != "" {
 			relative = "thumbnails/" + id + thumbnailExt
+		}
+		if relative == "" {
+			continue
 		}
 		target, err := packageDestination(root, relative)
 		if err != nil {

@@ -66,6 +66,7 @@ type previewWindow struct {
 	footerHeight                            float32
 	decoding                                bool // 后台正在解原图
 	video                                   previewVideo
+	live                                    previewLive
 }
 
 type previewFooterKey struct {
@@ -498,6 +499,7 @@ func (w *previewWindow) destroyWindows() {
 }
 func (w *previewWindow) dispose() {
 	w.closeVideo()
+	w.closeLive()
 	w.disposed = true
 	w.picture.Open = false
 	w.picture.target("", "", 0)
@@ -545,6 +547,7 @@ func (w *previewWindow) setAsset(a *App, asset model.Asset) {
 	// 换了素材就关掉旧播放器，不在后台接着出声。
 	if asset.ID != w.asset.ID {
 		w.closeVideo()
+		w.closeLive()
 	}
 	w.asset = asset
 	w.picture.target(w.root, asset.ID, asset.Rotation)

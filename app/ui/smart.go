@@ -99,16 +99,17 @@ func (a *App) EditSmartFolder(id string) {
 				state.SmartRules = slices.Clone(folder.Rules)
 				for i := range state.SmartRules {
 					rule := &state.SmartRules[i]
-					if rule.Field != "size" {
+					unit, ok := smartRuleUnits[rule.Field]
+					if !ok {
 						continue
 					}
-					bytes, err := strconv.ParseInt(rule.Value, 10, 64)
+					stored, err := strconv.ParseInt(rule.Value, 10, 64)
 					if err != nil {
 						a.ShowError(i18n.NewError("error_smart_rule"))
 						return
 					}
-					mb := big.NewRat(bytes, 1<<20)
-					rule.Value = strings.TrimRight(strings.TrimRight(mb.FloatString(20), "0"), ".")
+					value := big.NewRat(stored, unit)
+					rule.Value = strings.TrimRight(strings.TrimRight(value.FloatString(20), "0"), ".")
 				}
 				if folder.Match == "any" {
 					state.SmartMatch = 1
@@ -181,7 +182,10 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 	}
 }
 
-var smartFields = []string{"name", "extension", "tag", "color", "width", "height", "size", "added", "note"}
+var smartFields = []string{"name", "extension", "tag", "color", "width", "height", "size", "duration", "added", "note"}
+
+// smartRuleUnits 是编辑时的单位换成存储单位的倍数：大小编辑用 MB、存字节，时长编辑用秒、存毫秒。
+var smartRuleUnits = map[string]int64{"size": 1 << 20, "duration": 1000}
 
 func smartOperators(field string) []string {
 	switch field {
@@ -189,6 +193,9 @@ func smartOperators(field string) []string {
 		return []string{"contains", "equals"}
 	case "width", "height", "size":
 		return []string{"gte", "lte", "eq"}
+	case "duration":
+		// 时长存的是毫秒，「等于」几乎不会命中，只给大于等于、小于等于。
+		return []string{"gte", "lte"}
 	case "added":
 		return []string{"after", "before"}
 	default:
@@ -212,7 +219,7 @@ func smartSelect(c *ui.Context, value *string, options []string, label func(stri
 	})
 	selectParts.Popup(func(panel ui.Element) {
 		elevated(popupMotion(panel), c.Theme()).Margin(space4, 0, 0, 0).Padding(space4).Radius(radiusPanel).Background(panelColor(c.Theme())).Border(1, paletteFor(c.Theme()).BorderSubtle)
-		ui.Scroll(c).Scrollbars(false).MaxHeight(280).FillWidth().Gap(space4).Children(func() {
+		ui.Scroll(c).Scrollbars(false).MaxHeight(smartPopupHeight(c, control, len(names))).FillWidth().Gap(space4).Children(func() {
 			for i, name := range names {
 				item := selectParts.Item(name).Height(controlHeight).FillWidth().Padding(space4, space12).Radius(radiusControl).Cursor(ui.CursorPointer)
 				background := ui.Color{}
@@ -236,6 +243,20 @@ func smartSelect(c *ui.Context, value *string, options []string, label func(stri
 		}
 	}
 	return control
+}
+
+// smartPopupHeight 是下拉列表的最大高度：触发框下面放得下就全部显示；放不下就按下面剩的高度滚动，
+// 不让弹层翻到上面被窗口顶边裁掉。至少留三项高。
+func smartPopupHeight(c *ui.Context, trigger ui.Element, count int) float32 {
+	full := float32(count)*controlHeight + float32(max(count-1, 0))*space4
+	bounds := trigger.Bounds()
+	if bounds.H <= 0 {
+		return min(full, 280)
+	}
+	_, windowHeight := c.Size()
+	// 减去弹层上边距、内边距和离窗口底边的一点空隙。
+	below := windowHeight - bounds.Y - bounds.H - space4 - 2*space4 - space8
+	return min(full, max(below, 3*controlHeight))
 }
 
 func (a *App) smartRuleValue(c *ui.Context, rule *model.SmartRule, index int) {
@@ -271,9 +292,11 @@ func (a *App) smartRuleValue(c *ui.Context, rule *model.SmartRule, index int) {
 		unit = a.T("smart_pixels")
 	case "size":
 		unit = a.T("smart_megabytes")
+	case "duration":
+		unit = a.T("smart_seconds")
 	}
 	input := fieldStyle(c, ui.TextInput(c, &rule.Value).Grow(1).MinWidth(0).Label(label).Placeholder(placeholder).PlaceholderColor(placeholderColor(c)).Disabled(a.GBrowsing.Saving))
-	if rule.Field == "added" || rule.Field == "width" || rule.Field == "height" || rule.Field == "size" {
+	if rule.Field == "added" || rule.Field == "width" || rule.Field == "height" || rule.Field == "size" || rule.Field == "duration" {
 		input.FontFeatures("tnum")
 	}
 	if unit != "" {
@@ -291,20 +314,21 @@ func (a *App) smartDraft() (model.SmartFolder, error) {
 	}
 	for i := range folder.Rules {
 		rule := &folder.Rules[i]
-		if rule.Field != "size" {
+		unit, ok := smartRuleUnits[rule.Field]
+		if !ok {
 			continue
 		}
-		mb, ok := new(big.Rat).SetString(strings.TrimSpace(rule.Value))
-		if !ok || mb.Sign() < 0 || strings.Contains(rule.Value, "/") {
+		value, ok := new(big.Rat).SetString(strings.TrimSpace(rule.Value))
+		if !ok || value.Sign() < 0 || strings.Contains(rule.Value, "/") {
 			return folder, i18n.NewError("error_smart_rule")
 		}
-		// 编辑用 MB，保存到最接近的字节；旧条件往返不丢精度。
-		mb.Mul(mb, big.NewRat(1<<20, 1))
-		bytes, err := strconv.ParseInt(mb.FloatString(0), 10, 64)
+		// 编辑用 MB（秒），保存到最接近的字节（毫秒）；旧条件往返不丢精度。
+		value.Mul(value, big.NewRat(unit, 1))
+		stored, err := strconv.ParseInt(value.FloatString(0), 10, 64)
 		if err != nil {
 			return folder, i18n.NewError("error_smart_rule")
 		}
-		rule.Value = strconv.FormatInt(bytes, 10)
+		rule.Value = strconv.FormatInt(stored, 10)
 	}
 	return folder, catalog.ValidateSmartFolder(folder)
 }

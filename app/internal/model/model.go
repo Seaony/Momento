@@ -116,6 +116,8 @@ type ImportResult struct {
 	Errors   []error
 	// 没能导入的源文件（绝对路径），和 Errors 一一对应；自动导入靠它决定哪些源文件不能移到废纸篓。
 	Failed []string
+	// Motion 是配进实况照片、跟着图片一起导入（或一起算重复）的视频源文件；它们不单独计入 Imported 和 Skipped。
+	Motion []string
 }
 
 type ImportRequest struct {

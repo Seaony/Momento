@@ -61,6 +61,12 @@ func numberedPath(path string, index int) string {
 // Export 导出素材，返回实际写入的路径（和 items 同序）。destination 是已有文件夹时逐个写进去，重名自动改名；
 // 否则 destination 就是保存对话框选的文件路径，已存在时直接替换。
 func (s *Service) Export(ctx context.Context, items []model.Asset, destination string, format model.ExportFormat, quality float64) (paths []string, err error) {
+	return s.ExportWithMotion(ctx, items, destination, format, quality, false)
+}
+
+// ExportWithMotion 同 Export；motion 为真时实况照片的视频也导出，和图片同名、放在一起（照片 App 认这种配对）。
+// 返回的仍只有图片路径。
+func (s *Service) ExportWithMotion(ctx context.Context, items []model.Asset, destination string, format model.ExportFormat, quality float64, motion bool) (paths []string, err error) {
 	if format != model.ExportOriginal && format != model.ExportJPEG && format != model.ExportPNG {
 		return nil, i18n.NewError("error_export_format", string(format))
 	}
@@ -178,16 +184,25 @@ func (s *Service) Export(ctx context.Context, items []model.Asset, destination s
 		if e != nil {
 			return paths, errors.Join(e, removeIfExists(staged))
 		}
+		withMotion := motion && a.MotionPath != ""
 		final := requested
 		if directory {
-			// 导出到文件夹：重名时自动改成「名字 2.ext」，不覆盖已有文件。
+			// 导出到文件夹：重名时自动改成「名字 2.ext」，不覆盖已有文件；带视频时两个名字都要空着，配对才不会乱。
 			for index := 1; ; index++ {
 				final = numberedPath(requested, index)
+				if withMotion {
+					if _, statErr := os.Lstat(motionExportPath(final)); statErr == nil {
+						continue
+					}
+				}
 				e = publishFile(staged, final)
 				if !os.IsExist(e) {
 					break
 				}
 			}
+		} else if _, statErr := os.Lstat(motionExportPath(final)); withMotion && statErr == nil {
+			// 保存框只确认了替换图片，同名视频不能悄悄覆盖。
+			e = i18n.NewError("error_export_motion_exists", filepath.Base(motionExportPath(final)))
 		} else {
 			// 保存对话框选的路径，重名时用户已确认替换：暂存文件写完后原子替换，中途失败旧文件还在。
 			e = os.Rename(staged, final)
@@ -203,8 +218,44 @@ func (s *Service) Export(ctx context.Context, items []model.Asset, destination s
 		if cleanupErr != nil {
 			return paths, cleanupErr
 		}
+		if withMotion {
+			if e = s.exportMotion(ctx, a, motionExportPath(final)); e != nil {
+				return paths, e
+			}
+		}
 	}
 	return paths, nil
+}
+
+// motionExportPath 是实况照片视频导出后的位置：和图片同名，后缀 .mov。
+func motionExportPath(image string) string {
+	return strings.TrimSuffix(image, filepath.Ext(image)) + ".mov"
+}
+
+// exportMotion 把实况照片的视频复制到 target，先写暂存再改名，中途失败不留半个文件。
+func (s *Service) exportMotion(ctx context.Context, a model.Asset, target string) (err error) {
+	source, err := s.assetPath(a.MotionPath)
+	if err != nil {
+		return err
+	}
+	in, err := os.Open(source)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	temp, err := os.CreateTemp(filepath.Dir(target), ".momento-export-*")
+	if err != nil {
+		return err
+	}
+	staged := temp.Name()
+	_, err = io.Copy(temp, contextReader{ctx: ctx, r: in})
+	if err == nil {
+		err = temp.Sync()
+	}
+	if err = errors.Join(err, temp.Close()); err == nil {
+		err = publishFile(staged, target)
+	}
+	return errors.Join(err, removeIfExists(staged))
 }
 
 // insideLibrary 按文件身份判断 path 是否在图库包里（不分大小写的文件系统、链接都算上）。

@@ -190,8 +190,12 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 			photo := previewPhoto(c.Key(struct{ ID string }{asset.ID}), bitmap, previewPhotoRadius, a.Preferences.PreviewChecker, ui.Contain).
 				Absolute().Label(asset.Name)
 			photoWidth, photoHeight := float32(bw)*p.Zoom, float32(bh)*p.Zoom
-			photo.Left((p.viewport.W-photoWidth)/2+p.Pan.X).Top((p.viewport.H-photoHeight)/2+p.Pan.Y).Size(photoWidth, photoHeight)
+			photoLeft, photoTop := (p.viewport.W-photoWidth)/2+p.Pan.X, (p.viewport.H-photoHeight)/2+p.Pan.Y
+			photo.Left(photoLeft).Top(photoTop).Size(photoWidth, photoHeight)
 			w.slideTransition(c, photo)
+			if isLiveAsset(asset) {
+				w.liveOverlay(c, a, ui.Rect{X: photoLeft, Y: photoTop, W: photoWidth, H: photoHeight})
+			}
 		})
 		if p.canPan() {
 			viewport.Cursor(ui.CursorGrab)

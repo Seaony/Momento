@@ -198,3 +198,24 @@ func BenchmarkSmartFolder10K(b *testing.B) {
 		benchmarkResult = index.Query(Query{Scope: "smart", SmartFolderID: "smart"})
 	}
 }
+
+// 时长条件只看视频和实况照片，存的是毫秒；图片的 0 不算「时长 ≤ N」。
+func TestSmartDurationOnlyMatchesMotion(t *testing.T) {
+	short := model.SmartFolder{Match: "all", Rules: []model.SmartRule{{Field: "duration", Operator: "lte", Value: "3000"}}}
+	long := model.SmartFolder{Match: "all", Rules: []model.SmartRule{{Field: "duration", Operator: "gte", Value: "3000"}}}
+	for _, tc := range []struct {
+		asset       model.Asset
+		short, long bool
+	}{
+		{model.Asset{ID: "image", Kind: model.KindImage}, false, false},
+		{model.Asset{ID: "live", Kind: model.KindLive, DurationMS: 1600}, true, false},
+		{model.Asset{ID: "video", Kind: model.KindVideo, DurationMS: 12000}, false, true},
+	} {
+		if got := MatchesSmart(tc.asset, short); got != tc.short {
+			t.Errorf("%s 时长 ≤ 3 秒：%v", tc.asset.ID, got)
+		}
+		if got := MatchesSmart(tc.asset, long); got != tc.long {
+			t.Errorf("%s 时长 ≥ 3 秒：%v", tc.asset.ID, got)
+		}
+	}
+}

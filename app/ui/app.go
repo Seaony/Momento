@@ -831,10 +831,10 @@ func (a *App) ExportSelected() {
 		a.ExportOpen = true
 	}
 }
-func (a *App) ExportTo(destination string, format model.ExportFormat, quality float64, selected []model.Asset) {
+func (a *App) ExportTo(destination string, format model.ExportFormat, quality float64, motion bool, selected []model.Asset) {
 	service := a.Assets
 	a.RunPatch("export", nil, func(ctx context.Context) error {
-		written, err := service.Export(ctx, selected, destination, format, quality)
+		written, err := service.ExportWithMotion(ctx, selected, destination, format, quality, motion)
 		if err != nil {
 			return err
 		}

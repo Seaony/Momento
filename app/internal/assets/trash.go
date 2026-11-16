@@ -67,9 +67,9 @@ func (s *Service) deletePermanently(ctx context.Context, ids []string) (err erro
 			continue
 		}
 		seen[id] = true
-		var relative string
+		var relative, motion string
 		var trashed bool
-		if err = tx.QueryRowContext(ctx, "SELECT relative_path,trashed FROM assets WHERE id=?", id).Scan(&relative, &trashed); err != nil {
+		if err = tx.QueryRowContext(ctx, "SELECT relative_path,trashed,motion_path FROM assets WHERE id=?", id).Scan(&relative, &trashed, &motion); err != nil {
 			return err
 		}
 		if !trashed {
@@ -82,6 +82,10 @@ func (s *Service) deletePermanently(ctx context.Context, ids []string) (err erro
 		// 暂存名带上素材 ID 和种类（缩略图还带格式），中途崩溃后打开图库时能按名字挪回原处。
 		// 缩略图 .jpg、.png 两种都挪，通常只有一种存在。
 		files := []struct{ rel, kind string }{{relative, "original"}}
+		if motion != "" {
+			// 实况照片的视频一起删。
+			files = append(files, struct{ rel, kind string }{motion, "motion"})
+		}
 		for _, ext := range thumbnailExtensions {
 			files = append(files, struct{ rel, kind string }{thumb + ext, "thumbnail" + ext})
 		}
@@ -90,7 +94,7 @@ func (s *Service) deletePermanently(ctx context.Context, ids []string) (err erro
 			rel := file.rel
 			from, e := s.assetPath(rel)
 			if os.IsNotExist(e) {
-				if file.kind == "original" {
+				if file.kind == "original" || file.kind == "motion" {
 					slog.Warn("永久删除时文件已不存在", "path", rel)
 				}
 				continue
@@ -103,7 +107,7 @@ func (s *Service) deletePermanently(ctx context.Context, ids []string) (err erro
 				return err
 			}
 			moved = append(moved, deletionFile{from: from, to: to})
-			if file.kind != "original" {
+			if file.kind != "original" && file.kind != "motion" {
 				thumbnails++
 			}
 		}

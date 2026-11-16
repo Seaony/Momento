@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -40,6 +41,7 @@ type candidate struct {
 	size      int64
 	extension string
 	createdAt time.Time
+	motion    *motionSource // 配成实况照片时的那段视频
 }
 type prepared struct {
 	asset               model.Asset
@@ -267,6 +269,30 @@ func stageHash(ctx context.Context, c *candidate, stage string, index int) (err 
 		return err
 	}
 	c.hash = hex.EncodeToString(h.Sum(nil))
+	if c.motion != nil {
+		return stageMotion(ctx, c.motion, stage, index)
+	}
+	return nil
+}
+
+// stageMotion 把实况照片的视频复制进暂存并算哈希，放进图库时用来核对已有文件。
+func stageMotion(ctx context.Context, m *motionSource, stage string, index int) error {
+	in, err := os.Open(m.path)
+	if err != nil {
+		return sourceError{err}
+	}
+	defer in.Close()
+	m.staged = filepath.Join(stage, fmt.Sprintf("source-%d.motion.mov", index))
+	out, err := os.OpenFile(m.staged, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
+		return err
+	}
+	h := sha256.New()
+	_, err = io.Copy(io.MultiWriter(out, h), contextReader{ctx: ctx, r: sourceReader{in}})
+	if err = errors.Join(err, out.Close()); err != nil {
+		return err
+	}
+	m.hash = hex.EncodeToString(h.Sum(nil))
 	return nil
 }
 
@@ -315,7 +341,7 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 	if err != nil {
 		return result, err
 	}
-	candidates := found.candidates
+	candidates := pairLivePhotos(found.candidates)
 	total := len(candidates)
 	progress.send(model.ImportProgress{Stage: "scanning", Total: total}, true)
 	if total == 0 {
@@ -519,16 +545,19 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 		name := filepath.Base(c.path)
 		name = strings.TrimSuffix(name, filepath.Ext(name))
 		now := time.Now().UTC()
-		kind := img.kind
+		kind, durationMS, motionPath := img.kind, img.durationMS, ""
 		if kind == "" {
 			kind = model.KindImage
+		}
+		if c.motion != nil {
+			kind, durationMS, motionPath = model.KindLive, c.motion.durationMS, motionRelative(c.hash, "mov")
 		}
 		// 通用封面只是纯色底，取不出有意义的颜色，不参与按颜色筛选。
 		var colors []model.Color
 		if metadata["posterUnavailable"] == "" {
 			colors = Palette(img.thumbnail)
 		}
-		ready[j] = prepared{asset: model.Asset{ID: c.hash, Name: name, OriginalFileName: filepath.Base(c.path), Extension: c.extension, MediaType: mediaType(c.extension), Size: c.size, Width: img.width, Height: img.height, Orientation: img.orientation, ColorProfile: img.profile, EXIF: metadata, SourceURL: request.SourceURL, RelativePath: filepath.ToSlash(filepath.Join("assets", c.hash[:2], c.hash+"."+c.extension)), CreatedAt: now, UpdatedAt: now, Colors: colors, Kind: kind, DurationMS: img.durationMS}, original: c.staged, thumbnail: thumb}
+		ready[j] = prepared{asset: model.Asset{ID: c.hash, Name: name, OriginalFileName: filepath.Base(c.path), Extension: c.extension, MediaType: mediaType(c.extension), Size: c.size, Width: img.width, Height: img.height, Orientation: img.orientation, ColorProfile: img.profile, EXIF: metadata, SourceURL: request.SourceURL, RelativePath: filepath.ToSlash(filepath.Join("assets", c.hash[:2], c.hash+"."+c.extension)), CreatedAt: now, UpdatedAt: now, Colors: colors, Kind: kind, DurationMS: durationMS, MotionPath: motionPath}, original: c.staged, thumbnail: thumb}
 		return nil
 	}, func(j int) {
 		hash := toPrepare[j]
@@ -572,6 +601,8 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 		}
 	}()
 	folderCache := map[string]string{}
+	// 配对视频单独出的问题（图库里这张图已配了别的视频），图片本身照常算导入或重复。
+	motionFailed := map[int]error{}
 	repaired := map[string]bool{}
 	resultIDs := map[string]bool{}
 	for i, c := range candidates {
@@ -579,8 +610,8 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 			continue
 		}
 		var trashed bool
-		var source, relative string
-		lookupErr := tx.QueryRowContext(ctx, "SELECT trashed,source_url,relative_path FROM assets WHERE id=?", c.hash).Scan(&trashed, &source, &relative)
+		var source, relative, motionPath string
+		lookupErr := tx.QueryRowContext(ctx, "SELECT trashed,source_url,relative_path,motion_path FROM assets WHERE id=?", c.hash).Scan(&trashed, &source, &relative, &motionPath)
 		switch {
 		case errors.Is(lookupErr, sql.ErrNoRows):
 			p, ok := byHash[c.hash]
@@ -590,11 +621,16 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 			if err = insertAsset(ctx, tx, p.asset); err != nil {
 				return result, err
 			}
-			for _, file := range []struct {
-				source, relative string
-				original         bool
-			}{{p.original, p.asset.RelativePath, true}, {p.thumbnail, thumbnailRelative(c.hash, p.thumbnail), false}} {
-				dst, placed, installErr := s.installFile(ctx, file.source, file.relative, c.hash, file.original)
+			type installing struct {
+				source, relative, hash string
+				original               bool
+			}
+			files := []installing{{p.original, p.asset.RelativePath, c.hash, true}, {p.thumbnail, thumbnailRelative(c.hash, p.thumbnail), c.hash, false}}
+			if m := candidates[i].motion; p.asset.MotionPath != "" && m != nil {
+				files = append(files, installing{m.staged, p.asset.MotionPath, m.hash, true})
+			}
+			for _, file := range files {
+				dst, placed, installErr := s.installFile(ctx, file.source, file.relative, file.hash, file.original)
 				if placed {
 					installed = append(installed, dst)
 				}
@@ -620,6 +656,37 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 				repaired[c.hash] = true
 				slog.Info("已补回图库缺失的原图和缩略图", "id", c.hash, "path", relative)
 			}
+			if m := c.motion; m != nil {
+				if motionPath == "" {
+					// 图库里已有这张图但没有视频（比如以前单独导入过）：补存视频，升级成实况照片，源视频才能放心移走。
+					rel := motionRelative(c.hash, "mov")
+					dst, placed, installErr := s.installFile(ctx, m.staged, rel, m.hash, true)
+					if placed {
+						installed = append(installed, dst)
+					}
+					if installErr != nil {
+						return result, installErr
+					}
+					if _, err = tx.ExecContext(ctx, "UPDATE assets SET kind=?,duration_ms=?,motion_path=?,updated_at=? WHERE id=?", model.KindLive, m.durationMS, rel, nowText(), c.hash); err != nil {
+						return result, err
+					}
+					slog.Info("已有的图片补上实况视频", "id", c.hash)
+				} else {
+					// 已经有视频：内容一样才算重复；不一样的视频不能当成已入库，留着源文件报出来。
+					stored, pathErr := s.assetPath(motionPath)
+					if pathErr != nil {
+						return result, pathErr
+					}
+					same, hashErr := fileHashEquals(ctx, stored, m.hash)
+					if hashErr != nil && !errors.Is(hashErr, os.ErrNotExist) {
+						return result, hashErr
+					}
+					if !same {
+						slog.Warn("这张实况照片在图库里已配了另一段视频，这段视频没有导入", "id", c.hash, "file", filepath.Base(m.path))
+						motionFailed[i] = i18n.NewError("error_live_motion_conflict", filepath.Base(m.path))
+					}
+				}
+			}
 			if trashed {
 				result.Imported++
 				result.Restored++
@@ -635,6 +702,9 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 		if !resultIDs[c.hash] {
 			result.AssetIDs = append(result.AssetIDs, c.hash)
 			resultIDs[c.hash] = true
+		}
+		if c.motion != nil && motionFailed[i] == nil {
+			result.Motion = append(result.Motion, c.motion.path)
 		}
 		for _, tagID := range request.TagIDs {
 			if _, err = tx.ExecContext(ctx, "INSERT OR IGNORE INTO asset_tags(asset_id,tag_id) VALUES(?,?)", c.hash, tagID); err != nil {
@@ -668,14 +738,30 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 		return result, err
 	}
 	committed = true
-	// Failed 和 Errors 按候选文件一一对应，重复内容一起失败时每个文件各占一条。
+	// Failed 和 Errors 按源文件一一对应，重复内容一起失败时每个文件各占一条；实况照片没导入时，配对的视频也算一条。
+	failedCandidates := 0
 	for i, fileErr := range fileErrs {
-		if fileErr != nil {
-			result.Errors = append(result.Errors, fileErr)
-			result.Failed = append(result.Failed, candidates[i].path)
+		if fileErr == nil {
+			continue
+		}
+		failedCandidates++
+		result.Errors = append(result.Errors, fileErr)
+		result.Failed = append(result.Failed, candidates[i].path)
+		if m := candidates[i].motion; m != nil {
+			var cause *i18n.LocalizedError
+			motionErr := i18n.NewError("error_import_read", filepath.Base(m.path))
+			if errors.As(fileErr, &cause) && cause.Cause != nil {
+				motionErr = i18n.WrapError(cause.Cause, "error_import_read", filepath.Base(m.path))
+			}
+			result.Errors = append(result.Errors, motionErr)
+			result.Failed = append(result.Failed, m.path)
 		}
 	}
-	progress.send(model.ImportProgress{Stage: "finishing", Total: total, Processed: total, Imported: total - result.Skipped - len(result.Errors), Skipped: result.Skipped}, true)
+	for _, i := range slices.Sorted(maps.Keys(motionFailed)) {
+		result.Errors = append(result.Errors, motionFailed[i])
+		result.Failed = append(result.Failed, candidates[i].motion.path)
+	}
+	progress.send(model.ImportProgress{Stage: "finishing", Total: total, Processed: total, Imported: total - result.Skipped - failedCandidates, Skipped: result.Skipped}, true)
 	return result, nil
 }
 

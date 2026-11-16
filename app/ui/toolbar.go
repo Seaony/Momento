@@ -651,6 +651,13 @@ func (a *App) filterPanel(c *ui.Context) {
 							a.Refine()
 						}
 					}
+					if a.libraryHasKind(model.KindLive) {
+						chosen := slices.Contains(a.Query.Kinds, model.KindLive)
+						if popChip(c.Key("kind-live"), &chosen, "type-live", a.T("filter_kind_live")).Changed() {
+							a.Query.Kinds = toolbarToggle(a.Query.Kinds, model.KindLive, chosen)
+							a.Refine()
+						}
+					}
 					for _, ext := range types {
 						chosen := slices.Contains(a.Query.Extensions, ext)
 						if popChip(c.Key("extension-"+ext), &chosen, extensionIcon(ext), strings.ToUpper(ext)).Changed() {

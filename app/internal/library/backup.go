@@ -177,6 +177,15 @@ func (l *Library) copyPackage(ctx context.Context, destination string, newIdenti
 		if err := copyLibraryFile(ctx, root, stage, asset.RelativePath, asset.ID, asset.Size); err != nil {
 			return err
 		}
+		// 实况照片的视频一起复制；没存哈希，只核对在包内。
+		if asset.MotionPath != "" {
+			if !strings.HasPrefix(asset.MotionPath, "assets/") {
+				return i18n.NewError("error_asset_path", asset.MotionPath)
+			}
+			if err := copyLibraryFile(ctx, root, stage, asset.MotionPath, "", -1); err != nil {
+				return err
+			}
+		}
 		// 缩略图可能是新的 .jpg 或旧的 .png，有哪个复制哪个，都没有就跳过。
 		for _, ext := range []string{".jpg", ".png"} {
 			thumb := "thumbnails/" + asset.ID + ext

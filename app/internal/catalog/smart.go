@@ -21,7 +21,7 @@ func ValidateSmartFolder(folder model.SmartFolder) error {
 			valid = slices.Contains([]string{"contains", "equals"}, rule.Operator) && strings.TrimSpace(rule.Value) != ""
 		case "extension", "tag", "color":
 			valid = rule.Operator == "equals" && strings.TrimSpace(rule.Value) != ""
-		case "width", "height", "size":
+		case "width", "height", "size", "duration":
 			n, err := strconv.ParseInt(rule.Value, 10, 64)
 			valid = err == nil && n >= 0 && slices.Contains([]string{"eq", "gte", "lte"}, rule.Operator)
 		case "added":
@@ -81,9 +81,13 @@ func matchesSmartRule(asset *model.Asset, rule *model.SmartRule) bool {
 		return slices.Contains(asset.TagIDs, rule.Value)
 	case "color":
 		return slices.ContainsFunc(asset.Colors, func(c model.Color) bool { return strings.EqualFold(c.Family, value) || strings.EqualFold(c.Hex, value) })
-	case "width", "height", "size":
+	case "width", "height", "size", "duration":
 		target, err := strconv.ParseInt(rule.Value, 10, 64)
 		if err != nil {
+			return false
+		}
+		// 时长只对视频和实况照片有意义，图片的 0 不算「时长 ≤ N」。
+		if rule.Field == "duration" && asset.Kind != model.KindVideo && asset.Kind != model.KindLive {
 			return false
 		}
 		width, height := asset.Width, asset.Height
@@ -96,6 +100,9 @@ func matchesSmartRule(asset *model.Asset, rule *model.SmartRule) bool {
 		}
 		if rule.Field == "height" {
 			actual = int64(height)
+		}
+		if rule.Field == "duration" {
+			actual = asset.DurationMS
 		}
 		switch rule.Operator {
 		case "eq":

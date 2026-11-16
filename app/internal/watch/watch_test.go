@@ -459,3 +459,22 @@ func TestWatcherGroupsBatchesByTargetFolder(t *testing.T) {
 		}
 	}
 }
+
+// 实况照片：图片和同名视频导成一个素材，视频记在 Motion 里，两个源文件都移走。
+func TestWatcherTrashesLivePhotoMotion(t *testing.T) {
+	root, folder, _ := fixture(t)
+	if err := os.Remove(filepath.Join(folder, "image.png")); err != nil {
+		t.Fatal(err)
+	}
+	paths := writeFiles(t, folder, "IMG_1.HEIC", "IMG_1.MOV")
+	var trashed []string
+	w := New(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
+		return model.ImportResult{Imported: 1, Motion: []string{paths[1]}}, nil
+	}, func(source string) error { trashed = append(trashed, source); return os.Remove(source) }, func(Event) {})
+	w.Update([]Rule{{Path: folder, FolderID: "f", Enabled: true}})
+	w.Scan(context.Background())
+	w.Scan(context.Background())
+	if !slices.Equal(trashed, paths) {
+		t.Fatalf("实况照片的两个源文件应都移走：%v", trashed)
+	}
+}

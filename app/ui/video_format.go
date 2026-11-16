@@ -24,6 +24,22 @@ func videoDuration(d time.Duration) string {
 // isVideoAsset 判断素材是不是视频（实况照片按图片看，只在悬停或预览时播那段视频）。
 func isVideoAsset(asset model.Asset) bool { return asset.Kind == model.KindVideo }
 
+// isLiveAsset 判断素材是不是带着视频的实况照片。
+func isLiveAsset(asset model.Asset) bool {
+	return asset.Kind == model.KindLive && asset.MotionPath != ""
+}
+
+// motionVideo 是悬停时播放的视频在包里的相对路径：视频是它自己，实况照片是配对的那段，图片没有。
+func motionVideo(asset model.Asset) string {
+	switch {
+	case isVideoAsset(asset):
+		return asset.RelativePath
+	case isLiveAsset(asset):
+		return asset.MotionPath
+	}
+	return ""
+}
+
 // assetDuration 是素材的视频时长；图片为 0。
 func assetDuration(asset model.Asset) time.Duration {
 	return time.Duration(asset.DurationMS) * time.Millisecond
