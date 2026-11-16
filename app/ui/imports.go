@@ -90,10 +90,12 @@ func (a *App) PasteImport() {
 		})
 	}()
 }
+
+// imageClipboardPaths 挑出剪贴板文件里能导入的（图片、视频、RAW、PSD 等），和拖进来、选文件导入认同一批格式。
 func imageClipboardPaths(paths []string) []string {
 	var out []string
 	for _, path := range paths {
-		if slices.Contains([]string{".jpg", ".jpeg", ".png", ".gif", ".webp", ".tif", ".tiff", ".bmp", ".heic", ".heif", ".avif"}, strings.ToLower(filepath.Ext(path))) {
+		if assets.Supported(path) {
 			out = append(out, path)
 		}
 	}

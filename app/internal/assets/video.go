@@ -27,6 +27,9 @@ const posterTimeout = 20 * time.Second
 // genericPosterColor 是取不到封面时（比如 Linux 没装 ffmpeg）通用封面的底色，界面会在上面画视频标记。
 var genericPosterColor = color.RGBA{R: 0x2b, G: 0x2b, B: 0x30, A: 0xff}
 
+// genericPosterLabel 是通用封面上格式名的颜色。
+var genericPosterLabel = color.RGBA{R: 0xb8, G: 0xb8, B: 0xc0, A: 0xff}
+
 // isVideo 判断按扩展名（不带点、小写）是不是视频文件。
 func isVideo(extension string) bool { return media.IsVideoExtension(extension) }
 

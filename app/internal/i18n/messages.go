@@ -655,6 +655,7 @@ var messages = map[string][3]string{
 	"folder_icon_rocket":              {"项目", "Projects", "プロジェクト"},
 	"assets_exported":                 {"已导出 %d 个素材到「%s」", "Exported images (%d) to “%s”", "%d枚の画像を「%s」に書き出しました"},
 	"error_live_motion_conflict":      {"图库里这张实况照片已经配了另一段视频，「%s」没有导入", "This Live Photo already has a different video in the library, so \"%s\" wasn't imported", "このLive Photosにはライブラリ内で別のビデオが既にあるため、「%s」は読み込まれませんでした"},
+	"error_system_decode_unavailable": {"这台电脑解不了 %s 文件的原图，只能用「原文件」格式导出", "This computer can't decode %s originals. Export with the Original format instead", "このコンピュータでは %s の元画像をデコードできません。「オリジナル」形式で書き出してください"},
 	"error_export_motion_exists":      {"这里已经有同名视频「%s」，换个名字或位置再导出实况照片", "A video named \"%s\" is already here. Choose another name or location to export the Live Photo", "同じ名前のビデオ「%s」が既にあります。名前か場所を変えてLive Photosを書き出してください"},
 	"error_export_into_library":       {"不能导出到图库包里面，请选择图库外的位置", "Can't export into the library package. Choose a location outside the library", "ライブラリパッケージの中には書き出せません。ライブラリの外を選んでください"},
 	"tray_show_main_window":           {"显示主界面", "Show Main Window", "メインウィンドウを表示"},

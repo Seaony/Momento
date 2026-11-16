@@ -377,11 +377,13 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 				})
 			}
 
-			// 尺寸角标照旧版：常驻右上角，黑色半透明底、白字。
-			badge := ui.Text(c.Key("dimensions"), fmt.Sprintf("%d × %d", width, height)).Absolute().Top(space8).Right(space8).
-				Radius(5).Background(ui.RGBA(0, 0, 0, .34)).
-				FontFeatures("tnum").FontSize(10).FontWeight(500).TextColor(ui.RGBA(255, 255, 255, .82)).PassThrough()
-			centeredTextHeight(badge, assetBadgeHeight, 3)
+			// 尺寸角标照旧版：常驻右上角，黑色半透明底、白字。读不出尺寸的（Windows、Linux 上的 RAW 等）不显示。
+			if width > 0 && height > 0 {
+				badge := ui.Text(c.Key("dimensions"), fmt.Sprintf("%d × %d", width, height)).Absolute().Top(space8).Right(space8).
+					Radius(5).Background(ui.RGBA(0, 0, 0, .34)).
+					FontFeatures("tnum").FontSize(10).FontWeight(500).TextColor(ui.RGBA(255, 255, 255, .82)).PassThrough()
+				centeredTextHeight(badge, assetBadgeHeight, 3)
+			}
 		}
 		if selected || focused {
 			// 图片外圈留 2px；列表描边放在行内，避免盖住相邻行。

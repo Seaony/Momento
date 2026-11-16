@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/Seaony/Momento/app/internal/i18n"
+	"github.com/Seaony/Momento/app/internal/media"
 	"github.com/Seaony/Momento/app/internal/model"
 )
 
@@ -53,7 +54,7 @@ func Supported(path string) bool {
 	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".tif", ".tiff", ".bmp", ".heic", ".heif", ".avif":
 		return true
 	default:
-		return isVideo(ext)
+		return isVideo(ext) || media.IsSystemImageExtension(ext)
 	}
 }
 func nowText() string { return time.Now().UTC().Format(time.RFC3339Nano) }
@@ -820,9 +821,19 @@ func mediaType(ext string) string {
 		return "image/tiff"
 	case "heic", "heif":
 		return "image/heic"
-	default:
-		return "image/" + ext
+	case "psd":
+		return "image/vnd.adobe.photoshop"
+	case "ico":
+		return "image/x-icon"
+	case "dng":
+		return "image/x-adobe-dng"
+	case "hdr":
+		return "image/vnd.radiance"
 	}
+	if media.IsRawExtension(ext) || media.IsSystemImageExtension(ext) {
+		return "image/x-" + ext
+	}
+	return "image/" + ext
 }
 
 func insertAsset(ctx context.Context, tx *sql.Tx, a model.Asset) error {

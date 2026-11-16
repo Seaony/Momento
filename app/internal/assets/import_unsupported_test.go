@@ -18,7 +18,7 @@ func TestImportOnlyUnsupportedFilesReportsLocalizedError(t *testing.T) {
 	// 访达替身是没有扩展名的普通文件，纯 Go 解析不了，按不支持的文件算。
 	alias := filepath.Join(input, "Photos 替身")
 	folder := filepath.Join(input, "Docs")
-	for _, path := range []string{notes, alias, filepath.Join(folder, "a.psd"), filepath.Join(folder, "b.pdf")} {
+	for _, path := range []string{notes, alias, filepath.Join(folder, "a.sketch"), filepath.Join(folder, "b.pdf")} {
 		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 			t.Fatal(err)
 		}

@@ -14,8 +14,8 @@ github.com/evanoberholster/imagemeta v1.1.0 h1:0iBtgVxLORZTZAlKxRcNodBmjMfHCSFwU
 github.com/evanoberholster/imagemeta v1.1.0/go.mod h1:nmf6le+qSyoRAXgp2psPbtfkxcEgf/AZGgai9pnN8d0=
 github.com/gen2brain/avif v0.6.0 h1:/8WSgcU+IEF0jhKYsUZ/mzlziFuTeJFpIKBj2siTQps=
 github.com/gen2brain/avif v0.6.0/go.mod h1:QgrYqdVE9y40PCfArK9VakcMIpYeDYpZmCSLkW6C1n8=
-github.com/gen2brain/heic v0.7.2 h1:iRJhkj0DQ9MAiIInH8o6ygy6E+KNfdIWNAZfxRxbPGM=
-github.com/gen2brain/heic v0.7.2/go.mod h1:ja42wMJc4fpnKsfdUJxeZa2YqqRnes1wS0xqs5+8o5w=
+github.com/gen2brain/h265 v0.2.5 h1:D3qCPx5GU+gHpinvLJtYMLSmQy64RGOm4fzMNGQcA1g=
+github.com/gen2brain/h265 v0.2.5/go.mod h1:kefpLxLhGpNCUG/q/aabJcD6GqB9Nhet3fNi9xX9Wzw=
 github.com/go-text/typesetting v0.3.5 h1:XZPUooClHY0Vf/rFyUyuPRNEkawARaFzLMQcXLSEyPk=
 github.com/go-text/typesetting v0.3.5/go.mod h1:XZO1hD+nQVyvVa5IicQk7FsCa4PFQaJ2soWAP1f//68=
 github.com/go-text/typesetting-utils v0.0.0-20260419141703-4ffe8874dabc h1:8FGo2It5K75XkavhTiCKExUfVaVDS1feBnLCru5qeoY=

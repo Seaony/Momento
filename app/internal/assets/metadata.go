@@ -40,8 +40,10 @@ func readMetadata(path string, img image.Image) (map[string]string, int, string)
 		}
 	}
 	ext := strings.ToLower(filepath.Ext(path))
-	switch ext {
-	case ".jpg", ".jpeg", ".tif", ".tiff", ".png", ".heic", ".heif", ".avif":
+	switch {
+	case ext == ".jpg", ext == ".jpeg", ext == ".tif", ext == ".tiff", ext == ".png", ext == ".heic", ext == ".heif", ext == ".avif":
+	case tiffRaw(ext):
+		// 多数相机 RAW 就是 TIFF 结构，相机、镜头、曝光参数照样读。
 	default:
 		return values, orientation, profile
 	}
@@ -130,6 +132,15 @@ func readMetadata(path string, img image.Image) (map[string]string, int, string)
 }
 
 // 库把缺失字段和零值放在同一个字段里，只检查 tag 是否存在，数值仍由库解析。
+// tiffRaw 判断这种相机 RAW 是不是 TIFF 结构（EXIF 就在 TIFF 的 IFD 里）。
+func tiffRaw(ext string) bool {
+	switch ext {
+	case ".dng", ".nef", ".nrw", ".cr2", ".arw", ".srf", ".sr2", ".pef", ".srw", ".erf", ".3fr", ".iiq":
+		return true
+	}
+	return false
+}
+
 func presentExifTags(f *os.File, ext string) (map[uint16]bool, error) {
 	found := map[uint16]bool{}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
@@ -154,7 +165,7 @@ func presentExifTags(f *os.File, ext string) (map[uint16]bool, error) {
 			return found, err
 		}
 		return found, collectTIFFTags(io.NewSectionReader(f, int64(h.TiffHeaderOffset), int64(h.ExifLength)), int64(h.FirstIfdOffset), h.ByteOrder, found)
-	case ".tif", ".tiff":
+	case ".tif", ".tiff", ".dng", ".nef", ".nrw", ".cr2", ".arw", ".srf", ".sr2", ".pef", ".srw", ".erf", ".3fr", ".iiq":
 		var header [8]byte
 		if _, err := f.ReadAt(header[:], 0); err != nil {
 			return found, err

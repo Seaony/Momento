@@ -8,13 +8,14 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/Seaony/Momento/app/internal/i18n"
 	"github.com/gen2brain/avif"
-	"github.com/gen2brain/heic"
+	"github.com/gen2brain/h265/heic"
 	_ "golang.org/x/image/bmp"
 	"golang.org/x/image/draw"
 	_ "golang.org/x/image/tiff"
@@ -68,7 +69,7 @@ func decodeImage(ctx context.Context, path string, admit func(context.Context, i
 	}
 	switch ext {
 	case ".heic", ".heif":
-		img, err = heic.Decode(f)
+		img, err = heic.Decode(f, heic.Options{AutoRotate: true})
 	case ".avif":
 		img, err = avif.Decode(f, avif.Options{AutoRotate: true})
 	default:
@@ -88,6 +89,17 @@ func decoderOriented(ext string) bool {
 
 // PrepareImage 返回全尺寸、已转正的第一帧和元数据，给预览和导出用。
 func PrepareImage(path string) (image.Image, map[string]string, int, string, error) {
+	if ext := strings.ToLower(filepath.Ext(path)); useSystemDecoder(ext) {
+		img, err := decodeSystemImage(path)
+		if err == nil {
+			metadata, orientation, profile := readMetadata(path, img)
+			return img, metadata, orientation, profile, nil
+		}
+		if systemOnly(ext) {
+			return nil, nil, 0, "", err
+		}
+		slog.Warn("系统解不了这张图片，改用内置解码器", "file", filepath.Base(path), "error", err)
+	}
 	img, ext, _, err := decodeImage(context.Background(), path, nil)
 	if err != nil {
 		return nil, nil, 0, "", err
@@ -114,6 +126,13 @@ type preparedImage struct {
 // prepareThumbnail 解码后先缩小再转正，避免对全尺寸大图做转正和多次高质量缩放。
 // 大图解码要按内存预算排队，缩好后马上归还额度。
 func prepareThumbnail(ctx context.Context, path string) (preparedImage, error) {
+	if ext := strings.ToLower(filepath.Ext(path)); useSystemDecoder(ext) {
+		prepared, err := prepareSystemThumbnail(ctx, path, ext)
+		if err == nil || systemOnly(ext) || ctx.Err() != nil {
+			return prepared, err
+		}
+		slog.Warn("系统解不了这张图片，改用内置解码器", "file", filepath.Base(path), "error", err)
+	}
 	img, ext, release, err := decodeImage(ctx, path, decodeBudget.admit)
 	if err != nil {
 		return preparedImage{}, err

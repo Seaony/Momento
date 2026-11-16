@@ -751,6 +751,9 @@ func extensionIcon(ext string) string {
 	if media.IsVideoExtension(ext) {
 		return "type-video"
 	}
+	if media.IsRawExtension(ext) {
+		return "type-photo"
+	}
 	return "type-image"
 }
 

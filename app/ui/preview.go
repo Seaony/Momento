@@ -112,7 +112,7 @@ func readPreviewPicture(path string, rotation int, pixelated bool) (previewPictu
 		}
 		return previewPicture{previewBitmap(img, pixelated), pixelated, &previewAnimation{decoder, frame.Duration, rotation, pixelated}}, nil
 	}
-	img, _, _, _, err := assets.PrepareImage(path)
+	img, err := assets.PreviewImage(path)
 	if err != nil {
 		return previewPicture{}, err
 	}
