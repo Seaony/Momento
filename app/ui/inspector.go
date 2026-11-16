@@ -359,12 +359,14 @@ func inspectorSection(c *ui.Context, key, title string, body func()) {
 }
 
 // 一行信息：左边 74 宽的次要色标签，右边左对齐的值，可选中复制。
-func inspectorInfo(c *ui.Context, label, value string) {
+// inspectorInfo 画一行「标签：值」，返回值那一格，调用方可以再加样式。
+func inspectorInfo(c *ui.Context, label, value string) (text ui.Element) {
 	p := paletteFor(c.Theme())
 	ui.Row(c).FillWidth().AlignItems(ui.Start).Gap(10).Children(func() {
 		ui.Text(c, label).FontSize(fontSecondary).TextColor(p.TextTertiary).Width(inspectorLabelWidth).Shrink(0)
-		ui.Text(c, value).FontSize(fontSecondary).FontFeatures("tnum").TextColor(p.Text).Grow(1).MinWidth(0).Selectable()
+		text = ui.Text(c, value).FontSize(fontSecondary).FontFeatures("tnum").TextColor(p.Text).Grow(1).MinWidth(0).Selectable()
 	})
+	return text
 }
 
 func (a *App) inspectorDetails(c *ui.Context, asset model.Asset) {
@@ -384,9 +386,9 @@ func (a *App) inspectorDetails(c *ui.Context, asset model.Asset) {
 		if !asset.CreatedAt.IsZero() {
 			inspectorInfo(c, a.T("date_added"), a.Texts.DateTime(asset.CreatedAt.Local()))
 		}
-		// 和旧版一样显示文件在磁盘上的完整路径，可以选中复制。
+		// 文件在磁盘上的路径只占一行，放不下的部分用省略号。
 		if a.Library != nil && asset.RelativePath != "" {
-			inspectorInfo(c, a.T("file_path"), filepath.Join(a.Library.Root, filepath.FromSlash(asset.RelativePath)))
+			inspectorInfo(c, a.T("file_path"), filepath.Join(a.Library.Root, filepath.FromSlash(asset.RelativePath))).SingleLine()
 		}
 		// 和旧版一样，没有链接就不显示这一行。
 		if strings.TrimSpace(a.Inspector.SourceURL) != "" || a.Inspector.Editing == "source" {
