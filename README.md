@@ -1,158 +1,142 @@
 <div align="center">
-<img src="app/resources/icon.png" width="112" alt="Momento">
+
+<a href="https://github.com/Seaony/Momento/releases/latest"><img src="app/resources/icon.png" width="112" alt="Momento"></a>
 
 # Momento
 
-A local image library for macOS, Windows and Linux.
+### Your image library, on your own disk.
 
-![Go](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white)
-![mygo](https://img.shields.io/badge/mygo-v0.9.0-222222)
-![Native UI](https://img.shields.io/badge/UI-native_GPU-222222)
-![License](https://img.shields.io/badge/license-MIT-222222)
+**Reference images, screenshots, photos and short videos, in one local library.**<br>
+Organize them by color, tag and folder, find them again when you need them,<br>
+with no account and nothing uploaded anywhere.
 
-[English](README.md) · [简体中文](README.zh-CN.md) · [Browser extension](https://github.com/Seaony/Momento-Chomre-Extension)
+[![Release](https://img.shields.io/github/v/release/Seaony/Momento?label=release&color=111111)](https://github.com/Seaony/Momento/releases/latest) [![Stars](https://img.shields.io/github/stars/Seaony/Momento?style=flat&color=111111)](https://github.com/Seaony/Momento/stargazers) [![License](https://img.shields.io/badge/license-MIT-111111)](LICENSE)<br>
+![macOS](https://img.shields.io/badge/macOS-13%2B-000000?logo=apple&logoColor=white) ![Windows](https://img.shields.io/badge/Windows-10%2B-0078D4?logo=windows&logoColor=white) ![Linux](https://img.shields.io/badge/Linux-GTK%203-FCC624?logo=linux&logoColor=black) ![Go](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white)
+
+**[Download](https://github.com/Seaony/Momento/releases/latest)** &nbsp;·&nbsp; **[Browser extension](https://github.com/Seaony/Momento-Chomre-Extension)** &nbsp;·&nbsp; **English** · [简体中文](README.zh-CN.md)
+
+<br>
+
+<img src=".github/assets/momento-hero-en.png" width="900" alt="The Momento main window: a folder sidebar on the left, a three-column masonry grid of photos in the middle, and an inspector on the right showing the selected image's palette, rating and tags">
+
 </div>
 
-Momento collects and organizes reference images, screenshots, photos and short videos. Everything stays on your own disk. A library is a single `.momento` folder that you can move, copy or back up as a whole. There is no account and no cloud sync.
+<br>
 
-The whole app is one Go codebase. It uses [mygo](https://github.com/egoist/mygo) to draw a native GPU interface on all three desktop platforms, with no web frontend and no cgo.
+## Is Momento for you?
+
+Saved images scatter fast: a batch in Downloads, a pile of screenshots on the desktop, a list of bookmarked links. When you need one, you remember "that pinkish building photo" but not where it went.
+
+Momento keeps them in one library, and the library is a single `.momento` folder on your disk:
+
+- **Find images by how they look**: every image gets a color palette, so you can filter by color, tag, format and rating, and search names, notes and source links.
+- **Organize without effort**: nested folders, tags, ratings and smart folders, all editable in batches. Drag in, paste or drop into a watched folder, and images are imported with duplicates skipped.
+- **Your files stay yours**: copy, move or back up the whole library like any folder. No account, no cloud sync, no analytics.
+- **One interface on three platforms**: macOS, Windows and Linux share the same native interface, in English, Chinese and Japanese.
+
+If you collect references, screenshots or photos and would rather not hand them to a cloud service, it is for you. If you only want your photos synced between your phone and computer, your system's photo app suits you better.
+
+> [!NOTE]
+> The Windows build is not code-signed yet, so SmartScreen warns the first time you open it: choose More info, then Run anyway. Camera RAW and PSD files do not open on Linux yet.
+
+## Quick start
+
+**1 · Install.** Download from the **[latest release](https://github.com/Seaony/Momento/releases/latest)**: the DMG for macOS, the `setup` program for Windows, or DEB, RPM or tar.gz for Linux.
+
+<sub>The macOS app runs on Apple silicon and Intel, and is signed with a Developer ID and notarized by Apple. Momento checks GitHub Releases for updates; you can turn that off in Settings.</sub>
+
+**2 · Create a library.** The first time you open Momento, create a library and pick where its `.momento` folder goes.
+
+**3 · Add images.** Drag them into the window, paste with `⌘V`, or choose files with `⌘I`. Save images from web pages with a right-click using the [browser extension](https://github.com/Seaony/Momento-Chomre-Extension).
 
 ## Features
 
-**Browse** in masonry, justified rows or list view, with adjustable thumbnail size. Press Space to open a preview window that zooms, pans and plays animated images and videos; press H to flip it horizontally and G to view it in grayscale. You can also run a full-screen slideshow of the current list.
+### Three ways to look
 
-**Organize** with nested folders, tags, favorites, 1 to 5 star ratings and notes, all editable in batches. Copy tags from one image and paste them onto others. Smart folders collect images by name, note, source, tag, color, format, dimensions, file size, rating, duration and date added. Batch rename numbers files from a template or finds and replaces text.
+Masonry for scanning many images at once, justified rows for neat full-width rows, and a list for names and sizes. Press Space to open a preview window that zooms, pans and plays animated images and videos; press H to flip horizontally and G for grayscale. You can also run a full-screen slideshow of the current list.
 
-**Find** images by name, tag, note, source link or format, then filter by color, tag or extension. Find Similar Images groups images that look the same; pick one to keep, and the tags, folders, notes and ratings of the others are merged into it before they go to the trash.
+### Find by color and tag
 
-**Inspect** palettes, dimensions, file size, path, source link and EXIF data. Draw a box on an image to leave an annotation; annotations are searchable too.
+Every image gets an 8-color palette on import. Filter by color, tag and extension, or search names, notes, source links and tags. Smart folders collect images by rules, such as "added this month, 4 stars or more, mostly blue PNGs".
 
-**Import** by dragging, pasting, or choosing files or whole folders, with duplicates detected by content. Watched folders import anything you put in them and move the originals to the trash. Keywords embedded in images can become tags.
+### Organize
 
-**Export** originals, or convert to JPEG or PNG with an optional longest-edge limit, and save the settings you use often as presets. Live Photos can be exported together with their videos. Deleted images go to the library's trash first, where you can restore them or delete them for good.
+Nested folders, tags, favorites, 1 to 5 star ratings and notes, all editable for many images at once. Copy tags from one image and paste them onto others. Batch rename numbers files from a template or finds and replaces text.
 
-**Also**: a browser extension that saves images from web pages, a password lock, a menu bar icon, launch at login and customizable shortcuts. The interface comes in English, Simplified Chinese and Japanese, with light and dark appearances.
+### Duplicates, annotations and export
 
-## Supported formats
+Find Similar Images groups images that look the same; pick one to keep, and the tags, folders, notes and ratings of the others are merged into it before they go to the trash. Draw a box on an image to leave an annotation, and annotations are searchable too. Export to JPEG or PNG with an optional longest-edge limit, and save the settings you use often as presets.
 
-| Kind | Formats | Notes |
-|---|---|---|
-| Images | JPEG, PNG, GIF, WebP, TIFF, BMP, HEIC, AVIF | All platforms |
-| Camera RAW, PSD and more | DNG, CR2, CR3, NEF, ARW, RAF, ORF, RW2 and others, plus PSD, ICO, ICNS, JPEG 2000, TGA, EXR, HDR | macOS decodes them with the system; Windows only gets the system thumbnail, up to 2560 pixels; not supported on Linux yet |
-| Videos | MP4, MOV, M4V, WebM | The system captures the cover frame; WebM on macOS and all videos on Linux need ffmpeg |
-| Live Photos | A HEIC or JPEG with a MOV of the same name | Paired automatically on import |
+### Import
 
-## Install
+Drag in, paste, or choose files or whole folders, with duplicates detected by content. Watched folders import anything you put in them and move the originals to the trash. Keywords embedded in images can become tags.
 
-Download the package for your platform from the [latest release](https://github.com/Seaony/Momento/releases/latest): a DMG for macOS, a setup program for Windows, and DEB, RPM or tar.gz for Linux. The macOS app is signed and notarized. The Windows build is not code-signed yet, so SmartScreen warns the first time you open it; choose More info, then Run anyway. The app checks for updates by itself.
+| Kind | Formats |
+|---|---|
+| Images | JPEG, PNG, GIF, WebP, TIFF, BMP, HEIC, AVIF |
+| Camera RAW and more | DNG, CR2, CR3, NEF, ARW, RAF, ORF, RW2 and others, plus PSD, JPEG 2000, TGA, EXR, HDR. Full support on macOS; Windows only gets the system thumbnail, up to 2560 pixels; not supported on Linux yet |
+| Videos | MP4, MOV, M4V, WebM. WebM on macOS and videos on Linux need ffmpeg for their cover frames |
+| Live Photos | A HEIC or JPEG with a MOV of the same name, paired on import and exported together if you like |
 
-You can also run it from source. Install Go 1.27.3 or later, then:
+### Also
+
+A password lock, a menu bar icon, launch at login, customizable shortcuts, and light and dark appearances.
+
+<details>
+<summary><b>Default shortcuts</b></summary>
+
+<br>
+
+These are the macOS keys; on Windows and Linux use `Ctrl` for `⌘` and `Alt` for `⌥`. Change any of them on the Shortcuts page in Settings.
+
+| Action | Keys |
+|---|---|
+| New / open library | `⌘N` / `⌘O` |
+| Import files / folder | `⌘I` / `⌘⇧I` |
+| Export | `⌘E` |
+| Masonry / list / justified rows | `⌘1` / `⌘2` / `⌘3` |
+| Search | `⌘K` |
+| Filter / sort | `⌘⌥F` / `⌘⌥S` |
+| Show or hide inspector | `⌘⌥I` |
+| Larger / smaller thumbnails | `⌘=` / `⌘-` |
+| Copy / paste tags | `⌘⇧C` / `⌘⇧V` |
+| Add to folder | `⇧F` |
+| Preview | `Space` |
+| Flip / grayscale / annotate in preview | `H` / `G` / `A` |
+| Lock | `⌘L` |
+| Settings | `⌘,` |
+
+</details>
+
+## Data and privacy
+
+- A library is a `.momento` folder holding the originals, their thumbnails and a SQLite database. The database stores only relative paths, so the folder can be moved, copied or backed up as a whole. On macOS a library in use cannot live in iCloud Drive.
+- Settings are saved in `preferences.json`: `~/Library/Application Support/Momento/` on macOS, `%APPDATA%\Momento\` on Windows, `~/.config/Momento/` on Linux.
+- Logs rotate at 5 MB and keep three older files: `~/Library/Logs/Momento/` on macOS, `%LOCALAPPDATA%\Momento\Logs\` on Windows, `~/.local/state/momento/` on Linux.
+- Momento has no analytics. It goes online for two things only: checking GitHub Releases for updates at launch, and downloading images you import through the browser extension or a link. The extension talks only to `127.0.0.1:47641` on your own computer.
+- The password lock covers the interface only; it does not encrypt files. If you forget the password, quit Momento and delete `passwordHash` from `preferences.json`.
+
+## Build from source
+
+You need Go 1.27.3 or later, and GTK 3 on Linux. No Node, web frontend or cgo.
 
 ```sh
 git clone https://github.com/Seaony/Momento.git
 cd Momento/app
-go tool mygo dev
-```
-
-The CLI is pinned in `go.mod`; you do not need Bun, Node or cgo. Linux needs GTK 3. The command opens the real app window and rebuilds it when Go files change.
-
-## Browser extension
-
-[Momento Image Saver](https://github.com/Seaony/Momento-Chomre-Extension) is the companion Chrome extension. Right-click an image on a web page to save it to Momento; on Xiaohongshu, Instagram, Pixiv, Weibo, X and similar sites it can save a whole post at once. The extension only talks to Momento on your own computer (`127.0.0.1:47641`), and you can turn it off on the Browser Extension page in Settings.
-
-The app also accepts links such as `momento://import?url=<image URL>`.
-
-## Shortcuts
-
-These are the defaults; change any of them on the Shortcuts page in Settings.
-
-| Action | macOS | Windows/Linux |
-|---|---|---|
-| New / open library | `⌘N` / `⌘O` | `Ctrl+N` / `Ctrl+O` |
-| Import files / folder | `⌘I` / `⌘⇧I` | `Ctrl+I` / `Ctrl+Shift+I` |
-| Export | `⌘E` | `Ctrl+E` |
-| Masonry / list / justified rows | `⌘1` / `⌘2` / `⌘3` | `Ctrl+1` / `Ctrl+2` / `Ctrl+3` |
-| Search | `⌘K` | `Ctrl+K` |
-| Filter / sort | `⌘⌥F` / `⌘⌥S` | `Ctrl+Alt+F` / `Ctrl+Alt+S` |
-| Show or hide inspector | `⌘⌥I` | `Ctrl+Alt+I` |
-| Larger / smaller thumbnails | `⌘=` / `⌘-` | `Ctrl+=` / `Ctrl+-` |
-| Copy / paste tags | `⌘⇧C` / `⌘⇧V` | `Ctrl+Shift+C` / `Ctrl+Shift+V` |
-| Add to folder | `⇧F` | `Shift+F` |
-| Preview | `Space` | `Space` |
-| Flip / grayscale / annotate in preview | `H` / `G` / `A` | `H` / `G` / `A` |
-| Lock | `⌘L` | `Ctrl+L` |
-| Settings | `⌘,` | `Ctrl+,` |
-
-## Where your data lives
-
-A `.momento` library holds a manifest, a SQLite database, the originals and their thumbnails. The database stores only relative paths, so the package can be moved or backed up as a whole. On macOS a library in use cannot live in iCloud Drive, though you can import from it or export to it. The library menu can also copy a library into the app's data directory, export a verified copy, or rebuild thumbnails.
-
-Settings and interface state are saved in `preferences.json` in the app's configuration directory, and recently opened libraries in `recent-libraries.json` next to it:
-
-- macOS: `~/Library/Application Support/Momento/`
-- Windows: `%APPDATA%\Momento\`
-- Linux: `$XDG_CONFIG_HOME/Momento/` (default `~/.config/Momento/`)
-
-If you forget the password lock password, quit Momento and delete the `passwordHash` field from `preferences.json`. The lock only covers the interface; it does not encrypt library files.
-
-Logs rotate at 5 MB and keep three older files:
-
-- macOS: `~/Library/Logs/Momento/`
-- Windows: `%LOCALAPPDATA%\Momento\Logs\`
-- Linux: `$XDG_STATE_HOME/momento/` (default `~/.local/state/momento/`)
-
-## Development
-
-From `app/`:
-
-```sh
-go build ./...
-go vet ./...
+go tool mygo dev     # opens the app and rebuilds it when the code changes
 go test ./...
 ```
 
-Render interface screenshots without opening a window:
+`go tool mygo build -platform darwin/universal,windows/amd64,windows/arm64,linux/amd64,linux/arm64` builds packages for all three platforms into `app/build/`; a DMG needs a Mac and Windows installers need NSIS. `go run ./cmd/sample-library -path /tmp/sample.momento -count 14` creates a sample library. See [RELEASING.md](.github/RELEASING.md) for releases and [AGENTS.md](AGENTS.md) for project conventions.
 
-```sh
-MOMENTO_SCREENSHOTS=1 go test ./ui -run '^TestStateScreenshots$' -count=1
-MOMENTO_SETTINGS_SCREENSHOTS=1 go test ./ui -run '^TestSettingsWindowScreenshots$' -count=1
-```
+## Credits
 
-Main window screenshots go to `/tmp/momento-titlebar-settings-preview/` and settings window screenshots to `/tmp/momento-settings-window/`, in English, Chinese and Japanese, light and dark.
+The interface and packaging use [mygo](https://github.com/egoist/mygo), the database is [modernc.org/sqlite](https://gitlab.com/cznic/sqlite), AVIF and HEIC decoding come from [gen2brain/avif](https://github.com/gen2brain/avif) and [gen2brain/h265](https://github.com/gen2brain/h265), and EXIF reading from [imagemeta](https://github.com/evanoberholster/imagemeta). Icons are from [Solar Icons](https://icon-sets.iconify.design/solar/) (CC BY 4.0) and [Tabler Icons](https://tabler.io/icons) (MIT).
 
-Generate a sample library:
+Momento is open source under the [MIT License](LICENSE).
 
-```sh
-go run ./cmd/sample-library -path /tmp/momento-sample.momento -count 14
-```
+---
 
-The default is 14 images (10 JPEG, 4 PNG); use `-count 100000` to test a large library. The parent directory must exist. The command never overwrites an existing library, and on failure or cancellation it removes only the package it created.
-
-Project conventions are in [AGENTS.md](AGENTS.md).
-
-## Build packages
-
-From `app/`, build for the current platform or cross-compile every desktop target:
-
-```sh
-go tool mygo build
-go tool mygo build -platform darwin/universal,windows/amd64,windows/arm64,linux/amd64,linux/arm64
-```
-
-Packages go to `app/build/`: the macOS app and DMG, Windows installers, and Linux DEB and RPM packages. Building a DMG needs a Mac; building Windows installers needs NSIS. The Linux interface depends on GTK 3 and does not need WebKitGTK.
-
-## Releasing
-
-[The release workflow](.github/workflows/release.yml) runs for version tags or by hand, and the tag must match the version in `app/mygo.json`. Without the full signing setup it only keeps unsigned build artifacts. With every key in place and a draft requested, it signs the packages and uploads them to a draft release; it never publishes the draft by itself.
-
-Before the first real release:
-
-1. Run `go tool mygo keygen`. It writes the update key pair to `mygo/update-keys` in your user configuration directory. Keep the private key out of the repository and back it up. Put the public key in `updates.publicKey` in `app/mygo.json`, with `updates.github` set to `Seaony/Momento`.
-2. Add the repository secrets `MYGO_UPDATER_PRIVATE_KEY`; `MACOS_CERTIFICATE`, `MACOS_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD`; and `WINDOWS_CERTIFICATE`, `WINDOWS_CERTIFICATE_PASSWORD`.
-3. Check signed installation, macOS notarization and signed updates. On real Windows and Linux machines, check installation, title bars, window buttons, import and export, dragging files out to the file manager, and launch at login on all three platforms.
-
-Version 1.0.0 was built locally on a Mac: the macOS app is signed with a Developer ID and notarized, the Windows build is not code-signed, and the updates of all three platforms are signed with the update key above. Windows and Linux have not been checked on real machines yet; a clean cross-build or offline screenshot does not replace that.
-
-## License
-
-[MIT](LICENSE)
+<div align="center">
+  <sub>Every image you keep, ready when you need it.</sub>
+</div>
