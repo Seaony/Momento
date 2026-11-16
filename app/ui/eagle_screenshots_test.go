@@ -92,6 +92,18 @@ func TestEagleFeatureScreenshots(t *testing.T) {
 					{IDs: []string{v[0].ID, v[1].ID, v[2].ID}, Keep: v[1].ID},
 					{IDs: []string{v[3].ID, v[4].ID}, Keep: v[3].ID},
 				}}
+			case "export-resize", "export-invalid":
+				a.Selected.Add(a.Visible[0].ID)
+				a.Preferences.ExportPresets = []ExportPreset{
+					{Name: "网页 2048", ExportOptions: model.ExportOptions{Format: model.ExportJPEG, Quality: .8, MaxEdge: 2048}},
+					{Name: "原图 PNG", ExportOptions: model.ExportOptions{Format: model.ExportPNG}},
+				}
+				// 跳过打开时的重置，直接摆成点了第一个预设的样子。
+				a.ExportOpen, a.Dialog.ExportWasOpen = true, true
+				a.applyExportPreset(a.Preferences.ExportPresets[0])
+				if state == "export-invalid" {
+					a.Dialog.MaxEdge = "0"
+				}
 			case "similar-progress":
 				a.Progress = &model.ImportProgress{Stage: "similar", Processed: 1234, Total: 5000}
 			case "subfolders":

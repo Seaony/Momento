@@ -31,6 +31,9 @@ type dialogsState struct {
 	Format         model.ExportFormat
 	Quality        float64
 	ExportMotion   bool // 实况照片连视频一起导出
+	// 转成 JPEG/PNG 时限制最长边：勾上才生效，像素数是输入框里的文字，导出前再校验。
+	MaxEdgeOn bool
+	MaxEdge   string
 }
 
 func (a *App) dialogs(c *ui.Context) {
@@ -48,6 +51,7 @@ func (a *App) dialogs(c *ui.Context) {
 		a.Dialog.Format = model.ExportOriginal
 		a.Dialog.Quality = 0.9
 		a.Dialog.ExportMotion = false
+		a.Dialog.MaxEdgeOn, a.Dialog.MaxEdge = false, "2048"
 	}
 	a.Dialog.ExportWasOpen = a.ExportOpen
 	a.newLibraryDialog(c)
@@ -222,6 +226,7 @@ func (a *App) exportDialog(c *ui.Context) {
 				}
 			}
 		})
+		a.exportPresetChips(c)
 		dialogSection(c, a.T("export_format"), func() {
 			ui.RadioGroup(c, func() {
 				animatedRadio(c, &a.Dialog.Format, model.ExportOriginal, a.T("export_original"))
@@ -238,15 +243,23 @@ func (a *App) exportDialog(c *ui.Context) {
 				ui.Slider(c.Key("jpeg-quality-slider"), &a.Dialog.Quality, 0.01, 1).Label(a.T("jpeg_quality")).FillWidth().Disabled(a.Dialog.Picking)
 			})
 		}
+		if a.Dialog.Format != model.ExportOriginal {
+			a.exportSizeSection(c)
+		}
 		// 选中的有实况照片才出现：默认只导出图片，勾上后视频和图片同名放在一起。
 		if slices.ContainsFunc(a.SelectedAssets(), isLiveAsset) {
 			settingsCheckbox(c.Key("export-live-motion"), &a.Dialog.ExportMotion, a.T("export_live_motion")).Disabled(a.Dialog.Picking)
 		}
 	}, func() {
+		_, problem := a.exportOptions()
+		if dialogButton(c, a.T("export_save_preset"), a.Dialog.Picking || problem != "").Clicked() {
+			a.Ask("export", a.T("export_preset_name"), "", a.saveExportPreset)
+		}
+		ui.Spacer(c)
 		if dialogButton(c, a.T("cancel"), a.Dialog.Picking).Clicked() {
 			a.ExportOpen = false
 		}
-		if dialogPrimaryButton(c, a.T("export"), a.Busy || a.Dialog.Picking || a.Selected.Len() == 0).Clicked() {
+		if dialogPrimaryButton(c, a.T("export"), a.Busy || a.Dialog.Picking || a.Selected.Len() == 0 || problem != "").Clicked() {
 			a.pickExportDestination()
 		}
 	})
@@ -257,9 +270,13 @@ func (a *App) pickExportDestination() {
 	if len(items) == 0 {
 		return
 	}
+	options, problem := a.exportOptions()
+	if problem != "" {
+		return
+	}
 	a.Dialog.Picking = true
-	title, format, quality, motion, generation := a.T("export"), a.Dialog.Format, a.Dialog.Quality, a.Dialog.ExportMotion, a.generation
-	name := exportDialogFileName(items[0], format)
+	title, generation := a.T("export"), a.generation
+	name := exportDialogFileName(items[0], options.Format)
 	go func() {
 		var path string
 		var err error
@@ -279,7 +296,7 @@ func (a *App) pickExportDestination() {
 			} else if path != "" && generation == a.generation {
 				a.ExportOpen = false
 				// 用打开对话框时的那批素材：选位置期间自动导入可能改了选择。
-				a.ExportTo(path, format, quality, motion, items)
+				a.ExportTo(path, options, items)
 			}
 		})
 	}()

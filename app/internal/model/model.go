@@ -141,3 +141,12 @@ const (
 	ExportJPEG     ExportFormat = "jpeg"
 	ExportPNG      ExportFormat = "png"
 )
+
+// ExportOptions 是一次导出的设置，也是导出预设保存的内容。
+// MaxEdge 是转成 JPEG/PNG 时最长边的上限（像素），0 是原尺寸；比上限小的图不放大。原格式导出不改尺寸。
+type ExportOptions struct {
+	Format  ExportFormat `json:"format"`
+	Quality float64      `json:"quality"`
+	MaxEdge int          `json:"maxEdge,omitempty"`
+	Motion  bool         `json:"motion,omitempty"`
+}

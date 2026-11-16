@@ -71,6 +71,7 @@ type Preferences struct {
 	SmartFolders            bool                        `json:"smartFolders"`
 	SubfolderContents       bool                        `json:"subfolderContents"` // 父文件夹里也显示子文件夹的素材
 	EXIFCollapsed           bool                        `json:"exifCollapsed"`
+	ExportPresets           []ExportPreset              `json:"exportPresets,omitempty"`
 }
 
 type App struct {
@@ -844,10 +845,10 @@ func (a *App) ExportSelected() {
 		a.ExportOpen = true
 	}
 }
-func (a *App) ExportTo(destination string, format model.ExportFormat, quality float64, motion bool, selected []model.Asset) {
+func (a *App) ExportTo(destination string, options model.ExportOptions, selected []model.Asset) {
 	service := a.Assets
 	a.RunPatch("export", nil, func(ctx context.Context) error {
-		written, err := service.ExportWithMotion(ctx, selected, destination, format, quality, motion)
+		written, err := service.ExportWithOptions(ctx, selected, destination, options)
 		if err != nil {
 			return err
 		}

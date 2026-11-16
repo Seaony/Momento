@@ -17,6 +17,7 @@ import (
 
 	"github.com/Seaony/Momento/app/internal/i18n"
 	"github.com/Seaony/Momento/app/internal/model"
+	xdraw "golang.org/x/image/draw"
 )
 
 func safeName(name string) string {
@@ -67,8 +68,18 @@ func (s *Service) Export(ctx context.Context, items []model.Asset, destination s
 // ExportWithMotion 同 Export；motion 为真时实况照片的视频也导出，和图片同名、放在一起（照片 App 认这种配对）。
 // 返回的仍只有图片路径。
 func (s *Service) ExportWithMotion(ctx context.Context, items []model.Asset, destination string, format model.ExportFormat, quality float64, motion bool) (paths []string, err error) {
+	return s.ExportWithOptions(ctx, items, destination, model.ExportOptions{Format: format, Quality: quality, Motion: motion})
+}
+
+// ExportWithOptions 按 options 导出；转成 JPEG/PNG 时可以限制最长边。
+func (s *Service) ExportWithOptions(ctx context.Context, items []model.Asset, destination string, options model.ExportOptions) (paths []string, err error) {
+	format, quality, motion := options.Format, options.Quality, options.Motion
 	if format != model.ExportOriginal && format != model.ExportJPEG && format != model.ExportPNG {
 		return nil, i18n.NewError("error_export_format", string(format))
+	}
+	// 原格式是原样复制文件，改不了尺寸；不能悄悄导出原尺寸。
+	if options.MaxEdge < 0 || options.MaxEdge > 0 && format == model.ExportOriginal {
+		return nil, i18n.NewError("error_export_max_edge")
 	}
 	if len(items) == 0 {
 		return nil, nil
@@ -93,7 +104,7 @@ func (s *Service) ExportWithMotion(ctx context.Context, items []model.Asset, des
 	if s.insideLibrary(destination) {
 		return nil, i18n.NewError("error_export_into_library")
 	}
-	slog.Info("开始导出", "count", len(items), "format", format)
+	slog.Info("开始导出", "count", len(items), "format", format, "maxEdge", options.MaxEdge)
 	defer func() {
 		if err != nil {
 			slog.Error("导出失败", "written", len(paths), "error", err)
@@ -165,6 +176,7 @@ func (s *Service) ExportWithMotion(ctx context.Context, items []model.Asset, des
 				if err != nil {
 					return err
 				}
+				img = fitLongestEdge(img, options.MaxEdge)
 				if format == model.ExportJPEG {
 					opaque := image.NewRGBA(img.Bounds())
 					draw.Draw(opaque, opaque.Bounds(), &image.Uniform{C: color.White}, image.Point{}, draw.Src)
@@ -225,6 +237,24 @@ func (s *Service) ExportWithMotion(ctx context.Context, items []model.Asset, des
 		}
 	}
 	return paths, nil
+}
+
+// fitLongestEdge 把最长边缩到 maxEdge 以内，保持比例；maxEdge 为 0 或图本来就不大时原样返回。
+func fitLongestEdge(img image.Image, maxEdge int) image.Image {
+	w, h := img.Bounds().Dx(), img.Bounds().Dy()
+	if maxEdge <= 0 || max(w, h) <= maxEdge {
+		return img
+	}
+	scale := float64(maxEdge) / float64(max(w, h))
+	bounds := image.Rect(0, 0, max(1, int(float64(w)*scale+.5)), max(1, int(float64(h)*scale+.5)))
+	// 用不预乘透明度的格式缩：预乘的 8 位会把半透明像素的颜色压糙；16 位的图缩完仍是 16 位。
+	var out draw.Image = image.NewNRGBA(bounds)
+	switch img.ColorModel() {
+	case color.RGBA64Model, color.NRGBA64Model, color.Gray16Model:
+		out = image.NewNRGBA64(bounds)
+	}
+	xdraw.CatmullRom.Scale(out, out.Bounds(), img, img.Bounds(), xdraw.Src, nil)
+	return out
 }
 
 // motionExportPath 是实况照片视频导出后的位置：和图片同名，后缀 .mov。
