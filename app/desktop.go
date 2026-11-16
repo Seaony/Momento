@@ -77,14 +77,14 @@ func (d *desktopIntegration) refresh() {
 }
 
 func trayItems(a *appui.App) []*mygo.MenuItem {
-	item := func(key string, fn func()) *mygo.MenuItem {
-		return &mygo.MenuItem{Label: a.T(key), Click: func(*mygo.MenuItem, *mygo.Window) { fn() }}
+	item := func(key, icon string, fn func()) *mygo.MenuItem {
+		return &mygo.MenuItem{Label: a.T(key), Icon: appui.MenuIcon(icon), Click: func(*mygo.MenuItem, *mygo.Window) { fn() }}
 	}
-	items := []*mygo.MenuItem{item("show_momento", a.ShowMainWindow)}
+	items := []*mygo.MenuItem{item("tray_show_main_window", "window-frame", a.ShowMainWindow)}
 	if !a.IsLocked() {
-		items = append(items, item("paste_import", a.PasteImport), item("settings", a.ShowSettings))
+		items = append(items, item("paste_import", "clipboard-add", a.PasteImport), item("settings", "gear-six", a.ShowSettings))
 	}
-	return append(items, mygo.Separator(), item("quit_momento", mygo.App.Quit))
+	return append(items, mygo.Separator(), item("tray_quit", "power", mygo.App.Quit))
 }
 
 func (d *desktopIntegration) refreshShortcuts() {

@@ -653,6 +653,8 @@ var messages = map[string][3]string{
 	"folder_icon_rocket":              {"项目", "Projects", "プロジェクト"},
 	"assets_exported":                 {"已导出 %d 个素材到「%s」", "Exported images (%d) to “%s”", "%d枚の画像を「%s」に書き出しました"},
 	"error_export_into_library":       {"不能导出到图库包里面，请选择图库外的位置", "Can't export into the library package. Choose a location outside the library", "ライブラリパッケージの中には書き出せません。ライブラリの外を選んでください"},
+	"tray_show_main_window":           {"显示主界面", "Show Main Window", "メインウィンドウを表示"},
+	"tray_quit":                       {"退出", "Quit", "終了"},
 	"library_not_found":               {"找不到", "Not Found", "見つかりません"},
 	"relocate_library":                {"重新定位…", "Locate…", "場所を指定…"},
 	"error_library_unavailable":       {"找不到图库：%s", "Can't find the library: %s", "ライブラリが見つかりません：%s"},
