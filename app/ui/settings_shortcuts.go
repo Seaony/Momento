@@ -127,9 +127,14 @@ func (a *App) SetShortcut(action, accelerator string) bool {
 	return true
 }
 
+// 预览窗口里才生效的快捷键；「空格预览」虽然列在预览组，但是在主界面按的，算主界面。
+func previewScoped(definition ShortcutDefinition) bool {
+	return definition.Group == "preview" && definition.Action != "preview"
+}
+
 func conflictingShortcut(definition ShortcutDefinition, mods ui.Modifiers, key ui.Key, overrides map[string]string) (ShortcutDefinition, bool) {
 	for _, other := range ShortcutDefinitions {
-		if other.Action == definition.Action || !definition.Global && !other.Global && (definition.Group == "preview") != (other.Group == "preview") {
+		if other.Action == definition.Action || !definition.Global && !other.Global && previewScoped(definition) != previewScoped(other) {
 			continue
 		}
 		otherMods, otherKey, valid := parseShortcut(shortcutValue(overrides, other.Action))
@@ -138,6 +143,37 @@ func conflictingShortcut(definition ShortcutDefinition, mods ui.Modifiers, key u
 		}
 	}
 	return ShortcutDefinition{}, false
+}
+
+// 菜单项实际挂的快捷键：录快捷键时全部摘掉；预览没开时摘掉预览里的；
+// 预览开着时，主界面菜单项如果和预览里的实际快捷键相同就摘掉，让按键交给预览（如列表视图改成 ⌘0 时，⌘0 仍是适合窗口）。
+func (a *App) MenuAccelerator(action string) string {
+	definition, ok := shortcutDefinition(action)
+	accelerator := a.Shortcut(action)
+	if !ok || a.Settings.RecordingShortcut != "" {
+		return ""
+	}
+	if previewScoped(definition) {
+		if !a.PreviewOpen() {
+			return ""
+		}
+		return accelerator
+	}
+	mods, key, valid := parseShortcut(accelerator)
+	if !valid || definition.Global || !a.PreviewOpen() {
+		return accelerator
+	}
+	for _, other := range ShortcutDefinitions {
+		if !previewScoped(other) {
+			continue
+		}
+		otherMods, otherKey, otherValid := parseShortcut(a.Shortcut(other.Action))
+		// 预览里放大也认 ⇧= 和 =，和预览窗口处理按键时一致。
+		if otherValid && otherKey == key && (otherMods == mods || other.Action == "preview_zoom_in" && otherKey == ui.KeyEqual && otherMods|ui.Shift == mods) {
+			return ""
+		}
+	}
+	return accelerator
 }
 
 func (a *App) ResetShortcuts(group string) {

@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Seaony/Momento/app/internal/i18n"
 	"github.com/Seaony/Momento/app/internal/model"
 )
 
@@ -391,5 +392,124 @@ func TestImportLibraryAllowsMissingRegenerableThumbnails(t *testing.T) {
 	}
 	if got, want := snapshot(t, imported), snapshot(t, l); !reflect.DeepEqual(got, want) {
 		t.Fatal("缺缓存时改变了素材记录")
+	}
+}
+
+func TestExportLibraryReplacingMovesOldTargetToTrash(t *testing.T) {
+	l := newTestLibrary(t)
+	asset := addBackupAsset(t, l)
+	dir := t.TempDir()
+	trashDir := t.TempDir()
+	existing := filepath.Join(dir, "已有.momento")
+	important := filepath.Join(existing, "important.txt")
+	if err := os.MkdirAll(existing, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(important, []byte("旧内容"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var trashed []string
+	trash := func(path string) error {
+		trashed = append(trashed, path)
+		return os.Rename(path, filepath.Join(trashDir, filepath.Base(path)))
+	}
+	if err := l.ExportLibraryReplacing(t.Context(), existing, trash); err != nil {
+		t.Fatal(err)
+	}
+	// 旧目标原名进了回收站，新包放在原位置且能打开。
+	if len(trashed) != 1 || filepath.Base(trashed[0]) != "已有.momento" {
+		t.Fatal("旧目标没有交给回收站", trashed)
+	}
+	if got, err := os.ReadFile(filepath.Join(trashDir, "已有.momento", "important.txt")); err != nil || string(got) != "旧内容" {
+		t.Fatal("旧目标内容丢失", err)
+	}
+	backup, err := Open(t.Context(), existing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot(t, backup).Assets) != 1 {
+		t.Fatal("新包内容不对")
+	}
+	if err := backup.Close(); err != nil {
+		t.Fatal(err)
+	}
+	assertNoReplaceLeftovers(t, dir)
+
+	// 目标不存在时和普通导出一样，不调用回收站。
+	trashed = nil
+	if err := l.ExportLibraryReplacing(t.Context(), filepath.Join(dir, "新的.momento"), trash); err != nil || len(trashed) != 0 {
+		t.Fatal(err, trashed)
+	}
+
+	// 导出本身失败（原图损坏）时旧目标原样留着。
+	path := filepath.Join(l.Root, filepath.FromSlash(asset.RelativePath))
+	if err := os.WriteFile(path, []byte("corrupt"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.ExportLibraryReplacing(t.Context(), existing, trash); err == nil {
+		t.Fatal("没有检测损坏原图")
+	}
+	if _, err := Open(t.Context(), existing); err != nil {
+		t.Fatal("导出失败动了已有目标", err)
+	}
+	assertNoReplaceLeftovers(t, dir)
+}
+
+func TestExportLibraryReplacingKeepsOldTargetWhenTrashFails(t *testing.T) {
+	l := newTestLibrary(t)
+	dir := t.TempDir()
+	existing := filepath.Join(dir, "已有.momento")
+	if err := os.MkdirAll(existing, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(existing, "important.txt"), []byte("旧内容"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	err := l.ExportLibraryReplacing(t.Context(), existing, func(string) error { return errors.New("这个盘没有回收站") })
+	var localized *i18n.LocalizedError
+	if !errors.As(err, &localized) || localized.Key != "error_replace_kept_old" {
+		t.Fatalf("回收站失败没有报出来：%v", err)
+	}
+	kept, _ := localized.Args[0].(string)
+	if got, err := os.ReadFile(filepath.Join(kept, "important.txt")); err != nil || string(got) != "旧内容" {
+		t.Fatal("旧目标没有保留在报错给出的位置", kept, err)
+	}
+	if _, err := os.Stat(filepath.Join(existing, "manifest.json")); err != nil {
+		t.Fatal("新包没有放到位", err)
+	}
+}
+
+func TestExportLibraryReplacingRefusesCurrentLibrary(t *testing.T) {
+	l := newTestLibrary(t)
+	trash := func(path string) error {
+		t.Fatal("不该把当前图库移到回收站", path)
+		return nil
+	}
+	destinations := []string{l.Root, filepath.Dir(l.Root)}
+	// 不分大小写的文件系统（macOS、Windows 默认）上，只差大小写的路径就是当前图库。
+	upper := filepath.Join(filepath.Dir(l.Root), strings.ToUpper(filepath.Base(l.Root)))
+	if info, err := os.Stat(upper); err == nil {
+		if root, _ := os.Stat(l.Root); os.SameFile(info, root) {
+			destinations = append(destinations, upper)
+		}
+	}
+	for _, destination := range destinations {
+		err := l.ExportLibraryReplacing(t.Context(), destination, trash)
+		var localized *i18n.LocalizedError
+		if !errors.As(err, &localized) || localized.Key != "error_replace_current_library" {
+			t.Fatalf("%s：%v", destination, err)
+		}
+	}
+	if l.Missing() || len(snapshot(t, l).Assets) != 0 {
+		t.Fatal("当前图库被改动")
+	}
+}
+
+func assertNoReplaceLeftovers(t *testing.T, dir string) {
+	t.Helper()
+	assertNoCopyStage(t, dir)
+	leftovers, err := filepath.Glob(filepath.Join(dir, ".momento-replaced-*"))
+	if err != nil || len(leftovers) != 0 {
+		t.Fatal("留下了替换暂存目录", leftovers, err)
 	}
 }

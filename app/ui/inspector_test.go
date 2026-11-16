@@ -511,3 +511,36 @@ func TestDiscardInspectorEditsKeepsNewerDraft(t *testing.T) {
 		t.Fatalf("日志里没有同时留下两份修改：%s", buf.String())
 	}
 }
+
+// 自动导入在后台跑（Busy）时正在写的备注照常能输入，保存排到导入结束后。
+func TestInspectorNoteKeepsTypingWhileBusy(t *testing.T) {
+	a := inspectorTestApp(model.Asset{ID: "a", Name: "Reference", Note: "Original"})
+	tt := ui.NewTester(a.inspector, 280, 1000)
+	if err := tt.Click(a.T("asset_note")); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	a.Busy = true
+	tt.Frame()
+	tt.Type(" more")
+	tt.Frame()
+	if a.Inspector.Editing != "note" || a.Inspector.Note != "Original more" {
+		t.Fatalf("忙碌时备注输入被吞：editing=%q note=%q", a.Inspector.Editing, a.Inspector.Note)
+	}
+}
+
+// 旧版本保存完成时，不能把保存期间又改出来的新版本一起从队列里删掉。
+func TestInspectorEditFinishedKeepsNewerVersion(t *testing.T) {
+	a := inspectorTestApp(model.Asset{ID: "a"})
+	submitted := inspectorEdit{ID: "a", Note: "N1", Details: true}
+	newer := inspectorEdit{ID: "a", Note: "N2", Details: true}
+	a.Inspector.Pending = []inspectorEdit{newer}
+	a.inspectorEditFinished(submitted, nil)
+	if len(a.Inspector.Pending) != 1 || a.Inspector.Pending[0].Note != "N2" {
+		t.Fatalf("新版本被删掉：%+v", a.Inspector.Pending)
+	}
+	a.inspectorEditFinished(newer, nil)
+	if len(a.Inspector.Pending) != 0 {
+		t.Fatalf("保存完成的版本没出队：%+v", a.Inspector.Pending)
+	}
+}

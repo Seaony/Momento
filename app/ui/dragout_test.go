@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Seaony/Momento/app/internal/model"
 	"github.com/egoist/mygo/transfer"
@@ -240,5 +241,79 @@ func TestAttachFileDragPreparesAtGestureAndCleansOnEscape(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "assets/image.png")); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// 放下后临时文件先留着给事后才读文件的应用；没放下立刻删；旧的在下次拖出时按时间和数量清掉。
+func TestDragSessionsOutliveDropAndAreSweptLater(t *testing.T) {
+	root := t.TempDir()
+	item := dragAsset(t, root, "assets/image.png", "image.png", "image")
+	dropped, err := prepareFileDrag(root, []model.Asset{item}, os.Link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := finishFileDrag(dropped, transfer.Result{Operation: transfer.Copy}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(dropped.paths[0]); err != nil {
+		t.Fatal("放下后立刻删了临时文件，浏览器、Slack 读不到")
+	}
+	canceled, err := prepareFileDrag(root, []model.Asset{item}, os.Link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := finishFileDrag(canceled, transfer.Result{Canceled: true}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(canceled.directory); !os.IsNotExist(err) {
+		t.Fatal("没放下的拖出没有清理")
+	}
+	parent := filepath.Dir(dropped.directory)
+	other := filepath.Join(parent, "keep.txt")
+	if err := os.WriteFile(other, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	if err := sweepDragSessions(root, now, dragSessionKeep, dragSessionLimit); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(dropped.directory); err != nil {
+		t.Fatal("还没过保留时间就删了")
+	}
+	if err := sweepDragSessions(root, now.Add(dragSessionKeep), dragSessionKeep, dragSessionLimit); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(dropped.directory); !os.IsNotExist(err) {
+		t.Fatal("过了保留时间没有清理")
+	}
+	if _, err := os.Stat(other); err != nil {
+		t.Fatal("误删了不是拖出会话的文件")
+	}
+	var sessions []string
+	for i := range 3 {
+		session, err := prepareFileDrag(root, []model.Asset{item}, os.Link)
+		if err != nil {
+			t.Fatal(err)
+		}
+		at := now.Add(time.Duration(i) * time.Second)
+		if err := os.Chtimes(session.directory, at, at); err != nil {
+			t.Fatal(err)
+		}
+		sessions = append(sessions, session.directory)
+	}
+	if err := sweepDragSessions(root, now.Add(time.Minute), dragSessionKeep, 2); err != nil {
+		t.Fatal(err)
+	}
+	for i, path := range sessions {
+		_, err := os.Stat(path)
+		if kept := err == nil; kept != (i == 2) {
+			t.Fatalf("超出上限时第 %d 个会话保留=%v", i, kept)
+		}
+	}
+	if err := ClearDragSessions(root); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(sessions[2]); !os.IsNotExist(err) {
+		t.Fatal("关闭图库时没有清掉拖出临时文件")
 	}
 }

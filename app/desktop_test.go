@@ -86,8 +86,8 @@ func TestGlobalShortcutFailureRemainsVisibleAndCanRetry(t *testing.T) {
 	unregisterGlobalShortcut = func(acc string) { removed = append(removed, acc) }
 	d := &desktopIntegration{app: a}
 	d.refreshShortcuts()
-	if a.Settings.ShortcutErrors["show_app"] != "occupied" {
-		t.Fatal("注册失败未显示")
+	if want := a.T("shortcut_register_failed", "occupied"); a.Settings.ShortcutErrors["show_app"] != want {
+		t.Fatalf("注册失败没有用本地化文案显示：%q", a.Settings.ShortcutErrors["show_app"])
 	}
 	d.refreshShortcuts()
 	if attempts != 2 || a.Settings.ShortcutErrors["show_app"] != "" {
@@ -128,5 +128,37 @@ func TestInspectorMenuFollowsSelectionAndHelpIsAvailable(t *testing.T) {
 		if a.HelpURL() != tc.url {
 			t.Fatalf("帮助链接错误：%s", a.HelpURL())
 		}
+	}
+}
+
+func TestTrayFailureIsNotRetriedUntilSettingChanges(t *testing.T) {
+	previousTray, previousRegister := newTray, registerGlobalShortcut
+	t.Cleanup(func() { newTray, registerGlobalShortcut = previousTray, previousRegister })
+	registerGlobalShortcut = func(string, func()) error { return nil }
+	attempts := 0
+	newTray = func(mygo.TrayOptions) (*mygo.Tray, error) {
+		attempts++
+		return nil, errors.New("no tray host")
+	}
+	a := desktopTestApp()
+	a.Preferences.TrayIcon = true
+	d := &desktopIntegration{app: a}
+	d.refresh()
+	if attempts != 1 || a.Error == "" {
+		t.Fatalf("托盘失败没有显示：attempts=%d error=%q", attempts, a.Error)
+	}
+	a.Error = ""
+	// 切换焦点、改别的设置都会走 refresh，不应再弹同一个错误。
+	d.refresh()
+	d.refresh()
+	if attempts != 1 || a.Error != "" {
+		t.Fatalf("托盘失败后仍在自动重试：attempts=%d error=%q", attempts, a.Error)
+	}
+	a.Preferences.TrayIcon = false
+	d.refresh()
+	a.Preferences.TrayIcon = true
+	d.refresh()
+	if attempts != 2 || a.Error == "" {
+		t.Fatalf("重新打开托盘设置没有再试一次：attempts=%d", attempts)
 	}
 }

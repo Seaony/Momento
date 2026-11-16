@@ -38,6 +38,7 @@ const (
 type previewWindows struct {
 	active       *previewWindow
 	pinned       []*previewWindow
+	fading       []*previewWindow // 还在播关闭动画的窗口，不再挡着打开新预览
 	gesture      *previewWindow
 	spaceDown    time.Time
 	inputPending bool
@@ -99,8 +100,13 @@ func (a *App) ShowPreview(id string, held bool) {
 	if !ok {
 		return
 	}
-	if a.Preview.active != nil {
-		return
+	if w := a.Preview.active; w != nil {
+		if !w.closing {
+			return
+		}
+		// 上一个预览还在播关闭动画：让它自己播完，新的直接打开，不用等 420ms。
+		a.Preview.fading = append(a.Preview.fading, w)
+		a.Preview.active = nil
 	}
 	now := time.Now()
 	selection, preferred, _ := a.previewMainSelection("")
@@ -318,7 +324,7 @@ func (a *App) CancelPreviewGesture() {
 	a.Preview.spaceDown = time.Time{}
 }
 func (a *App) CloseAllPreviewWindows() {
-	windows := append([]*previewWindow(nil), a.Preview.pinned...)
+	windows := append(slices.Clone(a.Preview.pinned), a.Preview.fading...)
 	if a.Preview.active != nil {
 		windows = append(windows, a.Preview.active)
 	}
@@ -494,6 +500,7 @@ func (a *App) removePreviewWindow(w *previewWindow) {
 		a.Preview.active = nil
 	}
 	a.Preview.pinned = slices.DeleteFunc(a.Preview.pinned, func(item *previewWindow) bool { return item == w })
+	a.Preview.fading = slices.DeleteFunc(a.Preview.fading, func(item *previewWindow) bool { return item == w })
 	if a.Preview.gesture == w {
 		a.Preview.gesture = nil
 	}
@@ -539,6 +546,7 @@ func (w *previewWindow) setAsset(a *App, asset model.Asset) {
 	w.invalidate()
 }
 func (w *previewWindow) move(a *App, delta int) {
+	w.items = a.previewItems(w)
 	index := slices.IndexFunc(w.items, func(asset model.Asset) bool { return asset.ID == w.asset.ID })
 	if index < 0 || index+delta < 0 || index+delta >= len(w.items) {
 		return
@@ -548,6 +556,34 @@ func (w *previewWindow) move(a *App, delta int) {
 	if a.Library != nil && a.Library.Root == w.root {
 		a.MarkAssetsUsed([]string{w.asset.ID})
 	}
+}
+
+// 翻页时按打开那一刻的顺序走（最近使用排序会随翻页重排，不能跟着变），但去掉之后删掉或被筛掉的图，并换成最新的素材数据。
+// 当前图还在主窗口列表里时，只留仍在列表里的；当前图已不在列表里（换了范围），只去掉已不存在或进出回收站的。
+func (a *App) previewItems(w *previewWindow) []model.Asset {
+	if a.Library == nil || a.Library.Root != w.root {
+		return w.items
+	}
+	visible := make(map[string]model.Asset, len(a.Visible))
+	for _, asset := range a.Visible {
+		visible[asset.ID] = asset
+	}
+	_, inView := visible[w.asset.ID]
+	items := make([]model.Asset, 0, len(w.items))
+	for _, item := range w.items {
+		if item.ID == w.asset.ID {
+			items = append(items, w.asset)
+			continue
+		}
+		if inView {
+			if current, ok := visible[item.ID]; ok {
+				items = append(items, current)
+			}
+		} else if current, ok := a.previewAsset(item.ID); ok && current.Trashed == item.Trashed {
+			items = append(items, current)
+		}
+	}
+	return items
 }
 
 // 预览窗口的底：和侧栏同色，窗口本身透明只为露出圆角。

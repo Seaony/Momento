@@ -58,6 +58,8 @@ func numberedPath(path string, index int) string {
 	return strings.TrimSuffix(path, ext) + fmt.Sprintf(" %d", index) + ext
 }
 
+// Export 导出素材，返回实际写入的路径（和 items 同序）。destination 是已有文件夹时逐个写进去，重名自动改名；
+// 否则 destination 就是保存对话框选的文件路径，已存在时直接替换。
 func (s *Service) Export(ctx context.Context, items []model.Asset, destination string, format model.ExportFormat, quality float64) (paths []string, err error) {
 	if format != model.ExportOriginal && format != model.ExportJPEG && format != model.ExportPNG {
 		return nil, i18n.NewError("error_export_format", string(format))
@@ -80,6 +82,10 @@ func (s *Service) Export(ctx context.Context, items []model.Asset, destination s
 	}
 	if len(items) > 1 && !directory {
 		return nil, i18n.NewError("error_export_directory")
+	}
+	// 不能导出进图库包里面：单张确认替换时会覆盖图库自己的原图，导出到包内文件夹也会留下图库不认识的文件。
+	if s.insideLibrary(destination) {
+		return nil, i18n.NewError("error_export_into_library")
 	}
 	slog.Info("开始导出", "count", len(items), "format", format)
 	defer func() {
@@ -160,12 +166,21 @@ func (s *Service) Export(ctx context.Context, items []model.Asset, destination s
 		if e != nil {
 			return paths, errors.Join(e, removeIfExists(staged))
 		}
-		var final string
-		for index := 1; ; index++ {
-			final = numberedPath(requested, index)
-			e = publishFile(staged, final)
-			if !os.IsExist(e) {
-				break
+		final := requested
+		if directory {
+			// 导出到文件夹：重名时自动改成「名字 2.ext」，不覆盖已有文件。
+			for index := 1; ; index++ {
+				final = numberedPath(requested, index)
+				e = publishFile(staged, final)
+				if !os.IsExist(e) {
+					break
+				}
+			}
+		} else {
+			// 保存对话框选的路径，重名时用户已确认替换：暂存文件写完后原子替换，中途失败旧文件还在。
+			e = os.Rename(staged, final)
+			if e == nil {
+				slog.Info("导出覆盖目标文件", "path", final)
 			}
 		}
 		cleanupErr := removeIfExists(staged)
@@ -178,4 +193,26 @@ func (s *Service) Export(ctx context.Context, items []model.Asset, destination s
 		}
 	}
 	return paths, nil
+}
+
+// insideLibrary 按文件身份判断 path 是否在图库包里（不分大小写的文件系统、链接都算上）。
+func (s *Service) insideLibrary(path string) bool {
+	root, err := os.Stat(s.root)
+	if err != nil {
+		return false
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return false
+	}
+	for p := abs; ; {
+		if info, err := os.Stat(p); err == nil && os.SameFile(info, root) {
+			return true
+		}
+		next := filepath.Dir(p)
+		if next == p {
+			return false
+		}
+		p = next
+	}
 }

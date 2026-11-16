@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
@@ -55,6 +56,9 @@ func (a *App) sidebarLibrary(c *ui.Context) {
 	})
 	if trigger.Clicked() {
 		a.Sidebar.LibraryOpen = !a.Sidebar.LibraryOpen
+		if a.Sidebar.LibraryOpen {
+			a.CheckRecentLibraries()
+		}
 	}
 	floatingPopover(c, trigger, &a.Sidebar.LibraryOpen, func() { a.libraryMenu(c) })
 }
@@ -70,7 +74,13 @@ func (a *App) libraryMenuWidth(c *ui.Context) float32 {
 	rowFixed := float32(space4 + libraryHandleWidth + space8 + libraryLogoSize + space8 + space8 + iconSmall + space4 + controlSmall + space8)
 	width := float32(0)
 	for _, recent := range a.Recent {
-		width = max(width, rowFixed+measure(recent.DisplayName, 600))
+		row := rowFixed + measure(recent.DisplayName, 600)
+		if a.RecentMissing[recent.Path] {
+			// 「找不到」占在勾的位置上，比勾宽。
+			w, _ := c.MeasureText(0, ui.Span{Text: a.T("library_not_found"), Font: c.Theme().Font, Size: fontSecondary, Lang: a.Texts.Locale()})
+			row += w - iconSmall
+		}
+		width = max(width, row)
 	}
 	// 操作行：左 8、图标 24、间距 8、名称、右 8。
 	for _, key := range []string{"new_library", "open_library", "import_library", "export_library"} {
@@ -107,6 +117,7 @@ func (a *App) libraryMenu(c *ui.Context) {
 func (a *App) libraryRecentRow(c *ui.Context, recent library.Recent) {
 	p := paletteFor(c.Theme())
 	current := a.Library != nil && a.Library.Root == recent.Path
+	missing := !current && a.RecentMissing[recent.Path]
 	if a.Sidebar.LibraryMore == nil {
 		a.Sidebar.LibraryMore = make(map[string]*bool)
 	}
@@ -149,12 +160,16 @@ func (a *App) libraryRecentRow(c *ui.Context, recent library.Recent) {
 			if current {
 				weight = 600
 			}
-			ui.Text(c, recent.DisplayName).FontSize(fontBody).FontWeight(weight).SingleLine().Grow(1).MinWidth(0)
+			name := ui.Text(c, recent.DisplayName).FontSize(fontBody).FontWeight(weight).SingleLine().Grow(1).MinWidth(0)
 			if current {
 				appSymbol(c, "check").Size(iconSmall, iconSmall).TextColor(p.Accent).Shrink(0)
 			}
+			if missing {
+				name.TextColor(p.TextSecondary)
+				ui.Text(c, a.T("library_not_found")).FontSize(fontSecondary).TextColor(p.TextSecondary).SingleLine().Shrink(0)
+			}
 		})
-		a.libraryMoreMenu(c, recent, current, moreOpen)
+		a.libraryMoreMenu(c, recent, current, missing, moreOpen)
 	})
 	background := ui.Transparent
 	if open.Pressed() {
@@ -171,8 +186,8 @@ func (a *App) libraryRecentRow(c *ui.Context, recent library.Recent) {
 	}
 }
 
-// libraryMoreMenu 是每个图库行尾的「…」菜单；当前图库能改名、清缓存和删除，其他图库只能显示或移出列表。
-func (a *App) libraryMoreMenu(c *ui.Context, recent library.Recent, current bool, open *bool) {
+// libraryMoreMenu 是每个图库行尾的「…」菜单；当前图库能改名、清缓存和删除，其他图库只能显示（找不到的改成重新定位）或移出列表。
+func (a *App) libraryMoreMenu(c *ui.Context, recent library.Recent, current, missing bool, open *bool) {
 	p := paletteFor(c.Theme())
 	menu := ui.MenuBase(c.Key("more"), open)
 	more := menu.Trigger.Size(controlSmall, controlSmall).Shrink(0).Padding(0).Radius(radiusControl).Cursor(ui.CursorPointer).Label(a.T("library_more")).Tooltip(a.T("library_more")).Justify(ui.Center).AlignItems(ui.Center)
@@ -200,7 +215,12 @@ func (a *App) libraryMoreMenu(c *ui.Context, recent library.Recent, current bool
 			return
 		}
 		path := recent.Path
-		choose(libraryMenuItem(c, menu, a.T("reveal_library"), "reveal", false).Clicked(), func() { mygo.Shell.ShowItemInFolder(path) })
+		// 找不到的图库没法在文件管理器里显示，换成重新定位。
+		if missing {
+			choose(libraryMenuItem(c, menu, a.T("relocate_library"), "open-library", false).Clicked(), func() { a.RelocateRecent(path) })
+		} else {
+			choose(libraryMenuItem(c, menu, a.T("reveal_library"), "reveal", false).Clicked(), func() { mygo.Shell.ShowItemInFolder(path) })
+		}
 		ui.Divider(c).Margin(space4, 0)
 		choose(libraryMenuItem(c, menu, a.T("remove_recent_library"), "remove", false).Clicked(), func() { a.RemoveRecent(path) })
 	})
@@ -290,4 +310,69 @@ func (a *App) recentRemoved(recent []library.Recent, err error) {
 		return
 	}
 	a.Recent = recent
+}
+
+func (a *App) markRecentMissing(path string, missing bool) {
+	if a.RecentMissing == nil {
+		a.RecentMissing = make(map[string]bool)
+	}
+	if missing {
+		a.RecentMissing[path] = true
+	} else {
+		delete(a.RecentMissing, path)
+	}
+}
+
+// CheckRecentLibraries 打开图库菜单时在后台看一遍每个图库还在不在（网络盘断开时可能卡住，不能放主线程）。
+func (a *App) CheckRecentLibraries() {
+	paths := make([]string, len(a.Recent))
+	for i, recent := range a.Recent {
+		paths[i] = recent.Path
+	}
+	go func() {
+		missing := make(map[string]bool)
+		for _, path := range paths {
+			if err := library.CheckLibraryPath(path); err != nil {
+				slog.Info("图库暂时找不到", "path", path, "error", err)
+				missing[path] = true
+			}
+		}
+		a.Window.Update(func() { a.RecentMissing = missing })
+	}()
+}
+
+// RelocateRecent 让用户重新选「找不到」的图库被挪到的位置，列表里换成新位置后直接打开。
+func (a *App) RelocateRecent(path string) {
+	if a.recents == nil {
+		return
+	}
+	store := a.recents
+	title := a.T("relocate_library")
+	go func() {
+		paths, err := mygo.Dialog.Open(libraryOpenOptions(a.Window, title))
+		if err != nil || len(paths) == 0 {
+			a.Window.Update(func() {
+				if err != nil {
+					a.ShowError(err)
+				}
+			})
+			return
+		}
+		moved, err := store.Relocate(path, paths[0])
+		var recent []library.Recent
+		if err == nil {
+			recent, err = store.List()
+		}
+		a.Window.Update(func() {
+			if err != nil {
+				slog.Error("重新定位图库失败", "from", path, "to", paths[0], "error", err)
+				a.ShowError(err)
+				return
+			}
+			slog.Info("重新定位图库", "from", path, "to", moved.Path)
+			a.Recent = recent
+			a.markRecentMissing(path, false)
+			a.OpenLibrary(moved.Path)
+		})
+	}()
 }

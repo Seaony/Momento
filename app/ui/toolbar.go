@@ -51,6 +51,9 @@ func (a *App) toolbar(c *ui.Context) {
 	}
 	right := space16 + max(float32(0), bar.Right-a.InspectorShownWidth())
 	width := a.toolbarWidth(c) - left - right
+	if a.pruneFilterTags() {
+		a.refine(false)
+	}
 	hint := displayShortcut(a.Shortcut("search"))
 	if !a.PreviewOpen() && a.ActionShortcut(c, "search") {
 		a.FocusSearch()
@@ -649,6 +652,24 @@ func (a *App) filterPanel(c *ui.Context) {
 			})
 		})
 	})
+}
+
+// 筛选里勾着的标签被删掉后，从筛选条件里去掉；不然列表一直是空的，筛选面板里也找不到它来取消。
+func (a *App) pruneFilterTags() bool {
+	if len(a.Query.TagIDs) == 0 || a.Index == nil {
+		return false
+	}
+	kept := slices.DeleteFunc(slices.Clone(a.Query.TagIDs), func(id string) bool {
+		return !slices.ContainsFunc(a.Snapshot.Tags, func(tag model.Tag) bool { return tag.ID == id })
+	})
+	if len(kept) == len(a.Query.TagIDs) {
+		return false
+	}
+	if len(kept) == 0 {
+		kept = nil
+	}
+	a.Query.TagIDs = kept
+	return true
 }
 
 // popSection 是筛选里的一段：小标题，下面是内容。

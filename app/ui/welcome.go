@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"github.com/Seaony/Momento/app/internal/library"
 	"github.com/Seaony/Momento/app/resources"
 	"github.com/egoist/mygo/ui"
 )
@@ -17,6 +18,7 @@ const browserExtensionURL = "https://github.com/Seaony/Momento-Chomre-Extension/
 
 type welcomeState struct {
 	Step, Direction int
+	RecentChecked   bool // 这次显示欢迎页时是否已在后台查过最近图库还在不在
 }
 
 func (a *App) needsOnboarding() bool {
@@ -32,6 +34,11 @@ func (a *App) welcome(c *ui.Context) {
 	if a.needsOnboarding() {
 		a.onboarding(c)
 		return
+	}
+	// 没有打开的图库时侧栏不出现，找不到的图库只能在这里处理，所以进来先查一遍。
+	if !a.Welcome.RecentChecked && len(a.Recent) > 0 {
+		a.Welcome.RecentChecked = true
+		a.CheckRecentLibraries()
 	}
 	fadeMotion(ui.Column(c.Key("welcome")).Fill().Padding(max(MainToolbarHeight, c.TitleBar().Bottom+space16), space24, space24, space24).Center().Gap(space16).Background(panelColor(c.Theme())).DragWindow()).Children(func() {
 		a.welcomeContent(c, false)
@@ -61,27 +68,55 @@ func (a *App) welcomeContent(c *ui.Context, onboarding bool) {
 		if len(a.Recent) > 0 {
 			ui.Scroll(c).Scrollbars(false).Width(panelNarrow).MaxWidthPercent(100).MaxHeight(192).Gap(space8).Children(func() {
 				for _, recent := range a.Recent {
-					button := ui.ButtonBase(c.Key(recent.Path)).FillWidth().Height(space40).Padding(space8, space12).Gap(space8).
-						Radius(radiusControl).Label(recent.DisplayName).Tooltip(recent.DisplayName).Cursor(ui.CursorPointer)
-					elevated(button, c.Theme())
-					background, text := p.Raised, p.TextSecondary
-					if button.Pressed() {
-						background, text = p.Pressed, p.Text
-					} else if button.Hovered() {
-						background, text = p.Hover, p.Text
-					}
-					animateColors(button, background, text)
-					button.Children(func() {
-						appIcon(c, "library").Size(iconSize, iconSize)
-						ui.Text(c, recent.DisplayName).Grow(1).SingleLine()
-					})
-					if button.Clicked() {
-						a.OpenLibrary(recent.Path)
-					}
+					a.welcomeRecentRow(c, recent)
 				}
 			})
 		}
 	})
+}
+
+// welcomeRecentRow 是欢迎页里的一条最近图库。找不到的图库（外接盘没插、被移走）标出来，
+// 行尾放和图库菜单同一个「…」菜单（重新定位、从列表中移除），和打开按钮并排，不嵌在按钮里。
+func (a *App) welcomeRecentRow(c *ui.Context, recent library.Recent) {
+	p := paletteFor(c.Theme())
+	missing := a.RecentMissing[recent.Path]
+	row := ui.Row(c.Key(recent.Path)).FillWidth().Height(space40).Padding(0, space8, 0, 0).Gap(space4).Radius(radiusControl).AlignItems(ui.Center)
+	elevated(row, c.Theme())
+	var open ui.Element
+	moreOpen := false
+	row.Children(func() {
+		open = ui.ButtonBase(c.Key("open")).Grow(1).MinWidth(0).FillHeight().Padding(space8, space12).Gap(space8).AlignItems(ui.Center).
+			Label(recent.DisplayName).Tooltip(libraryDisplayPath(recent.Path)).Cursor(ui.CursorPointer)
+		open.Children(func() {
+			appIcon(c, "library").Size(iconSize, iconSize)
+			ui.Text(c, recent.DisplayName).Grow(1).MinWidth(0).SingleLine()
+			if missing {
+				ui.Text(c, a.T("library_not_found")).FontSize(fontSecondary).TextColor(p.TextSecondary).SingleLine().Shrink(0)
+			}
+		})
+		if missing {
+			if a.Sidebar.LibraryMore == nil {
+				a.Sidebar.LibraryMore = make(map[string]*bool)
+			}
+			state := a.Sidebar.LibraryMore[recent.Path]
+			if state == nil {
+				state = new(bool)
+				a.Sidebar.LibraryMore[recent.Path] = state
+			}
+			moreOpen = *state
+			a.libraryMoreMenu(c, recent, false, true, state)
+		}
+	})
+	background, text := p.Raised, p.TextSecondary
+	if open.Pressed() {
+		background, text = p.Pressed, p.Text
+	} else if row.Hovered() || moreOpen {
+		background, text = p.Hover, p.Text
+	}
+	animateColors(row, background, text)
+	if open.Clicked() {
+		a.OpenLibrary(recent.Path)
+	}
 }
 
 func (a *App) onboarding(c *ui.Context) {

@@ -116,16 +116,9 @@ func Open(ctx context.Context, path string) (_ *Library, err error) {
 	if !info.IsDir() {
 		return nil, i18n.NewError("error_library_directory")
 	}
-	var manifest model.Manifest
-	data, err := os.ReadFile(filepath.Join(root, "manifest.json"))
+	manifest, err := readManifest(root)
 	if err != nil {
 		return nil, err
-	}
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return nil, i18n.WrapError(err, "error_manifest_invalid")
-	}
-	if (manifest.SchemaVersion < 1 || manifest.SchemaVersion > model.SchemaVersion) || manifest.LibraryID == "" || strings.TrimSpace(manifest.DisplayName) == "" || manifest.CreatedAt.IsZero() || manifest.UpdatedAt.IsZero() {
-		return nil, i18n.NewError("error_manifest_invalid")
 	}
 	dbPath := filepath.Join(root, "database", "library.sqlite")
 	if _, err = os.Stat(dbPath); err != nil {
@@ -147,6 +140,22 @@ func Open(ctx context.Context, path string) (_ *Library, err error) {
 
 	slog.Info("打开图库", "path", root, "libraryID", manifest.LibraryID)
 	return &Library{Root: root, DB: db, Manifest: manifest}, nil
+}
+
+// readManifest 读出并校验图库包里的 manifest.json。
+func readManifest(root string) (model.Manifest, error) {
+	var manifest model.Manifest
+	data, err := os.ReadFile(filepath.Join(root, "manifest.json"))
+	if err != nil {
+		return manifest, err
+	}
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return manifest, i18n.WrapError(err, "error_manifest_invalid")
+	}
+	if (manifest.SchemaVersion < 1 || manifest.SchemaVersion > model.SchemaVersion) || manifest.LibraryID == "" || strings.TrimSpace(manifest.DisplayName) == "" || manifest.CreatedAt.IsZero() || manifest.UpdatedAt.IsZero() {
+		return manifest, i18n.NewError("error_manifest_invalid")
+	}
+	return manifest, nil
 }
 
 // cleanStaging 清掉上次导入或永久删除中途退出留下的 .import-*、.delete-* 暂存目录。

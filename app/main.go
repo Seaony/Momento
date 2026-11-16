@@ -9,6 +9,7 @@ import (
 	"runtime"
 
 	"github.com/Seaony/Momento/app/internal/browser"
+	"github.com/Seaony/Momento/app/internal/library"
 	"github.com/Seaony/Momento/app/internal/logging"
 	appui "github.com/Seaony/Momento/app/ui"
 	"github.com/egoist/mygo"
@@ -66,6 +67,7 @@ func main() {
 		}
 	})
 	mygo.App.OnQuit(func() { cancel() })
+	preferencesQuitWarned := false
 	mygo.App.OnBeforeQuit(func(e *mygo.QuitEvent) {
 		if app != nil {
 			if app.PasswordOperationPending() && !e.SessionEnding {
@@ -79,13 +81,27 @@ func main() {
 				app.InvalidateWindows()
 				return
 			}
+			// 设置没存上：第一次拦下退出，把窗口叫出来让用户看到原因（窗口可能在后台，从托盘退出时以前就是「点了没反应」）；
+			// 用户看过后再退出一次就照常退出，最近的设置改动不保存，原因已经记在日志里。
 			if err := app.FlushPreferences(); err != nil && !e.SessionEnding {
-				e.PreventDefault()
-				app.InvalidateWindows()
-				return
+				if !preferencesQuitWarned {
+					preferencesQuitWarned = true
+					e.PreventDefault()
+					app.Error += "\n" + app.T("quit_without_saving_preferences")
+					app.ShowMainWindow()
+					app.InvalidateWindows()
+					return
+				}
+				slog.Error("设置保存失败，按用户再次要求退出", "error", err)
 			}
 			app.CloseAllPreviewWindows()
 			app.Quitting = true
+			// 拖出给别的应用的临时副本，退出时清掉；清不掉只能记日志，窗口马上就关了。
+			if app.Library != nil {
+				if err := appui.ClearDragSessions(app.Library.Root); err != nil {
+					slog.Error("退出时清理拖出临时文件失败", "error", err)
+				}
+			}
 		}
 	})
 	mygo.App.OnQuitCanceled(func() {
@@ -113,8 +129,8 @@ func main() {
 		})
 		if pendingFile != "" {
 			app.OpenLibrary(pendingFile)
-		} else if len(app.Recent) > 0 {
-			app.OpenLibrary(app.Recent[0].Path)
+		} else if recent, ok := library.MostRecent(app.Recent); ok {
+			app.OpenLibrary(recent.Path)
 		}
 		if pendingURL != "" {
 			openURL(pendingURL)
@@ -143,17 +159,7 @@ func installMenu(a *appui.App) {
 		menus = append(menus, menu)
 		for _, definition := range appui.ShortcutDefinitions {
 			if item := menu.ItemByID(definition.Action); item != nil {
-				accelerator := a.Shortcut(definition.Action)
-				if a.Settings.RecordingShortcut != "" {
-					accelerator = ""
-				}
-				if a.PreviewOpen() && definition.Group != "preview" && (definition.Action == "view_masonry" || definition.Action == "thumbnail_larger" || definition.Action == "thumbnail_smaller") {
-					accelerator = ""
-				}
-				if !a.PreviewOpen() && definition.Group == "preview" {
-					accelerator = ""
-				}
-				item.SetAccelerator(accelerator)
+				item.SetAccelerator(a.MenuAccelerator(definition.Action))
 			}
 		}
 		return menu
@@ -204,7 +210,10 @@ func menuItems(a *appui.App, platform string) []*mygo.MenuItem {
 		return []*mygo.MenuItem{{Label: "Momento", Submenu: []*mygo.MenuItem{{Label: a.T("settings_shortcuts"), Disabled: true}}}}
 	}
 	if a.IsLocked() {
-		return []*mygo.MenuItem{{Label: "Momento", Submenu: []*mygo.MenuItem{item("show_momento", "", a.ShowMainWindow), item("quit_momento", "", mygo.App.Quit)}}}
+		// 锁屏时也要能用退出快捷键（和平时同一个），不然 ⌘Q 没反应。
+		quit := item("quit_momento", "", mygo.App.Quit)
+		quit.Accelerator = a.Shortcut("quit")
+		return []*mygo.MenuItem{{Label: "Momento", Submenu: []*mygo.MenuItem{item("show_momento", "", a.ShowMainWindow), quit}}}
 	}
 	settings := item("settings", "CmdOrCtrl+,", a.ShowSettings)
 	lock := item("lock_now", "CmdOrCtrl+L", a.LockNow)

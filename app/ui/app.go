@@ -112,6 +112,7 @@ type App struct {
 	PreferencesChanged                                        func()
 	WindowShown                                               func()
 	Recent                                                    []library.Recent
+	RecentMissing                                             map[string]bool // 打不开的图库（外接盘没插、被移走），菜单里显示成灰色「找不到」
 	Sidebar                                                   sidebarState
 	Toolbar                                                   toolbarState
 	Inspector                                                 inspectorState
@@ -131,6 +132,8 @@ type App struct {
 	manifest                                                  model.Manifest
 	pendingOpen                                               string
 	pendingImports                                            [][2]string
+	queuedRuns                                                []queuedRun
+	remoteImporting                                           bool // 正在处理一条深度链接导入
 	assetByID                                                 map[string]model.Asset
 	configDir                                                 string
 	preferencesBlocked                                        error // 偏好文件读不出来又没法挪走时，本次运行不写回，免得覆盖用户原来的设置
@@ -334,8 +337,21 @@ type assetPatch struct {
 	apply func(*model.Asset)
 }
 
+type queuedRun struct {
+	generation uint64
+	label      string
+	work       func(context.Context) error
+	patch      *assetPatch
+}
+
 func (a *App) run(label string, work func(context.Context) error, patch *assetPatch) {
-	if a.Library == nil || a.Busy {
+	if a.Library == nil {
+		return
+	}
+	// 导入或别的写入还没结束时，不能把用户的操作悄悄丢掉：排队，空闲后按顺序执行。
+	if a.Busy {
+		a.queuedRuns = append(a.queuedRuns, queuedRun{generation: a.generation, label: label, work: work, patch: patch})
+		slog.Info("操作排队", "operation", label, "queued", len(a.queuedRuns))
 		return
 	}
 	lib := a.Library
@@ -461,13 +477,30 @@ func (a *App) refine(resetScroll bool) {
 	if a.Index == nil {
 		return
 	}
+	// 后台刷新（收藏、加标签、自动导入）后，Shift 范围选择的起点和当前项按素材找回新位置，不能直接丢掉。
+	idAt := func(index int) string {
+		if index >= 0 && index < len(a.Visible) {
+			return a.Visible[index].ID
+		}
+		return ""
+	}
+	anchorID, currentID := idAt(a.anchor), idAt(a.selectedIndex)
 	a.Visible = a.browseAssets(a.Query)
 	a.visibleVersion++
 	if resetScroll {
 		a.scroll = ui.ScrollState{}
 	}
-	a.anchor = -1
-	a.selectedIndex = -1
+	a.anchor, a.selectedIndex = -1, -1
+	if anchorID != "" || currentID != "" {
+		for i, asset := range a.Visible {
+			if asset.ID == anchorID {
+				a.anchor = i
+			}
+			if asset.ID == currentID {
+				a.selectedIndex = i
+			}
+		}
+	}
 	valid := make(map[string]bool, len(a.Visible))
 	for _, v := range a.Visible {
 		valid[v.ID] = true
@@ -527,30 +560,35 @@ func (a *App) OpenLibrary(path string) {
 			}
 		}
 
-		var recents []library.Recent
-		if err != nil && os.IsNotExist(err) && a.recents != nil {
-			if removeErr := a.recents.Remove(path); removeErr != nil {
-				err = errors.Join(err, removeErr)
-			}
-			recents, _ = a.recents.List()
-		}
 		a.Window.Update(func() {
 			a.Busy = false
 			if err != nil {
 				a.ShowError(err)
-				if recents != nil {
-					a.Recent = recents
+				// 外接盘没插这类情况保留在列表里，标成「找不到」，插上后还能直接打开。
+				if errors.Is(err, os.ErrNotExist) {
+					a.markRecentMissing(path, true)
 				}
-				a.pendingImports = nil
+				// 图库没打开，排队的链接也导不进去了：告诉用户有几条没导入，不悄悄丢掉。
+				if n := len(a.pendingImports); n > 0 {
+					slog.Error("图库打开失败，排队的链接导入取消", "count", n)
+					a.Error += "\n" + a.T("pending_imports_dropped", n)
+					a.pendingImports = nil
+				}
 				a.drainPending()
 				return
 			}
 			if a.Library != nil {
+				if err := ClearDragSessions(a.Library.Root); err != nil {
+					slog.Error("切换图库时清理拖出临时文件失败", "error", err)
+					a.ShowError(err)
+				}
 				if err := a.Library.Close(); err != nil {
 					a.ShowError(err)
 				}
 			}
 			a.Library = lib
+			a.markRecentMissing(lib.Root, false)
+			a.Welcome.RecentChecked = false
 			if iconErr != nil {
 				a.ShowError(iconErr)
 			}
@@ -566,6 +604,8 @@ func (a *App) OpenLibrary(path string) {
 			a.TagPage = false
 			a.ClosePreview()
 			a.Thumbnails.Clear()
+			// 新图库从顶部开始看，不沿用上一个图库的滚动位置。
+			a.scroll = ui.ScrollState{}
 			a.applySnapshot(snapshot)
 			a.Window.SetTitle(lib.Manifest.DisplayName + " – Momento")
 			if !a.Preferences.Onboarded {
@@ -659,6 +699,11 @@ func (a *App) DeleteLibrary() {
 	}
 	lib := a.Library
 	a.Confirm(a.T("delete_library"), a.T("delete_library_detail"), a.T("delete"), func() {
+		// 确认框开着时换了图库：确认的是旧图库，不能删掉或关掉现在这个。
+		if a.Library != lib || a.Busy {
+			a.Notify(a.T("delete_library_changed"))
+			return
+		}
 		a.Busy = true
 		go func() {
 			a.workMu.Lock()
@@ -670,14 +715,9 @@ func (a *App) DeleteLibrary() {
 					a.ShowError(err)
 					return
 				}
-				a.DiscardInspectorEdits("library_deleted")
-				a.Library = nil
-				a.Assets = nil
-				a.Index = nil
-				a.Snapshot = model.Snapshot{}
-				a.Visible = nil
-				a.generation++
-				a.Thumbnails.Clear()
+				if a.Library == lib {
+					a.closeLibrary("library_deleted")
+				}
 				if err := a.recents.Remove(lib.Root); err != nil {
 					a.ShowError(err)
 				}
@@ -685,6 +725,30 @@ func (a *App) DeleteLibrary() {
 			})
 		}()
 	})
+}
+
+// 关掉当前图库时一起清掉跟它有关的东西：没保存的修改、预览窗口、自动导入监视、选择、缓存和滚动位置。
+// 返回是否放弃了没保存的修改。图库连接本身由调用方关闭。
+func (a *App) closeLibrary(reason string) bool {
+	discarded := a.DiscardInspectorEdits(reason)
+	a.ClosePreview()
+	a.cancelExtensionPicker()
+	if a.Import.WatchCancel != nil {
+		a.Import.WatchCancel()
+	}
+	a.Import.WatchCancel, a.Import.WatchLibrary, a.Import.WatchRules = nil, "", nil
+	a.Library, a.Assets, a.Index = nil, nil, nil
+	a.Snapshot, a.manifest = model.Snapshot{}, model.Manifest{}
+	a.Visible, a.assetByID = nil, nil
+	a.Selected.Clear()
+	a.queuedRuns = nil
+	a.scroll = ui.ScrollState{}
+	a.anchor, a.selectedIndex = -1, -1
+	a.generation++
+	if a.Thumbnails != nil {
+		a.Thumbnails.Clear()
+	}
+	return discarded
 }
 func (a *App) RevealLibrary() {
 	if a.Library != nil {
@@ -708,7 +772,21 @@ func (a *App) ChooseImport(folder bool) {
 	}()
 }
 func (a *App) ImportPaths(paths []string) {
-	a.startPathImport(paths, a.Query.FolderID, "", nil)
+	// 拖进来的是 .momento 图库包：当作打开图库，不能把包里的原图和缩略图当新素材导进来。
+	var libraries []string
+	for _, path := range paths {
+		if strings.EqualFold(filepath.Ext(filepath.Clean(path)), ".momento") {
+			libraries = append(libraries, path)
+		}
+	}
+	switch {
+	case len(libraries) == 0:
+		a.startPathImport(paths, a.Query.FolderID, "", nil)
+	case len(libraries) == 1 && len(paths) == 1:
+		a.OpenLibrary(libraries[0])
+	default:
+		a.ShowError(i18n.NewError("error_drop_library_mixed"))
+	}
 }
 
 func (a *App) SetFavorite(ids []string, value bool) {
@@ -749,12 +827,20 @@ func (a *App) ExportSelected() {
 		a.ExportOpen = true
 	}
 }
-func (a *App) ExportTo(destination string, format model.ExportFormat, quality float64) {
+func (a *App) ExportTo(destination string, format model.ExportFormat, quality float64, selected []model.Asset) {
 	service := a.Assets
-	selected := a.SelectedAssets()
 	a.RunPatch("export", nil, func(ctx context.Context) error {
-		_, err := service.Export(ctx, selected, destination, format, quality)
-		return err
+		written, err := service.Export(ctx, selected, destination, format, quality)
+		if err != nil {
+			return err
+		}
+		// 写明导到了哪个文件夹：多张时可能自动改了名，单张就是保存框里选的位置。
+		folder := destination
+		if len(written) > 0 {
+			folder = filepath.Dir(written[0])
+		}
+		a.Window.Update(func() { a.Notify(a.T("assets_exported", len(written), filepath.Base(folder))) })
+		return nil
 	}, nil)
 }
 func (a *App) Bitmap(asset model.Asset) *ui.Bitmap {
@@ -777,13 +863,21 @@ func (a *App) watchLibrary() {
 		case <-a.ctx.Done():
 			return
 		case <-ticker.C:
+			// 检查图库还在不在要读文件，图库在 NAS 上断网时会卡几十秒，不能放在主线程。
+			var watched *library.Library
+			mygo.RunOnMain(func() {
+				if !a.Busy {
+					watched = a.Library
+				}
+			})
+			if watched == nil || !watched.Missing() {
+				continue
+			}
 			a.Window.Update(func() {
-				if a.Library != nil && !a.Busy && a.Library.Missing() {
+				if a.Library == watched && !a.Busy {
 					lib := a.Library
-					a.Library = nil
-					a.Assets = nil
-					a.generation++
-					a.Thumbnails.Clear()
+					// 图库没了，没保存的修改也写不回去了：内容记进日志后清掉，不然打开别的图库和退出都会一直等它。
+					discarded := a.closeLibrary("library_missing")
 					go func() {
 						a.workMu.Lock()
 						defer a.workMu.Unlock()
@@ -791,13 +885,10 @@ func (a *App) watchLibrary() {
 							slog.Error("关闭失踪图库", "error", err)
 						}
 					}()
-					if err := a.recents.Remove(lib.Root); err != nil {
-						a.ShowError(err)
-					}
-					a.Recent, _ = a.recents.List()
+					// 外接盘拔掉、图库被挪走时留在图库菜单里（显示找不到），插回来还能直接打开。
+					a.markRecentMissing(lib.Root, true)
 					a.Error = a.T("library_missing")
-					// 图库没了，没保存的修改也写不回去了：内容记进日志后清掉，不然打开别的图库和退出都会一直等它。
-					if a.DiscardInspectorEdits("library_missing") {
+					if discarded {
 						a.Error += "\n" + a.T("inspector_edits_discarded")
 					}
 				}
@@ -874,7 +965,8 @@ func (a *App) shortcuts(c *ui.Context) {
 		a.CollapseInspector()
 		a.FollowPreviewSelection()
 	}
-	if a.ActionShortcut(c, "select_all") {
+	// 标签管理页看不到素材，全选会选中背后列表，接着删除就会误删。
+	if a.ActionShortcut(c, "select_all") && !a.TagPage {
 		for _, v := range a.Visible {
 			a.Selected.Add(v.ID)
 		}
@@ -1026,15 +1118,42 @@ func (a *App) drainPending() {
 			return
 		}
 	}
-	if len(a.pendingImports) == 0 || a.Library == nil {
+	// 排队的操作属于打开它们时的那个图库；换了图库就作废，不能写进新图库。
+	for len(a.queuedRuns) > 0 && !a.Busy {
+		next := a.queuedRuns[0]
+		a.queuedRuns = a.queuedRuns[1:]
+		if next.generation != a.generation || a.Library == nil {
+			slog.Warn("图库已切换，丢弃排队的操作", "operation", next.label)
+			continue
+		}
+		a.run(next.label, next.work, next.patch)
 		return
 	}
+	if len(a.pendingImports) == 0 || a.Library == nil || a.remoteImporting {
+		return
+	}
+	// 先占位：上一条还没开始写库时又来一条，不能两条同时去抢，抢输的那条以前会被丢掉。
 	next := a.pendingImports[0]
 	a.pendingImports = a.pendingImports[1:]
+	a.remoteImporting = true
 	go func() {
-		if err := a.ImportRemote(a.ctx, next[0], next[1]); err != nil {
-			slog.Error("深度链接导入失败", "error", err)
+		err := a.ImportRemote(a.ctx, next[0], next[1])
+		var localized *i18n.LocalizedError
+		busy := errors.As(err, &localized) && localized.Key == "busy"
+		if err != nil {
+			slog.Error("深度链接导入失败", "error", err, "requeued", busy)
 		}
+		a.Window.Update(func() {
+			a.remoteImporting = false
+			switch {
+			case busy:
+				// 正好碰上别的写入：放回队首，空闲后再来。
+				a.pendingImports = append([][2]string{next}, a.pendingImports...)
+			case errors.As(err, &localized) && localized.Key == "library_required":
+				a.ShowError(err)
+			}
+			a.drainPending()
+		})
 	}()
 }
 

@@ -11,10 +11,13 @@ import (
 var registerGlobalShortcut = mygo.GlobalShortcut.Register
 var unregisterGlobalShortcut = mygo.GlobalShortcut.Unregister
 
+var newTray = mygo.NewTray
+
 type desktopIntegration struct {
-	app       *appui.App
-	tray      *mygo.Tray
-	shortcuts map[string]string
+	app        *appui.App
+	tray       *mygo.Tray
+	trayFailed bool // 托盘建不出来（如 GNOME 没有托盘）后不再自动重试，免得每次切焦点、改设置都弹同一个错误
+	shortcuts  map[string]string
 }
 
 func installDesktop(a *appui.App) *desktopIntegration {
@@ -45,19 +48,25 @@ func (d *desktopIntegration) refreshDock() {
 
 func (d *desktopIntegration) refresh() {
 	a := d.app
-	if !a.Preferences.TrayIcon && d.tray != nil {
-		d.tray.Destroy()
-		d.tray = nil
+	if !a.Preferences.TrayIcon {
+		if d.tray != nil {
+			d.tray.Destroy()
+			d.tray = nil
+		}
+		// 用户关掉托盘设置后再打开，会重新试一次。
+		d.trayFailed = false
 	}
-	if a.Preferences.TrayIcon {
+	if a.Preferences.TrayIcon && !d.trayFailed {
 		menu := mygo.NewMenu(trayItems(a))
 		if d.tray == nil {
-			var err error
-			d.tray, err = mygo.NewTray(mygo.TrayOptions{ID: "momento", Icon: resources.TrayIcon, IconIsTemplate: true, ToolTip: "Momento", Menu: menu})
+			tray, err := newTray(mygo.TrayOptions{ID: "momento", Icon: resources.TrayIcon, IconIsTemplate: true, ToolTip: "Momento", Menu: menu})
 			if err != nil {
 				slog.Error("创建托盘失败", "error", err)
 				a.ShowError(err)
 				a.Preferences.DockWhenHidden = true
+				d.trayFailed = true
+			} else {
+				d.tray = tray
 			}
 		} else {
 			d.tray.SetMenu(menu)
@@ -109,8 +118,8 @@ func (d *desktopIntegration) refreshShortcuts() {
 			}
 		})
 		if err != nil {
-			slog.Error("注册全局快捷键失败", "action", action, "error", err)
-			a.Settings.ShortcutErrors[action] = err.Error()
+			// 记日志并显示本地化的「注册失败：原因」。
+			a.SetShortcutRegistrationError(action, err)
 			next[action] = ""
 		}
 	}

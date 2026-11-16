@@ -1017,3 +1017,61 @@ func TestInterruptedDeletionRestoreRefusesSymlinkedDirectory(t *testing.T) {
 		t.Fatalf("拒绝挪回时暂存里的文件应原样保留：%v", err)
 	}
 }
+
+func TestExportToChosenFileReplacesItAndFolderExportRenames(t *testing.T) {
+	ctx, lib, s := testLibrary(t)
+	importFixture(t, ctx, s, "png")
+	a := snapshot(t, ctx, lib).Assets[0]
+	dest := t.TempDir()
+	// 保存对话框选的已存在文件：用户已确认替换，要写到这个路径本身。
+	chosen := filepath.Join(dest, "chosen.png")
+	if err := os.WriteFile(chosen, []byte("old"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	paths, err := s.Export(ctx, []model.Asset{a}, chosen, model.ExportOriginal, 0)
+	if err != nil || len(paths) != 1 || paths[0] != chosen {
+		t.Fatalf("没有写到选定的路径：%v %v", paths, err)
+	}
+	original, _ := os.ReadFile(filepath.Join("testdata", "sample.png"))
+	if got, err := os.ReadFile(chosen); err != nil || !bytes.Equal(got, original) {
+		t.Fatal("没有替换选定的文件", err)
+	}
+	entries, err := os.ReadDir(dest)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("留下了多余文件：%v %v", entries, err)
+	}
+	// 导出到文件夹时重名照旧改名，返回值里是实际写入的路径。
+	paths, err = s.Export(ctx, []model.Asset{a}, dest, model.ExportOriginal, 0)
+	if err != nil || len(paths) != 1 || paths[0] != filepath.Join(dest, "sample.png") {
+		t.Fatalf("%v %v", paths, err)
+	}
+	paths, err = s.Export(ctx, []model.Asset{a}, dest, model.ExportOriginal, 0)
+	if err != nil || len(paths) != 1 || paths[0] != filepath.Join(dest, "sample 2.png") {
+		t.Fatalf("文件夹导出没有改名：%v %v", paths, err)
+	}
+}
+
+// 导出目标在图库包里（包括只差大小写的路径）时拒绝，不能覆盖图库自己的原图。
+func TestExportRefusesDestinationInsideLibrary(t *testing.T) {
+	ctx, lib, s := testLibrary(t)
+	importFixture(t, ctx, s, "png")
+	a := snapshot(t, ctx, lib).Assets[0]
+	original := filepath.Join(lib.Root, filepath.FromSlash(a.RelativePath))
+	before, _ := os.ReadFile(original)
+	targets := []string{original, filepath.Dir(original), lib.Root}
+	if upper := strings.ToUpper(original); upper != original {
+		if _, err := os.Stat(upper); err == nil {
+			targets = append(targets, upper)
+		}
+	}
+	for _, target := range targets {
+		_, err := s.Export(ctx, []model.Asset{a}, target, model.ExportPNG, 0)
+		var localized *i18n.LocalizedError
+		if !errors.As(err, &localized) || localized.Key != "error_export_into_library" {
+			t.Fatalf("%s：%v", target, err)
+		}
+	}
+	if after, _ := os.ReadFile(original); !bytes.Equal(before, after) {
+		t.Fatal("图库原图被改动")
+	}
+}

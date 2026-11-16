@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/Seaony/Momento/app/internal/i18n"
 	"github.com/Seaony/Momento/app/internal/model"
@@ -24,6 +26,10 @@ func AttachFileDrag(element ui.Element, root string, selected func() []model.Ass
 		report(err)
 	}
 	element.DragDataFrom(func() transfer.Data {
+		// 顺手清掉早先拖出留下的临时文件；清不掉只提示，不挡这次拖出。
+		if err := sweepDragSessions(root, time.Now(), dragSessionKeep, dragSessionLimit); err != nil {
+			fail(err)
+		}
 		var err error
 		items := selected()
 		session, err = prepareFileDrag(root, items, os.Link)
@@ -51,11 +57,8 @@ func AttachFileDrag(element ui.Element, root string, selected func() []model.Ass
 	}, transfer.DragOptions{
 		Operations: transfer.Copy,
 		Done: func(result transfer.Result) {
-			var err error
-			if session != nil {
-				err = session.cleanup()
-				session = nil
-			}
+			err := finishFileDrag(session, result)
+			session = nil
 			if !preparationFailed {
 				err = errors.Join(result.Err, err)
 			}
@@ -64,6 +67,84 @@ func AttachFileDrag(element ui.Element, root string, selected func() []model.Ass
 			}
 		},
 	})
+}
+
+const (
+	dragSessionKeep  = 10 * time.Minute // 放下后临时文件至少留这么久，给事后才读文件的应用
+	dragSessionLimit = 20               // 最多留这么多次拖出的临时目录，超出时先删最旧的
+)
+
+// ClearDragSessions 删掉图库里所有拖出临时文件，图库关闭或应用退出时调用。
+func ClearDragSessions(root string) error {
+	return sweepDragSessions(root, time.Now(), 0, 0)
+}
+
+// 删掉 .drag-out 里超过 keep 的拖出临时目录；剩下的超过 limit-1 个时再删最旧的，给马上要建的新目录留位置。limit 为 0 时不留。
+func sweepDragSessions(root string, now time.Time, keep time.Duration, limit int) error {
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	root, err = filepath.EvalSymlinks(root)
+	if err != nil {
+		return err
+	}
+	parent := filepath.Join(root, ".drag-out")
+	info, err := os.Lstat(parent)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	// 不是普通目录（比如被换成指向别处的链接）时不碰，拖出准备会报错。
+	if !info.IsDir() {
+		return nil
+	}
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		return err
+	}
+	type session struct {
+		path     string
+		modified time.Time
+	}
+	var kept []session
+	var errs []error
+	for _, entry := range entries {
+		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), "session-") {
+			continue
+		}
+		info, err := entry.Info()
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		path := filepath.Join(parent, entry.Name())
+		if now.Sub(info.ModTime()) >= keep {
+			errs = append(errs, os.RemoveAll(path))
+			continue
+		}
+		kept = append(kept, session{path, info.ModTime()})
+	}
+	if len(kept) > max(0, limit-1) {
+		slices.SortFunc(kept, func(x, y session) int { return x.modified.Compare(y.modified) })
+		for _, old := range kept[:len(kept)-max(0, limit-1)] {
+			errs = append(errs, os.RemoveAll(old.path))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// 没放下就没人读，马上删；放下了的话浏览器、Slack、访达常常过一会儿才读文件，留到之后的拖出或图库关闭时再清。
+func finishFileDrag(session *fileDragSession, result transfer.Result) error {
+	if session == nil || !result.Canceled && result.Operation != transfer.None {
+		return nil
+	}
+	return session.cleanup()
 }
 
 type fileDragSession struct {

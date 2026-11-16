@@ -258,3 +258,18 @@ func TestPasswordLockScreenHidesApplicationActions(t *testing.T) {
 		t.Fatal("锁屏仍显示了应用内容或操作")
 	}
 }
+
+// 锁屏时菜单里没有编辑菜单，⌘V 要靠密码框自己处理按键粘贴。
+func TestPasswordLockScreenAcceptsPaste(t *testing.T) {
+	a, _ := passwordTestApp(t)
+	a.Preferences.PasswordHash = "invalid-hash-still-locks"
+	a.InitPasswordLock()
+	tt := ui.NewTester(a.View, 1100, 640)
+	tt.Frame()
+	tt.SetClipboard("secret-pass")
+	tt.Key(ui.Cmd, ui.KeyV)
+	tt.Frame()
+	if a.Lock.Password != "secret-pass" {
+		t.Fatalf("锁屏密码框不能粘贴：%q", a.Lock.Password)
+	}
+}

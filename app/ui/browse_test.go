@@ -256,3 +256,20 @@ func TestThumbnailSizeSnapsToSteps(t *testing.T) {
 		t.Fatalf("旧偏好 0.6 应显示为 0.5 档：%v", a.thumbnailScale())
 	}
 }
+
+// 标签管理页看不到素材：⌘A 不能选中背后的列表，否则接着按删除键会把它们全移进回收站。
+func TestTagPageSelectAllDoesNotSelectHiddenAssets(t *testing.T) {
+	fixture := newScreenshotFixture(t)
+	a := fixture.app(t, "single", "zh-CN", "light")
+	a.ShowTagsPage()
+	tt := ui.NewTester(a.View, 1440, 900)
+	tt.Frame()
+	if a.Selected.Len() != 0 {
+		t.Fatalf("进入标签页后还留着 %d 个选中", a.Selected.Len())
+	}
+	tt.Key(ui.Cmd, ui.KeyA)
+	tt.Frame()
+	if a.Selected.Len() != 0 {
+		t.Fatalf("标签页 ⌘A 选中了 %d 个看不见的素材", a.Selected.Len())
+	}
+}

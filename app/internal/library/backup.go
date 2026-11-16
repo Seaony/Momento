@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/Seaony/Momento/app/internal/i18n"
@@ -57,7 +56,7 @@ func ImportLibrary(ctx context.Context, source, destinationDir string) (_ *Libra
 		}
 		destination = filepath.Join(destinationDir, fmt.Sprintf("%s %d.momento", base, i))
 	}
-	if err := src.copyPackage(ctx, destination, true); err != nil {
+	if err := src.copyPackage(ctx, destination, true, nil); err != nil {
 		return nil, err
 	}
 	result, err := Open(ctx, destination)
@@ -71,7 +70,7 @@ func ImportLibrary(ctx context.Context, source, destinationDir string) (_ *Libra
 // destination 是新目录包的完整路径，已有位置不会被覆盖。
 // 导出的副本换一个新的图库 ID：沿用原 ID 的话，打开副本时原库的自动导入规则会在副本上生效，新图导进副本、源文件却被移到废纸篓。
 func (l *Library) ExportLibrary(ctx context.Context, destination string) error {
-	err := l.copyPackage(ctx, destination, true)
+	err := l.copyPackage(ctx, destination, true, nil)
 	if err != nil {
 		slog.Error("导出图库失败", "destination", destination, "error", err)
 		return err
@@ -80,22 +79,46 @@ func (l *Library) ExportLibrary(ctx context.Context, destination string) error {
 	return nil
 }
 
-func (l *Library) copyPackage(ctx context.Context, destination string, newIdentity bool) (err error) {
+// ExportLibraryReplacing 和 ExportLibrary 一样，但 destination 已存在时（用户在保存对话框里确认了替换）
+// 先把新包完整写好，再把旧目标挪开、放入新包，最后用 trash 把旧目标移到系统回收站。
+// 放入新包失败时旧目标挪回原处；只有移到回收站失败时旧目标会留在报错里给出的位置，不会被删掉。
+// 目标不能是当前图库本身，也不能包含当前图库。
+func (l *Library) ExportLibraryReplacing(ctx context.Context, destination string, trash func(string) error) error {
+	err := l.copyPackage(ctx, destination, true, trash)
+	if err != nil {
+		slog.Error("导出图库失败", "destination", destination, "replace", true, "error", err)
+		return err
+	}
+	slog.Info("导出图库", "source", l.Root, "destination", destination, "replace", true)
+	return nil
+}
+
+// trash 不为空时允许替换已存在的 destination，旧目标交给 trash 处理。
+func (l *Library) copyPackage(ctx context.Context, destination string, newIdentity bool, trash func(string) error) (err error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	destination, err = resolvePath(destination)
-	if err != nil {
+	if trash != nil {
+		// 只解开上级目录的链接：目标本身是链接时替换的是这个链接，不是它指向的地方。
+		parent, err := resolvePath(filepath.Dir(destination))
+		if err != nil {
+			return err
+		}
+		destination = filepath.Join(parent, filepath.Base(destination))
+	} else if destination, err = resolvePath(destination); err != nil {
 		return err
 	}
 	root, err := filepath.EvalSymlinks(l.Root)
 	if err != nil {
 		return err
 	}
-	if withinPath(root, destination) {
+	if trash != nil && containsFile(destination, root) {
+		return i18n.NewError("error_replace_current_library")
+	}
+	if containsFile(root, destination) {
 		return i18n.NewError("error_library_destination")
 	}
-	if _, err := os.Lstat(destination); !os.IsNotExist(err) {
+	if _, err := os.Lstat(destination); trash == nil && !os.IsNotExist(err) {
 		if err == nil {
 			return i18n.NewError("error_destination_exists", destination)
 		}
@@ -169,7 +192,13 @@ func (l *Library) copyPackage(ctx context.Context, destination string, newIdenti
 		return err
 	}
 	conn = nil
-	if _, err := os.Lstat(destination); !os.IsNotExist(err) {
+	if _, err := os.Lstat(destination); err == nil && trash != nil {
+		if err := replacePackage(stage, destination, trash); err != nil {
+			return err
+		}
+		stage = ""
+		return nil
+	} else if !os.IsNotExist(err) {
 		if err == nil {
 			return i18n.NewError("error_destination_exists", destination)
 		}
@@ -182,6 +211,32 @@ func (l *Library) copyPackage(ctx context.Context, destination string, newIdenti
 	return nil
 }
 
+// replacePackage 用写好的 stage 替换已存在的 destination：旧目标先挪进同目录的暂存文件夹（名字不变，
+// 移到回收站后还是原名），新包改名到位，再把旧目标移到回收站。新包没放进去时旧目标挪回原处。
+func replacePackage(stage, destination string, trash func(string) error) error {
+	aside, err := os.MkdirTemp(filepath.Dir(destination), ".momento-replaced-")
+	if err != nil {
+		return err
+	}
+	old := filepath.Join(aside, filepath.Base(destination))
+	if err := os.Rename(destination, old); err != nil {
+		return errors.Join(err, os.Remove(aside))
+	}
+	if err := os.Rename(stage, destination); err != nil {
+		if restoreErr := os.Rename(old, destination); restoreErr != nil {
+			slog.Error("替换导出失败且旧目标没能挪回", "destination", destination, "kept", old, "error", restoreErr)
+			return errors.Join(err, i18n.WrapError(restoreErr, "error_replace_restore_failed", old))
+		}
+		return errors.Join(err, os.Remove(aside))
+	}
+	if err := trash(old); err != nil {
+		slog.Error("被替换的旧目标没能移到回收站", "kept", old, "error", err)
+		return i18n.WrapError(err, "error_replace_kept_old", old)
+	}
+	slog.Info("替换导出目标，旧目标已移到回收站", "destination", destination)
+	return os.Remove(aside)
+}
+
 func openCopySource(ctx context.Context, path string) (*Library, error) {
 	root, err := filepath.EvalSymlinks(path)
 	if err != nil {
@@ -191,16 +246,9 @@ func openCopySource(ctx context.Context, path string) (*Library, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(filepath.Join(root, "manifest.json"))
+	manifest, err := readManifest(root)
 	if err != nil {
 		return nil, err
-	}
-	var manifest model.Manifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return nil, i18n.WrapError(err, "error_manifest_invalid")
-	}
-	if (manifest.SchemaVersion < 1 || manifest.SchemaVersion > model.SchemaVersion) || manifest.LibraryID == "" || strings.TrimSpace(manifest.DisplayName) == "" || manifest.CreatedAt.IsZero() || manifest.UpdatedAt.IsZero() {
-		return nil, i18n.NewError("error_manifest_invalid")
 	}
 	db, err := sql.Open("sqlite", databaseURI(filepath.Join(root, "database", "library.sqlite"), "ro"))
 	if err != nil {

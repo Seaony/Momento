@@ -269,7 +269,8 @@ func (a *App) pickExportDestination() {
 				a.ShowError(err)
 			} else if path != "" && generation == a.generation {
 				a.ExportOpen = false
-				a.ExportTo(path, format, quality)
+				// 用打开对话框时的那批素材：选位置期间自动导入可能改了选择。
+				a.ExportTo(path, format, quality, items)
 			}
 		})
 	}()

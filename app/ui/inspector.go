@@ -256,7 +256,7 @@ func (a *App) inspectorEditor(c *ui.Context, key string, value *string, label, p
 	p := paletteFor(c.Theme())
 	input := ui.TextArea(c.Key(key), value).Lines(1, lines).Label(label).Placeholder(placeholder).PlaceholderColor(placeholderColor(c)).
 		FillWidth().MinHeight(0).Padding(space4, 6).FontSize(size).LineHeight(inspectorEditLineHeight).Radius(inspectorEditRadius).Background(p.Raised).Border(1, p.Accent.Alpha(.65)).
-		FocusRing(false).Scrollbars(false).AutoFocus().Disabled(a.Busy)
+		FocusRing(false).Scrollbars(false).AutoFocus()
 	// 回车、Esc 在输入框处理之前拦下，记下来留到下一帧处理：单行字段回车不插换行，光标停在哪都不改内容。
 	input.OnTextKey(func(k ui.TextKey) bool {
 		switch {
@@ -919,27 +919,7 @@ func (a *App) runInspectorEdit(edit inspectorEdit) {
 			}
 			return nil
 		}()
-		a.Window.Update(func() {
-			if err != nil {
-				a.Inspector.SaveError = a.Texts.Error(err)
-				for i, pending := range a.Inspector.Pending {
-					if pending.ID == edit.ID {
-						a.Inspector.Pending[i].Failed = true
-					}
-				}
-				return
-			}
-			a.Inspector.Pending = slices.DeleteFunc(a.Inspector.Pending, func(pending inspectorEdit) bool { return pending.ID == edit.ID })
-			if a.Inspector.AssetID == edit.ID {
-				if edit.Rename {
-					a.Inspector.SourceTitle = edit.Name
-				}
-				if edit.Details {
-					a.Inspector.SourceNote = edit.Note
-					a.Inspector.SavedSourceURL = edit.Source
-				}
-			}
-		})
+		a.Window.Update(func() { a.inspectorEditFinished(edit, err) })
 		return err
 	}, func(asset *model.Asset) {
 		if edit.Rename {
@@ -949,6 +929,33 @@ func (a *App) runInspectorEdit(edit inspectorEdit) {
 			asset.Note, asset.SourceURL = edit.Note, edit.Source
 		}
 	})
+}
+
+func (a *App) inspectorEditFinished(edit inspectorEdit, err error) {
+	// 保存期间用户可能又改了同一张图（导入时输入框不锁），队列里已换成新版本：只认这次提交的那一版，新版本留着接着存。
+	submitted := func(pending inspectorEdit) bool {
+		pending.Failed = edit.Failed
+		return pending == edit
+	}
+	if err != nil {
+		a.Inspector.SaveError = a.Texts.Error(err)
+		for i, pending := range a.Inspector.Pending {
+			if submitted(pending) {
+				a.Inspector.Pending[i].Failed = true
+			}
+		}
+		return
+	}
+	a.Inspector.Pending = slices.DeleteFunc(a.Inspector.Pending, submitted)
+	if a.Inspector.AssetID == edit.ID {
+		if edit.Rename {
+			a.Inspector.SourceTitle = edit.Name
+		}
+		if edit.Details {
+			a.Inspector.SourceNote = edit.Note
+			a.Inspector.SavedSourceURL = edit.Source
+		}
+	}
 }
 
 func (a *App) saveInspectorDetails() { a.saveInspectorEdits() }

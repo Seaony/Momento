@@ -188,7 +188,7 @@ func TestLibraryMenuScreenshots(t *testing.T) {
 	if os.Getenv("MOMENTO_LIBRARY_SHOTS") != "1" {
 		t.Skip("设置 MOMENTO_LIBRARY_SHOTS=1 生成图库切换下拉截图")
 	}
-	dir := "/tmp/momento-polish/shots4/library"
+	dir := "/tmp/momento-stage3/library"
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +198,7 @@ func TestLibraryMenuScreenshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, appearance := range []string{"light", "dark"} {
-		for _, state := range []string{"menu", "more"} {
+		for _, state := range []string{"menu", "more", "missing"} {
 			t.Run(appearance+"/"+state, func(t *testing.T) {
 				a := fixture.app(t, "small", "zh-CN", appearance)
 				a.InspectorVisible = false
@@ -223,6 +223,12 @@ func TestLibraryMenuScreenshots(t *testing.T) {
 					open := true
 					a.Sidebar.LibraryMore = map[string]*bool{a.Library.Root: &open}
 				}
+				if state == "missing" {
+					missing := a.Recent[2].Path
+					open := true
+					a.RecentMissing = map[string]bool{missing: true}
+					a.Sidebar.LibraryMore = map[string]*bool{missing: &open}
+				}
 				tt := ui.NewTester(a.View, 1100, 800)
 				tt.SetLocale(a.Texts.Locale())
 				tt.SetTitleBar(ui.TitleBar{Height: MainToolbarHeight, Left: 80, Bottom: 37})
@@ -232,5 +238,24 @@ func TestLibraryMenuScreenshots(t *testing.T) {
 				writeScreenshot(t, filepath.Join(dir, state+"-zh-CN-"+appearance+".png"), tt)
 			})
 		}
+	}
+}
+
+// 外接盘没插的图库留在列表里，标「找不到」；「…」里用重新定位替换在文件管理器中显示。
+func TestLibraryMenuMarksMissingLibrary(t *testing.T) {
+	a := libraryMenuTestApp(t)
+	archive := a.Recent[2].Path
+	tt := openLibraryMenu(t, a)
+	a.RecentMissing = map[string]bool{archive: true}
+	tt.Frame()
+	if !tt.HasText(a.T("library_not_found")) {
+		t.Fatal("找不到的图库没有标出来")
+	}
+	open := true
+	a.Sidebar.LibraryMore = map[string]*bool{archive: &open}
+	tt.Frame()
+	tt.Advance(time.Second)
+	if !tt.HasText(a.T("relocate_library")) || !tt.HasText(a.T("remove_recent_library")) || tt.HasText(a.T("reveal_library")) {
+		t.Fatal("找不到的图库菜单应只有重新定位和从列表中移除")
 	}
 }

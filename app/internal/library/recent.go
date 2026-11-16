@@ -3,6 +3,7 @@ package library
 import (
 	"encoding/json"
 	"github.com/Seaony/Momento/app/internal/i18n"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -63,6 +64,8 @@ func (r *RecentStore) List() ([]Recent, error) {
 	return r.read()
 }
 
+// Add 记下打开过的图库。已在列表里的只更新名称、图标和打开时间，位置不动（保留用户拖好的顺序）；
+// 新图库加到末尾。列表不设上限，条目只在用户移除时才会消失。
 func (r *RecentStore) Add(entry Recent) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -78,13 +81,113 @@ func (r *RecentStore) Add(entry Recent) error {
 	if err != nil {
 		return err
 	}
-	next := []Recent{entry}
-	for _, old := range entries {
-		if old.Path != path && len(next) < 10 {
+	for i, old := range entries {
+		if old.Path == path {
+			entries[i] = entry
+			return r.write(entries)
+		}
+	}
+	return r.write(append(entries, entry))
+}
+
+// MostRecent 返回打开时间最近的那条；列表为空时 ok 为 false。启动时用它选要打开的图库，不看列表顺序。
+func MostRecent(entries []Recent) (latest Recent, ok bool) {
+	for _, entry := range entries {
+		if !ok || entry.LastOpened.After(latest.LastOpened) {
+			latest, ok = entry, true
+		}
+	}
+	return latest, ok
+}
+
+// CheckLibraryPath 检查图库现在能不能打开（外接盘没插、被移走、数据库丢了时会报错）。会读磁盘，
+// 网络盘断开时可能卡很久，不要在主线程调用。
+func CheckLibraryPath(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return i18n.WrapError(err, "error_library_unavailable", path)
+	}
+	if !info.IsDir() {
+		return i18n.NewError("error_library_directory")
+	}
+	manifest, err := os.Stat(filepath.Join(path, "manifest.json"))
+	if err != nil {
+		return i18n.WrapError(err, "error_library_unavailable", path)
+	}
+	if !manifest.Mode().IsRegular() {
+		return i18n.NewError("error_manifest_invalid")
+	}
+	// 和 Open 一样要求数据库在：只看目录和清单的话，数据库丢了也会被当成能打开。
+	if _, err := os.Stat(filepath.Join(path, "database", "library.sqlite")); err != nil {
+		return i18n.WrapError(err, "error_library_unavailable", path)
+	}
+	return nil
+}
+
+// Relocate 把列表里 oldPath 那条换到用户重新选的 newPath，位置和打开时间不变，名称和图标按新位置的清单更新。
+// 新位置必须是同一个图库（LibraryID 相同），否则报错、列表不变。新位置原本也在列表里时合并成一条。
+func (r *RecentStore) Relocate(oldPath, newPath string) (Recent, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	oldPath, err := filepath.Abs(oldPath)
+	if err != nil {
+		return Recent{}, err
+	}
+	if err := ValidateWorkingPath(newPath); err != nil {
+		return Recent{}, err
+	}
+	root, err := filepath.Abs(newPath)
+	if err != nil {
+		return Recent{}, err
+	}
+	// 和 Open 一样解开链接，之后打开时记下的路径才对得上。
+	root, err = filepath.EvalSymlinks(root)
+	if err != nil {
+		return Recent{}, err
+	}
+	if inTrash(root) {
+		return Recent{}, i18n.NewError("error_library_in_trash")
+	}
+	if err := CheckLibraryPath(root); err != nil {
+		return Recent{}, err
+	}
+	manifest, err := readManifest(root)
+	if err != nil {
+		return Recent{}, err
+	}
+	entries, err := r.read()
+	if err != nil {
+		return Recent{}, err
+	}
+	index := -1
+	for i, entry := range entries {
+		if entry.Path == oldPath {
+			index = i
+			break
+		}
+	}
+	if index < 0 {
+		return Recent{}, i18n.NewError("error_recent_entry_missing", oldPath)
+	}
+	if entries[index].LibraryID != manifest.LibraryID {
+		return Recent{}, i18n.NewError("error_relocate_other_library", manifest.DisplayName)
+	}
+	entry := entries[index]
+	entry.Path, entry.DisplayName, entry.Icon = root, manifest.DisplayName, manifest.Icon
+	next := make([]Recent, 0, len(entries))
+	for i, old := range entries {
+		switch {
+		case i == index:
+			next = append(next, entry)
+		case old.Path != root:
 			next = append(next, old)
 		}
 	}
-	return r.write(next)
+	if err := r.write(next); err != nil {
+		return Recent{}, err
+	}
+	slog.Info("重新定位图库", "from", oldPath, "to", root, "libraryID", manifest.LibraryID)
+	return entry, nil
 }
 
 func (r *RecentStore) Remove(path string) error {

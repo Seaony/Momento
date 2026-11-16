@@ -482,6 +482,7 @@ func TestPreviewFocusedWindowShortcutsWithoutElementFocus(t *testing.T) {
 	w.hasFocus = true
 	bitmap := w.picture.Bitmap
 	w.items = append(w.items, model.Asset{ID: "two", Name: "第二张", Width: 288, Height: 192})
+	a.Visible = append(a.Visible, w.items[len(w.items)-1]) // 翻页只走主窗口列表里还在的图
 	tt := ui.NewTester(func(c *ui.Context) { w.view(c, a) }, 600, 400)
 	tt.Key(0, ui.KeyRight)
 	if w.asset.ID != "two" {

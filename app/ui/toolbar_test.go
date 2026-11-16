@@ -332,3 +332,23 @@ func TestTrashToolbarEmptiesInsteadOfImport(t *testing.T) {
 		t.Fatal("清空回收站没有先要求确认")
 	}
 }
+
+// 筛选里勾着的标签被删掉后，筛选条件跟着去掉，列表恢复。
+func TestDeletedTagLeavesFilter(t *testing.T) {
+	a := toolbarTestApp()
+	tt := toolbarTester(a)
+	a.Query.TagIDs = []string{"ref"}
+	a.Refine()
+	if len(a.Visible) != 1 {
+		t.Fatalf("标签筛选结果：%v", a.Visible)
+	}
+	snapshot := a.Snapshot
+	snapshot.Tags = nil
+	snapshot.Assets = slices.Clone(snapshot.Assets)
+	snapshot.Assets[0].TagIDs = nil
+	a.applySnapshot(snapshot)
+	tt.Frame()
+	if len(a.Query.TagIDs) != 0 || len(a.Visible) != 3 {
+		t.Fatalf("删掉的标签还留在筛选里：tags=%v visible=%d", a.Query.TagIDs, len(a.Visible))
+	}
+}

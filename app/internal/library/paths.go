@@ -62,6 +62,28 @@ func resolvePath(path string) (string, error) {
 	}
 }
 
+// containsFile 按文件身份判断 path 是不是 parent 本身或在它里面：macOS、Windows 默认不分大小写，
+// 「Photos.momento」和「photos.momento」是同一个目录，只比路径拼写会放过去。
+func containsFile(parent, path string) bool {
+	if withinPath(parent, path) {
+		return true
+	}
+	target, err := os.Stat(parent)
+	if err != nil {
+		return false
+	}
+	for p := path; ; {
+		if info, err := os.Stat(p); err == nil && os.SameFile(info, target) {
+			return true
+		}
+		next := filepath.Dir(p)
+		if next == p {
+			return false
+		}
+		p = next
+	}
+}
+
 func withinPath(parent, path string) bool {
 	rel, err := filepath.Rel(parent, path)
 	return err == nil && (rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))))

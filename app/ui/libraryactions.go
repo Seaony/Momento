@@ -114,9 +114,12 @@ func (a *App) ChooseExportLibrary() {
 				a.drainPending()
 				return
 			}
+			// 系统存储对话框已经对它返回的路径问过「替换」；补上扩展名后是另一个路径，没问过，不能替换。
+			chosen := destination
 			destination = libraryExportPath(destination)
+			replace := destination == chosen
 			a.Run("export_library", func(ctx context.Context) error {
-				if err := lib.ExportLibrary(ctx, destination); err != nil {
+				if err := exportLibrary(ctx, lib, destination, replace); err != nil {
 					return err
 				}
 				a.Window.Update(func() { a.Notify(a.T("library_exported")) })
@@ -124,6 +127,16 @@ func (a *App) ChooseExportLibrary() {
 			})
 		})
 	}()
+}
+
+var trashItem = mygo.Shell.TrashItem
+
+// 目标已存在且用户确认过替换时，旧的那份移到系统回收站，不直接删。
+func exportLibrary(ctx context.Context, lib *library.Library, destination string, replace bool) error {
+	if !replace {
+		return lib.ExportLibrary(ctx, destination)
+	}
+	return lib.ExportLibraryReplacing(ctx, destination, trashItem)
 }
 
 func libraryExportPath(path string) string {

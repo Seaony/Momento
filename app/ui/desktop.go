@@ -28,6 +28,8 @@ func (a *App) ShowMainWindow() {
 
 func (a *App) HideMainWindow() {
 	a.CancelPreviewGesture()
+	// 设置窗口跟着藏起来，正在录的快捷键和输了一半的密码一起作废。
+	a.ResetSettingsSession()
 	if a.Window == nil {
 		return
 	}
@@ -38,6 +40,20 @@ func (a *App) HideMainWindow() {
 	if a.WindowShown != nil {
 		a.WindowShown()
 	}
+}
+
+// 设置窗口关掉或跟着主窗口藏起来时调用：正在录的快捷键作废（不然回来后所有快捷键都失效），
+// 输了一半的密码清掉；密码正在校验或保存时不动，等结果出来自己关。
+func (a *App) ResetSettingsSession() {
+	a.CancelShortcutRecording()
+	if a.Lock.DialogOpen && !a.PasswordOperationPending() {
+		a.closePasswordDialog()
+	}
+}
+
+// 每次打开设置窗口都重新读系统里「登录时启动」的真实状态，用户可能在系统设置里改过。
+func (a *App) RefreshLaunchAtLogin() {
+	a.Settings.LoginEnabled = launchAtLogin()
 }
 
 func (a *App) importFeedback(event string, result model.ImportResult) {
@@ -71,16 +87,24 @@ func (a *App) importFeedback(event string, result model.ImportResult) {
 	})
 	ctx := a.ctx
 	go func() {
-		if err := note.ShowContext(ctx); err != nil {
+		err := note.ShowContext(ctx)
+		if err != nil {
 			slog.Error("显示系统通知失败", "error", err)
-			a.Window.Update(func() {
-				if errors.Is(err, mygo.ErrNotificationsDenied) {
-					a.Settings.NotificationDenied = true
-				}
-				a.InvalidateWindows()
-			})
 		}
+		a.Window.Update(func() { a.notificationShown(err) })
 	}()
+}
+
+// 通知被系统拒绝时在设置里提示；用户重新允许后，下一条通知发得出去，提示就收起来。
+func (a *App) notificationShown(err error) {
+	denied := errors.Is(err, mygo.ErrNotificationsDenied)
+	if err != nil && !denied {
+		return
+	}
+	if a.Settings.NotificationDenied != denied {
+		a.Settings.NotificationDenied = denied
+		a.InvalidateWindows()
+	}
 }
 
 // 坏图被跳过时，导入结束后列出失败的文件和原因；太多时只列前 20 条，全部写进日志。

@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -54,13 +55,23 @@ func Supported(path string) bool {
 }
 func nowText() string { return time.Now().UTC().Format(time.RFC3339Nano) }
 
-func scan(ctx context.Context, paths []string) ([]candidate, error) {
-	var out []candidate
+// scanned 是展开拖入路径后的结果。
+type scanned struct {
+	candidates []candidate
+	// unsupported 是格式不支持的文件数（含文件夹里的），example 是其中一个文件名，用来提示用户。
+	unsupported int
+	example     string
+	// direct 是用户直接拖进来、格式不支持的文件（绝对路径），和图片一起拖进来时要逐个报出来。
+	direct []string
+}
+
+// scan 展开拖入的文件和文件夹。链接（含指向文件夹的）会跟过去扫，同一个真实文件夹只扫一次，防止链接绕圈。
+// macOS 访达的「替身」不是链接，纯 Go 解析不了，按不支持的文件计数。
+func scan(ctx context.Context, paths []string) (scanned, error) {
+	var out scanned
 	seen := map[string]bool{}
+	visited := map[string]bool{}
 	add := func(path string, folders []string) error {
-		if !Supported(path) || strings.HasPrefix(filepath.Base(path), ".") {
-			return nil
-		}
 		absolute, err := filepath.Abs(path)
 		if err != nil {
 			return err
@@ -70,65 +81,98 @@ func scan(ctx context.Context, paths []string) ([]candidate, error) {
 		}
 		seen[absolute] = true
 		ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), ".")
-		out = append(out, candidate{path: absolute, folders: folders, extension: ext})
+		out.candidates = append(out.candidates, candidate{path: absolute, folders: folders, extension: ext})
+		return nil
+	}
+	unsupported := func(path string) {
+		out.unsupported++
+		if out.example == "" {
+			out.example = filepath.Base(path)
+		}
+	}
+	var walk func(dir string, folders []string) error
+	walk = func(dir string, folders []string) error {
+		real, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			return err
+		}
+		if visited[real] {
+			slog.Warn("导入时跳过重复或绕圈的文件夹", "path", dir)
+			return nil
+		}
+		visited[real] = true
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			name := entry.Name()
+			if strings.HasPrefix(name, ".") {
+				continue
+			}
+			path := filepath.Join(dir, name)
+			mode := entry.Type()
+			if mode&os.ModeSymlink != 0 {
+				info, err := os.Stat(path)
+				if err != nil {
+					slog.Warn("导入时跳过失效的链接", "path", path, "error", err)
+					continue
+				}
+				mode = info.Mode().Type()
+			}
+			switch {
+			case mode.IsDir():
+				if strings.EqualFold(filepath.Ext(name), ".momento") {
+					continue
+				}
+				if err := walk(path, append(slices.Clone(folders), name)); err != nil {
+					return err
+				}
+			case !mode.IsRegular():
+			case Supported(path):
+				if err := add(path, folders); err != nil {
+					return err
+				}
+			default:
+				unsupported(path)
+			}
+		}
 		return nil
 	}
 	for _, root := range paths {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return out, err
 		}
 		info, err := os.Stat(root)
 		if err != nil {
-			return nil, err
+			return out, err
 		}
-		if !info.IsDir() {
-			if info.Mode().IsRegular() {
-				if err = add(root, nil); err != nil {
-					return nil, err
-				}
+		if info.IsDir() {
+			if err := walk(root, nil); err != nil {
+				return out, err
 			}
 			continue
 		}
-		err = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			if path == root {
-				return nil
-			}
-			if strings.HasPrefix(entry.Name(), ".") {
-				if entry.IsDir() {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if entry.IsDir() {
-				if strings.EqualFold(filepath.Ext(entry.Name()), ".momento") {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if !entry.Type().IsRegular() {
-				return nil
-			}
-			rel, err := filepath.Rel(root, filepath.Dir(path))
+		if !info.Mode().IsRegular() || strings.HasPrefix(filepath.Base(root), ".") {
+			continue
+		}
+		if !Supported(root) {
+			unsupported(root)
+			absolute, err := filepath.Abs(root)
 			if err != nil {
-				return err
+				return out, err
 			}
-			var folders []string
-			if rel != "." {
-				folders = strings.Split(rel, string(filepath.Separator))
-			}
-			return add(path, folders)
-		})
-		if err != nil {
-			return nil, err
+			out.direct = append(out.direct, absolute)
+			continue
+		}
+		if err := add(root, nil); err != nil {
+			return out, err
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].path < out[j].path })
+	sort.Slice(out.candidates, func(i, j int) bool { return out.candidates[i].path < out.candidates[j].path })
 	return out, nil
 }
 
@@ -266,16 +310,32 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 	}()
 	progress := progressReporter{callback: callback}
 	progress.send(model.ImportProgress{Stage: "scanning"}, true)
-	candidates, err := scan(ctx, request.Paths)
+	found, err := scan(ctx, request.Paths)
 	if err != nil {
 		return result, err
 	}
+	candidates := found.candidates
 	total := len(candidates)
 	progress.send(model.ImportProgress{Stage: "scanning", Total: total}, true)
 	if total == 0 {
 		progress.send(model.ImportProgress{Stage: "finishing"}, true)
+		// 有文件但一个都不支持：报出来，不能显示「已导入 0 个」让用户以为没反应。
+		if found.unsupported > 0 {
+			return result, i18n.NewError("error_import_unsupported", found.unsupported, found.example)
+		}
 		return result, nil
 	}
+	// 和图片一起直接拖进来的不支持文件，逐个记成没能导入，结束时和坏图一起列出来。
+	defer func() {
+		if err != nil {
+			return
+		}
+		for _, path := range found.direct {
+			slog.Warn("导入时跳过不支持的文件", "file", filepath.Base(path))
+			result.Errors = append(result.Errors, i18n.NewError("error_import_unsupported_file", filepath.Base(path)))
+			result.Failed = append(result.Failed, path)
+		}
+	}()
 	stage, err := os.MkdirTemp(s.root, ".import-")
 	if err != nil {
 		return result, err
