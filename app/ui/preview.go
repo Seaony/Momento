@@ -187,14 +187,31 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 		}
 		p.clampPan()
 		viewport.Children(func() {
-			photo := previewPhoto(c.Key(struct{ ID string }{asset.ID}), bitmap, previewPhotoRadius, a.Preferences.PreviewChecker, ui.Contain).
+			photo := previewPhoto(c.Key(struct{ ID string }{asset.ID}), bitmap, previewPhotoRadius, a.Preferences.PreviewChecker, w.gray, ui.Contain).
 				Absolute().Label(asset.Name)
+			if w.flipped {
+				photo.TransformOrigin(.5, .5).Scale(-1, 1)
+			}
 			photoWidth, photoHeight := float32(bw)*p.Zoom, float32(bh)*p.Zoom
 			photoLeft, photoTop := (p.viewport.W-photoWidth)/2+p.Pan.X, (p.viewport.H-photoHeight)/2+p.Pan.Y
 			photo.Left(photoLeft).Top(photoTop).Size(photoWidth, photoHeight)
 			w.slideTransition(c, photo)
 			if isLiveAsset(asset) {
 				w.liveOverlay(c, a, ui.Rect{X: photoLeft, Y: photoTop, W: photoWidth, H: photoHeight})
+			}
+			// 翻转、灰度只是这样看，在左上角标出来，免得以为原图就是这样。
+			var modes []string
+			if w.flipped {
+				modes = append(modes, a.T("preview_flipped"))
+			}
+			if w.gray {
+				modes = append(modes, a.T("preview_gray"))
+			}
+			if len(modes) > 0 {
+				ui.Row(c.Key("preview-view-modes")).Absolute().Top(space8).Left(space8).Height(22).Padding(0, space8).Radius(radiusSmall + 2).
+					Background(ui.RGBA(0, 0, 0, .55)).AlignItems(ui.Center).IgnoreInput(true).Children(func() {
+					ui.Text(c, strings.Join(modes, " · ")).FontSize(fontCaption).TextColor(ui.RGBA(255, 255, 255, .92)).SingleLine()
+				})
 			}
 		})
 		if p.canPan() {
@@ -227,7 +244,7 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 	}
 }
 
-func previewPhoto(c *ui.Context, bitmap *ui.Bitmap, radius float32, checker bool, fit ui.Fit) ui.Element {
+func previewPhoto(c *ui.Context, bitmap *ui.Bitmap, radius float32, checker, gray bool, fit ui.Fit) ui.Element {
 	photo := ui.Box(c).Radius(radius).Clip().Role(ui.RoleImage).Background(paletteFor(c.Theme()).Subtle)
 	if checker {
 		theme := c.Theme()
@@ -235,7 +252,12 @@ func previewPhoto(c *ui.Context, bitmap *ui.Bitmap, radius float32, checker bool
 			painter.Clip(r, radius, func() { drawPreviewChecker(painter, r, r, theme) })
 		})
 	}
-	photo.Children(func() { ui.Image(c, bitmap).Fill().Fit(fit).Radius(radius) })
+	photo.Children(func() {
+		image := ui.Image(c, bitmap).Fill().Fit(fit).Radius(radius)
+		if gray {
+			image.Grayscale()
+		}
+	})
 	return photo
 }
 

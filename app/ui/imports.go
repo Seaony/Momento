@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -36,6 +37,26 @@ type importChoice struct {
 	Canceled bool
 }
 
+// clipboardImageURLs 从剪贴板文字里取出 http(s) 链接，一行一个，最多 50 个；有一行不是链接就当作普通文字，不导入。
+func clipboardImageURLs(text string) []string {
+	var urls []string
+	for _, line := range strings.Split(strings.TrimSpace(text), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parsed, err := url.Parse(line)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || strings.ContainsAny(line, " \t") {
+			return nil
+		}
+		urls = append(urls, line)
+	}
+	if len(urls) > 50 {
+		return nil
+	}
+	return urls
+}
+
 func (a *App) PasteImport() {
 	if a.IsLocked() {
 		a.ShowMainWindow()
@@ -61,6 +82,13 @@ func (a *App) PasteImport() {
 	}
 	data := mygo.Clipboard.ReadImage()
 	if len(data) == 0 {
+		// 复制的是图片链接（一行一个）：按链接下载导入，和浏览器扩展、momento:// 链接走同一个队列。
+		if urls := clipboardImageURLs(mygo.Clipboard.ReadText()); len(urls) > 0 {
+			for _, url := range urls {
+				a.QueueImport(url, "")
+			}
+			return
+		}
 		a.Notify(a.T("clipboard_no_image"))
 		return
 	}

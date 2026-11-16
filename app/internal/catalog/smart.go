@@ -14,19 +14,17 @@ func ValidateSmartFolder(folder model.SmartFolder) error {
 	if !slices.Contains([]string{"all", "any"}, folder.Match) || len(folder.Rules) == 0 {
 		return i18n.NewError("error_smart_rule")
 	}
-	for _, rule := range folder.Rules {
+	for i := range folder.Rules {
+		rule := &folder.Rules[i]
 		valid := false
 		switch rule.Field {
-		case "name", "note":
-			valid = slices.Contains([]string{"contains", "equals"}, rule.Operator) && strings.TrimSpace(rule.Value) != ""
+		case "name", "note", "source":
+			valid = slices.Contains(TextOperators, rule.Operator) && strings.TrimSpace(rule.Value) != ""
 		case "extension", "tag", "color":
 			valid = rule.Operator == "equals" && strings.TrimSpace(rule.Value) != ""
-		case "width", "height", "size", "duration":
-			n, err := strconv.ParseInt(rule.Value, 10, 64)
-			valid = err == nil && n >= 0 && slices.Contains([]string{"eq", "gte", "lte"}, rule.Operator)
-		case "rating":
-			n, err := strconv.Atoi(rule.Value)
-			valid = err == nil && n >= 0 && n <= 5 && slices.Contains([]string{"eq", "gte", "lte"}, rule.Operator)
+		case "width", "height", "size", "duration", "rating":
+			low, high, err := numericRange(rule)
+			valid = err == nil && low >= 0 && low <= high && (rule.Field != "rating" || high <= 5)
 		case "added":
 			_, err := parseRuleDate(rule.Value)
 			valid = err == nil && slices.Contains([]string{"after", "before"}, rule.Operator)
@@ -36,6 +34,30 @@ func ValidateSmartFolder(folder model.SmartFolder) error {
 		}
 	}
 	return nil
+}
+
+// TextOperators 是名称、备注、来源链接能用的比较方式。
+var TextOperators = []string{"contains", "not_contains", "equals", "starts_with", "ends_with"}
+
+// numericRange 把数值条件的值读成范围：「介于」存成「小,大」两端都包含，其余是一个数（low == high）。
+func numericRange(rule *model.SmartRule) (int64, int64, error) {
+	if rule.Operator == "between" {
+		left, right, ok := strings.Cut(rule.Value, ",")
+		if !ok {
+			return 0, 0, strconv.ErrSyntax
+		}
+		low, err := strconv.ParseInt(strings.TrimSpace(left), 10, 64)
+		if err != nil {
+			return 0, 0, err
+		}
+		high, err := strconv.ParseInt(strings.TrimSpace(right), 10, 64)
+		return low, high, err
+	}
+	if !slices.Contains([]string{"eq", "gte", "lte"}, rule.Operator) {
+		return 0, 0, strconv.ErrSyntax
+	}
+	n, err := strconv.ParseInt(rule.Value, 10, 64)
+	return n, n, err
 }
 
 func parseRuleDate(value string) (time.Time, error) {
@@ -68,14 +90,24 @@ func matchesValidatedSmart(asset *model.Asset, folder *model.SmartFolder) bool {
 func matchesSmartRule(asset *model.Asset, rule *model.SmartRule) bool {
 	value := strings.ToLower(strings.TrimSpace(rule.Value))
 	switch rule.Field {
-	case "name", "note":
+	case "name", "note", "source":
 		text := asset.Name
-		if rule.Field == "note" {
+		switch rule.Field {
+		case "note":
 			text = asset.Note
+		case "source":
+			text = asset.SourceURL
 		}
 		text = strings.ToLower(text)
-		if rule.Operator == "contains" {
+		switch rule.Operator {
+		case "contains":
 			return strings.Contains(text, value)
+		case "not_contains":
+			return !strings.Contains(text, value)
+		case "starts_with":
+			return strings.HasPrefix(text, value)
+		case "ends_with":
+			return strings.HasSuffix(text, value)
 		}
 		return text == value
 	case "extension":
@@ -85,7 +117,7 @@ func matchesSmartRule(asset *model.Asset, rule *model.SmartRule) bool {
 	case "color":
 		return slices.ContainsFunc(asset.Colors, func(c model.Color) bool { return strings.EqualFold(c.Family, value) || strings.EqualFold(c.Hex, value) })
 	case "width", "height", "size", "duration", "rating":
-		target, err := strconv.ParseInt(rule.Value, 10, 64)
+		low, high, err := numericRange(rule)
 		if err != nil {
 			return false
 		}
@@ -112,11 +144,13 @@ func matchesSmartRule(asset *model.Asset, rule *model.SmartRule) bool {
 		}
 		switch rule.Operator {
 		case "eq":
-			return actual == target
+			return actual == low
 		case "gte":
-			return actual >= target
+			return actual >= low
 		case "lte":
-			return actual <= target
+			return actual <= low
+		case "between":
+			return actual >= low && actual <= high
 		}
 	case "added":
 		target, err := parseRuleDate(rule.Value)

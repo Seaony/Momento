@@ -36,6 +36,14 @@ type inspectorState struct {
 	// EXIF 不随图库一起读进内存，选中时才从库里取；只留当前这一张。
 	EXIFFor, EXIFLoading string
 	EXIF                 map[string]string
+	// 多选时一起改备注或链接（Editing 是 multi-note、multi-source）：开始编辑时记下是哪些素材、原来的值一不一样，
+	// 编辑中途换了选择也只改开始时那批。
+	MultiDraft    string
+	MultiIDs      []string
+	MultiOriginal string
+	MultiMixed    bool
+	// MultiSaving 为真时一起改的那批还没写完，退出和换图库要等它。
+	MultiSaving bool
 }
 
 // 照旧版 macOS 检查器的规格。
@@ -64,6 +72,11 @@ func (a *App) inspector(c *ui.Context) {
 		a.Inspector = inspectorState{LibraryID: a.Library.Manifest.LibraryID}
 	}
 	selected := a.SelectedAssets()
+	// 多选时正在一起改备注或链接，选择变成单张或清空后编辑框不再画出来、收不到失焦：这里替它结束，按开始时那批素材存下。
+	if field, ok := strings.CutPrefix(a.Inspector.Editing, "multi-"); ok && len(selected) < 2 {
+		a.applyMultiDetail(field)
+		a.Inspector.Editing, a.Inspector.EditKey = "", 0
+	}
 	if len(selected) == 0 {
 		a.saveInspectorEdits()
 		a.Inspector.AssetID, a.Inspector.Editing = "", ""
@@ -99,12 +112,16 @@ func (a *App) inspector(c *ui.Context) {
 				return
 			}
 			a.saveInspectorEdits()
-			a.Inspector.AssetID, a.Inspector.Editing = "", ""
+			a.Inspector.AssetID = ""
+			if !strings.HasPrefix(a.Inspector.Editing, "multi-") {
+				a.Inspector.Editing = ""
+			}
 			ui.Column(c.Key("inspector-multiple")).FillWidth().Gap(space12).Children(func() {
 				a.inspectorStack(c, selected)
 				a.inspectorRating(c, selected)
 				a.inspectorTags(c, selected)
 				a.inspectorFolders(c, selected)
+				a.inspectorMultiDetails(c, selected)
 			})
 		})
 	})
@@ -437,6 +454,95 @@ func (a *App) inspectorNotes(c *ui.Context, asset model.Asset) {
 			ui.Text(c, a.Inspector.Note).FontSize(fontSecondary).TextColor(p.Text).FillWidth()
 		}, func() { a.Inspector.Editing = "note" })
 	})
+}
+
+// 多选：备注和链接一起改。值都一样时显示出来照常改；不一样时显示「多个不同的…」，
+// 这时留空结束编辑不算清空，免得一不小心把每张不同的备注全抹掉。
+func (a *App) inspectorMultiDetails(c *ui.Context, selected []model.Asset) {
+	inspectorSection(c, "inspector-multi-details", "", func() {
+		for _, field := range []struct {
+			key, label, placeholder, mixed string
+			value                          func(model.Asset) string
+			lines                          int
+		}{
+			{"note", a.T("asset_note"), a.T("asset_note_placeholder"), a.T("multiple_notes"), func(x model.Asset) string { return x.Note }, 10},
+			{"source", a.T("source_url"), a.T("source_url_placeholder"), a.T("multiple_links"), func(x model.Asset) string { return x.SourceURL }, 4},
+		} {
+			common, mixed := field.value(selected[0]), false
+			for _, asset := range selected[1:] {
+				if field.value(asset) != common {
+					common, mixed = "", true
+					break
+				}
+			}
+			editing := "multi-" + field.key
+			if a.Inspector.Editing == editing {
+				placeholder := field.placeholder
+				if a.Inspector.MultiMixed {
+					placeholder = field.mixed
+				}
+				a.inspectorEditor(c, editing, &a.Inspector.MultiDraft, field.label, placeholder, fontSecondary, field.lines, field.key == "source", func(cancel bool) {
+					if !cancel {
+						a.applyMultiDetail(field.key)
+					}
+				})
+				continue
+			}
+			a.inspectorEditable(c, editing+"-display", field.label, func(p *designPalette) {
+				switch {
+				case mixed:
+					ui.Text(c, field.mixed).FontSize(fontSecondary).TextColor(placeholderColor(c)).FillWidth()
+				case strings.TrimSpace(common) == "":
+					ui.Text(c, field.placeholder).FontSize(fontSecondary).TextColor(placeholderColor(c)).FillWidth()
+				default:
+					ui.Text(c, common).FontSize(fontSecondary).TextColor(p.Text).FillWidth()
+				}
+			}, func() {
+				ids := make([]string, len(selected))
+				for i, asset := range selected {
+					ids[i] = asset.ID
+				}
+				a.Inspector.Editing, a.Inspector.MultiIDs = editing, ids
+				a.Inspector.MultiDraft, a.Inspector.MultiOriginal, a.Inspector.MultiMixed = common, common, mixed
+			})
+		}
+	})
+}
+
+func (a *App) applyMultiDetail(field string) {
+	value := a.Inspector.MultiDraft
+	if field == "source" {
+		value = strings.TrimSpace(value)
+	}
+	if (a.Inspector.MultiMixed && strings.TrimSpace(value) == "") || (!a.Inspector.MultiMixed && value == a.Inspector.MultiOriginal) {
+		return
+	}
+	ids := make([]string, 0, len(a.Inspector.MultiIDs))
+	for _, id := range a.Inspector.MultiIDs {
+		if _, ok := a.assetByID[id]; ok {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 || a.Library == nil {
+		return
+	}
+	lib := a.Library
+	write, patch := lib.SetAssetsNote, func(asset *model.Asset) { asset.Note = value }
+	if field == "source" {
+		write, patch = lib.SetAssetsSourceURL, func(asset *model.Asset) { asset.SourceURL = value }
+	}
+	a.Inspector.MultiSaving = true
+	a.RunPatch("update_asset_details", ids, func(ctx context.Context) error {
+		err := write(ctx, ids, value)
+		a.Window.Update(func() {
+			a.Inspector.MultiSaving = false
+			// 没写进去：错误照常弹出，等着退出或换图库的这次先不走，免得以为存好了。
+			if err != nil {
+				a.quitAfterInspector, a.pendingLibraryAfterEdits = false, ""
+			}
+		})
+		return err
+	}, patch)
 }
 
 func (a *App) inspectorEXIF(c *ui.Context, asset model.Asset) {
@@ -896,7 +1002,8 @@ func (a *App) inspectorDraft() (inspectorEdit, bool) {
 
 func (a *App) InspectorEditsPending() bool {
 	_, dirty := a.inspectorDraft()
-	return dirty || len(a.Inspector.Pending) > 0
+	_, multi := strings.CutPrefix(a.Inspector.Editing, "multi-")
+	return dirty || len(a.Inspector.Pending) > 0 || multi || a.Inspector.MultiSaving
 }
 
 func (a *App) InspectorEditsFailed() bool {
@@ -924,6 +1031,11 @@ func (a *App) saveInspectorEdits() {
 
 // 锁屏和退出前调用；保存失败后再次明确调用才重试。
 func (a *App) FlushInspectorEdits() {
+	// 多选时正在一起改备注或链接（还没失焦就按了退出、换图库）：按开始时那批存下。
+	if field, ok := strings.CutPrefix(a.Inspector.Editing, "multi-"); ok {
+		a.applyMultiDetail(field)
+		a.Inspector.Editing, a.Inspector.EditKey = "", 0
+	}
 	a.saveInspectorEdits()
 	for i := range a.Inspector.Pending {
 		a.Inspector.Pending[i].Failed = false

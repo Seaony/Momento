@@ -98,6 +98,7 @@ type App struct {
 	Busy                                                      bool
 	Progress                                                  *model.ImportProgress
 	Error, Notice                                             string
+	tagClipboard                                              []string // ⌘⇧C 复制下来的标签，⌘⇧V 加到选中的素材上
 	SettingsOpen, NewLibraryOpen, EditLibraryOpen, ExportOpen bool
 	Rename                                                    renameState
 	Preferences                                               Preferences
@@ -971,6 +972,17 @@ func (a *App) shortcuts(c *ui.Context) {
 	}
 	if a.ActionShortcut(c, "paste") {
 		a.PasteImport()
+	}
+	// 单按 F 是收藏，Shift+F 打开检查器里的文件夹选择器，直接搜着加。
+	if a.ActionShortcut(c, "add_to_folder") && a.Selected.Len() > 0 && !a.TagPage {
+		a.RevealInspector()
+		a.Inspector.TagsOpen, a.Inspector.FoldersOpen = false, true
+	}
+	if a.ActionShortcut(c, "copy_tags") {
+		a.CopyTags()
+	}
+	if a.ActionShortcut(c, "paste_tags") {
+		a.PasteTags()
 	}
 	if a.ActionShortcut(c, "delete") {
 		a.RequestDelete(a.selectedIDs())

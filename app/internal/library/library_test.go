@@ -377,6 +377,12 @@ func TestInvalidFolderParentAndBatchRelationsRollback(t *testing.T) {
 	if err := l.RenameAssets(t.Context(), map[string]string{"a": " 新名 "}); err != nil || snapshot(t, l).Assets[0].Name != "新名" {
 		t.Fatal("批量改名没有生效", err)
 	}
+	if err := l.SetAssetsNote(t.Context(), []string{"a", "missing"}, "x"); err == nil || snapshot(t, l).Assets[0].Note != "" {
+		t.Fatal("批量改备注失败没有整体回滚", err)
+	}
+	if err := l.SetAssetsSourceURL(t.Context(), []string{"a"}, "https://example.com/a"); err != nil || snapshot(t, l).Assets[0].SourceURL != "https://example.com/a" {
+		t.Fatal("批量改链接没有生效", err)
+	}
 }
 
 func TestTagDedupeRenameDeleteAndBatchEdit(t *testing.T) {

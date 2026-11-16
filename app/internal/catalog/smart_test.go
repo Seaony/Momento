@@ -233,3 +233,39 @@ func TestSmartRating(t *testing.T) {
 		}
 	}
 }
+
+func TestSmartTextOperatorsAndBetween(t *testing.T) {
+	asset := model.Asset{Name: "Poster Draft", SourceURL: "https://www.behance.net/gallery/1", Width: 1920, Height: 1080, Size: 3 << 20, Rating: 3}
+	for _, tc := range []struct {
+		rule model.SmartRule
+		want bool
+	}{
+		{model.SmartRule{Field: "source", Operator: "contains", Value: "behance"}, true},
+		{model.SmartRule{Field: "source", Operator: "starts_with", Value: "https://www.behance"}, true},
+		{model.SmartRule{Field: "name", Operator: "ends_with", Value: "draft"}, true},
+		{model.SmartRule{Field: "name", Operator: "starts_with", Value: "draft"}, false},
+		{model.SmartRule{Field: "name", Operator: "not_contains", Value: "final"}, true},
+		{model.SmartRule{Field: "name", Operator: "not_contains", Value: "poster"}, false},
+		{model.SmartRule{Field: "width", Operator: "between", Value: "1280,1920"}, true},
+		{model.SmartRule{Field: "width", Operator: "between", Value: "1921,4000"}, false},
+		{model.SmartRule{Field: "rating", Operator: "between", Value: "2,4"}, true},
+	} {
+		folder := model.SmartFolder{Match: "all", Rules: []model.SmartRule{tc.rule}}
+		if err := ValidateSmartFolder(folder); err != nil {
+			t.Fatalf("%+v 被拒：%v", tc.rule, err)
+		}
+		if got := MatchesSmart(asset, folder); got != tc.want {
+			t.Errorf("%+v：%v，期望 %v", tc.rule, got, tc.want)
+		}
+	}
+	for _, rule := range []model.SmartRule{
+		{Field: "width", Operator: "between", Value: "200"},
+		{Field: "width", Operator: "between", Value: "300,200"},
+		{Field: "rating", Operator: "between", Value: "1,6"},
+		{Field: "source", Operator: "gte", Value: "x"},
+	} {
+		if ValidateSmartFolder(model.SmartFolder{Match: "all", Rules: []model.SmartRule{rule}}) == nil {
+			t.Errorf("无效条件被接受：%+v", rule)
+		}
+	}
+}

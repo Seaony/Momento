@@ -45,16 +45,18 @@ type previewWindows struct {
 }
 
 type previewWindow struct {
-	window                                  *mygo.Window
-	picture                                 previewState
-	root                                    string
-	asset                                   model.Asset
-	items                                   []model.Asset
-	placeholder                             *ui.Bitmap
-	lastSelectionID                         string
-	mainSelection                           []string
-	pinned, closing, disposed               bool
-	hasFocus                                bool
+	window                    *mygo.Window
+	picture                   previewState
+	root                      string
+	asset                     model.Asset
+	items                     []model.Asset
+	placeholder               *ui.Bitmap
+	lastSelectionID           string
+	mainSelection             []string
+	pinned, closing, disposed bool
+	hasFocus                  bool
+	// 只在预览里看的水平翻转和灰度，不改原图，翻页时保留，关掉预览就没了。
+	flipped, gray                           bool
 	pressedAt, openedAt, closedAt, pinnedAt time.Time
 	frame                                   mygo.Rectangle
 	closeScale, closeOpacity                float32
@@ -198,7 +200,7 @@ func (a *App) ReconcilePreviewKeys(c *ui.Context) {
 		a.markPreviewInput()
 		return
 	}
-	for _, action := range []string{"preview_zoom_in", "preview_zoom_out", "preview_fit", "preview_actual"} {
+	for _, action := range []string{"preview_zoom_in", "preview_zoom_out", "preview_fit", "preview_actual", "preview_flip", "preview_grayscale"} {
 		mods, key, ok := parseShortcut(a.Shortcut(action))
 		if !ok {
 			continue
@@ -219,6 +221,10 @@ func (a *App) ReconcilePreviewKeys(c *ui.Context) {
 			w.fitToWindow()
 		case "preview_actual":
 			w.actualSize()
+		case "preview_flip":
+			w.flipped = !w.flipped
+		case "preview_grayscale":
+			w.gray = !w.gray
 		}
 		w.invalidate()
 		a.markPreviewInput()
@@ -702,6 +708,7 @@ func (w *previewWindow) footer(c *ui.Context, a *App, now time.Time) {
 					if isVideoAsset(w.asset) && w.asset.DurationMS > 0 {
 						previewInfo(c, "play", videoDuration(assetDuration(w.asset)))
 					}
+
 				})
 			}
 		})
@@ -852,6 +859,10 @@ func (w *previewWindow) handleKeys(c *ui.Context, a *App, now time.Time) {
 		w.fitToWindow()
 	case a.previewShortcut(root, "preview_actual"):
 		w.actualSize()
+	case a.previewShortcut(root, "preview_flip"):
+		w.flipped = !w.flipped
+	case a.previewShortcut(root, "preview_grayscale"):
+		w.gray = !w.gray
 	default:
 		handled = false
 	}

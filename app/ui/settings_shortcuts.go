@@ -32,6 +32,9 @@ var ShortcutDefinitions = []ShortcutDefinition{
 	{"cut", "shortcut_cut", "edit", "CmdOrCtrl+X", false},
 	{"copy", "shortcut_copy", "edit", "CmdOrCtrl+C", false},
 	{"paste", "paste_import", "edit", "CmdOrCtrl+V", false},
+	{"copy_tags", "copy_tags", "edit", "CmdOrCtrl+Shift+C", false},
+	{"paste_tags", "paste_tags", "edit", "CmdOrCtrl+Shift+V", false},
+	{"add_to_folder", "add_to_folder", "edit", "Shift+F", false},
 	{"select_all", "select_all", "edit", "CmdOrCtrl+A", false},
 	{"delete", "delete", "edit", "Backspace", false},
 	{"view_masonry", "view_masonry", "view", "CmdOrCtrl+1", false},
@@ -51,6 +54,8 @@ var ShortcutDefinitions = []ShortcutDefinition{
 	{"preview_actual", "preview_actual_size", "preview", "CmdOrCtrl+1", false},
 	{"preview_previous", "previous_asset", "preview", "Left", false},
 	{"preview_next", "next_asset", "preview", "Right", false},
+	{"preview_flip", "preview_flip", "preview", "H", false},
+	{"preview_grayscale", "preview_grayscale", "preview", "G", false},
 }
 
 func shortcutDefinition(action string) (ShortcutDefinition, bool) {

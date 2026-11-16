@@ -3,10 +3,13 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/Seaony/Momento/app/internal/assets"
 	"github.com/Seaony/Momento/app/internal/model"
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -20,7 +23,10 @@ func TestEagleFeatureScreenshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixture := newScreenshotFixture(t)
-	states := []string{"single", "multiple", "filter", "sort", "smart", "rename-format", "rename-replace", "subfolders", "recent"}
+	states := []string{"single", "multiple", "filter", "sort", "smart", "rename-format", "rename-replace", "subfolders", "recent", "smart-more", "preview-flip"}
+	if only := os.Getenv("MOMENTO_STAGE8_ONLY"); only != "" {
+		states = strings.Split(only, ",")
+	}
 	for _, theme := range []string{"light", "dark"} {
 		for _, state := range states {
 			a := fixture.app(t, "small", "zh-CN", theme)
@@ -75,15 +81,41 @@ func TestEagleFeatureScreenshots(t *testing.T) {
 				if state == "rename-replace" {
 					a.Rename.Mode, a.Rename.Find, a.Rename.Regex = 1, "([0-9]+", true
 				}
+			case "smart-more":
+				a.Preferences.SmartFolders = true
+				a.EditSmartFolder("")
+				a.GBrowsing.SmartName = "竖版海报"
+				a.GBrowsing.SmartRules = []model.SmartRule{{Field: "height", Operator: "between", Value: "1200,4000"}, {Field: "source", Operator: "not_contains", Value: "pinterest"}}
 			case "subfolders":
 				a.SetScope("folder", "travel")
 			case "recent":
 				a.SetScope("recent", "")
 			}
-			tt := ui.NewTester(a.View, 1100, 700)
+			width, height := 1100, 700
+			view := a.View
+			if state == "preview-flip" {
+				asset := a.Visible[0]
+				photo, _, _, _, err := assets.PrepareImage(filepath.Join(fixture.root, filepath.FromSlash(asset.RelativePath)))
+				if err != nil {
+					t.Fatal(err)
+				}
+				a.ShowPreview(asset.ID, false)
+				w := a.Preview.active
+				w.picture.Bitmap = ui.NewBitmap(photo)
+				w.flipped, w.gray = true, true
+				frame := previewLayout(mygo.Rectangle{Width: 900, Height: 640}, mygo.Rectangle{}, asset, a.Preferences.PreviewFit == "fit", a.Texts.Locale(), 1)
+				width, height = frame.Width, frame.Height
+				view = func(c *ui.Context) { w.view(c, a) }
+				w.openedAt = time.Now().Add(-time.Second)
+			}
+			tt := ui.NewTester(view, width, height)
 			tt.SetLocale(a.Texts.Locale())
 			tt.SetDark(theme == "dark")
-			tt.SetTitleBar(ui.TitleBar{Height: MainToolbarHeight, Left: 80, Bottom: 37})
+			if state != "preview-flip" {
+				tt.SetTitleBar(ui.TitleBar{Height: MainToolbarHeight, Left: 80, Bottom: 37})
+			} else {
+				a.Preview.active.openedAt = tt.Now().Add(-time.Second)
+			}
 			tt.SetWindowActive(true)
 			tt.Frame()
 			tt.Advance(time.Second)

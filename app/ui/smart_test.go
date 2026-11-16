@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -449,7 +450,19 @@ func TestSmartDurationEditsSecondsAndStoresMilliseconds(t *testing.T) {
 	if got := a.GBrowsing.SmartRules[0].Value; got != "2.5" {
 		t.Fatalf("重新打开没有换回秒：%s", got)
 	}
-	if ops := smartOperators("duration"); len(ops) != 2 || ops[0] != "gte" || ops[1] != "lte" {
+	if ops := smartOperators("duration"); !slices.Equal(ops, []string{"gte", "lte", "between"}) {
 		t.Fatalf("时长的比较方式不对：%v", ops)
+	}
+	// 「介于」两端都按秒编辑、按毫秒存，重新打开换回秒。
+	a.GBrowsing.SmartName = "中等长度"
+	a.GBrowsing.SmartRules = []model.SmartRule{{Field: "duration", Operator: "between", Value: "1.5,10"}}
+	folder, err = a.smartDraft()
+	if err != nil || folder.Rules[0].Value != "1500,10000" {
+		t.Fatalf("介于没有按毫秒存：%+v %v", folder.Rules, err)
+	}
+	a.Snapshot.SmartFolders[0].Rules = folder.Rules
+	a.EditSmartFolder("smart-a")
+	if got := a.GBrowsing.SmartRules[0].Value; got != "1.5,10" {
+		t.Fatalf("介于重新打开没有换回秒：%s", got)
 	}
 }

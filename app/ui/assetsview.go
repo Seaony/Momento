@@ -486,6 +486,9 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 		if m.Item(a.T("preview")).Chosen() {
 			a.ShowPreview(asset.ID, false)
 		}
+		if m.Item(a.T("open_default_app")).Chosen() {
+			a.OpenAssetExternally(asset)
+		}
 		if m.Item(a.T("export")).Chosen() {
 			if !a.Selected.Has(asset.ID) {
 				a.selectAsset(asset.ID, index, 0)
@@ -495,6 +498,14 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 		if !asset.Trashed {
 			if m.Item(a.T("rename_assets")).Chosen() {
 				a.OpenRename(a.orderedIDs(ids))
+			}
+			if m.Item(a.T("new_folder_with_selection")).Chosen() {
+				// 在文件夹里时新文件夹建在它下面。
+				parent := ""
+				if a.Query.Scope == "folder" {
+					parent = a.Query.FolderID
+				}
+				a.ShowNewFolder(parent, "", ids)
 			}
 			if m.Item(a.T("refresh_thumbnail")).Chosen() {
 				service := a.Assets
@@ -511,6 +522,16 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 		}
 		if m.Item(a.T("reveal")).Chosen() {
 			a.Reveal(asset)
+		}
+		if !isVideoAsset(asset) && m.Item(a.T("copy_image")).Chosen() {
+			a.CopyAssetImage(asset)
+		}
+		if m.Item(a.T("copy_file_path")).Chosen() {
+			if a.Selected.Has(asset.ID) {
+				a.CopyAssetPaths(a.SelectedAssets())
+			} else {
+				a.CopyAssetPaths([]model.Asset{asset})
+			}
 		}
 		m.Separator()
 		if asset.Trashed {

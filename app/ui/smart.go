@@ -103,13 +103,12 @@ func (a *App) EditSmartFolder(id string) {
 					if !ok {
 						continue
 					}
-					stored, err := strconv.ParseInt(rule.Value, 10, 64)
+					value, err := smartEditValue(rule.Value, unit)
 					if err != nil {
 						a.ShowError(i18n.NewError("error_smart_rule"))
 						return
 					}
-					value := big.NewRat(stored, unit)
-					rule.Value = strings.TrimRight(strings.TrimRight(value.FloatString(20), "0"), ".")
+					rule.Value = value
 				}
 				if folder.Match == "any" {
 					state.SmartMatch = 1
@@ -147,7 +146,12 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 						rule.Operator = smartOperators(rule.Field)[0]
 						rule.Value = ""
 					}
+					operator := rule.Operator
 					smartSelect(c.Key("operator"), &rule.Operator, smartOperators(rule.Field), func(key string) string { return a.T("smart_operator_" + key) }).Width(124).Label(a.T("smart_rule_operator", i+1)).Disabled(state.Saving)
+					// 换进或换出「介于」时值的格式不一样（一个数和「小,大」），清空重填。
+					if (operator == "between") != (rule.Operator == "between") {
+						rule.Value = ""
+					}
 					a.smartRuleValue(c.Key("value"), rule, i)
 					removeButton := inspectorIconButton(c.Key("remove"), a.T("remove_smart_rule_number", i+1), "close").Tooltip(a.T("remove_smart_rule")).Disabled(state.Saving || len(state.SmartRules) == 1)
 					if removeButton.Clicked() {
@@ -182,20 +186,22 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 	}
 }
 
-var smartFields = []string{"name", "extension", "tag", "color", "rating", "width", "height", "size", "duration", "added", "note"}
+var smartFields = []string{"name", "extension", "tag", "color", "rating", "width", "height", "size", "duration", "added", "note", "source"}
 
 // smartRuleUnits 是编辑时的单位换成存储单位的倍数：大小编辑用 MB、存字节，时长编辑用秒、存毫秒。
 var smartRuleUnits = map[string]int64{"size": 1 << 20, "duration": 1000}
 
 func smartOperators(field string) []string {
 	switch field {
-	case "name", "note":
-		return []string{"contains", "equals"}
-	case "width", "height", "size", "rating":
+	case "name", "note", "source":
+		return catalog.TextOperators
+	case "width", "height", "size":
+		return []string{"gte", "lte", "eq", "between"}
+	case "rating":
 		return []string{"gte", "lte", "eq"}
 	case "duration":
-		// 时长存的是毫秒，「等于」几乎不会命中，只给大于等于、小于等于。
-		return []string{"gte", "lte"}
+		// 时长存的是毫秒，「等于」几乎不会命中，不给。
+		return []string{"gte", "lte", "between"}
 	case "added":
 		return []string{"after", "before"}
 	default:
@@ -303,6 +309,21 @@ func (a *App) smartRuleValue(c *ui.Context, rule *model.SmartRule, index int) {
 	case "duration":
 		unit = a.T("smart_seconds")
 	}
+	if rule.Operator == "between" {
+		// 「介于」两个输入框，存成「小,大」。
+		low, high, _ := strings.Cut(rule.Value, ",")
+		for i, part := range []*string{&low, &high} {
+			if i == 1 {
+				ui.Text(c, a.T("smart_range_to")).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary).Shrink(0)
+			}
+			fieldStyle(c, ui.TextInput(c.Key(i), part).Grow(1).MinWidth(0).Label(label).FontFeatures("tnum").Disabled(a.GBrowsing.Saving))
+		}
+		rule.Value = low + "," + high
+		if unit != "" {
+			ui.Text(c, unit).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary).Shrink(0)
+		}
+		return
+	}
 	input := fieldStyle(c, ui.TextInput(c, &rule.Value).Grow(1).MinWidth(0).Label(label).Placeholder(placeholder).PlaceholderColor(placeholderColor(c)).Disabled(a.GBrowsing.Saving))
 	if rule.Field == "added" || rule.Field == "width" || rule.Field == "height" || rule.Field == "size" || rule.Field == "duration" {
 		input.FontFeatures("tnum")
@@ -311,6 +332,38 @@ func (a *App) smartRuleValue(c *ui.Context, rule *model.SmartRule, index int) {
 		ui.Text(c, unit).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary).Shrink(0)
 	}
 }
+
+// smartEditValue 把存的字节（毫秒）换成编辑用的 MB（秒）；「介于」的「小,大」两端分别换。
+func smartEditValue(stored string, unit int64) (string, error) {
+	parts := strings.Split(stored, ",")
+	for i, part := range parts {
+		n, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64)
+		if err != nil {
+			return "", err
+		}
+		parts[i] = strings.TrimRight(strings.TrimRight(big.NewRat(n, unit).FloatString(20), "0"), ".")
+	}
+	return strings.Join(parts, ","), nil
+}
+
+// smartStoredValue 是 smartEditValue 的反向：编辑用 MB（秒），保存到最接近的字节（毫秒），旧条件往返不丢精度。
+func smartStoredValue(edited string, unit int64) (string, error) {
+	parts := strings.Split(edited, ",")
+	for i, part := range parts {
+		value, ok := new(big.Rat).SetString(strings.TrimSpace(part))
+		if !ok || value.Sign() < 0 || strings.Contains(part, "/") {
+			return "", i18n.NewError("error_smart_rule")
+		}
+		value.Mul(value, big.NewRat(unit, 1))
+		n, err := strconv.ParseInt(value.FloatString(0), 10, 64)
+		if err != nil {
+			return "", i18n.NewError("error_smart_rule")
+		}
+		parts[i] = strconv.FormatInt(n, 10)
+	}
+	return strings.Join(parts, ","), nil
+}
+
 func (a *App) smartDraft() (model.SmartFolder, error) {
 	state := &a.GBrowsing
 	folder := model.SmartFolder{ID: state.SmartID, Name: strings.TrimSpace(state.SmartName), Match: "all", Rules: slices.Clone(state.SmartRules)}
@@ -326,17 +379,11 @@ func (a *App) smartDraft() (model.SmartFolder, error) {
 		if !ok {
 			continue
 		}
-		value, ok := new(big.Rat).SetString(strings.TrimSpace(rule.Value))
-		if !ok || value.Sign() < 0 || strings.Contains(rule.Value, "/") {
-			return folder, i18n.NewError("error_smart_rule")
-		}
-		// 编辑用 MB（秒），保存到最接近的字节（毫秒）；旧条件往返不丢精度。
-		value.Mul(value, big.NewRat(unit, 1))
-		stored, err := strconv.ParseInt(value.FloatString(0), 10, 64)
+		stored, err := smartStoredValue(rule.Value, unit)
 		if err != nil {
-			return folder, i18n.NewError("error_smart_rule")
+			return folder, err
 		}
-		rule.Value = strconv.FormatInt(stored, 10)
+		rule.Value = stored
 	}
 	return folder, catalog.ValidateSmartFolder(folder)
 }
