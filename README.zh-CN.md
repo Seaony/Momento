@@ -137,3 +137,7 @@ go tool mygo build -platform darwin/universal,windows/amd64,windows/arm64,linux/
 更新公钥尚未配置。正式签名、公证、签名更新验收和 Windows/Linux 图形界面验收仍待完成。Windows/Linux 真机标题栏与窗口按钮、三端开机启动实效均为 **not run（未执行）**。交叉编译或离线截图成功不能代替这些验证。
 
 项目规则见 [AGENTS.md](AGENTS.md)。
+
+## 许可证
+
+[MIT](LICENSE)

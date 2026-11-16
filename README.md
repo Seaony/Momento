@@ -137,3 +137,7 @@ Before distributing a release:
 The update public key is not configured yet. Signing, notarization, signed-update acceptance and Windows/Linux GUI acceptance remain release work. Windows/Linux title bars and window controls on real machines, and actual launch at login on all three platforms, are **not run**. A successful cross-build or offline screenshot does not prove these behaviors.
 
 Project conventions are in [AGENTS.md](AGENTS.md).
+
+## License
+
+[MIT](LICENSE)
