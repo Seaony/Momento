@@ -8,25 +8,43 @@
 ![Go](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white)
 ![mygo](https://img.shields.io/badge/mygo-v0.9.0-222222)
 ![Native UI](https://img.shields.io/badge/UI-native_GPU-222222)
+![License](https://img.shields.io/badge/license-MIT-222222)
 
-[English](README.md) · [简体中文](README.zh-CN.md) · [浏览器扩展](https://github.com/Seaony/Momento-Chomre-Extension/releases/latest)
+[English](README.md) · [简体中文](README.zh-CN.md) · [浏览器扩展](https://github.com/Seaony/Momento-Chomre-Extension)
 </div>
 
-Momento 把图片保存在自己的磁盘上，按颜色、标签和嵌套文件夹整理。一套 Go 代码，在三个桌面平台绘制原生 GPU 界面。
+Momento 用来收集和整理参考图、截图、照片和短视频。所有文件都放在你自己的磁盘上，一个图库就是一个 `.momento` 文件夹，可以整体移动、复制和备份。不需要账号，也不联网同步。
+
+整个应用是一套 Go 代码，用 [mygo](https://github.com/egoist/mygo) 在三个桌面平台上绘制原生 GPU 界面，没有网页前端，也不用 cgo。
 
 ## 功能
 
-- 瀑布流、网格和列表三种视图。搜索名称、文件类型和标签，再按颜色、标签或扩展名筛选。
-- 收藏、嵌套文件夹和批量标签编辑。检查器显示调色板、来源链接和 EXIF 数据。
-- 导入文件或整个文件夹，按 SHA-256 去重。支持 JPEG、PNG、GIF、WebP、TIFF、BMP、HEIC 和 AVIF；GIF 预览显示首帧。
-- 导出原文件、JPEG 或 PNG。删除的素材先进入图库回收站，可以恢复或永久删除。
-- 支持英文、简体中文和日语，以及跟随系统、浅色、深色外观。
+**浏览**：瀑布流、等高行和列表三种视图，缩略图大小可调。空格打开预览窗口，可以缩放、平移、播放动图和视频，按 H 水平翻转、按 G 看灰度。也可以全屏放映当前列表。
 
-文件夹旁的数量和打开文件夹后的结果都只包含直接归入该文件夹的素材，不包含子文件夹中的素材。
+**整理**：嵌套文件夹、标签、收藏、1 到 5 星评分和备注，都能批量修改；标签可以复制后粘贴到别的图片上。智能文件夹按名称、备注、来源、标签、颜色、格式、尺寸、文件大小、评分、时长和添加时间自动收集图片。批量重命名可以按模板编号，也可以查找替换。
 
-## 快速开始
+**查找**：按名称、标签、备注、来源链接和格式搜索，再按颜色、标签和扩展名筛选。「查找相似图片」会把看起来一样的图分成一组，选一张保留，其余几张的标签、文件夹、备注和评分并进这一张，然后移到回收站。
 
-安装 Go 1.27.3 或更高版本，然后运行：
+**检查器**：显示调色板、尺寸、大小、路径、来源链接和 EXIF。可以在图上框出区域写批注，批注内容也能被搜索到。
+
+**导入**：拖入、粘贴、选文件或整个文件夹，按内容去重。可以监视几个文件夹，放进去的图片自动导入，原文件移到废纸篓。图片里自带的关键字可以直接变成标签。
+
+**导出**：导出原文件，或转成 JPEG、PNG；可以限制最长边，常用的组合存成预设。实况照片可以连同视频一起导出。删除的素材先进图库回收站，可以恢复，也可以永久删除。
+
+**其他**：浏览器扩展可以把网页上的图片直接存进来。可以设置密码锁、在菜单栏显示图标、开机启动、改快捷键。界面支持简体中文、英文和日语，以及浅色、深色外观。
+
+## 支持的格式
+
+| 类型 | 格式 | 说明 |
+|---|---|---|
+| 图片 | JPEG、PNG、GIF、WebP、TIFF、BMP、HEIC、AVIF | 三个平台都支持 |
+| 相机 RAW、PSD 等 | DNG、CR2、CR3、NEF、ARW、RAF、ORF、RW2 等，以及 PSD、ICO、ICNS、JPEG 2000、TGA、EXR、HDR | macOS 用系统解码；Windows 只能拿到系统缩略图，预览最长 2560 像素；Linux 暂不支持 |
+| 视频 | MP4、MOV、M4V、WebM | 封面由系统截取；macOS 上的 WebM 和 Linux 上的所有视频需要装 ffmpeg |
+| 实况照片 | 同名的 HEIC 或 JPEG 加 MOV | 导入时自动配对 |
+
+## 安装
+
+还没有发布安装包，目前需要从源码运行。安装 Go 1.27.3 或更高版本，然后：
 
 ```sh
 git clone https://github.com/Seaony/Momento.git
@@ -34,109 +52,104 @@ cd Momento/app
 go tool mygo dev
 ```
 
-命令行工具版本锁定在 `go.mod`，无需 Bun、Node、网页前端或 cgo。Linux 需要 GTK 3。开发命令打开真正的应用窗口，Go 文件修改后自动重新构建。
+命令行工具的版本锁在 `go.mod` 里，不需要 Bun、Node 或 cgo。Linux 需要 GTK 3。这条命令会打开真正的应用窗口，改了 Go 文件会自动重新构建。
 
-macOS 捕获或共享窗口时，左上角可能显示紫色的 `Window sharing` 系统控件，点击仍可关闭、最小化或全屏。这不是开发版标记；未被该控件替代时显示正常的红黄绿按钮。
+## 浏览器扩展
 
-## 设置与快捷键
+[Momento Image Saver](https://github.com/Seaony/Momento-Chomre-Extension) 是配套的 Chrome 扩展。在网页图片上右键就能存进 Momento，在小红书、Instagram、Pixiv、微博、X 等网站上还能一次存下整帖。扩展只和本机的 Momento 通信（`127.0.0.1:47641`），可以在设置的「浏览器扩展」页关掉。
 
-从侧栏打开独立设置窗口，也可以在 macOS 的 **Momento > 设置…** 中打开（`⌘,`）；Windows/Linux 位于 **文件 > 设置…**（`Ctrl+,`）。再次打开会聚焦已有窗口。
+应用也接受 `momento://import?url=<图片地址>` 这样的链接。
 
-- **通用：** 开机时启动、外观、语言和自动检查更新。开机启动默认关闭，开关以操作系统的真实状态为准，失败时显示错误。自动检查更新默认开启，启动后检查一次；关闭后仍可手动检查。
-- **浏览器扩展：** 允许导入并查看本机服务状态。默认开启，开关实际启动或停止 `127.0.0.1:47641` 的监听。端口占用和其他服务错误会显示在设置中并记入日志。
-- **关于：** 查看版本、检查更新和打开日志文件夹。更新检查显示进度、结果或无法检查的原因，包括开发构建缺少更新配置的情况。
+## 快捷键
 
-外观和语言切换立即作用于两个窗口及应用菜单。跟随系统支持英文、简体中文和日语，其他语言回落到英文。在 macOS 上，AppKit 原生文件对话框按钮通常在下次启动进程时采用更改后的语言。
-
-应用自动记住上次的视图模式、排序方式和方向、侧栏与检查器是否显示，以及侧栏宽度。
+下面是默认按键，都可以在设置的「快捷键」页修改。
 
 | 操作 | macOS | Windows/Linux |
 |---|---|---|
 | 新建 / 打开图库 | `⌘N` / `⌘O` | `Ctrl+N` / `Ctrl+O` |
 | 导入文件 / 文件夹 | `⌘I` / `⌘⇧I` | `Ctrl+I` / `Ctrl+Shift+I` |
-| 导出选中素材 | `⌘E` | `Ctrl+E` |
-| 瀑布流 / 网格 / 列表 | `⌘1` / `⌘2` / `⌘3` | `Ctrl+1` / `Ctrl+2` / `Ctrl+3` |
-| 搜索 | `⌘F` | `Ctrl+F` |
+| 导出 | `⌘E` | `Ctrl+E` |
+| 瀑布流 / 列表 / 等高行 | `⌘1` / `⌘2` / `⌘3` | `Ctrl+1` / `Ctrl+2` / `Ctrl+3` |
+| 搜索 | `⌘K` | `Ctrl+K` |
 | 筛选 / 排序 | `⌘⌥F` / `⌘⌥S` | `Ctrl+Alt+F` / `Ctrl+Alt+S` |
-| 切换检查器 | `⌘⌥I` | `Ctrl+Alt+I` |
+| 显示或隐藏检查器 | `⌘⌥I` | `Ctrl+Alt+I` |
+| 放大 / 缩小缩略图 | `⌘=` / `⌘-` | `Ctrl+=` / `Ctrl+-` |
+| 复制 / 粘贴标签 | `⌘⇧C` / `⌘⇧V` | `Ctrl+Shift+C` / `Ctrl+Shift+V` |
+| 加入文件夹 | `⇧F` | `Shift+F` |
+| 预览 | `Space` | `Space` |
+| 预览里翻转 / 灰度 / 批注 | `H` / `G` / `A` | `H` / `G` / `A` |
+| 锁定 | `⌘L` | `Ctrl+L` |
 | 设置 | `⌘,` | `Ctrl+,` |
+
+## 数据放在哪里
+
+`.momento` 图库里有 manifest、SQLite 数据库、原图和缩略图。数据库只记相对路径，所以整个包可以随意移动或备份。macOS 上正在使用的图库不能放在 iCloud Drive 里，但可以从 iCloud Drive 导入，或者导出到那里。图库菜单里还可以把图库复制到应用数据目录、导出一份校验过的副本，或者重建缩略图。
+
+设置和界面状态存在应用配置目录的 `preferences.json` 里，最近打开的图库存在同一目录的 `recent-libraries.json`：
+
+- macOS：`~/Library/Application Support/Momento/`
+- Windows：`%APPDATA%\Momento\`
+- Linux：`$XDG_CONFIG_HOME/Momento/`，默认 `~/.config/Momento/`
+
+忘了密码锁的密码：先退出 Momento，再删掉 `preferences.json` 里的 `passwordHash` 字段。密码锁只锁界面，不加密图库文件。
+
+日志满 5 MB 就轮换，保留三份旧文件：
+
+- macOS：`~/Library/Logs/Momento/`
+- Windows：`%LOCALAPPDATA%\Momento\Logs\`
+- Linux：`$XDG_STATE_HOME/momento/`，默认 `~/.local/state/momento/`
 
 ## 开发
 
-在 `app/` 中执行：
+在 `app/` 里执行：
 
 ```sh
 go build ./...
 go vet ./...
-go test ./internal/...
 go test ./...
 ```
 
-生成离线界面截图：
+不打开窗口，直接渲染界面截图：
 
 ```sh
 MOMENTO_SCREENSHOTS=1 go test ./ui -run '^TestStateScreenshots$' -count=1
 MOMENTO_SETTINGS_SCREENSHOTS=1 go test ./ui -run '^TestSettingsWindowScreenshots$' -count=1
 ```
 
-主界面状态截图写入 `/tmp/momento-titlebar-settings-preview/`，设置窗口状态写入 `/tmp/momento-settings-window/`，各自附带清单。两组均覆盖中英日三语和浅深色。测试直接渲染界面，不会打开应用窗口。
+主界面截图写到 `/tmp/momento-titlebar-settings-preview/`，设置窗口写到 `/tmp/momento-settings-window/`，覆盖中英日三种语言和浅深两种外观。
 
-生成开发用样本图库：
+生成一个样本图库：
 
 ```sh
 go run ./cmd/sample-library -path /tmp/momento-sample.momento -count 14
 ```
 
-默认生成 14 张图片，其中 10 张 JPEG、4 张 PNG。大图库用 `-count 100000`。父目录必须存在；命令拒绝覆盖已有图库，失败或取消时只清理本次新建的包。
+默认 14 张图（10 张 JPEG、4 张 PNG），测大图库可以用 `-count 100000`。父目录必须已经存在；命令不会覆盖已有图库，失败或取消时只删掉这次新建的包。
 
-## 配置、图库与日志
-
-设置和界面状态保存在应用配置目录的 `preferences.json` 中：
-
-- macOS：`~/Library/Application Support/Momento/`
-- Windows：`%APPDATA%\Momento\`
-- Linux：`$XDG_CONFIG_HOME/Momento/`，默认 `~/.config/Momento/`
-
-已有配置文件缺少新字段时使用默认值。初始主题和语言跟随系统；初始视图为瀑布流，按添加时间从新到旧排序，侧栏与检查器均显示。最近图库路径单独保存在同目录的 `recent-libraries.json` 中。
-
-忘记密码锁的密码时，先退出 Momento，再删除上述配置目录中 `preferences.json` 的 `passwordHash` 字段，即可解除。密码锁只锁界面，不加密图库文件。
-
-日志达到 5 MB 时轮转，保留三份历史文件：
-
-- macOS：`~/Library/Logs/Momento/`
-- Windows：`%LOCALAPPDATA%\Momento\Logs\`
-- Linux：`$XDG_STATE_HOME/momento/`，默认 `~/.local/state/momento/`
-
-`.momento` 图库是自包含目录包，内含 manifest、SQLite 数据库、原图和缩略图。数据库只存相对路径，可整体移动或备份。这是全新应用的数据格式。
-
-图库菜单可以把图库复制到应用数据目录、导出经过校验的副本，或重建缩略图缓存。macOS 工作图库必须放在 iCloud Drive 之外；可以从 iCloud Drive 导入或向其导出图库。
-
-浏览器扩展通过 `127.0.0.1:47641` 与应用通信，同时保留 `momento://import?url=<图片地址>`。
+项目约定见 [AGENTS.md](AGENTS.md)。
 
 ## 打包
 
-在 `app/` 中，为当前平台打包或交叉编译全部桌面目标：
+在 `app/` 里为当前平台打包，或交叉编译全部桌面平台：
 
 ```sh
 go tool mygo build
 go tool mygo build -platform darwin/universal,windows/amd64,windows/arm64,linux/amd64,linux/arm64
 ```
 
-产物位于 `app/build/`：macOS 应用和 DMG、Windows 安装包、Linux DEB/RPM。生成 macOS DMG 需要 Mac，生成 Windows 安装包需要 NSIS。Linux 原生界面依赖 GTK 3，不需要 WebKitGTK。
+产物在 `app/build/`：macOS 的 App 和 DMG、Windows 安装包、Linux 的 DEB 和 RPM。打 DMG 需要 Mac，打 Windows 安装包需要 NSIS。Linux 界面依赖 GTK 3，不需要 WebKitGTK。
 
-## 发布准备
+## 发布
 
-[发布流程](.github/workflows/release.yml) 由版本标签或手动触发，标签必须与 `app/mygo.json` 的版本一致。缺少签名配置时，只保存未签名构建产物；配置齐全且请求建立草稿时，才签名并上传到草稿发布，不会自动公开草稿。
+[发布流程](.github/workflows/release.yml) 由版本标签或手动触发，标签必须和 `app/mygo.json` 里的版本一致。签名配置不全时只保存未签名的构建产物；配置齐全并要求建草稿时，才签名并上传到草稿，不会自动公开。
 
-正式分发前需要完成：
+正式发布前要做的：
 
-1. 执行 `go tool mygo keygen`，密钥对会写入用户配置目录下的 `mygo/update-keys`。私钥不进仓库，并另行安全备份。在 `app/mygo.json` 的 `updates.publicKey` 写入公钥，`updates.github` 设为 `Seaony/Momento`。
+1. 执行 `go tool mygo keygen`，密钥对会写到用户配置目录下的 `mygo/update-keys`。私钥不进仓库，另外妥善备份。把公钥写进 `app/mygo.json` 的 `updates.publicKey`，`updates.github` 设为 `Seaony/Momento`。
 2. 配置仓库密钥：`MYGO_UPDATER_PRIVATE_KEY`；`MACOS_CERTIFICATE`、`MACOS_CERTIFICATE_PASSWORD`、`APPLE_ID`、`APPLE_TEAM_ID`、`APPLE_APP_PASSWORD`；`WINDOWS_CERTIFICATE`、`WINDOWS_CERTIFICATE_PASSWORD`。
-3. 验证正式签名安装、macOS 公证和签名更新。在 Windows/Linux 真机安装运行，检查标题栏、窗口按钮、导入和导出。实际检查拖出到 Finder、资源管理器和 Linux 文件管理器，以及三端开机启动的效果。
+3. 验证签名安装、macOS 公证和签名更新；在 Windows、Linux 真机上检查安装、标题栏、窗口按钮、导入导出、往文件管理器拖文件，以及三个平台的开机启动。
 
-更新公钥尚未配置。正式签名、公证、签名更新验收和 Windows/Linux 图形界面验收仍待完成。Windows/Linux 真机标题栏与窗口按钮、三端开机启动实效均为 **not run（未执行）**。交叉编译或离线截图成功不能代替这些验证。
-
-项目规则见 [AGENTS.md](AGENTS.md)。
+目前更新公钥还没配置，上面这些验证都还没做过。交叉编译成功或离线截图正常，不能代替真机验证。
 
 ## 许可证
 
