@@ -2,7 +2,11 @@ package ui
 
 import (
 	"bytes"
+	"fmt"
 	"image"
+	"maps"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -181,6 +185,191 @@ func TestToolbarActualTypesAndToggle(t *testing.T) {
 	}
 	if got := toolbarToggle(values, "red", false); len(got) != 0 {
 		t.Fatalf("移除筛选：%v", got)
+	}
+}
+
+func TestToolbarFormatsAndCountsFollowSnapshotAndScope(t *testing.T) {
+	a := toolbarTestApp()
+	snapshot := a.Snapshot
+	snapshot.Assets = slices.Clone(snapshot.Assets)
+	snapshot.Assets[0].Width, snapshot.Assets[0].Height = 1920, 1080
+	snapshot.Assets[1].Width, snapshot.Assets[1].Height = 1080, 1920
+	snapshot.Assets[2].Width, snapshot.Assets[2].Height = 1920, 1080
+	snapshot.Assets[2].Trashed, snapshot.Assets[2].Kind = true, model.KindVideo
+	a.applySnapshot(snapshot)
+	if !a.libraryHasKind(model.KindVideo) || a.libraryHasKind(model.KindLive) {
+		t.Fatal("可选种类范围与图库素材不一致")
+	}
+	a.Query.Shapes = []string{catalog.ShapePortrait}
+	a.Query.TagIDs = []string{"ref"}
+	a.Refine()
+	query := a.browseQuery(a.Query)
+	extensions, kinds := a.typeCounts()
+	wantExtensions, wantKinds := a.Index.TypeCounts(query)
+	wantShapes := a.Index.ShapeCounts(query)
+	query.TagIDs = nil
+	if !maps.Equal(extensions, wantExtensions) || !maps.Equal(kinds, wantKinds) ||
+		!maps.Equal(a.shapeCounts(), wantShapes) || !maps.Equal(a.tagCounts(), a.Index.TagCounts(query)) {
+		t.Fatal("分组计数没有保留其他组的筛选条件")
+	}
+
+	snapshot.Assets[2].Trashed, snapshot.Assets[2].Kind, snapshot.Assets[2].Extension = false, model.KindLive, "heic"
+	a.clearFilters()
+	a.applySnapshot(snapshot)
+	if got := a.toolbarExtensions(); !slices.Equal(got, []string{"heic", "jpg", "png"}) ||
+		a.libraryHasKind(model.KindVideo) || !a.libraryHasKind(model.KindLive) {
+		t.Fatalf("更新快照后仍使用旧扩展名或种类：%v", got)
+	}
+	if shapes := a.shapeCounts(); shapes[catalog.ShapeLandscape] != 2 {
+		t.Fatalf("更新快照后的横图计数：%v", shapes)
+	}
+
+	a.SetScope("recent", "")
+	if a.shapeCounts()[catalog.ShapeLandscape] != 0 {
+		t.Fatal("尚未使用的素材计入了最近使用")
+	}
+	a.applyAssetsUsed([]string{"a"}, time.Now().Add(-time.Second))
+	if a.shapeCounts()[catalog.ShapeLandscape] != 1 {
+		t.Fatal("写入使用时间后没有刷新最近使用的分组计数")
+	}
+}
+
+func filterCountPreviewApp(language, theme string) *App {
+	a := toolbarTestApp()
+	a.Preferences.Language, a.Preferences.Theme = language, theme
+	a.Texts.Language = language
+	snapshot := a.Snapshot
+	snapshot.Assets[0].Width, snapshot.Assets[0].Height = 1920, 1080
+	snapshot.Assets[1].Width, snapshot.Assets[1].Height = 1080, 1920
+	snapshot.Assets[2].Width, snapshot.Assets[2].Height = 1000, 1000
+	snapshot.Assets = append(snapshot.Assets,
+		model.Asset{ID: "video", Extension: "mp4", Kind: model.KindVideo, Width: 1920, Height: 1080},
+		model.Asset{ID: "live", Extension: "heic", Kind: model.KindLive, Width: 1500, Height: 1000},
+	)
+	if language == "zh-CN" {
+		snapshot.Tags[0].Name = "灵感参考"
+	}
+	a.applySnapshot(snapshot)
+	return a
+}
+
+func TestFilterCountLabelsFit(t *testing.T) {
+	for _, language := range []string{"en", "ja"} {
+		t.Run(language, func(t *testing.T) {
+			a := filterCountPreviewApp(language, "light")
+			labels := []string{"filter_shapes", "filter_kind_video", "filter_kind_live", "shape_landscape"}
+			measured := make([]ui.Rect, len(labels))
+			tt := ui.NewTester(func(c *ui.Context) {
+				a.applyTheme(c)
+				a.filterPanel(c)
+				for i, label := range labels {
+					size, weight := float32(fontSecondary), 400
+					if label == "filter_shapes" {
+						size, weight = fontGroup, 600
+					}
+					measured[i].W, measured[i].H = c.MeasureText(0, ui.Span{
+						Text: a.T(label), Font: c.Theme().Font, Size: size, Weight: weight, Lang: c.Locale(),
+					})
+				}
+			}, popFilterWidth, 460)
+			tt.SetLocale(a.Texts.Locale())
+			for i, label := range labels {
+				box, ok := tt.Find(a.T(label))
+				if !ok || box.W+1 < measured[i].W || box.H > measured[i].H+2 ||
+					box.X+box.W > popFilterWidth || box.Y+box.H > 460 {
+					t.Fatalf("筛选计数文案截断或换行：%s，实际 %+v，测量 %+v", a.T(label), box, measured[i])
+				}
+			}
+		})
+	}
+}
+
+func TestBatch2PerfScreenshots(t *testing.T) {
+	if os.Getenv("MOMENTO_BATCH2_E_SCREENSHOTS") != "1" {
+		t.Skip("设置 MOMENTO_BATCH2_E_SCREENSHOTS=1 生成筛选和侧栏截图")
+	}
+	const dir = "/tmp/momento-batch2-shots"
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, theme := range []string{"light", "dark"} {
+		a := filterCountPreviewApp("zh-CN", theme)
+		filter := ui.NewTester(func(c *ui.Context) {
+			a.applyTheme(c)
+			ui.Column(c).FillWidth().Background(panelColor(c.Theme())).Children(func() { a.filterPanel(c) })
+		}, popFilterWidth, popHeaderHeight+popBodyMax+1)
+		filter.SetLocale(a.Texts.Locale())
+		if !filter.HasText(a.T("filter_kind_live")) || !filter.HasText(a.T("shape_landscape")) {
+			t.Fatal("筛选截图缺少实况类型或形状计数")
+		}
+		writeScreenshot(t, filepath.Join(dir, "e-filter-zh-CN-"+theme+".png"), filter)
+
+		a = smartTestApp()
+		a.Preferences.Language, a.Preferences.Theme = "zh-CN", theme
+		a.Texts.Language = "zh-CN"
+		a.Library.Manifest.DisplayName = "参考图库"
+		a.Snapshot.Folders[0].Name = "设计参考"
+		a.Snapshot.SmartFolders[0].Name = "横向参考"
+		a.Snapshot.SmartFolders[1].Name = "竖向参考"
+		a.Snapshot.Tags[0].Name = "资料"
+		a.applySnapshot(a.Snapshot)
+		a.BrowseSmartFolder("smart-a")
+		sidebar := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.sidebar(c) }, 236, 800)
+		sidebar.SetLocale(a.Texts.Locale())
+		sidebar.SetWindowActive(true)
+		for _, mode := range []string{"counts", "no-counts"} {
+			a.Preferences.SidebarCounts = mode == "counts"
+			sidebar.Frame()
+			if !sidebar.HasText("横向参考") || !sidebar.HasText("竖向参考") ||
+				sidebar.HasText("1") != a.Preferences.SidebarCounts {
+				t.Fatalf("智能侧栏截图状态错误：%s", mode)
+			}
+			writeScreenshot(t, filepath.Join(dir, "e-sidebar-"+mode+"-zh-CN-"+theme+".png"), sidebar)
+		}
+	}
+}
+
+func filterBenchmarkSnapshot() model.Snapshot {
+	snapshot := model.Snapshot{
+		Assets: make([]model.Asset, 100_000),
+		Tags:   []model.Tag{{ID: "ref", Name: "Reference"}},
+	}
+	for i := range snapshot.Assets {
+		snapshot.Assets[i] = model.Asset{
+			ID: fmt.Sprint(i), Name: "Reference", Extension: "jpg",
+			Width: 1920, Height: 1080, TagIDs: []string{"ref"},
+		}
+	}
+	return snapshot
+}
+
+func BenchmarkFilterPanelData100K(b *testing.B) {
+	for _, mode := range []string{"Warm", "Cold"} {
+		b.Run(mode, func(b *testing.B) {
+			a := &App{}
+			a.applySnapshot(filterBenchmarkSnapshot())
+			a.shapeCounts()
+			a.typeCounts()
+			a.tagCounts()
+			b.ReportAllocs()
+			for b.Loop() {
+				if mode == "Cold" {
+					a.Toolbar = toolbarState{}
+				}
+				if len(a.toolbarExtensions()) != 1 || a.libraryHasKind(model.KindVideo) || a.libraryHasKind(model.KindLive) {
+					b.Fatal("文件类型样本错误")
+				}
+				if shapes := a.shapeCounts(); shapes[catalog.ShapeLandscape] != 100_000 {
+					b.Fatal("形状计数错误")
+				}
+				if extensions, _ := a.typeCounts(); extensions["jpg"] != 100_000 {
+					b.Fatal("文件类型计数错误")
+				}
+				if tags := a.tagCounts(); tags["ref"] != 100_000 {
+					b.Fatal("标签计数错误")
+				}
+			}
+		})
 	}
 }
 

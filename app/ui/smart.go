@@ -44,10 +44,7 @@ func (a *App) sidebarSmartFolders(c *ui.Context) {
 
 func (a *App) sidebarSmartRows(c *ui.Context) {
 	for _, folder := range a.Snapshot.SmartFolders {
-		count := 0
-		if a.Index != nil {
-			count = a.smartFolderCount(folder.ID)
-		}
+		count := a.smartFolderCount(folder.ID)
 		row := a.smartSidebarRow(c.Key(folder.ID), folder.Name, count, !a.TagPage && a.Query.Scope == "smart" && a.Query.SmartFolderID == folder.ID)
 		if row.Clicked() {
 			a.BrowseSmartFolder(folder.ID)

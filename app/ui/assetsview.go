@@ -35,9 +35,6 @@ func (a *App) contentTopInset() float32 {
 }
 
 func (a *App) assetArea(c *ui.Context) {
-	if a.Thumbnails != nil {
-		a.Thumbnails.NextFrame()
-	}
 	// 上一帧鼠标已经离开那张视频卡片就关掉悬停播放器（上一帧的 hovered 这时已经算完整）。
 	a.finishHoverVideo()
 	a.hovered = ""

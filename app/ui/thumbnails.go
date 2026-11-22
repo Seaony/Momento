@@ -53,6 +53,12 @@ func (c *thumbnailCache) NextFrame() {
 	c.mu.Unlock()
 }
 
+func (c *thumbnailCache) EndFrame() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.trim()
+}
+
 func newThumbnailCache(update func(func())) *thumbnailCache {
 	return &thumbnailCache{
 		update:  update,

@@ -244,6 +244,10 @@ func (a *App) OpenWindow() {
 }
 
 func (a *App) View(c *ui.Context) {
+	if a.Thumbnails != nil {
+		a.Thumbnails.NextFrame()
+		defer a.Thumbnails.EndFrame()
+	}
 	a.applyTheme(c)
 	a.SyncMenuFocus(c)
 	a.ContinueInspectorEdits()

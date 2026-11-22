@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"slices"
+
 	"github.com/Seaony/Momento/app/internal/catalog"
 	"github.com/Seaony/Momento/app/internal/model"
 	"github.com/egoist/mygo/ui"
@@ -20,6 +22,7 @@ type gBrowsingState struct {
 	countsReady   bool
 	Counts        catalog.Counts
 	SmartCounts   map[string]int
+	smartCounting bool
 }
 
 func (a *App) BrowseSmartFolder(id string) {
@@ -59,12 +62,13 @@ func (a *App) quickAccessTarget(entry model.QuickAccess) (name, icon string, cou
 
 		selected = !a.TagPage && a.Query.Scope == "smart" && a.Query.SmartFolderID == entry.TargetID
 	}
-	if name != "" && a.Index != nil {
-		a.gBrowsingCounts()
+	if name != "" && a.Preferences.SidebarCounts && a.Index != nil {
 		switch entry.Kind {
 		case "folder":
+			a.gBrowsingCounts()
 			count = a.GBrowsing.Counts.Folders[countKey]
 		case "tag":
+			a.gBrowsingCounts()
 			count = a.GBrowsing.Counts.Tags[countKey]
 		case "smart":
 			count = a.smartFolderCount(countKey)
@@ -90,21 +94,62 @@ func (a *App) gBrowsingCounts() {
 		return
 	}
 	a.GBrowsing.countsReady, a.GBrowsing.countsVersion = true, a.snapshotVersion
-	a.GBrowsing.SmartCounts = map[string]int{}
+	a.GBrowsing.SmartCounts = nil
 	a.GBrowsing.Counts = catalog.Counts{}
 	if a.Index != nil {
 		a.GBrowsing.Counts = a.Index.Counts()
 	}
 }
 func (a *App) smartFolderCount(id string) int {
-	if a.Index == nil {
+	if !a.Preferences.SidebarCounts || a.Index == nil {
 		return 0
 	}
 	a.gBrowsingCounts()
-	if count, exists := a.GBrowsing.SmartCounts[id]; exists {
-		return count
+	state := &a.GBrowsing
+	if state.SmartCounts != nil {
+		return state.SmartCounts[id]
 	}
-	count := len(a.Index.Query(catalog.Query{Scope: "smart", SmartFolderID: id}))
-	a.GBrowsing.SmartCounts[id] = count
-	return count
+	if a.Window == nil {
+		state.SmartCounts = countSmartFolders(a.Index, a.Snapshot.SmartFolders)
+		return state.SmartCounts[id]
+	}
+	if !state.smartCounting {
+		state.smartCounting = true
+		version, generation := a.snapshotVersion, a.generation
+		snapshot := a.smartCountSnapshot()
+		window := a.Window
+		go func() {
+			counts := countSmartFolders(catalog.New(snapshot), snapshot.SmartFolders)
+			window.Update(func() { a.finishSmartFolderCounts(version, generation, counts) })
+		}()
+	}
+	return 0
+}
+
+func (a *App) smartCountSnapshot() model.Snapshot {
+	folders := slices.Clone(a.Snapshot.SmartFolders)
+	for i := range folders {
+		folders[i].Rules = slices.Clone(folders[i].Rules)
+	}
+	return model.Snapshot{
+		Assets:       slices.Clone(a.Snapshot.Assets),
+		SmartFolders: folders,
+	}
+}
+
+func countSmartFolders(index *catalog.Index, folders []model.SmartFolder) map[string]int {
+	counts := make(map[string]int, len(folders))
+	for _, folder := range folders {
+		counts[folder.ID] = index.Count(catalog.Query{Scope: "smart", SmartFolderID: folder.ID})
+	}
+	return counts
+}
+
+func (a *App) finishSmartFolderCounts(version, generation uint64, counts map[string]int) {
+	if generation == a.generation {
+		a.GBrowsing.smartCounting = false
+		if version == a.snapshotVersion {
+			a.GBrowsing.SmartCounts = counts
+		}
+	}
 }

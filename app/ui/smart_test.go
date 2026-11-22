@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -196,6 +197,95 @@ func TestGBrowsingCountsRefreshAfterSnapshotChange(t *testing.T) {
 		if count != 2 {
 			t.Fatalf("固定目标仍使用旧计数：%+v，%d", entry, count)
 		}
+	}
+}
+
+func TestHiddenSmartCountsSkipSidebarAndQuickAccess(t *testing.T) {
+	a := smartTestApp()
+	a.Preferences.SidebarCounts = false
+	sidebar := ui.NewTester(a.sidebarSmartFolders, 236, 320)
+	quick := ui.NewTester(a.sidebarQuickAccess, 236, 320)
+	sidebar.Frame()
+	quick.Frame()
+	if !sidebar.HasText("Landscape Rules") || !quick.HasText("Landscape Rules") {
+		t.Fatal("隐藏计数后智能文件夹入口也被隐藏")
+	}
+	if a.GBrowsing.SmartCounts != nil || a.GBrowsing.smartCounting {
+		t.Fatal("侧栏隐藏计数时仍计算了智能文件夹数量")
+	}
+	a.Preferences.SidebarCounts = true
+	if _, _, count, _ := a.quickAccessTarget(a.Snapshot.QuickAccess[2]); count != 1 {
+		t.Fatalf("重新显示计数后的固定智能文件夹数量：%d", count)
+	}
+}
+
+func TestSmartFolderCountsDiscardOutdatedResults(t *testing.T) {
+	a := smartTestApp()
+	version, generation := a.snapshotVersion, a.generation
+	snapshot := a.smartCountSnapshot()
+	a.Snapshot.Assets[0].Name = "Portrait"
+	if got := countSmartFolders(catalog.New(snapshot), snapshot.SmartFolders)["smart-a"]; got != 1 {
+		t.Fatalf("后台快照被当前图库的原地修改影响：%d", got)
+	}
+	a.snapshotVersion++
+	a.GBrowsing.smartCounting = true
+	a.finishSmartFolderCounts(version, generation, map[string]int{"smart-a": 99})
+	if a.GBrowsing.smartCounting || a.GBrowsing.SmartCounts != nil {
+		t.Fatal("素材变化后采用了过期结果，或没有释放后台计算状态")
+	}
+	a.generation++
+	a.GBrowsing.smartCounting = true
+	a.finishSmartFolderCounts(a.snapshotVersion, generation, map[string]int{"smart-a": 99})
+	if !a.GBrowsing.smartCounting || a.GBrowsing.SmartCounts != nil {
+		t.Fatal("切换图库后旧任务修改了新图库的计数状态")
+	}
+}
+
+func BenchmarkSmartFolderCounts100K(b *testing.B) {
+	for _, mode := range []string{"Hidden", "Warm", "Cold", "FramePreparation", "Background"} {
+		b.Run(mode, func(b *testing.B) {
+			snapshot := filterBenchmarkSnapshot()
+			for i := range 10 {
+				snapshot.SmartFolders = append(snapshot.SmartFolders, model.SmartFolder{
+					ID: fmt.Sprint(i), Match: "all",
+					Rules: []model.SmartRule{{Field: "name", Operator: "contains", Value: "reference"}},
+				})
+			}
+			a := &App{Preferences: DefaultPreferences()}
+			a.applySnapshot(snapshot)
+			for _, folder := range snapshot.SmartFolders {
+				a.smartFolderCount(folder.ID)
+			}
+			a.Preferences.SidebarCounts = mode != "Hidden"
+			workerSnapshot := a.smartCountSnapshot()
+			b.ReportAllocs()
+			for b.Loop() {
+				switch mode {
+				case "FramePreparation":
+					if len(a.smartCountSnapshot().Assets) != 100_000 {
+						b.Fatal("后台计数快照数量错误")
+					}
+					continue
+				case "Background":
+					if got := countSmartFolders(catalog.New(workerSnapshot), workerSnapshot.SmartFolders); got["0"] != 100_000 {
+						b.Fatal("后台计数错误")
+					}
+					continue
+				}
+				if mode != "Warm" {
+					a.snapshotVersion++
+				}
+				want := 100_000
+				if mode == "Hidden" {
+					want = 0
+				}
+				for _, folder := range snapshot.SmartFolders {
+					if got := a.smartFolderCount(folder.ID); got != want {
+						b.Fatalf("智能文件夹计数 %d，期望 %d", got, want)
+					}
+				}
+			}
+		})
 	}
 }
 

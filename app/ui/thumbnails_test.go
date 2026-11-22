@@ -189,14 +189,53 @@ func TestThumbnailKeepsEverythingDrawnThisFrame(t *testing.T) {
 	if decodes != len(ids) {
 		t.Fatalf("同一屏重复解码 %d 次", decodes)
 	}
-	// 滚走以后，新的一屏进来时才淘汰旧的，内存回到上限以内。
+	c.EndFrame()
+	if c.bytes != int64(len(ids))*(32<<20) {
+		t.Fatalf("当前帧活跃的缩略图被淘汰：%d 字节", c.bytes)
+	}
+	// 密集视图缩小后，本帧保留的图都已经缓存。
 	c.NextFrame()
-	c.Get("library", model.Asset{ID: "f"})
-	waitThumbnail(t, completed)
+	for _, id := range []string{"a", "b"} {
+		if c.Get("library", model.Asset{ID: id}) == nil {
+			t.Fatalf("留在视口或预读区的 %s 不在缓存中", id)
+		}
+	}
+	c.EndFrame()
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.bytes > thumbnailByteLimit {
-		t.Fatalf("不在屏幕上的缩略图没有淘汰：%d 字节", c.bytes)
+	if c.bytes != thumbnailByteLimit || decodes != len(ids) || len(c.pending) != 0 {
+		t.Fatalf("没有在本帧从缓存回收：%d 字节，%d 次解码，%d 项待处理", c.bytes, decodes, len(c.pending))
+	}
+	for _, id := range []string{"a", "b", "e"} {
+		if c.entries[thumbnailKey{"library", id}] == nil {
+			t.Fatalf("活跃项或最近使用的 %s 被淘汰", id)
+		}
+	}
+}
+
+func TestAppFrameTrimsThumbnailCacheWithoutNewDecode(t *testing.T) {
+	a := sidebarTestApp()
+	a.Thumbnails = newThumbnailCache(func(func()) { t.Error("已缓存的素材不应重新解码") })
+	c := a.Thumbnails
+	c.NextFrame()
+	bitmap := thumbnailTestBitmap()
+	for _, id := range []string{"a", "b", "offscreen-1", "offscreen-2", "offscreen-3"} {
+		key := thumbnailKey{root: filepath.Clean(a.Library.Root), id: id}
+		const size = 32 << 20
+		c.entries[key] = c.order.PushFront(thumbnailEntry{key: key, bitmap: bitmap, bytes: size, used: c.frame})
+		c.bytes += size
+	}
+	tester := ui.NewTester(a.View, 1000, 640)
+	tester.Frame()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.bytes != thumbnailByteLimit || len(c.pending) != 0 {
+		t.Fatalf("主窗口一帧后仍有 %d 字节缓存、%d 个解码任务", c.bytes, len(c.pending))
+	}
+	for _, id := range []string{"a", "b"} {
+		if c.entries[thumbnailKey{root: filepath.Clean(a.Library.Root), id: id}] == nil {
+			t.Fatalf("主窗口素材 %s 被淘汰", id)
+		}
 	}
 }
 

@@ -32,6 +32,9 @@ type toolbarState struct {
 	typeKindCount map[string]int
 	tagKey        string
 	tagCount      map[string]int
+	formatVersion uint64
+	extensions    []string
+	kinds         map[string]bool
 }
 
 var toolbarFamilies = []struct{ ID, Hex string }{
@@ -883,19 +886,31 @@ func (a *App) changeSort(field string) {
 }
 
 func (a *App) toolbarExtensions() []string {
+	a.refreshToolbarFormats()
+	return a.Toolbar.extensions
+}
+
+func (a *App) refreshToolbarFormats() {
+	state := &a.Toolbar
+	if state.extensions != nil && state.formatVersion == a.snapshotVersion {
+		return
+	}
 	unique := map[string]bool{}
-	for _, asset := range a.Snapshot.Assets {
+	kinds := map[string]bool{}
+	for i := range a.Snapshot.Assets {
+		asset := &a.Snapshot.Assets[i]
 		ext := strings.TrimPrefix(strings.ToLower(asset.Extension), ".")
 		if ext != "" {
 			unique[ext] = true
 		}
+		kinds[asset.Kind] = true
 	}
-	out := make([]string, 0, len(unique))
+	extensions := make([]string, 0, len(unique))
 	for ext := range unique {
-		out = append(out, ext)
+		extensions = append(extensions, ext)
 	}
-	slices.Sort(out)
-	return out
+	slices.Sort(extensions)
+	state.formatVersion, state.extensions, state.kinds = a.snapshotVersion, extensions, kinds
 }
 
 // filtering 表示有没有颜色、标签、类型、形状筛选条件。
@@ -909,7 +924,11 @@ func (a *App) clearFilters() {
 
 // countKey 是筛选面板数量缓存的键：图库或任何条件变了就重算。
 func (a *App) countKey(q catalog.Query) string {
-	return fmt.Sprintf("%d|%s|%s|%s|%s|%v|%v|%v|%v|%v|%v|%s", a.indexVersion, q.Scope, q.FolderID, q.ScopeTagID, q.SmartFolderID, q.ColorFamilies, q.TagIDs, q.Extensions, q.Kinds, q.Shapes, q.IncludeSubfolders, q.Search)
+	version := a.snapshotVersion
+	if q.Scope == "recent" {
+		version = a.indexVersion
+	}
+	return fmt.Sprintf("%d|%s|%s|%s|%s|%v|%v|%v|%v|%v|%v|%s", version, q.Scope, q.FolderID, q.ScopeTagID, q.SmartFolderID, q.ColorFamilies, q.TagIDs, q.Extensions, q.Kinds, q.Shapes, q.IncludeSubfolders, q.Search)
 }
 
 // shapeCounts 是筛选面板里各形状的数量，条件和图库没变就用上次算的。
@@ -917,11 +936,7 @@ func (a *App) shapeCounts() map[string]int {
 	if a.Index == nil {
 		return nil
 	}
-	q := a.browseQuery(a.Query)
-	q.Shapes = nil
-	if key := a.countKey(q); a.Toolbar.shapeKey != key {
-		a.Toolbar.shapeKey, a.Toolbar.shapeCount = key, a.Index.ShapeCounts(q)
-	}
+	a.refreshFilterCounts()
 	return a.Toolbar.shapeCount
 }
 
@@ -930,12 +945,7 @@ func (a *App) typeCounts() (extensions, kinds map[string]int) {
 	if a.Index == nil {
 		return nil, nil
 	}
-	q := a.browseQuery(a.Query)
-	q.Extensions, q.Kinds = nil, nil
-	if key := a.countKey(q); a.Toolbar.typeKey != key {
-		a.Toolbar.typeExtCount, a.Toolbar.typeKindCount = a.Index.TypeCounts(q)
-		a.Toolbar.typeKey = key
-	}
+	a.refreshFilterCounts()
 	return a.Toolbar.typeExtCount, a.Toolbar.typeKindCount
 }
 
@@ -944,12 +954,68 @@ func (a *App) tagCounts() map[string]int {
 	if a.Index == nil {
 		return nil
 	}
-	q := a.browseQuery(a.Query)
-	q.TagIDs = nil
-	if key := a.countKey(q); a.Toolbar.tagKey != key {
-		a.Toolbar.tagKey, a.Toolbar.tagCount = key, a.Index.TagCounts(q)
-	}
+	a.refreshFilterCounts()
 	return a.Toolbar.tagCount
+}
+
+func (a *App) refreshFilterCounts() {
+	state := &a.Toolbar
+	query := a.browseQuery(a.Query)
+	shapeQuery, typeQuery, tagQuery := query, query, query
+	shapeQuery.Shapes = nil
+	typeQuery.Extensions, typeQuery.Kinds = nil, nil
+	tagQuery.TagIDs = nil
+	shapeKey, typeKey, tagKey := a.countKey(shapeQuery), a.countKey(typeQuery), a.countKey(tagQuery)
+	staleShapes, staleTypes, staleTags := state.shapeKey != shapeKey, state.typeKey != typeKey, state.tagKey != tagKey
+	if !staleShapes && !staleTypes && !staleTags {
+		return
+	}
+
+	visibleShapes := staleShapes && len(query.Shapes) == 0
+	visibleTypes := staleTypes && len(query.Extensions)+len(query.Kinds) == 0
+	visibleTags := staleTags && len(query.TagIDs) == 0
+	if visibleShapes || visibleTypes || visibleTags {
+		a.countVisibleFilters(visibleShapes, visibleTypes, visibleTags)
+	}
+	if staleShapes && !visibleShapes {
+		state.shapeCount = a.Index.ShapeCounts(shapeQuery)
+	}
+	if staleTypes && !visibleTypes {
+		state.typeExtCount, state.typeKindCount = a.Index.TypeCounts(typeQuery)
+	}
+	if staleTags && !visibleTags {
+		state.tagCount = a.Index.TagCounts(tagQuery)
+	}
+	state.shapeKey, state.typeKey, state.tagKey = shapeKey, typeKey, tagKey
+}
+
+func (a *App) countVisibleFilters(shapes, types, tags bool) {
+	state := &a.Toolbar
+	if shapes {
+		state.shapeCount = make(map[string]int, len(catalog.Shapes))
+	}
+	if types {
+		state.typeExtCount, state.typeKindCount = map[string]int{}, map[string]int{}
+	}
+	if tags {
+		state.tagCount = map[string]int{}
+	}
+	for i := range a.Visible {
+		asset := &a.Visible[i]
+		if shapes {
+			catalog.AddShapeCounts(state.shapeCount, asset)
+		}
+		if types {
+			ext := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(asset.Extension)), ".")
+			state.typeExtCount[ext]++
+			state.typeKindCount[asset.Kind]++
+		}
+		if tags {
+			for _, id := range asset.TagIDs {
+				state.tagCount[id]++
+			}
+		}
+	}
 }
 
 func toolbarToggle(values []string, value string, on bool) []string {
@@ -1102,12 +1168,8 @@ func (a *App) thumbnailRuler(c *ui.Context) {
 
 // libraryHasKind 判断当前图库里有没有这种素材（不看回收站外的筛选范围，和文件类型列表一致）。
 func (a *App) libraryHasKind(kind string) bool {
-	for i := range a.Snapshot.Assets {
-		if a.Snapshot.Assets[i].Kind == kind {
-			return true
-		}
-	}
-	return false
+	a.refreshToolbarFormats()
+	return a.Toolbar.kinds[kind]
 }
 
 // thumbnailLabel 是刻度尺右边的字：瀑布流写几列，等高行写行高。

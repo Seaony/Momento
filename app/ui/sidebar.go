@@ -38,10 +38,8 @@ func (a *App) sidebar(c *ui.Context) {
 	if a.Sidebar.Open == nil {
 		a.Sidebar.Open = make(map[string]*bool)
 	}
-	counts := catalog.Counts{}
-	if a.Index != nil {
-		counts = a.Index.Counts()
-	}
+	a.gBrowsingCounts()
+	counts := a.GBrowsing.Counts
 	width := a.SidebarWidth
 	if width == 0 {
 		width = 236
