@@ -29,7 +29,7 @@ func BenchmarkWatchIdle100000(b *testing.B) {
 			}
 		}
 	}
-	watcher := New(root, nil, nil, nil)
+	watcher := New(root, nil, nil, nil, nil)
 	watcher.Update([]Rule{{Path: incoming, Enabled: true}})
 	ctx := context.Background()
 	watcher.Scan(ctx)

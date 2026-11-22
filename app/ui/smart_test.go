@@ -200,6 +200,26 @@ func TestGBrowsingCountsRefreshAfterSnapshotChange(t *testing.T) {
 	}
 }
 
+func TestSmartCountsStayVisibleWhileRefreshing(t *testing.T) {
+	a := smartTestApp()
+	if got := a.smartFolderCount("smart-a"); got != 1 {
+		t.Fatalf("初始计数 %d", got)
+	}
+	a.snapshotVersion++
+	a.Index.Patch(map[string]bool{a.Snapshot.Assets[0].ID: true}, func(asset *model.Asset) { asset.Name = "Portrait" })
+	a.GBrowsing.smartCounting = true
+	if got := a.smartFolderCount("smart-a"); got != 1 {
+		t.Fatalf("后台重算期间计数变成 %d", got)
+	}
+	if !a.GBrowsing.smartCounting {
+		t.Fatal("后台重算期间提前释放了任务状态")
+	}
+	a.GBrowsing.smartCounting = false
+	if got := a.smartFolderCount("smart-a"); got != 0 {
+		t.Fatalf("重算后的计数 %d", got)
+	}
+}
+
 func TestHiddenSmartCountsSkipSidebarAndQuickAccess(t *testing.T) {
 	a := smartTestApp()
 	a.Preferences.SidebarCounts = false

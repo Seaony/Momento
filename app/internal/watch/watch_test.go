@@ -3,9 +3,12 @@ package watch
 import (
 	"context"
 	"errors"
+	"image"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
+	"syscall"
 	"testing"
 	"time"
 
@@ -22,6 +25,12 @@ func newTestWatcher(root string, importFile ImportFunc, trash func(string) error
 				event(item)
 			}
 		}
+	}, func(_ context.Context, paths []string) (map[string]AssetStatus, error) {
+		statuses := make(map[string]AssetStatus, len(paths))
+		for _, path := range paths {
+			statuses[path] = AssetStatus{Active: true}
+		}
+		return statuses, nil
 	})
 }
 
@@ -126,7 +135,11 @@ func TestWatcherRetainsSourcesOnFailureAndRetriesWhenReenabled(t *testing.T) {
 			w.Update([]Rule{{Path: folder, Enabled: true}})
 			w.Scan(context.Background())
 			w.Scan(context.Background())
-			if calls != 2 {
+			expected := 2
+			if failure == "trash" {
+				expected = 1
+			}
+			if calls != expected {
 				t.Fatal("重新启用后没有重试")
 			}
 		})
@@ -242,7 +255,7 @@ func TestWatcherFindsNewFilesUnderCachedParent(t *testing.T) {
 	watcher := New(root, func(_ context.Context, paths []string, _ string) (model.ImportResult, error) {
 		imported = append(imported, paths...)
 		return model.ImportResult{Imported: len(paths)}, nil
-	}, os.Remove, nil)
+	}, os.Remove, nil, nil)
 	clk := &clock{t: time.Now()}
 	watcher.now = clk.now
 	watcher.Update([]Rule{{Path: folder, Enabled: true}})
@@ -277,6 +290,34 @@ func TestWatcherFindsNewFilesUnderCachedParent(t *testing.T) {
 	watcher.Scan(ctx)
 	if !slices.Contains(imported, incoming[0]) {
 		t.Fatalf("重读目录后仍漏掉修改时间不变时的新文件：%v", imported)
+	}
+}
+
+func TestWatcherKeepsStatesForUnchangedRules(t *testing.T) {
+	root, folder, _ := fixture(t)
+	watcher := New(root, nil, os.Remove, nil, nil)
+	clk := &clock{t: time.Now()}
+	watcher.now = clk.now
+	watcher.Update([]Rule{{Path: folder, FolderID: "kept", Enabled: true}})
+	watcher.Scan(context.Background())
+	realFolder, err := filepath.EvalSymlinks(folder)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(realFolder, "image.png")
+	state := watcher.files[path]
+	state.failures, state.retryAt, state.attempted = 3, clk.now().Add(time.Hour), true
+	watcher.files[path] = state
+	watcher.Update([]Rule{{Path: folder, FolderID: "kept", Enabled: true}, {Path: filepath.Join(filepath.Dir(folder), "changed"), Enabled: true}})
+	watcher.Scan(context.Background())
+	kept, exists := watcher.files[path]
+	if !exists || kept.failures != 3 || !kept.retryAt.Equal(state.retryAt) || !kept.attempted {
+		t.Fatalf("未变化规则的状态没有保留：%+v %v", kept, exists)
+	}
+	watcher.Update([]Rule{{Path: filepath.Join(filepath.Dir(folder), "changed"), Enabled: true}})
+	watcher.Scan(context.Background())
+	if _, exists := watcher.files[path]; exists {
+		t.Fatal("被删规则的状态没有清掉")
 	}
 }
 
@@ -328,7 +369,7 @@ func TestWatcherRealImportCommitsBeforeRemovingSource(t *testing.T) {
 
 func TestWatcherRunStopsOnCancellation(t *testing.T) {
 	root, folder, _ := fixture(t)
-	w := New(root, nil, nil, nil)
+	w := New(root, nil, nil, nil, nil)
 	w.Update([]Rule{{Path: folder, Enabled: true}})
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -434,7 +475,7 @@ func TestWatcherBatchKeepsOnlyFailedFiles(t *testing.T) {
 	}, func(source string) error { trashed = append(trashed, source); return os.Remove(source) }, func(_ context.Context, batch []Event) {
 		batches++
 		events = append(events, batch...)
-	})
+	}, nil)
 	w.Update([]Rule{{Path: folder, FolderID: "f", Enabled: true}})
 	w.Scan(context.Background())
 	w.Scan(context.Background())
@@ -690,6 +731,95 @@ func TestWatcherTrashRetryChecksFileIdentity(t *testing.T) {
 	w.Scan(context.Background())
 	if imports != 2 {
 		t.Fatalf("文件变了应重新导入：%d", imports)
+	}
+}
+
+func TestWatcherRechecksAssetBeforeTrashAfterRulesRestart(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		status  AssetStatus
+		err     error
+		imports int
+		trashes int
+	}{
+		{name: "active", status: AssetStatus{Active: true}, imports: 1, trashes: 3},
+		{name: "trashed", status: AssetStatus{Active: true, Trashed: true}, imports: 2, trashes: 3},
+		{name: "missing", imports: 2, trashes: 3},
+		{name: "lookup-failed", err: syscall.EIO, imports: 1, trashes: 2},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root, folder, original := fixture(t)
+			if err := os.Remove(original); err != nil {
+				t.Fatal(err)
+			}
+			paths := writeFiles(t, folder, "photo.HEIC", "photo.MOV")
+			clk := &clock{t: time.Now()}
+			imports, trashes, checks := 0, 0, 0
+			var last Event
+			watcher := New(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
+				imports++
+				if imports == 1 {
+					return model.ImportResult{AssetIDs: []string{"owner"}, Imported: 1, Motion: []string{paths[1]}}, nil
+				}
+				if !slices.Equal(sources, paths[1:]) {
+					t.Fatalf("应只重新导入剩下的源文件：%v", sources)
+				}
+				return model.ImportResult{Imported: 1}, nil
+			}, func(source string) error {
+				trashes++
+				if trashes == 2 {
+					return syscall.EPERM
+				}
+				return os.Remove(source)
+			}, func(_ context.Context, events []Event) {
+				last = events[len(events)-1]
+			}, func(ctx context.Context, sources []string) (map[string]AssetStatus, error) {
+				checks++
+				if !slices.Equal(sources, paths[1:]) || !slices.Equal(MotionAssetIDs(ctx, paths[1]), []string{"owner"}) {
+					t.Fatalf("规则重启后丢失实况视频归属：%v", sources)
+				}
+				return map[string]AssetStatus{paths[1]: test.status}, test.err
+			})
+			watcher.now = clk.now
+			ctx := context.Background()
+			rules := []Rule{{Path: folder, Enabled: true}}
+			watcher.Update(rules)
+			watcher.Scan(ctx)
+			watcher.Scan(ctx)
+			watcher.Update(nil)
+			watcher.Scan(ctx)
+			watcher.Update(rules)
+			clk.t = clk.t.Add(retryBackoff)
+			watcher.Scan(ctx)
+			if checks != 1 || imports != test.imports || trashes != test.trashes || !errors.Is(last.Err, test.err) {
+				t.Fatalf("状态检查 / 导入 / 移源 = %d / %d / %d，最后错误 %v", checks, imports, trashes, last.Err)
+			}
+		})
+	}
+}
+
+func TestImageDecodeFailureRetriesOnlyForIO(t *testing.T) {
+	for _, key := range []string{"error_image_unreadable", "error_decode_image"} {
+		t.Run(key, func(t *testing.T) {
+			params := []any(nil)
+			if key == "error_decode_image" {
+				params = []any{"image.png"}
+			}
+			for _, test := range []struct {
+				cause     error
+				permanent bool
+			}{
+				{cause: &os.PathError{Op: "read", Path: "image.png", Err: syscall.EIO}},
+				{cause: syscall.EIO},
+				{cause: image.ErrFormat, permanent: true},
+				{cause: io.ErrUnexpectedEOF, permanent: true},
+			} {
+				err := i18n.WrapError(i18n.WrapError(test.cause, key, params...), "error_import_read", "image.png")
+				if permanent(err) != test.permanent {
+					t.Fatalf("错误 %v 的永久失败判定与预期 %v 不符", err, test.permanent)
+				}
+			}
+		})
 	}
 }
 

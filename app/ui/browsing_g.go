@@ -94,7 +94,6 @@ func (a *App) gBrowsingCounts() {
 		return
 	}
 	a.GBrowsing.countsReady, a.GBrowsing.countsVersion = true, a.snapshotVersion
-	a.GBrowsing.SmartCounts = nil
 	a.GBrowsing.Counts = catalog.Counts{}
 	if a.Index != nil {
 		a.GBrowsing.Counts = a.Index.Counts()
@@ -106,7 +105,7 @@ func (a *App) smartFolderCount(id string) int {
 	}
 	a.gBrowsingCounts()
 	state := &a.GBrowsing
-	if state.SmartCounts != nil {
+	if state.SmartCounts != nil && (state.smartCounting || a.Window != nil) {
 		return state.SmartCounts[id]
 	}
 	if a.Window == nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/Seaony/Momento/app/internal/assets"
@@ -48,10 +50,12 @@ const (
 
 type fileState struct {
 	info      os.FileInfo
+	rulePath  string
 	attempted bool
 	failures  int       // 已经失败的次数
 	retryAt   time.Time // 这之前不重试
 	imported  bool
+	motionIDs []string
 }
 
 // 导入本身就不可能成功的错误：重试没有意义。
@@ -69,6 +73,15 @@ var permanentKeys = map[string]bool{
 func permanent(err error) bool {
 	for ; err != nil; err = errors.Unwrap(err) {
 		if localized, ok := err.(*i18n.LocalizedError); ok && permanentKeys[localized.Key] {
+			if localized.Key == "error_decode_image" || localized.Key == "error_image_unreadable" {
+				var pathErr *fs.PathError
+				var errno syscall.Errno
+				if !errors.Is(localized.Cause, io.EOF) && !errors.Is(localized.Cause, io.ErrUnexpectedEOF) &&
+					(errors.As(localized.Cause, &pathErr) || errors.As(localized.Cause, &errno) ||
+						errors.Is(localized.Cause, fs.ErrPermission) || errors.Is(localized.Cause, fs.ErrNotExist)) {
+					return false
+				}
+			}
 			return true
 		}
 	}
@@ -86,6 +99,21 @@ func backoff(failures int) time.Duration {
 // ImportFunc 把一批源文件导入到同一个目标文件夹。单个文件失败记在 result.Failed（和 Errors 一一对应），
 // 返回 err 表示整批没有导入。
 type ImportFunc func(ctx context.Context, paths []string, folderID string) (model.ImportResult, error)
+
+type AssetStatus struct {
+	Active  bool
+	Trashed bool
+}
+
+type AssetStatusFunc func(ctx context.Context, paths []string) (map[string]AssetStatus, error)
+
+type motionIDsKey struct{}
+
+// MotionAssetIDs 返回源视频第一次入库时同批提交的素材 ID，供状态查询核对实况视频。
+func MotionAssetIDs(ctx context.Context, path string) []string {
+	batches, _ := ctx.Value(motionIDsKey{}).(map[string][]string)
+	return batches[path]
+}
 
 // 一个已经写完、等着导入的文件。
 type readyFile struct {
@@ -107,6 +135,7 @@ type scanDirectory struct {
 type Watcher struct {
 	root       string
 	importFile ImportFunc
+	status     AssetStatusFunc
 	trash      func(string) error
 	event      func(context.Context, []Event)
 	now        func() time.Time
@@ -120,9 +149,9 @@ type Watcher struct {
 	ruleErrors map[string]string
 }
 
-func New(libraryRoot string, importFile ImportFunc, trash func(string) error, event func(context.Context, []Event)) *Watcher {
+func New(libraryRoot string, importFile ImportFunc, trash func(string) error, event func(context.Context, []Event), status AssetStatusFunc) *Watcher {
 	return &Watcher{
-		root: libraryRoot, importFile: importFile, trash: trash, event: event, now: time.Now,
+		root: libraryRoot, importFile: importFile, status: status, trash: trash, event: event, now: time.Now,
 		files: map[string]fileState{}, ruleErrors: map[string]string{},
 	}
 }
@@ -130,11 +159,34 @@ func New(libraryRoot string, importFile ImportFunc, trash func(string) error, ev
 func (w *Watcher) Update(rules []Rule) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if slices.Equal(w.rules, rules) {
-		return
+	if !slices.Equal(w.rules, rules) {
+		old := map[string]Rule{}
+		for _, rule := range w.rules {
+			old[rule.Path] = rule
+		}
+		next := map[string]Rule{}
+		for _, rule := range rules {
+			next[rule.Path] = rule
+		}
+		// 全量停用多半是监视器重建，先保留状态，等同一条规则回来继续用。
+		if len(rules) == 0 {
+			for path, state := range w.files {
+				if !state.imported {
+					state.attempted, state.failures, state.retryAt = false, 0, time.Time{}
+					w.files[path] = state
+				}
+			}
+		} else if len(w.rules) > 0 {
+			for path, state := range w.files {
+				previous, exists := old[state.rulePath]
+				if !exists || previous.Path != next[state.rulePath].Path || previous.FolderID != next[state.rulePath].FolderID {
+					delete(w.files, path)
+				}
+			}
+		}
+		w.rules = slices.Clone(rules)
+		w.revision++
 	}
-	w.rules = slices.Clone(rules)
-	w.revision++
 }
 
 func (w *Watcher) Run(ctx context.Context) {
@@ -208,7 +260,6 @@ func (w *Watcher) Scan(ctx context.Context) {
 	revision := w.revision
 	w.mu.Unlock()
 	if w.scanned != revision {
-		clear(w.files)
 		w.scanned = revision
 	}
 	now := w.now()
@@ -246,9 +297,11 @@ func (w *Watcher) Scan(ctx context.Context) {
 			seen[path] = true
 			previous := w.files[path]
 			if !sameFile(previous.info, info) {
-				w.files[path] = fileState{info: info}
+				w.files[path] = fileState{info: info, rulePath: rule.Path}
 				return
 			}
+			previous.rulePath = rule.Path
+			w.files[path] = previous
 			if previous.attempted || now.Before(previous.retryAt) {
 				return
 			}
@@ -273,9 +326,11 @@ func (w *Watcher) Scan(ctx context.Context) {
 		events = w.importBatch(ctx, folderID, ready[folderID], events)
 	}
 	w.dirs = dirs
-	for path := range w.files {
-		if !seen[path] {
-			delete(w.files, path)
+	if len(rules) > 0 {
+		for path, state := range w.files {
+			if !seen[path] && (!state.imported || dirs[filepath.Dir(path)].info != nil) {
+				delete(w.files, path)
+			}
 		}
 	}
 	for path := range w.ruleErrors {
@@ -342,9 +397,32 @@ func (w *Watcher) scanDirectory(ctx context.Context, path string, now time.Time,
 }
 
 func (w *Watcher) importBatch(ctx context.Context, folderID string, files []readyFile, events []Event) []Event {
+	var retries []string
+	motionIDs := map[string][]string{}
+	for _, file := range files {
+		state := w.files[file.path]
+		if state.imported {
+			retries = append(retries, file.path)
+			if len(state.motionIDs) > 0 {
+				motionIDs[file.path] = state.motionIDs
+			}
+		}
+	}
+	var statuses map[string]AssetStatus
+	var statusErr error
+	if len(retries) > 0 {
+		statuses, statusErr = w.status(context.WithValue(ctx, motionIDsKey{}, motionIDs), retries)
+		if ctx.Err() != nil {
+			return events
+		}
+	}
+	confirmed := func(path string) bool {
+		status := statuses[path]
+		return status.Active && !status.Trashed
+	}
 	var paths []string
 	for _, file := range files {
-		if !w.files[file.path].imported {
+		if !w.files[file.path].imported || statusErr == nil && !confirmed(file.path) {
 			paths = append(paths, file.path)
 		}
 	}
@@ -353,9 +431,6 @@ func (w *Watcher) importBatch(ctx context.Context, folderID string, files []read
 	failed := map[string]error{}
 	if len(paths) > 0 {
 		result, err = w.importFile(ctx, paths, folderID)
-		if errors.Is(err, assets.ErrImportBusy) {
-			return events
-		}
 		if err != nil && ctx.Err() != nil {
 			slog.Warn("自动导入被取消，源文件保留", "folder", folderID, "files", len(paths), "error", err)
 			return events
@@ -363,23 +438,37 @@ func (w *Watcher) importBatch(ctx context.Context, folderID string, files []read
 		if err == nil {
 			err = checkResult(result, paths, failed)
 		}
-		if err != nil {
+		if err != nil && !errors.Is(err, assets.ErrImportBusy) {
 			slog.Error("自动导入整批失败，源文件全部保留", "folder", folderID, "files", len(paths), "error", err)
-		} else {
+		} else if err == nil {
 			slog.Info("自动导入一批完成", "folder", folderID, "files", len(paths), "imported", result.Imported, "skipped", result.Skipped, "failed", len(failed))
 		}
+	}
+	motions := make(map[string]bool, len(result.Motion))
+	for _, path := range result.Motion {
+		motions[path] = true
 	}
 	var failures []Event
 	for _, file := range files {
 		state := w.files[file.path]
 		state.info = file.info
 		var fileErr error
-		if !state.imported {
+		switch {
+		case state.imported && statusErr != nil:
+			fileErr = statusErr
+		case state.imported && confirmed(file.path):
+		case errors.Is(err, assets.ErrImportBusy):
+			continue
+		default:
 			fileErr = err
 			if fileErr == nil {
 				fileErr = failed[file.path]
 			}
 			state.imported = fileErr == nil
+			state.motionIDs = nil
+			if state.imported && motions[file.path] {
+				state.motionIDs = result.AssetIDs
+			}
 		}
 		if fileErr == nil {
 			after, statErr := os.Lstat(file.path)
@@ -400,6 +489,8 @@ func (w *Watcher) importBatch(ctx context.Context, folderID string, files []read
 		switch {
 		case fileErr == nil:
 			state.attempted = true
+			state.imported = false
+			state.motionIDs = nil
 		case permanent(fileErr):
 			state.attempted = true
 		default:

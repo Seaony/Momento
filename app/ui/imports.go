@@ -2,7 +2,12 @@ package ui
 
 import (
 	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/url"
 	"os"
@@ -23,6 +28,7 @@ import (
 
 type importState struct {
 	WatchCancel     context.CancelFunc
+	Watcher         *watch.Watcher
 	WatchLibrary    string
 	WatchGeneration uint64
 	WatchRules      []AutoImportRule
@@ -152,7 +158,7 @@ func (a *App) startPathImport(paths []string, folderID, event string, cleanup fu
 func (a *App) importFiles(ctx context.Context, service *assets.Service, lib *library.Library, gen uint64, request model.ImportRequest, event string) (model.ImportResult, error) {
 	a.workMu.Lock()
 	defer a.workMu.Unlock()
-	result, err := service.Import(ctx, request, func(p model.ImportProgress) {
+	result, importErr := service.Import(ctx, request, func(p model.ImportProgress) {
 		a.Window.Update(func() {
 			if a.generation == gen {
 				a.Progress = &p
@@ -160,8 +166,9 @@ func (a *App) importFiles(ctx context.Context, service *assets.Service, lib *lib
 		})
 	})
 	var snapshot model.Snapshot
-	if err == nil {
-		snapshot, err = lib.Snapshot(ctx)
+	refreshErr := importErr
+	if importErr == nil {
+		snapshot, refreshErr = lib.Snapshot(a.ctx)
 	}
 	a.Window.Update(func() {
 		if a.generation != gen {
@@ -169,15 +176,15 @@ func (a *App) importFiles(ctx context.Context, service *assets.Service, lib *lib
 		}
 		a.Busy = false
 		a.Progress = nil
-		if err != nil {
-			a.ShowError(err)
+		if refreshErr != nil {
+			a.ShowError(refreshErr)
 		} else {
 			a.applySnapshot(snapshot)
 			a.importFeedback(event, result)
 		}
 		a.drainPending()
 	})
-	return result, err
+	return result, importErr
 }
 
 func (a *App) ConfigureAutoImport() {
@@ -193,53 +200,173 @@ func (a *App) ConfigureAutoImport() {
 	if a.Library == nil || a.Window == nil {
 		return
 	}
+	lib, service, gen := a.Library, a.Assets, a.generation
+	if a.Import.Watcher == nil || a.Import.WatchLibrary != libraryID || a.Import.WatchGeneration != gen {
+		a.Import.Watcher = watch.New(lib.Root, func(ctx context.Context, paths []string, folderID string) (model.ImportResult, error) {
+			ready := false
+			keywords := false
+			mygo.RunOnMain(func() {
+				if gen == a.generation && !a.Busy && ctx.Err() == nil {
+					a.Busy = true
+					ready = true
+					keywords = a.Preferences.ImportKeywords
+				}
+			})
+			if !ready {
+				return model.ImportResult{}, assets.ErrImportBusy
+			}
+			return a.importFiles(ctx, service, lib, gen, model.ImportRequest{Paths: paths, FolderID: folderID, ImportKeywords: keywords}, "auto-import")
+		}, mygo.Shell.TrashItem, func(ctx context.Context, events []watch.Event) {
+			a.Window.Update(func() {
+				if gen != a.generation || ctx.Err() != nil {
+					return
+				}
+				for _, event := range events {
+					if event.Err != nil && !errors.Is(event.Err, context.Canceled) {
+						if a.Settings.AutoImportErrors == nil {
+							a.Settings.AutoImportErrors = map[string]string{}
+						}
+						a.Settings.AutoImportErrors[event.RulePath] = a.Texts.Error(event.Err)
+					} else {
+						delete(a.Settings.AutoImportErrors, event.RulePath)
+					}
+				}
+				a.InvalidateWindows()
+			})
+		}, func(ctx context.Context, paths []string) (map[string]watch.AssetStatus, error) {
+			return autoImportAssetStatus(ctx, lib, paths)
+		})
+	}
 	a.Import.WatchLibrary = libraryID
-	a.Import.WatchGeneration = a.generation
+	a.Import.WatchGeneration = gen
 	a.Import.WatchRules = slices.Clone(rules)
 	var configs []watch.Rule
 	for _, rule := range rules {
 		configs = append(configs, watch.Rule{Path: rule.Path, FolderID: rule.FolderID, Enabled: rule.Enabled})
 	}
+	a.Import.Watcher.Update(configs)
 	if !slices.ContainsFunc(configs, func(rule watch.Rule) bool { return rule.Enabled }) {
 		return
 	}
-	lib, service, gen := a.Library, a.Assets, a.generation
 	ctx, cancel := context.WithCancel(a.ctx)
 	a.Import.WatchCancel = cancel
-	watcher := watch.New(lib.Root, func(ctx context.Context, paths []string, folderID string) (model.ImportResult, error) {
-		ready := false
-		keywords := false
-		mygo.RunOnMain(func() {
-			if gen == a.generation && !a.Busy && ctx.Err() == nil {
-				a.Busy = true
-				ready = true
-				keywords = a.Preferences.ImportKeywords
-			}
-		})
-		if !ready {
-			return model.ImportResult{}, assets.ErrImportBusy
+	go a.Import.Watcher.Run(ctx)
+}
+
+func autoImportAssetStatus(ctx context.Context, lib *library.Library, paths []string) (map[string]watch.AssetStatus, error) {
+	root, err := os.OpenRoot(lib.Root)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	statuses := make(map[string]watch.AssetStatus, len(paths))
+	verified := map[string]string{}
+	for _, path := range paths {
+		source, err := os.Open(path)
+		if err != nil {
+			return nil, err
 		}
-		return a.importFiles(ctx, service, lib, gen, model.ImportRequest{Paths: paths, FolderID: folderID, ImportKeywords: keywords}, "auto-import")
-	}, mygo.Shell.TrashItem, func(ctx context.Context, events []watch.Event) {
-		a.Window.Update(func() {
-			if gen != a.generation || ctx.Err() != nil {
-				return
+		hash, err := autoImportHash(ctx, source)
+		source.Close()
+		if err != nil {
+			return nil, err
+		}
+		ids := watch.MotionAssetIDs(ctx, path)
+		var rowQuery string
+		var arg string
+		if len(ids) == 0 {
+			rowQuery = "SELECT id,trashed,relative_path,motion_path FROM assets WHERE id=?"
+			arg = hash
+		} else {
+			encoded, err := json.Marshal(ids)
+			if err != nil {
+				return nil, err
 			}
-			for _, event := range events {
-				if event.Err != nil && !errors.Is(event.Err, context.Canceled) {
-					if a.Settings.AutoImportErrors == nil {
-						a.Settings.AutoImportErrors = map[string]string{}
-					}
-					a.Settings.AutoImportErrors[event.RulePath] = a.Texts.Error(event.Err)
-				} else {
-					delete(a.Settings.AutoImportErrors, event.RulePath)
-				}
+			rowQuery = "SELECT assets.id,trashed,relative_path,motion_path FROM json_each(?) JOIN assets ON assets.id=json_each.value WHERE kind='live'"
+			arg = string(encoded)
+		}
+		rows, err := lib.DB.QueryContext(ctx, rowQuery, arg)
+		if err != nil {
+			return nil, err
+		}
+		status, err := checkAutoImportCopies(ctx, rows, root, hash, len(ids) > 0, verified)
+		if err != nil {
+			return nil, err
+		}
+		statuses[path] = status
+	}
+	return statuses, nil
+}
+
+func checkAutoImportCopies(ctx context.Context, rows *sql.Rows, root *os.Root, sourceHash string, motion bool, verified map[string]string) (watch.AssetStatus, error) {
+	defer rows.Close()
+	var status watch.AssetStatus
+	fileHash := func(relative string) (string, error) {
+		if hash, ok := verified[relative]; ok {
+			return hash, nil
+		}
+		file, err := root.Open(filepath.FromSlash(relative))
+		if errors.Is(err, os.ErrNotExist) {
+			return "", nil
+		}
+		if err != nil {
+			return "", err
+		}
+		defer file.Close()
+		hash, err := autoImportHash(ctx, file)
+		if err == nil {
+			verified[relative] = hash
+		}
+		return hash, err
+	}
+	for rows.Next() {
+		var id, original, video string
+		var trashed bool
+		if err := rows.Scan(&id, &trashed, &original, &video); err != nil {
+			return watch.AssetStatus{}, err
+		}
+		if motion {
+			if video == "" {
+				continue
 			}
-			a.InvalidateWindows()
-		})
-	})
-	watcher.Update(configs)
-	go watcher.Run(ctx)
+			hash, err := fileHash(video)
+			if err != nil {
+				return watch.AssetStatus{}, err
+			}
+			if hash != sourceHash {
+				continue
+			}
+		}
+		hash, err := fileHash(original)
+		if err != nil {
+			return watch.AssetStatus{}, err
+		}
+		if hash == id {
+			if !trashed {
+				return watch.AssetStatus{Active: true}, nil
+			}
+			status.Trashed = true
+		}
+	}
+	return status, rows.Err()
+}
+
+func autoImportHash(ctx context.Context, file *os.File) (string, error) {
+	hash := sha256.New()
+	var buffer [32 * 1024]byte
+	for {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		count, err := file.Read(buffer[:])
+		hash.Write(buffer[:count])
+		if errors.Is(err, io.EOF) {
+			return hex.EncodeToString(hash.Sum(nil)), nil
+		}
+		if err != nil {
+			return "", err
+		}
+	}
 }
 
 // 只返回属于当前这个图库包的规则。规则记的图库位置还在、但不是当前位置，说明当前打开的是一份副本：副本不监视，在设置里说明原因。
