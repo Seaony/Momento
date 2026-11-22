@@ -149,6 +149,8 @@ func New(libraryRoot string, importFile ImportFunc, trash func(string) error, ev
 }
 
 func (w *Watcher) Update(rules []Rule) {
+	w.scanMu.Lock()
+	defer w.scanMu.Unlock()
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if !slices.Equal(w.rules, rules) {
