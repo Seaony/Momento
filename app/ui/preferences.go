@@ -115,7 +115,7 @@ func NormalizePreferences(p Preferences) Preferences {
 	}
 	delete(p.Shortcuts, "view_grid")
 	switch p.Sort {
-	case "added", "name", "size", "rating":
+	case "added", "name", "size":
 	default:
 		p.Sort, p.SortDescending = "added", true
 	}

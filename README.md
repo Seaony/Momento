@@ -17,7 +17,7 @@ with no account and nothing uploaded anywhere.
 
 <br>
 
-<img src=".github/assets/momento-hero-en.png" width="900" alt="The Momento main window: a folder sidebar on the left, a three-column masonry grid of photos in the middle, and an inspector on the right showing the selected image's palette, rating and tags">
+<img src=".github/assets/momento-hero-en.png" width="900" alt="The Momento main window: a folder sidebar on the left, a three-column masonry grid of photos in the middle, and an inspector on the right showing the selected image's palette and tags">
 
 </div>
 
@@ -29,8 +29,8 @@ Saved images scatter fast: a batch in Downloads, a pile of screenshots on the de
 
 Momento keeps them in one library, and the library is a single `.momento` folder on your disk:
 
-- **Find images by how they look**: every image gets a color palette, so you can filter by color, tag, format and rating, and search names, notes and source links.
-- **Organize without effort**: nested folders, tags, ratings and smart folders, all editable in batches. Drag in, paste or drop into a watched folder, and images are imported with duplicates skipped.
+- **Find images by how they look**: every image gets a color palette, so you can filter by color, tag and format, and search names, notes and source links.
+- **Organize without effort**: nested folders, tags and smart folders, all editable in batches. Drag in, paste or drop into a watched folder, and images are imported with duplicates skipped.
 - **Your files stay yours**: copy, move or back up the whole library like any folder. No account, no cloud sync, no analytics.
 - **One interface on three platforms**: macOS, Windows and Linux share the same native interface, in English, Chinese and Japanese.
 
@@ -61,11 +61,11 @@ Every image gets an 8-color palette on import. Filter by color, tag and extensio
 
 ### Organize
 
-Nested folders, tags, favorites, 1 to 5 star ratings and notes, all editable for many images at once. Copy tags from one image and paste them onto others. Batch rename numbers files from a template or finds and replaces text.
+Nested folders, tags, favorites and notes, all editable for many images at once. Copy tags from one image and paste them onto others. Batch rename numbers files from a template or finds and replaces text.
 
-### Duplicates, annotations and export
+### Duplicates and export
 
-Find Similar Images groups images that look the same; pick one to keep, and the tags, folders, notes and ratings of the others are merged into it before they go to the trash. Draw a box on an image to leave an annotation, and annotations are searchable too. Export to JPEG or PNG with an optional longest-edge limit, and save the settings you use often as presets.
+Find Similar Images groups images that look the same; pick one to keep, and the tags, folders and notes of the others are merged into it before they go to the trash. Export to JPEG or PNG with an optional longest-edge limit, and save the settings you use often as presets.
 
 ### Import
 
@@ -102,7 +102,7 @@ These are the macOS keys; on Windows and Linux use `Ctrl` for `⌘` and `Alt` fo
 | Copy / paste tags | `⌘⇧C` / `⌘⇧V` |
 | Add to folder | `⇧F` |
 | Preview | `Space` |
-| Flip / grayscale / annotate in preview | `H` / `G` / `A` |
+| Flip / grayscale in preview | `H` / `G` |
 | Lock | `⌘L` |
 | Settings | `⌘,` |
 

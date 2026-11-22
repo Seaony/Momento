@@ -58,7 +58,6 @@ var ShortcutDefinitions = []ShortcutDefinition{
 	{"preview_next", "next_asset", "preview", "Right", false},
 	{"preview_flip", "preview_flip", "preview", "H", false},
 	{"preview_grayscale", "preview_grayscale", "preview", "G", false},
-	{"preview_annotate", "preview_annotate", "preview", "A", false},
 }
 
 func shortcutDefinition(action string) (ShortcutDefinition, bool) {
@@ -319,11 +318,19 @@ func (a *App) shortcutsSettings(c *ui.Context) {
 			continue
 		}
 		ui.Column(c.Key(group)).FillWidth().Gap(space8).Children(func() {
-			ui.Row(c).FillWidth().Padding(0, space4).Gap(space8).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, a.T("shortcut_group_"+group)).FontSize(fontGroup).FontWeight(600).LetterSpacing(.6).TextColor(p.TextSecondary)
-				ui.Text(c, fmt.Sprintf("(%d)", len(definitions))).FontFeatures("tnum").FontSize(fontNumber).TextColor(p.TextSecondary)
-				ui.Box(c).Grow(1)
-				if settingsButton(c, a.T("restore_defaults")).Clicked() {
+			// 标题和其他设置分组一样；「恢复默认」是和「清除筛选」同款的小号文字按钮，不把标题行撑高。
+			ui.Row(c).FillWidth().Padding(0, 0, 0, space4).Gap(space8).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, a.T("shortcut_group_"+group)).FontSize(fontGroup).FontWeight(600).LetterSpacing(.6).TextColor(p.TextSecondary).Grow(1).MinWidth(0)
+				reset := ui.ButtonBase(c.Key("reset")).Height(20).Padding(0, popClearPad).Radius(radiusSmall).Cursor(ui.CursorPointer).Label(a.T("restore_defaults"))
+				background, text := ui.Transparent, p.TextTertiary
+				if reset.Pressed() {
+					background, text = p.Pressed, p.Text
+				} else if reset.Hovered() {
+					background, text = p.Hover, p.Text
+				}
+				animateColors(reset, background, text)
+				reset.Children(func() { ui.Text(c, a.T("restore_defaults")).FontSize(fontGroup).SingleLine() })
+				if reset.Clicked() {
 					a.ResetShortcuts(group)
 				}
 			})

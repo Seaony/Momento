@@ -85,15 +85,11 @@ func TestSettingsChangesPreferencesImmediately(t *testing.T) {
 	a := settingsTestApp("en", "light")
 	a.Settings.Tab = SettingsPreview
 	tt := ui.NewTester(func(c *ui.Context) { a.settingsView(c, UpdateCheckStatus{}) }, 760, 560)
-	if err := tt.Click(a.T("preview_pixelated")); err != nil {
-		t.Fatal(err)
-	}
+	chooseSettingsMenu(t, tt, a.T("preview_details"), a.T("preview_pixelated"))
 	if !a.Preferences.PreviewPixelated {
 		t.Fatal("像素化选择未生效")
 	}
-	if err := tt.Click(a.T("preview_solid")); err != nil {
-		t.Fatal(err)
-	}
+	chooseSettingsMenu(t, tt, a.T("preview_transparency"), a.T("preview_solid"))
 	if a.Preferences.PreviewChecker {
 		t.Fatal("纯色背景选择未生效")
 	}
@@ -159,7 +155,7 @@ func TestSettingsQuickLookIsMacOnly(t *testing.T) {
 		a := settingsTestApp("en", "light")
 		a.Settings.Tab = SettingsControls
 		tt := ui.NewTester(func(c *ui.Context) { a.settingsView(c, UpdateCheckStatus{}) }, 760, 560)
-		if tt.HasText(a.T("system_preview")) != (platform == "darwin") {
+		if tt.HasText(a.T("space_key")) != (platform == "darwin") {
 			t.Fatalf("%s的快速查看选项错误", platform)
 		}
 		a.Settings.Tab = SettingsGeneral
@@ -361,20 +357,37 @@ func TestSettingsSidebarBrowsingSectionsCanBeHidden(t *testing.T) {
 	}
 }
 
-func TestSettingsSegmentsKeepKeyboardSelection(t *testing.T) {
+// 设置里的几选一是菜单按钮：按钮上写当前选项，选了马上保存。
+func TestSettingsChoiceMenuSaves(t *testing.T) {
 	a := settingsTestApp("en", "light")
 	a.Settings.Tab = SettingsSidebar
 	tt := ui.NewTester(func(c *ui.Context) { a.settingsView(c, UpdateCheckStatus{}) }, 760, 560)
-	if err := tt.Click(a.T("rename")); err != nil {
+	a.Preferences.FolderDoubleClick = "rename"
+	tt.Frame()
+	if !tt.HasText(a.T("rename")) || tt.HasText(a.T("folder_expand")) {
+		t.Fatal("按钮上没有显示当前选项")
+	}
+	chooseSettingsMenu(t, tt, a.T("folder_double_click"), a.T("folder_expand"))
+	if a.Preferences.FolderDoubleClick != "expand" || !tt.HasText(a.T("folder_expand")) {
+		t.Fatal("选了展开没有保存或按钮没更新")
+	}
+	chooseSettingsMenu(t, tt, a.T("folder_double_click"), a.T("rename"))
+	if a.Preferences.FolderDoubleClick != "rename" {
+		t.Fatal("选回重命名没有保存")
+	}
+}
+
+func chooseSettingsMenu(t *testing.T, tt *ui.Tester, label, option string) {
+	t.Helper()
+	button, ok := tt.AccessByRole(ui.RoleMenuButton, label)
+	if !ok {
+		t.Fatalf("%s 不是菜单按钮", label)
+	}
+	tt.ClickAt(button.Bounds.X+button.Bounds.W/2, button.Bounds.Y+button.Bounds.H/2)
+	if err := tt.ChooseMenuItem(option); err != nil {
 		t.Fatal(err)
 	}
-	if a.Preferences.FolderDoubleClick != "rename" {
-		t.Fatal("分段点击没有保存")
-	}
-	tt.Key(0, ui.KeyRight)
-	if a.Preferences.FolderDoubleClick != "expand" {
-		t.Fatal("分段方向键没有保存")
-	}
+	tt.Frame()
 }
 
 func TestSettingsZoomUsesMenuAndChangesImmediately(t *testing.T) {
@@ -506,25 +519,23 @@ func TestSettingsPreviewTransparencyOrderAndSelection(t *testing.T) {
 		a := settingsTestApp(language, "light")
 		a.Settings.Tab = SettingsPreview
 		tt := ui.NewTester(func(c *ui.Context) { a.settingsView(c, UpdateCheckStatus{}) }, 760, 560)
-		checker, checkerOK := tt.AccessByRole(ui.RoleRadio, a.T("preview_checker"))
-		solid, solidOK := tt.AccessByRole(ui.RoleRadio, a.T("preview_solid"))
-		if !checkerOK || !solidOK || checker.Bounds.X >= solid.Bounds.X || !checker.Checked || solid.Checked {
-			t.Fatal("透明背景应先显示棋盘格并默认选中")
+		// 默认是棋盘格和平滑，菜单里棋盘格在纯色前面。
+		if !tt.HasText(a.T("preview_checker")) || tt.HasText(a.T("preview_solid")) || !tt.HasText(a.T("preview_smooth")) {
+			t.Fatal("透明背景应默认棋盘格、放大细节应默认平滑")
 		}
-		smooth, smoothOK := tt.AccessByRole(ui.RoleRadio, a.T("preview_smooth"))
-		pixelated, pixelatedOK := tt.AccessByRole(ui.RoleRadio, a.T("preview_pixelated"))
-		if !smoothOK || !pixelatedOK || smooth.Bounds.X >= pixelated.Bounds.X || !smooth.Checked {
-			t.Fatal("放大细节应保持平滑在左并默认选中")
+		button, _ := tt.AccessByRole(ui.RoleMenuButton, a.T("preview_transparency"))
+		tt.ClickAt(button.Bounds.X+button.Bounds.W/2, button.Bounds.Y+button.Bounds.H/2)
+		if menu := tt.Menu(); len(menu) != 2 || menu[0] != a.T("preview_checker") || menu[1] != a.T("preview_solid") {
+			t.Fatalf("透明背景菜单顺序不对：%v", menu)
 		}
-		if err := tt.Click(a.T("preview_solid")); err != nil {
+		if err := tt.ChooseMenuItem(a.T("preview_solid")); err != nil {
 			t.Fatal(err)
 		}
+		tt.Frame()
 		if a.Preferences.PreviewChecker {
 			t.Fatal("点击纯色没有保存")
 		}
-		if err := tt.Click(a.T("preview_checker")); err != nil {
-			t.Fatal(err)
-		}
+		chooseSettingsMenu(t, tt, a.T("preview_transparency"), a.T("preview_checker"))
 		if !a.Preferences.PreviewChecker {
 			t.Fatal("点击棋盘格没有保存")
 		}

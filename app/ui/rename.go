@@ -38,6 +38,17 @@ func (a *App) OpenRename(ids []string) {
 	}
 }
 
+// RenameAsset 给单张素材改名：输入框里预填原名，保存后直接用新名字。
+func (a *App) RenameAsset(asset model.Asset) {
+	lib := a.Library
+	a.Ask("edit", a.T("rename"), asset.Name, func(name string) {
+		if name == asset.Name {
+			return
+		}
+		a.RunPatch("rename", []string{asset.ID}, func(ctx context.Context) error { return lib.RenameAsset(ctx, asset.ID, name) }, func(asset *model.Asset) { asset.Name = name })
+	})
+}
+
 // renameAssets 是对话框打开时那批素材里还在图库中的，按打开时的顺序。
 func (a *App) renameAssets() []model.Asset {
 	assets := make([]model.Asset, 0, len(a.Rename.IDs))
@@ -96,7 +107,7 @@ func (a *App) renameDialog(c *ui.Context) {
 	}
 	names, changed, problem := a.renamePlan(assets)
 	dialogPanel(c.Key("rename"), &state.Open, panelWide, "edit", a.T("rename_title", len(assets)), func() {
-		settingsSegments(c.Key("rename-mode"), a.T("rename_mode"), &state.Mode, a.T("rename_format"), a.T("rename_replace"))
+		choiceMenu(c.Key("rename-mode"), a.T("rename_mode"), state.Mode, []string{a.T("rename_format"), a.T("rename_replace")}, func(i int) { state.Mode = i }).AlignSelf(ui.Start)
 		if state.Mode == 0 {
 			dialogSection(c, a.T("rename_template"), func() {
 				fieldStyle(c, ui.TextInput(c.Key("rename-template"), &state.Template).Label(a.T("rename_template")).AutoFocus().FillWidth())

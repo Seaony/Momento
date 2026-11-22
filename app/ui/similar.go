@@ -221,7 +221,7 @@ func (a *App) mergeSimilar(groups []similarResolved) {
 	lib := a.Library
 	a.RunPatch("merge_similar", ids, func(ctx context.Context) error { return lib.MergeAssets(ctx, merges...) }, func(asset *model.Asset) {
 		if m, ok := merged[asset.ID]; ok {
-			asset.Note, asset.SourceURL, asset.Favorite, asset.Rating = m.Note, m.SourceURL, m.Favorite, m.Rating
+			asset.Note, asset.SourceURL, asset.Favorite = m.Note, m.SourceURL, m.Favorite
 			asset.TagIDs, asset.FolderIDs = m.TagIDs, m.FolderIDs
 			return
 		}

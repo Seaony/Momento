@@ -107,8 +107,6 @@ type App struct {
 	libraryOpening                                            bool       // 正在后台打开另一个图库
 	Slideshow                                                 *slideshow // 正在全屏放映
 	justified                                                 justifiedCache
-	annotationSaves                                           []annotationSave // 还没确认写进图库的批注改动
-	annotationKey                                             int
 	Preferences                                               Preferences
 	Browse                                                    browseState
 	GBrowsing                                                 gBrowsingState
@@ -756,11 +754,7 @@ func (a *App) DeleteLibrary() {
 // 返回是否放弃了没保存的修改。图库连接本身由调用方关闭。
 func (a *App) closeLibrary(reason string) bool {
 	discarded := a.DiscardInspectorEdits(reason)
-	// 图库没了，关预览时不能再发起批注写入（写不进去，还会让 Busy 一直挂着）。
 	a.StopSlideshow()
-	if a.dropPreviewAnnotationDrafts(reason) {
-		discarded = true
-	}
 	a.ClosePreview()
 	a.closeHoverVideo()
 	a.cancelExtensionPicker()
@@ -823,10 +817,6 @@ func (a *App) ImportPaths(paths []string) {
 func (a *App) SetFavorite(ids []string, value bool) {
 	lib := a.Library
 	a.RunPatch("favorite", ids, func(ctx context.Context) error { return lib.SetFavorite(ctx, ids, value) }, func(asset *model.Asset) { asset.Favorite = value })
-}
-func (a *App) SetRating(ids []string, rating int) {
-	lib := a.Library
-	a.RunPatch("rating", ids, func(ctx context.Context) error { return lib.SetRating(ctx, ids, rating) }, func(asset *model.Asset) { asset.Rating = rating })
 }
 func (a *App) SetTags(ids, tagIDs []string, add bool) {
 	lib := a.Library

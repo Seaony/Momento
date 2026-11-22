@@ -103,13 +103,11 @@ func (a *App) inspector(c *ui.Context) {
 						a.inspectorPreview(c, asset)
 						a.inspectorColors(c, asset)
 						a.inspectorTitle(c, asset)
-						a.inspectorRating(c, selected)
 					})
 					a.inspectorDetails(c, asset)
 					a.inspectorTags(c, selected)
 					a.inspectorFolders(c, selected)
 					a.inspectorNotes(c, asset)
-					a.inspectorAnnotations(c, asset)
 					a.inspectorEXIF(c, asset)
 				})
 				return
@@ -121,7 +119,6 @@ func (a *App) inspector(c *ui.Context) {
 			}
 			ui.Column(c.Key("inspector-multiple")).FillWidth().Gap(space12).Children(func() {
 				a.inspectorStack(c, selected)
-				a.inspectorRating(c, selected)
 				a.inspectorTags(c, selected)
 				a.inspectorFolders(c, selected)
 				a.inspectorMultiDetails(c, selected)
@@ -255,35 +252,6 @@ func (a *App) inspectorTitle(c *ui.Context, asset model.Asset) {
 	a.inspectorEditable(c, "title-display", a.T("edit_title"), func(p *designPalette) {
 		ui.Text(c, a.Inspector.Title).FontSize(fontLead).FontWeight(inspectorTitleWeight).TextColor(p.Text).FillWidth()
 	}, func() { a.Inspector.Editing = "title" }).Margin(0, -inspectorEditBleed)
-}
-
-// 星级评分：多选时星级都一样才亮出来，不一样显示空星，点一下给全部打同样的星。
-func (a *App) inspectorRating(c *ui.Context, selected []model.Asset) {
-	value := selected[0].Rating
-	for _, asset := range selected[1:] {
-		if asset.Rating != value {
-			value = 0
-			break
-		}
-	}
-	if ratingStars(c.Key("rating"), &value, a.T("rating")).Changed() {
-		ids := make([]string, len(selected))
-		for i, asset := range selected {
-			ids[i] = asset.ID
-		}
-		a.SetRating(ids, value)
-	}
-}
-
-// ratingStars 是 mygo 的评分星星，实心星换成品牌色（组件默认取主题的警示色，浅色下是棕色）。
-func ratingStars(c *ui.Context, value *int, label string) ui.Element {
-	theme := *c.Theme()
-	theme.Warning = paletteFor(c.Theme()).Accent
-	var stars ui.Element
-	ui.Themed(c, &theme).Background(ui.Transparent).Children(func() {
-		stars = ui.Rating(c, value, 5).Label(label)
-	})
-	return stars
 }
 
 // 可原地编辑的文字：悬停铺浅底和细边，点一下进入编辑。
@@ -1010,12 +978,11 @@ func (a *App) inspectorDraft() (inspectorEdit, bool) {
 func (a *App) InspectorEditsPending() bool {
 	_, dirty := a.inspectorDraft()
 	_, multi := strings.CutPrefix(a.Inspector.Editing, "multi-")
-	return dirty || len(a.Inspector.Pending) > 0 || multi || a.Inspector.MultiSaving || a.annotationSavesPending()
+	return dirty || len(a.Inspector.Pending) > 0 || multi || a.Inspector.MultiSaving
 }
 
-// 批注写失败也算在这里：退出、换图库时一样给「放弃修改」的出口。
 func (a *App) InspectorEditsFailed() bool {
-	return slices.ContainsFunc(a.Inspector.Pending, func(edit inspectorEdit) bool { return edit.Failed }) || a.annotationSavesFailed()
+	return slices.ContainsFunc(a.Inspector.Pending, func(edit inspectorEdit) bool { return edit.Failed })
 }
 
 func (a *App) saveInspectorEdits() {
@@ -1049,8 +1016,6 @@ func (a *App) FlushInspectorEdits() {
 		a.Inspector.Pending[i].Failed = false
 	}
 	a.ContinueInspectorEdits()
-	// 预览里正在写的批注也一起存下，之前没写进去的再试一次。
-	a.flushPreviewAnnotations()
 }
 
 // 每帧推进已失焦的草稿，不碰正在输入的内容，也不循环重试失败写入。
@@ -1167,8 +1132,7 @@ func (a *App) DiscardInspectorEdits(reason string) bool {
 		slog.Warn("放弃未保存的检查器修改", "reason", reason, "asset", edit.ID, "name", edit.Name, "note", edit.Note, "source", edit.Source)
 	}
 	a.Inspector = inspectorState{}
-	annotations := a.discardAnnotationSaves(reason)
-	return len(edits) > 0 || annotations
+	return len(edits) > 0
 }
 
 // 分组标题比下面的字段名（类型、尺寸……）再浅一档，一眼能分出是标题还是字段。

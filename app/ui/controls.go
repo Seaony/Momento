@@ -6,41 +6,22 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-func styleSegment(c *ui.Context, item ui.Element, selected bool) {
-	theme := c.Theme()
-	palette := paletteFor(theme)
-	background, text := ui.Transparent, theme.TextMuted
-	if selected {
-		text = titleColor(theme)
-	} else if item.Pressed() {
-		background, text = palette.Pressed, theme.Text
-	} else if item.Hovered() {
-		background, text = palette.Hover, theme.Text
-	}
-	animateColors(item, background, text)
-}
-
-// 底块画在整组文字后面，移动途中也不会盖住相邻选项。
-func slidingSegmentTrack(c *ui.Context, track ui.Element, items []ui.Element, selected int, padding, gap float32) {
-	theme := c.Theme()
-	palette := paletteFor(theme)
-	background := palette.SegmentSelected
-	hover, pressed := palette.SegmentSelected.Mix(palette.Text, .04), palette.SegmentSelected.Mix(palette.Text, .08)
-	if items[selected].Pressed() {
-		background = pressed
-	} else if items[selected].Hovered() {
-		background = hover
-	}
-	background = track.AnimateColor("indicator-color", background, motionColor)
-	position := track.AnimateTo("indicator-position", float32(selected), motionSpring)
-	track.Draw(func(p *ui.Painter, r ui.Rect) {
-		inset := padding + 1
-		width := (r.W - inset*2 - gap*float32(len(items)-1)) / float32(len(items))
-		box := ui.Rect{X: r.X + inset + position*(width+gap), Y: r.Y + inset, W: width, H: r.H - inset*2}
-		p.Shadow(box, radiusSmall, 0, 1, 2, 0, palette.Shadow)
-		p.Fill(box, background, radiusSmall)
-		p.Stroke(box, palette.BorderSubtle, radiusSmall, 1)
+// choiceMenu 是「几选一」：按钮上写当前选项，点开是打勾的菜单。设置、重命名方式、智能文件夹的匹配方式都用它。
+func choiceMenu(c *ui.Context, label string, selected int, labels []string, choose func(int)) ui.Element {
+	// 读屏软件不读按钮里的文字，当前选项要单独作为值报出来。
+	trigger := settingsMenuButton(c, label).Value(labels[selected])
+	trigger.Children(func() {
+		ui.Text(c, labels[selected]).FontSize(fontBody).SingleLine()
+		symbol := appSymbol(c, "chevrons-up-down").Size(iconSmall, iconSmall).Shrink(0)
+		symbol.TextColor(symbol.AnimateColor("symbol-color", symbolColor(c.Theme(), trigger.Hovered()), motionColor))
+	}).Menu(func(m *ui.Menu) {
+		for i, text := range labels {
+			if m.Item(text).Radio(i == selected).Chosen() {
+				choose(i)
+			}
+		}
 	})
+	return trigger
 }
 
 func settingsCheckbox(c *ui.Context, checked *bool, label string) ui.Element {

@@ -299,32 +299,14 @@ func TestShapes(t *testing.T) {
 	}
 }
 
-func TestRatingFilterAndSort(t *testing.T) {
-	index := New(model.Snapshot{Assets: []model.Asset{
-		{ID: "none", Name: "a"},
-		{ID: "three", Name: "b", Rating: 3},
-		{ID: "five", Name: "c", Rating: 5},
-		{ID: "one", Name: "d", Rating: 1},
-	}})
-	if got := assetIDs(index.Query(Query{Ratings: []int{0, 5}, Sort: "name"})); !slices.Equal(got, []string{"none", "five"}) {
-		t.Fatalf("评分筛选：%v", got)
-	}
-	if got := assetIDs(index.Query(Query{Sort: "rating", Descending: true})); !slices.Equal(got, []string{"five", "three", "one", "none"}) {
-		t.Fatalf("按评分排序：%v", got)
-	}
-	if counts := index.RatingCounts(Query{Ratings: []int{5}}); counts != [6]int{1, 1, 0, 1, 0, 1} {
-		t.Fatalf("评分数量：%v", counts)
-	}
-}
-
 func TestTypeAndTagCounts(t *testing.T) {
 	index := New(model.Snapshot{Assets: []model.Asset{
-		{ID: "a", Name: "a", Extension: ".JPG", TagIDs: []string{"cat"}, Rating: 5},
+		{ID: "a", Name: "a", Extension: ".JPG", TagIDs: []string{"cat"}},
 		{ID: "b", Name: "b", Extension: "jpg", TagIDs: []string{"cat", "dog"}},
-		{ID: "c", Name: "c", Extension: "mp4", Kind: model.KindVideo, TagIDs: []string{"dog"}, Rating: 5},
+		{ID: "c", Name: "c", Extension: "mp4", Kind: model.KindVideo, TagIDs: []string{"dog"}},
 	}})
 	// 自己这一组的条件不影响自己的数量，其他条件照常生效。
-	extensions, kinds := index.TypeCounts(Query{Extensions: []string{"mp4"}, Ratings: []int{5}})
+	extensions, kinds := index.TypeCounts(Query{Extensions: []string{"mp4"}, TagIDs: []string{"dog"}})
 	if extensions["jpg"] != 1 || extensions["mp4"] != 1 || kinds[model.KindVideo] != 1 {
 		t.Fatalf("类型数量：%v %v", extensions, kinds)
 	}
@@ -359,16 +341,5 @@ func TestIncludeSubfolders(t *testing.T) {
 	}
 	if got := assetIDs(index.Query(Query{Scope: "folder", FolderID: "loop-a", IncludeSubfolders: true, Sort: "name"})); !slices.Equal(got, []string{"looped"}) {
 		t.Fatalf("有环的文件夹：%v", got)
-	}
-}
-
-// 搜索也查区域批注的文字。
-func TestSearchMatchesAnnotationText(t *testing.T) {
-	snapshot := sampleSnapshot()
-	snapshot.Assets[0].Annotations = []model.Annotation{{ID: "n", X: .1, Y: .1, W: .2, H: .2, Text: "换成品牌紫"}}
-	index := New(snapshot)
-	got := index.Query(Query{Search: "品牌紫"})
-	if len(got) != 1 || got[0].ID != snapshot.Assets[0].ID {
-		t.Fatalf("搜不到批注里的字：%v", got)
 	}
 }

@@ -56,29 +56,6 @@ func writeSettingsMotionFrames(t *testing.T, name string, frames []*image.RGBA) 
 	}
 }
 
-func TestSettingsSegmentSlidesAndKeepsBinding(t *testing.T) {
-	a := settingsTestApp("zh-CN", "light")
-	a.Settings.Tab = SettingsPreview
-	tt := polishedSettingsTester(a, UpdateCheckStatus{}, nil)
-	if err := tt.Click(a.T("preview_fit_window")); err != nil {
-		t.Fatal(err)
-	}
-	frames := settingsMotionFrames(tt)
-	if a.Preferences.PreviewFit != "fit" {
-		t.Fatal("分段切换没有保存值")
-	}
-	if bytes.Equal(frames[0].Pix, frames[1].Pix) || bytes.Equal(frames[1].Pix, frames[3].Pix) {
-		t.Fatal("分段底块没有经过中间位置")
-	}
-	tt.Key(0, ui.KeyLeft)
-	if a.Preferences.PreviewFit != "smart" {
-		t.Fatal("分段动画打断了方向键切换")
-	}
-	if os.Getenv("MOMENTO_SETTINGS_MOTION") == "1" {
-		writeSettingsMotionFrames(t, "settings-segment-0-35-70-100", frames)
-	}
-}
-
 func TestSettingsPageAndDialogTransitions(t *testing.T) {
 	a := settingsTestApp("zh-CN", "light")
 	tt := polishedSettingsTester(a, UpdateCheckStatus{}, nil)

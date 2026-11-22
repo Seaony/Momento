@@ -134,7 +134,7 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 	}
 	dialogPanel(c.Key("smart-folder-editor"), &state.SmartOpen, 648, "smart-folder", title, func() {
 		fieldStyle(c, ui.TextInput(c.Key("smart-name"), &state.SmartName).FillWidth().Label(a.T("smart_folder_name")).Placeholder(a.T("smart_folder_name")).PlaceholderColor(placeholderColor(c)).AutoFocus().Disabled(state.Saving))
-		settingsSegments(c.Key("smart-match"), a.T("smart_match"), &state.SmartMatch, a.T("smart_all"), a.T("smart_any")).Disabled(state.Saving)
+		choiceMenu(c.Key("smart-match"), a.T("smart_match"), state.SmartMatch, []string{a.T("smart_all"), a.T("smart_any")}, func(i int) { state.SmartMatch = i }).AlignSelf(ui.Start).Disabled(state.Saving)
 		_, height := c.Size()
 		ui.Scroll(c.Key("smart-rules")).Scrollbars(false).TrackScroll(&state.RulesScroll).MaxHeight(max(120, min(280, height-312))).FillWidth().Gap(space8).Children(func() {
 			remove := -1
@@ -187,7 +187,7 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 	}
 }
 
-var smartFields = []string{"name", "extension", "tag", "color", "rating", "width", "height", "size", "duration", "added", "note", "source"}
+var smartFields = []string{"name", "extension", "tag", "color", "width", "height", "size", "duration", "added", "note", "source"}
 
 // smartRuleUnits 是编辑时的单位换成存储单位的倍数：大小编辑用 MB、存字节，时长编辑用秒、存毫秒。
 var smartRuleUnits = map[string]int64{"size": 1 << 20, "duration": 1000}
@@ -198,8 +198,6 @@ func smartOperators(field string) []string {
 		return catalog.TextOperators
 	case "width", "height", "size":
 		return []string{"gte", "lte", "eq", "between"}
-	case "rating":
-		return []string{"gte", "lte", "eq"}
 	case "duration":
 		// 时长存的是毫秒，「等于」几乎不会命中，不给。
 		return []string{"gte", "lte", "between"}
@@ -288,14 +286,6 @@ func (a *App) smartRuleValue(c *ui.Context, rule *model.SmartRule, index int) {
 			ids = append(ids, family.ID)
 		}
 		smartSelect(c, &rule.Value, ids, func(id string) string { return a.T("color_" + id) }).Grow(1).MinWidth(0).Label(label).Disabled(a.GBrowsing.Saving)
-		return
-	}
-	if rule.Field == "rating" {
-		// 空星是 0，也就是没评分；刚换到评分时值是空的，按 0 存。
-		stars, _ := strconv.Atoi(rule.Value)
-		ratingStars(c, &stars, label).Disabled(a.GBrowsing.Saving)
-		rule.Value = strconv.Itoa(stars)
-		ui.Spacer(c)
 		return
 	}
 	placeholder := ""

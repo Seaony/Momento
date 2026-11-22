@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-const SchemaVersion = 6
+const SchemaVersion = 4
 
 type Manifest struct {
 	SchemaVersion int    `json:"schemaVersion"`
@@ -50,21 +50,6 @@ type Asset struct {
 	DurationMS int64 `json:"durationMS"`
 	// MotionPath 是实况照片那段视频在图库包里的相对路径，其他素材为空。
 	MotionPath string `json:"motionPath"`
-	// Rating 是星级评分，0 是没评分，1～5 星。
-	Rating int `json:"rating"`
-	// Annotations 是图上的区域批注，按添加时间排。
-	Annotations []Annotation `json:"annotations,omitempty"`
-}
-
-// Annotation 是图上的一块区域批注。X、Y、W、H 是相对图（已按 EXIF 转正、没手动旋转时）宽高的比例，0～1。
-type Annotation struct {
-	ID        string    `json:"id"`
-	X         float64   `json:"x"`
-	Y         float64   `json:"y"`
-	W         float64   `json:"w"`
-	H         float64   `json:"h"`
-	Text      string    `json:"text"`
-	CreatedAt time.Time `json:"createdAt"`
 }
 
 const (

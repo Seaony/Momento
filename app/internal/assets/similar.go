@@ -332,7 +332,7 @@ func similarShape(a, b model.Asset) bool {
 	return ra/rb < 1.1 && rb/ra < 1.1
 }
 
-// BestFirst 决定一组相似图里保留哪张：像素多的、文件大的、评分高的、先添加的在前。
+// BestFirst 决定一组相似图里保留哪张：像素多的、文件大的、先添加的在前。
 func BestFirst(a, b model.Asset) int {
 	if pa, pb := a.Width*a.Height, b.Width*b.Height; pa != pb {
 		return pb - pa
@@ -342,9 +342,6 @@ func BestFirst(a, b model.Asset) int {
 			return -1
 		}
 		return 1
-	}
-	if a.Rating != b.Rating {
-		return b.Rating - a.Rating
 	}
 	if c := a.CreatedAt.Compare(b.CreatedAt); c != 0 {
 		return c

@@ -44,7 +44,7 @@ func TestSettingsPolishLocalizedLayout(t *testing.T) {
 					for _, navigation := range settingsTabs {
 						measure[a.T(navigation.key)] = 0
 					}
-					for _, key := range []string{"close_background", "close_quit", "rename", "folder_expand", "momento_preview", "default_app", "system_preview", "wheel_navigate", "wheel_zoom", "preview_smart", "preview_fit_window", "preview_smooth", "preview_pixelated", "preview_checker", "preview_solid", "all", "tag_management", "trash", "favorites", "uncategorized", "untagged", "random_browse", "quick_access", "smart_folders", "folders"} {
+					for _, key := range []string{"close_background", "close_quit", "rename", "folder_expand", "momento_preview", "default_app", "system_preview", "wheel_navigate", "wheel_zoom", "preview_smart", "preview_fit_window", "preview_smooth", "preview_pixelated", "preview_checker", "preview_solid", "follow_system", "all", "tag_management", "trash", "favorites", "uncategorized", "untagged", "random_browse", "quick_access", "smart_folders", "folders"} {
 						measure[a.T(key)] = 0
 					}
 					tt := polishedSettingsTester(a, UpdateCheckStatus{}, measure)
@@ -70,7 +70,13 @@ func TestSettingsPolishLocalizedLayout(t *testing.T) {
 								t.Errorf("选项文字被截断: %q, 文字 %.1f, 可用 %.1f", item.Name, width, item.Bounds.W-padding)
 							}
 							fallthrough
-						case ui.RoleButton, ui.RoleMenuButton, ui.RoleSwitch, ui.RoleTextField:
+						case ui.RoleMenuButton:
+							// 几选一菜单按钮：当前选项文字 + 左右各 8 + 间距 8 + 箭头 14 要放得下。
+							if width, ok := measure[item.Value]; ok && width > item.Bounds.W-38+1 {
+								t.Errorf("菜单按钮文字被截断: %q, 文字 %.1f, 可用 %.1f", item.Value, width, item.Bounds.W-38)
+							}
+							fallthrough
+						case ui.RoleButton, ui.RoleSwitch, ui.RoleTextField:
 							if item.Bounds.X < 223 || item.Bounds.X+item.Bounds.W > 737 {
 								t.Errorf("控件超出内容区: %s %+v", item.Name, item.Bounds)
 							}

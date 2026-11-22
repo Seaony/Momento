@@ -42,52 +42,31 @@ func (a *App) switchSettingHint(c *ui.Context, key, hint string, value *bool) bo
 	return changed
 }
 
-func settingsSegments(c *ui.Context, label string, selected *int, labels ...string) ui.Element {
-	theme := c.Theme()
-	p := paletteFor(theme)
-	parts := ui.SegmentedBase(c, selected, len(labels))
-	items := make([]ui.Element, len(labels))
-	parts.Track.AlignItems(ui.Stretch).Padding(space4).Gap(space4).Radius(radiusControl).Background(p.Subtle).Border(1, p.BorderSubtle).Label(label).Children(func() {
-		for i, text := range labels {
-			segment := parts.Segment(i).MinHeight(controlSmall).Padding(space4, space12).Radius(radiusSmall).Cursor(ui.CursorPointer).Label(text)
-			styleSegment(c, segment, i == *selected)
-			items[i] = segment
-			segment.Children(func() { ui.Text(c, text).SingleLine() })
-		}
-	})
-	slidingSegmentTrack(c, parts.Track, items, *selected, space4, space4)
-	return parts.Track.FillEqually()
-}
-
 func (a *App) stringSetting(c *ui.Context, key string, value *string, codes, labels []string) {
-	ui.Column(c.Key(key)).FillWidth().Padding(space12, space16).Gap(space8).Children(func() {
-		ui.Text(c, a.T(key))
-		selected := max(0, slices.Index(codes, *value))
-		translated := make([]string, len(labels))
-		for i, label := range labels {
-			translated[i] = a.T(label)
-		}
-		if settingsSegments(c, a.T(key), &selected, translated...).Changed() {
-			*value = codes[selected]
+	translated := make([]string, len(labels))
+	for i, label := range labels {
+		translated[i] = a.T(label)
+	}
+	settingsRow(c.Key(key), func() {
+		ui.Text(c, a.T(key)).Grow(1).MinWidth(0)
+		choiceMenu(c.Key("choice"), a.T(key), max(0, slices.Index(codes, *value)), translated, func(i int) {
+			*value = codes[i]
 			a.SavePreferences()
-		}
+		})
 	})
 }
 
 func (a *App) boolSetting(c *ui.Context, key string, value *bool, firstValue bool, firstKey, secondKey string) {
-	ui.Column(c.Key(key)).FillWidth().Padding(space12, space16).Gap(space8).Children(func() {
-		ui.Text(c, a.T(key))
-		selected := 0
-		if *value != firstValue {
-			selected = 1
-		}
-		if settingsSegments(c, a.T(key), &selected, a.T(firstKey), a.T(secondKey)).Changed() {
-			*value = firstValue
-			if selected == 1 {
-				*value = !firstValue
-			}
+	selected := 0
+	if *value != firstValue {
+		selected = 1
+	}
+	settingsRow(c.Key(key), func() {
+		ui.Text(c, a.T(key)).Grow(1).MinWidth(0)
+		choiceMenu(c.Key("choice"), a.T(key), selected, []string{a.T(firstKey), a.T(secondKey)}, func(i int) {
+			*value = firstValue == (i == 0)
 			a.SavePreferences()
-		}
+		})
 	})
 }
 

@@ -48,7 +48,10 @@ func TestSmartEditorChangesFieldsAndPreservesInvalidDraft(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Type("design")
-	if err := tt.Click(a.T("smart_any")); err != nil {
+	if err := tt.Click(a.T("smart_match")); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem(a.T("smart_any")); err != nil {
 		t.Fatal(err)
 	}
 	if err := tt.Click(a.T("add_smart_rule")); err != nil {
@@ -290,8 +293,8 @@ func TestSmartEditorLocalizedTextFits(t *testing.T) {
 					}
 					checks := []textCheck{
 						{a.T("smart_folder_create_title"), a.T("smart_folder_create_title"), 20, 700, 0},
-						{a.T("smart_all"), a.T("smart_all"), 13, 400, 24},
-						{a.T("smart_any"), a.T("smart_any"), 13, 400, 24},
+						// 匹配方式按钮：当前选项文字 + 左右各 8 + 间距 8 + 箭头 14。
+						{a.T("smart_match"), []string{a.T("smart_all"), a.T("smart_any")}[match], 13, 400, 38},
 						{a.T("add_smart_rule"), a.T("add_smart_rule"), 13, 400, 0},
 						{a.T("cancel"), a.T("cancel"), 13, 400, 0},
 						{a.T("save"), a.T("save"), 13, 400, 0},

@@ -23,8 +23,6 @@ type Query struct {
 	Kinds []string
 	// Shapes 按形状和比例筛（ShapeLandscape 等，或 "16:9" 这种比例，不分横竖），命中任一个就算。
 	Shapes []string
-	// Ratings 按星级筛，0 是没评分，命中任一个就算。
-	Ratings []int
 	// IncludeSubfolders 为 true 时，文件夹范围也包括它下面各层子文件夹里的素材。
 	IncludeSubfolders bool
 	// folderSet 是 IncludeSubfolders 时算出的文件夹和全部子孙文件夹。
@@ -107,7 +105,7 @@ func New(snapshot model.Snapshot) *Index {
 		idx.counts.Folders[folder.ID] = 0
 	}
 	for i, asset := range snapshot.Assets {
-		e := entry{name: strings.ToLower(asset.Name), extension: normalizedExtension(asset.Extension), note: strings.ToLower(searchNote(asset)), source: strings.ToLower(asset.SourceURL)}
+		e := entry{name: strings.ToLower(asset.Name), extension: normalizedExtension(asset.Extension), note: strings.ToLower(asset.Note), source: strings.ToLower(asset.SourceURL)}
 		for _, id := range asset.TagIDs {
 			e.tagNames = append(e.tagNames, tagNames[id])
 		}
@@ -184,7 +182,7 @@ func (idx *Index) eachMatching(q Query, fn func(int)) {
 		if !inScope(asset, q) || (smart != nil && !matchesValidatedSmart(asset, smart)) || !matchesColors(asset.Colors, q.ColorFamilies) || !matchesAny(asset.TagIDs, q.TagIDs) {
 			continue
 		}
-		if !idx.matchesFilters(i, extensions, q.Kinds, search) || !matchesShapes(asset, q.Shapes) || (len(q.Ratings) > 0 && !slices.Contains(q.Ratings, asset.Rating)) {
+		if !idx.matchesFilters(i, extensions, q.Kinds, search) || !matchesShapes(asset, q.Shapes) {
 			continue
 		}
 		fn(i)
@@ -194,7 +192,7 @@ func (idx *Index) eachMatching(q Query, fn func(int)) {
 // order 返回按查询的排序方式排好的全部素材下标；排序是全序（最后按 ID 定），所以先排全部再过滤和先过滤再排结果一样。
 func (idx *Index) order(q Query) []int32 {
 	key := orderKey{field: "added", descending: q.Descending || q.Sort == "", recent: q.Scope == "recent"}
-	if q.Sort == "name" || q.Sort == "size" || q.Sort == "rating" {
+	if q.Sort == "name" || q.Sort == "size" {
 		key.field = q.Sort
 	}
 	idx.mu.Lock()
@@ -219,8 +217,6 @@ func (idx *Index) order(q Query) []int32 {
 			result = strings.Compare(idx.entries[left].name, idx.entries[right].name)
 		case "size":
 			result = cmp.Compare(a.Size, b.Size)
-		case "rating":
-			result = cmp.Compare(a.Rating, b.Rating)
 		default:
 			result = a.CreatedAt.Compare(b.CreatedAt)
 		}
@@ -343,16 +339,4 @@ func cloneSmartFolders(folders []model.SmartFolder) []model.SmartFolder {
 		copy[i].Rules = slices.Clone(copy[i].Rules)
 	}
 	return copy
-}
-
-// searchNote 是搜索时当作备注的文字：备注加上各块区域批注。
-func searchNote(asset model.Asset) string {
-	if len(asset.Annotations) == 0 {
-		return asset.Note
-	}
-	parts := []string{asset.Note}
-	for _, note := range asset.Annotations {
-		parts = append(parts, note.Text)
-	}
-	return strings.Join(parts, "\n")
 }

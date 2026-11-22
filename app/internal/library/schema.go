@@ -117,26 +117,4 @@ CREATE INDEX assets_kind ON assets(kind);
 PRAGMA user_version = 4;
 `
 
-// v5：星级评分，0 是没评分，1～5 星。
-const migrationV5 = `
-ALTER TABLE assets ADD COLUMN rating INTEGER NOT NULL DEFAULT 0 CHECK (rating BETWEEN 0 AND 5);
-PRAGMA user_version = 5;
-`
-
-// v6：图上的区域批注。x、y、w、h 是相对图（已按 EXIF 转正、没手动旋转时）宽高的比例，手动旋转后界面换算，框还在原处。
-const migrationV6 = `
-CREATE TABLE asset_annotations (
- id TEXT PRIMARY KEY NOT NULL,
- asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
- x REAL NOT NULL CHECK (x >= 0 AND x < 1),
- y REAL NOT NULL CHECK (y >= 0 AND y < 1),
- w REAL NOT NULL CHECK (w > 0 AND x + w <= 1.000001),
- h REAL NOT NULL CHECK (h > 0 AND y + h <= 1.000001),
- text TEXT NOT NULL DEFAULT '',
- created_at TEXT NOT NULL
-);
-CREATE INDEX asset_annotations_asset ON asset_annotations(asset_id, created_at);
-PRAGMA user_version = 6;
-`
-
-const schema = schemaV1 + migrationV2 + migrationV3 + migrationV4 + migrationV5 + migrationV6
+const schema = schemaV1 + migrationV2 + migrationV3 + migrationV4

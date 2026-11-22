@@ -70,7 +70,6 @@ func TestPromoScreenshots(t *testing.T) {
 		asset.FolderIDs = []string{snapshot.Folders[i%len(snapshot.Folders)].ID}
 		asset.TagIDs = []string{snapshot.Tags[i%len(snapshot.Tags)].ID}
 		asset.Favorite = i%4 == 0
-		asset.Rating = []int{5, 4, 0, 3}[i%4]
 		bitmap, _, err := loadThumbnail(filepath.Join(lib.Root, "thumbnails", asset.ID))
 		if err != nil {
 			t.Fatal(err)

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/Seaony/Momento/app/internal/browser"
@@ -246,24 +247,9 @@ func (a *App) generalSettings(c *ui.Context, update UpdateCheckStatus) {
 func (a *App) languageMenu(c *ui.Context) {
 	codes := []string{"system", "en", "zh-CN", "ja"}
 	labels := []string{a.T("follow_system"), "English", "简体中文", "日本語"}
-	selected := 0
-	for i, code := range codes {
-		if code == a.Preferences.Language {
-			selected = i
-		}
-	}
-	trigger := settingsMenuButton(c, a.T("language"))
-	trigger.Children(func() {
-		ui.Text(c, labels[selected]).SingleLine()
-		symbol := appSymbol(c, "chevrons-up-down").Size(iconSmall, iconSmall).Shrink(0)
-		symbol.TextColor(symbol.AnimateColor("symbol-color", symbolColor(c.Theme(), trigger.Hovered()), motionColor))
-	}).Menu(func(m *ui.Menu) {
-		for i, label := range labels {
-			if m.Item(label).Radio(a.Preferences.Language == codes[i]).Chosen() {
-				a.Preferences.Language = codes[i]
-				a.SavePreferences()
-			}
-		}
+	choiceMenu(c, a.T("language"), max(0, slices.Index(codes, a.Preferences.Language)), labels, func(i int) {
+		a.Preferences.Language = codes[i]
+		a.SavePreferences()
 	})
 }
 

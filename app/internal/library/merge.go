@@ -12,7 +12,7 @@ import (
 )
 
 // MergedAsset 是把 others 合并进 keep 之后 keep 的样子：标签、文件夹取并集，收藏有一个就算，
-// 评分取最高，备注把不同的几段接起来，来源链接 keep 没有时用第一个有的。界面改内存和写库都用它，两边一致。
+// 备注把不同的几段接起来，来源链接 keep 没有时用第一个有的。界面改内存和写库都用它，两边一致。
 func MergedAsset(keep model.Asset, others []model.Asset) model.Asset {
 	merged := keep
 	merged.TagIDs = slices.Clone(keep.TagIDs)
@@ -33,7 +33,6 @@ func MergedAsset(keep model.Asset, others []model.Asset) model.Asset {
 			}
 		}
 		merged.Favorite = merged.Favorite || other.Favorite
-		merged.Rating = max(merged.Rating, other.Rating)
 		if note := strings.TrimSpace(other.Note); note != "" && !slices.ContainsFunc(notes, func(n string) bool { return strings.TrimSpace(n) == note }) {
 			notes = append(notes, other.Note)
 		}
@@ -77,8 +76,8 @@ func (l *Library) MergeAssets(ctx context.Context, groups ...MergeGroup) error {
 func mergeGroup(ctx context.Context, tx *sql.Tx, group MergeGroup, now string) error {
 	keep := group.Keep
 	merged := MergedAsset(keep, group.Others)
-	if err := changed(tx.ExecContext(ctx, "UPDATE assets SET note=?,source_url=?,favorite=?,rating=?,updated_at=? WHERE id=? AND trashed=0",
-		merged.Note, merged.SourceURL, merged.Favorite, merged.Rating, now, keep.ID)); err != nil {
+	if err := changed(tx.ExecContext(ctx, "UPDATE assets SET note=?,source_url=?,favorite=?,updated_at=? WHERE id=? AND trashed=0",
+		merged.Note, merged.SourceURL, merged.Favorite, now, keep.ID)); err != nil {
 		return err
 	}
 	for _, id := range merged.TagIDs {

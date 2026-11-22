@@ -13,7 +13,6 @@ var themeKeys = []string{"system", "light", "dark"}
 type designPalette struct {
 	Background, Sidebar, Raised, Subtle, Hover, Pressed, Selected ui.Color
 	BorderSubtle, Border, Text, TextSecondary, TextTertiary       ui.Color
-	SegmentSelected                                               ui.Color
 	// 表单控件：Field 底 + BorderSubtle 边框一起表现层次，聚焦时换成浮起面 + 焦点色。
 	// 深色下 Field 和视图切换器的轨道同色（Subtle），压在背景上像一道浅槽，不比卡片更亮。
 	Field, FieldHover                                         ui.Color
@@ -22,12 +21,11 @@ type designPalette struct {
 }
 
 var lightPalette = designPalette{
-	Background: ui.Hex("#F9FCFF"), Sidebar: ui.Hex("#F0F8FF"), Raised: ui.Hex("#FFFFFF"),
-	Subtle: ui.Hex("#E7F2FE"), Hover: ui.Hex("#DFEDFC"), Pressed: ui.Hex("#D1E5F9"), Selected: ui.Hex("#FFFFFF"),
-	BorderSubtle: ui.Hex("#D9E8F8"), Border: ui.Hex("#C6DBF2"),
-	Text: ui.Hex("#17232F"), TextSecondary: ui.Hex("#4D6073"), TextTertiary: ui.Hex("#5B6F84"),
-	SegmentSelected: ui.Hex("#FFFFFF"),
-	Field:           ui.Hex("#E9F2FD"), FieldHover: ui.Hex("#E1EDFB"),
+	Background: ui.Hex("#FCFCFC"), Sidebar: ui.Hex("#EFEFEF"), Raised: ui.Hex("#FFFFFF"),
+	Subtle: ui.Hex("#E7E7E7"), Hover: ui.Hex("#E3E3E3"), Pressed: ui.Hex("#D9D9D9"), Selected: ui.Hex("#FFFFFF"),
+	BorderSubtle: ui.Hex("#DFDFDF"), Border: ui.Hex("#CFCFCF"),
+	Text: ui.Hex("#17232F"), TextSecondary: ui.Hex("#4D6073"), TextTertiary: ui.Hex("#56697D"),
+	Field: ui.Hex("#E9E9E9"), FieldHover: ui.Hex("#E3E3E3"),
 	// 品牌蓝取自 logo 的天蓝底，加深到白字对比度 5.2，主按钮上的字才看得清。
 	Accent: ui.Hex("#1069DA"), AccentHover: ui.Hex("#1C71E2"), AccentPressed: ui.Hex("#0B5FC8"),
 	OnAccent: ui.Hex("#FFFFFF"), Focus: ui.Hex("#0462D3"), Link: ui.Hex("#0555B7"),
@@ -41,8 +39,7 @@ var darkPalette = designPalette{
 	Subtle: ui.Hex("#161A1D"), Hover: ui.Hex("#21262A"), Pressed: ui.Hex("#282E33"), Selected: ui.Hex("#1E2327"),
 	BorderSubtle: ui.Hex("#202529"), Border: ui.Hex("#2B3138"),
 	Text: ui.Hex("#EEF1F5"), TextSecondary: ui.Hex("#A6AFB9"), TextTertiary: ui.Hex("#848D96"),
-	SegmentSelected: ui.Hex("#282E33"),
-	Field:           ui.Hex("#161A1D"), FieldHover: ui.Hex("#1B1F23"),
+	Field: ui.Hex("#161A1D"), FieldHover: ui.Hex("#1B1F23"),
 	// 品牌色和浅色一样；焦点框和链接文字用浅一些的蓝，深底上好认。
 	Accent: ui.Hex("#1069DA"), AccentHover: ui.Hex("#1C71E2"), AccentPressed: ui.Hex("#0B5FC8"),
 	OnAccent: ui.Hex("#FFFFFF"), Focus: ui.Hex("#5A98F3"), Link: ui.Hex("#92BDFB"),

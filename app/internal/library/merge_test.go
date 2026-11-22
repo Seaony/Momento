@@ -7,7 +7,7 @@ import (
 	"github.com/Seaony/Momento/app/internal/model"
 )
 
-// 合并：标签、文件夹并到保留的那张，评分取高，备注接起来，其余进回收站；中途失败整体回滚。
+// 合并：标签、文件夹并到保留的那张，备注接起来，其余进回收站；中途失败整体回滚。
 func TestMergeAssets(t *testing.T) {
 	l := newTestLibrary(t)
 	for _, id := range []string{"keep", "dup1", "dup2"} {
@@ -25,9 +25,6 @@ func TestMergeAssets(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := l.SetAssetFolders(t.Context(), []string{"dup2"}, []string{folder.ID}, true); err != nil {
-		t.Fatal(err)
-	}
-	if err := l.SetRating(t.Context(), []string{"dup2"}, 4); err != nil {
 		t.Fatal(err)
 	}
 	if err := l.UpdateAssetDetails(t.Context(), "keep", "原备注", ""); err != nil {
@@ -65,7 +62,7 @@ func TestMergeAssets(t *testing.T) {
 		switch asset.ID {
 		case "keep":
 			want := MergedAsset(keep, []model.Asset{dup1, dup2})
-			if asset.Trashed || asset.Rating != 4 || asset.Note != "原备注\n\n另一段" || asset.SourceURL != "https://example.com/1" ||
+			if asset.Trashed || asset.Note != "原备注\n\n另一段" || asset.SourceURL != "https://example.com/1" ||
 				!slices.Equal(asset.TagIDs, []string{tag.ID}) || !slices.Equal(asset.FolderIDs, []string{folder.ID}) || asset.Note != want.Note {
 				t.Fatalf("保留的那张没合并对：%+v", asset)
 			}

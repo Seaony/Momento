@@ -22,9 +22,9 @@ func ValidateSmartFolder(folder model.SmartFolder) error {
 			valid = slices.Contains(TextOperators, rule.Operator) && strings.TrimSpace(rule.Value) != ""
 		case "extension", "tag", "color":
 			valid = rule.Operator == "equals" && strings.TrimSpace(rule.Value) != ""
-		case "width", "height", "size", "duration", "rating":
+		case "width", "height", "size", "duration":
 			low, high, err := numericRange(rule)
-			valid = err == nil && low >= 0 && low <= high && (rule.Field != "rating" || high <= 5)
+			valid = err == nil && low >= 0 && low <= high
 		case "added":
 			_, err := parseRuleDate(rule.Value)
 			valid = err == nil && slices.Contains([]string{"after", "before"}, rule.Operator)
@@ -116,7 +116,7 @@ func matchesSmartRule(asset *model.Asset, rule *model.SmartRule) bool {
 		return slices.Contains(asset.TagIDs, rule.Value)
 	case "color":
 		return slices.ContainsFunc(asset.Colors, func(c model.Color) bool { return strings.EqualFold(c.Family, value) || strings.EqualFold(c.Hex, value) })
-	case "width", "height", "size", "duration", "rating":
+	case "width", "height", "size", "duration":
 		low, high, err := numericRange(rule)
 		if err != nil {
 			return false
@@ -138,9 +138,6 @@ func matchesSmartRule(asset *model.Asset, rule *model.SmartRule) bool {
 		}
 		if rule.Field == "duration" {
 			actual = asset.DurationMS
-		}
-		if rule.Field == "rating" {
-			actual = int64(asset.Rating)
 		}
 		switch rule.Operator {
 		case "eq":

@@ -13,7 +13,7 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// 第八阶段（Eagle 第一批）改到的界面：评分、筛选和排序、智能条件、批量重命名、子文件夹卡片、最近使用、检查器路径。
+// 第八阶段（Eagle 第一批）改到的界面：筛选和排序、智能条件、批量重命名、子文件夹卡片、最近使用、检查器路径。
 func TestEagleFeatureScreenshots(t *testing.T) {
 	if os.Getenv("MOMENTO_STAGE8_SHOTS") != "1" {
 		t.Skip("设置 MOMENTO_STAGE8_SHOTS=1 生成第八阶段截图")
@@ -23,7 +23,7 @@ func TestEagleFeatureScreenshots(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixture := newScreenshotFixture(t)
-	states := []string{"single", "multiple", "filter", "sort", "smart", "rename-format", "rename-replace", "subfolders", "recent", "smart-more", "preview-flip", "similar", "similar-progress", "export-resize", "export-invalid", "annotate-edit", "annotate-hover", "inspector-annotations", "justified", "slideshow"}
+	states := []string{"single", "multiple", "filter", "sort", "smart", "rename-format", "rename-replace", "subfolders", "recent", "smart-more", "preview-flip", "similar", "similar-progress", "export-resize", "export-invalid", "justified", "slideshow"}
 	if only := os.Getenv("MOMENTO_STAGE8_ONLY"); only != "" {
 		states = strings.Split(only, ",")
 	}
@@ -32,9 +32,6 @@ func TestEagleFeatureScreenshots(t *testing.T) {
 			a := fixture.app(t, "small", "zh-CN", theme)
 			snapshot := a.Snapshot
 			snapshot.Assets = append([]model.Asset(nil), snapshot.Assets...)
-			for i := range snapshot.Assets {
-				snapshot.Assets[i].Rating = []int{5, 3, 0, 4, 0, 1, 3}[i%7]
-			}
 			snapshot.Folders = []model.Folder{
 				{ID: "travel", Name: "旅行", Icon: "camera"},
 				{ID: "japan", Name: "日本", ParentID: "travel", SortIndex: 0},
@@ -60,17 +57,17 @@ func TestEagleFeatureScreenshots(t *testing.T) {
 				}
 			case "filter":
 				a.Toolbar.FilterOpen = true
-				a.Query.Ratings = []int{5}
+				a.Query.Shapes = []string{"landscape"}
 				a.Refine()
 			case "sort":
-				a.Query.Sort, a.Query.Descending = "rating", true
+				a.Query.Sort, a.Query.Descending = "size", true
 				a.Refine()
 				a.Toolbar.SortOpen = true
 			case "smart":
 				a.Preferences.SmartFolders = true
 				a.EditSmartFolder("")
 				a.GBrowsing.SmartName = "精选"
-				a.GBrowsing.SmartRules = []model.SmartRule{{Field: "rating", Operator: "gte", Value: "4"}}
+				a.GBrowsing.SmartRules = []model.SmartRule{{Field: "width", Operator: "gte", Value: "1920"}}
 			case "rename-format", "rename-replace":
 				ids := make([]string, 0, 5)
 				for _, asset := range a.Visible[:5] {
@@ -113,29 +110,9 @@ func TestEagleFeatureScreenshots(t *testing.T) {
 			case "recent":
 				a.SetScope("recent", "")
 			}
-			if strings.HasPrefix(state, "annotate") || state == "inspector-annotations" {
-				snapshot := a.Snapshot
-				snapshot.Assets = append([]model.Asset(nil), snapshot.Assets...)
-				for i := range snapshot.Assets {
-					if snapshot.Assets[i].ID == a.Visible[0].ID {
-						snapshot.Assets[i].Annotations = []model.Annotation{
-							{ID: "n1", X: .08, Y: .12, W: .34, H: .3, Text: "标题字太细，换中黑"},
-							{ID: "n2", X: .5, Y: .55, W: .4, H: .3, Text: "这块留白可以再大一点"},
-						}
-					}
-				}
-				a.applySnapshot(snapshot)
-				if state == "inspector-annotations" {
-					a.InspectorVisible = true
-					a.Selected.Add(a.Visible[0].ID)
-				}
-			}
 			width, height := 1100, 700
-			if state == "inspector-annotations" {
-				height = 1150 // 批注在检查器下半部分
-			}
 			view := a.View
-			if state == "preview-flip" || strings.HasPrefix(state, "annotate") {
+			if state == "preview-flip" {
 				asset := a.Visible[0]
 				photo, _, _, _, err := assets.PrepareImage(filepath.Join(fixture.root, filepath.FromSlash(asset.RelativePath)))
 				if err != nil {
@@ -144,11 +121,7 @@ func TestEagleFeatureScreenshots(t *testing.T) {
 				a.ShowPreview(asset.ID, false)
 				w := a.Preview.active
 				w.picture.Bitmap = ui.NewBitmap(photo)
-				w.flipped, w.gray = state == "preview-flip", state == "preview-flip"
-				if state == "annotate-edit" {
-					w.notes.On = true
-					w.notes.edit = &annotationEdit{Rect: model.Annotation{X: .55, Y: .1, W: .35, H: .28}, Text: "换成品牌紫"}
-				}
+				w.flipped, w.gray = true, true
 				frame := previewLayout(mygo.Rectangle{Width: 900, Height: 640}, mygo.Rectangle{}, asset, a.Preferences.PreviewFit == "fit", a.Texts.Locale(), 1)
 				width, height = frame.Width, frame.Height
 				view = func(c *ui.Context) { w.view(c, a) }
@@ -181,12 +154,6 @@ func TestEagleFeatureScreenshots(t *testing.T) {
 				// 指针动一下，底部控制条出来。
 				a.Slideshow.shownAt = tt.Now()
 				tt.Move(500, 400)
-				tt.Frame()
-			}
-			if state == "annotate-hover" {
-				// 指针停在第二个框上，框下面显示它的文字。
-				photo := a.Preview.active.picture.imageRect(a.Preview.active.picture.viewport)
-				tt.Move(photo.X+photo.W*.7, photo.Y+photo.H*.7)
 				tt.Frame()
 			}
 			writeScreenshot(t, filepath.Join(dir, state+"-zh-CN-"+theme+".png"), tt)

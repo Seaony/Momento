@@ -32,8 +32,6 @@ type toolbarState struct {
 	typeKindCount map[string]int
 	tagKey        string
 	tagCount      map[string]int
-	ratingKey     string
-	ratingCount   [6]int
 }
 
 var toolbarFamilies = []struct{ ID, Hex string }{
@@ -233,7 +231,7 @@ func (a *App) toolbarFit(c *ui.Context, width float32) (inlineRuler, labels, tit
 	if a.Query.Scope == "trash" {
 		actionText = a.T("empty_trash")
 	}
-	importLabel := 11 + toolbarAddIcon + toolbarChipGap + measure(actionText, toolbarFont, 600) + 14
+	importLabel := 11 + toolbarAddIcon + toolbarChipGap + measure(actionText, toolbarFont, 500) + 14
 	fits := func(inlineRuler, labels, title bool) bool {
 		if a.TagPage {
 			// 标签管理页只有：（侧栏按钮）、标题、搜索、弹簧、（更新）、新建标签。
@@ -248,7 +246,7 @@ func (a *App) toolbarFit(c *ui.Context, width float32) (inlineRuler, labels, tit
 				total, items = total+titleWidth+space8, items+1
 			}
 			if labels {
-				total += 11 + toolbarAddIcon + toolbarChipGap + measure(a.T("new_tag"), toolbarFont, 600) + 14
+				total += 11 + toolbarAddIcon + toolbarChipGap + measure(a.T("new_tag"), toolbarFont, 500) + 14
 			} else {
 				total += toolbarControlHeight
 			}
@@ -411,9 +409,10 @@ func (a *App) toolbarActionStyle(c *ui.Context, button ui.Element, icon, text st
 	}
 	animateColors(button, background, ink)
 	button.Children(func() {
-		toolbarIcon(c, icon).Size(toolbarAddIcon, toolbarAddIcon)
+		// 白字在实色底上显粗、1.5 的线显细：文字用 500，图标用描线加粗到 2 的那套，两边分量相当。
+		ui.Icon(c, iconSidebar[iconName(icon)]).Size(toolbarAddIcon, toolbarAddIcon)
 		if label {
-			ui.Text(c, text).FontSize(toolbarFont).FontWeight(600).SingleLine()
+			ui.Text(c, text).FontSize(toolbarFont).FontWeight(500).SingleLine()
 		}
 	})
 	if label {
@@ -699,27 +698,6 @@ func (a *App) filterPanel(c *ui.Context) {
 					}
 				})
 			})
-			// 一张都没打过星时不显示评分这一段。
-			if counts := a.ratingCounts(); counts != [6]int{counts[0]} || len(a.Query.Ratings) > 0 {
-				popSection(c, a.T("filter_rating"), func() {
-					ui.Row(c.Key("rating-chips")).FillWidth().Wrap().Gap(popChipGap).Children(func() {
-						for rating := 5; rating >= 0; rating-- {
-							chosen := slices.Contains(a.Query.Ratings, rating)
-							if counts[rating] == 0 && !chosen {
-								continue
-							}
-							if popCountChip(c.Key(fmt.Sprint("rating-", rating)), &chosen, "", a.ratingLabel(rating), counts[rating]).Changed() {
-								if chosen {
-									a.Query.Ratings = append(a.Query.Ratings, rating)
-								} else {
-									a.Query.Ratings = slices.DeleteFunc(slices.Clone(a.Query.Ratings), func(r int) bool { return r == rating })
-								}
-								a.Refine()
-							}
-						}
-					})
-				})
-			}
 		})
 	})
 }
@@ -836,7 +814,7 @@ func popFill(p *designPalette, amount float32) ui.Color { return p.Raised.Mix(p.
 // 点别的字段就换过去，再点当前字段就反转方向。弹层不收起，方便连着点。
 func (a *App) sortPanel(c *ui.Context) {
 	ui.Column(c).FillWidth().Gap(0).Children(func() {
-		for _, item := range []struct{ ID, Label string }{{"added", "sort_added"}, {"name", "sort_name"}, {"size", "sort_size"}, {"rating", "sort_rating"}} {
+		for _, item := range []struct{ ID, Label string }{{"added", "sort_added"}, {"name", "sort_name"}, {"size", "sort_size"}} {
 			chosen := a.Query.Sort == item.ID || a.Query.Sort == "" && item.ID == "added"
 			direction := ""
 			if chosen {
@@ -898,8 +876,8 @@ func (a *App) changeSort(field string) {
 		a.Query.Descending = !a.Query.Descending
 	} else {
 		a.Query.Sort = field
-		// 时间和评分默认新的、高的在前。
-		a.Query.Descending = field == "added" || field == "rating"
+		// 时间默认新的在前。
+		a.Query.Descending = field == "added"
 	}
 	a.Refine()
 }
@@ -922,27 +900,16 @@ func (a *App) toolbarExtensions() []string {
 
 // filtering 表示有没有颜色、标签、类型、形状筛选条件。
 func (a *App) filtering() bool {
-	return len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions)+len(a.Query.Kinds)+len(a.Query.Shapes)+len(a.Query.Ratings) > 0
+	return len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions)+len(a.Query.Kinds)+len(a.Query.Shapes) > 0
 }
 
 func (a *App) clearFilters() {
-	a.Query.ColorFamilies, a.Query.TagIDs, a.Query.Extensions, a.Query.Kinds, a.Query.Shapes, a.Query.Ratings = nil, nil, nil, nil, nil, nil
-}
-
-// ratingLabel 是评分筛选的文字：0 是「未评分」，其余是几星。
-func (a *App) ratingLabel(rating int) string {
-	switch rating {
-	case 0:
-		return a.T("rating_none")
-	case 1:
-		return a.T("rating_one_star")
-	}
-	return a.T("rating_stars", rating)
+	a.Query.ColorFamilies, a.Query.TagIDs, a.Query.Extensions, a.Query.Kinds, a.Query.Shapes = nil, nil, nil, nil, nil
 }
 
 // countKey 是筛选面板数量缓存的键：图库或任何条件变了就重算。
 func (a *App) countKey(q catalog.Query) string {
-	return fmt.Sprintf("%d|%s|%s|%s|%v|%v|%v|%v|%v|%v|%v|%s", a.indexVersion, q.Scope, q.FolderID, q.SmartFolderID, q.ColorFamilies, q.TagIDs, q.Extensions, q.Kinds, q.Shapes, q.Ratings, q.IncludeSubfolders, q.Search)
+	return fmt.Sprintf("%d|%s|%s|%s|%v|%v|%v|%v|%v|%v|%s", a.indexVersion, q.Scope, q.FolderID, q.SmartFolderID, q.ColorFamilies, q.TagIDs, q.Extensions, q.Kinds, q.Shapes, q.IncludeSubfolders, q.Search)
 }
 
 // shapeCounts 是筛选面板里各形状的数量，条件和图库没变就用上次算的。
@@ -985,19 +952,6 @@ func (a *App) tagCounts() map[string]int {
 		a.Toolbar.tagKey, a.Toolbar.tagCount = key, a.Index.TagCounts(q)
 	}
 	return a.Toolbar.tagCount
-}
-
-// ratingCounts 是筛选面板里 0～5 星各自的数量，缓存方式同 shapeCounts。
-func (a *App) ratingCounts() [6]int {
-	if a.Index == nil {
-		return [6]int{}
-	}
-	q := a.browseQuery(a.Query)
-	q.Ratings = nil
-	if key := a.countKey(q); a.Toolbar.ratingKey != key {
-		a.Toolbar.ratingKey, a.Toolbar.ratingCount = key, a.Index.RatingCounts(q)
-	}
-	return a.Toolbar.ratingCount
 }
 
 func toolbarToggle(values []string, value string, on bool) []string {

@@ -91,18 +91,6 @@ func (idx *Index) ShapeCounts(q Query) map[string]int {
 	return counts
 }
 
-// RatingCounts 是按当前其他条件（不算评分条件本身）0～5 星各有多少素材，下标就是星数，0 是没评分。
-func (idx *Index) RatingCounts(q Query) [6]int {
-	var counts [6]int
-	q.Ratings = nil
-	idx.eachMatching(q, func(i int) {
-		if rating := idx.snapshot.Assets[i].Rating; rating >= 0 && rating <= 5 {
-			counts[rating]++
-		}
-	})
-	return counts
-}
-
 // TypeCounts 是按当前其他条件（不算文件类型条件本身）各扩展名、各种类有多少素材，给筛选面板标数量。
 func (idx *Index) TypeCounts(q Query) (extensions, kinds map[string]int) {
 	extensions, kinds = map[string]int{}, map[string]int{}

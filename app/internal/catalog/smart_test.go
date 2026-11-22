@@ -151,8 +151,7 @@ func TestInvalidSmartRulesFailClosed(t *testing.T) {
 		{Field: "name", Operator: "contains", Value: " "},
 		{Field: "extension", Operator: "contains", Value: "png"},
 		{Field: "added", Operator: "before", Value: "2026-99-99"},
-		{Field: "rating", Operator: "gte", Value: "6"},
-		{Field: "rating", Operator: "contains", Value: "3"},
+		{Field: "rating", Operator: "gte", Value: "3"},
 	}
 	for _, rule := range invalid {
 		folder := model.SmartFolder{ID: "invalid", Match: "all", Rules: []model.SmartRule{rule}}
@@ -222,20 +221,8 @@ func TestSmartDurationOnlyMatchesMotion(t *testing.T) {
 	}
 }
 
-func TestSmartRating(t *testing.T) {
-	folder := model.SmartFolder{Match: "all", Rules: []model.SmartRule{{Field: "rating", Operator: "gte", Value: "4"}}}
-	if err := ValidateSmartFolder(folder); err != nil {
-		t.Fatal(err)
-	}
-	for rating, want := range []bool{false, false, false, false, true, true} {
-		if got := MatchesSmart(model.Asset{Rating: rating}, folder); got != want {
-			t.Errorf("%d 星 ≥ 4：%v", rating, got)
-		}
-	}
-}
-
 func TestSmartTextOperatorsAndBetween(t *testing.T) {
-	asset := model.Asset{Name: "Poster Draft", SourceURL: "https://www.behance.net/gallery/1", Width: 1920, Height: 1080, Size: 3 << 20, Rating: 3}
+	asset := model.Asset{Name: "Poster Draft", SourceURL: "https://www.behance.net/gallery/1", Width: 1920, Height: 1080, Size: 3 << 20}
 	for _, tc := range []struct {
 		rule model.SmartRule
 		want bool
@@ -248,7 +235,6 @@ func TestSmartTextOperatorsAndBetween(t *testing.T) {
 		{model.SmartRule{Field: "name", Operator: "not_contains", Value: "poster"}, false},
 		{model.SmartRule{Field: "width", Operator: "between", Value: "1280,1920"}, true},
 		{model.SmartRule{Field: "width", Operator: "between", Value: "1921,4000"}, false},
-		{model.SmartRule{Field: "rating", Operator: "between", Value: "2,4"}, true},
 	} {
 		folder := model.SmartFolder{Match: "all", Rules: []model.SmartRule{tc.rule}}
 		if err := ValidateSmartFolder(folder); err != nil {
@@ -261,7 +247,6 @@ func TestSmartTextOperatorsAndBetween(t *testing.T) {
 	for _, rule := range []model.SmartRule{
 		{Field: "width", Operator: "between", Value: "200"},
 		{Field: "width", Operator: "between", Value: "300,200"},
-		{Field: "rating", Operator: "between", Value: "1,6"},
 		{Field: "source", Operator: "gte", Value: "x"},
 	} {
 		if ValidateSmartFolder(model.SmartFolder{Match: "all", Rules: []model.SmartRule{rule}}) == nil {

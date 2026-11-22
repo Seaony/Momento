@@ -8,39 +8,6 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// 数字键给选中的素材打星，Shift+数字打完跳到下一张；输入框有焦点时不抢键。
-// Busy 时写入排队，不起后台任务，正好拿来检查排进去的是什么。
-func TestRatingKeys(t *testing.T) {
-	a := assetViewFixture()
-	a.Library = &library.Library{}
-	a.Busy = true
-	tt := ui.NewTester(a.assetArea, 700, 600)
-	if err := tt.Click("Photo 0"); err != nil {
-		t.Fatal(err)
-	}
-	tt.Key(0, ui.Key3)
-	tt.Frame()
-	if len(a.queuedRuns) != 1 || a.queuedRuns[0].label != "rating" || len(a.queuedRuns[0].patch.ids) != 1 || a.queuedRuns[0].patch.ids[0] != "0" {
-		t.Fatalf("按 3 没有给选中的素材打星：%+v", a.queuedRuns)
-	}
-	asset := model.Asset{}
-	a.queuedRuns[0].patch.apply(&asset)
-	if asset.Rating != 3 {
-		t.Fatalf("打的星数不对：%d", asset.Rating)
-	}
-	tt.Key(ui.Shift, ui.Key5)
-	tt.Frame()
-	if len(a.queuedRuns) != 2 || a.queuedRuns[1].patch.ids[0] != "0" || !a.Selected.Has(a.Visible[1].ID) || a.Selected.Len() != 1 {
-		t.Fatalf("Shift+5 没有打完跳到下一张：选中 %v", a.selectedIDs())
-	}
-	tt.Key(0, ui.Key0)
-	tt.Frame()
-	a.queuedRuns[2].patch.apply(&asset)
-	if asset.Rating != 0 || a.queuedRuns[2].patch.ids[0] != a.Visible[1].ID {
-		t.Fatal("按 0 没有清除下一张的评分")
-	}
-}
-
 func TestRenameDialogQueuesOnlyChangedNames(t *testing.T) {
 	a := assetViewFixture()
 	a.Library = &library.Library{}
@@ -60,6 +27,35 @@ func TestRenameDialogQueuesOnlyChangedNames(t *testing.T) {
 	a.Rename.Template, a.Rename.Start = "{n}", "-1"
 	if _, _, problem := a.renamePlan(assets); problem == "" {
 		t.Fatal("起始序号是负数时没有拦下")
+	}
+}
+
+// 右键重命名：只选一张时是预填原名的改名框，选多张才是批量重命名。
+func TestRenameMenuSingleVersusMultiple(t *testing.T) {
+	a := assetViewFixture()
+	a.Library = &library.Library{}
+	tt := ui.NewTester(a.assetArea, 700, 600)
+	if err := tt.RightClick("Photo 0"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem(a.T("rename_assets")); err != nil {
+		t.Fatal(err)
+	}
+	if !a.PromptOpen || a.PromptValue != "Photo 0" || a.Rename.Open {
+		t.Fatalf("单张应打开改名框：prompt %v %q，批量 %v", a.PromptOpen, a.PromptValue, a.Rename.Open)
+	}
+	a.PromptOpen, a.PromptSubmit = false, nil
+	a.Selected.Add(a.Visible[0].ID)
+	a.Selected.Add(a.Visible[1].ID)
+	tt.Frame()
+	if err := tt.RightClick("Photo 1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem(a.T("rename_assets")); err != nil {
+		t.Fatal(err)
+	}
+	if a.PromptOpen || !a.Rename.Open || len(a.Rename.IDs) != 2 {
+		t.Fatalf("多张应打开批量重命名：prompt %v，批量 %v %v", a.PromptOpen, a.Rename.Open, a.Rename.IDs)
 	}
 }
 
@@ -172,7 +168,6 @@ func TestSimilarDialogMerge(t *testing.T) {
 	a.Busy = true
 	snapshot := a.Snapshot
 	snapshot.Assets[1].TagIDs = []string{"t1"}
-	snapshot.Assets[2].Rating = 4
 	a.applySnapshot(snapshot)
 	a.Similar = similarState{Open: true, Groups: []similarGroup{
 		{IDs: []string{"0", "1", "2"}, Keep: "0"},
@@ -202,7 +197,7 @@ func TestSimilarDialogMerge(t *testing.T) {
 	run := a.queuedRuns[0]
 	a.patchAssets(run.patch.ids, run.patch.apply)
 	keep, other := a.assetByID["1"], a.assetByID["2"]
-	if keep.Trashed || keep.Rating != 4 || len(keep.TagIDs) != 1 || !other.Trashed || !a.assetByID["0"].Trashed || a.assetByID["3"].Trashed {
+	if keep.Trashed || len(keep.TagIDs) != 1 || !other.Trashed || !a.assetByID["0"].Trashed || a.assetByID["3"].Trashed {
 		t.Fatalf("合并结果不对：保留 %+v，其余 %+v", keep, other)
 	}
 	// 剩下一组里有一张进了回收站，只剩一张，就没有可合并的了，对话框自己关掉。

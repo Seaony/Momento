@@ -186,9 +186,6 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 			}
 		}
 		p.clampPan()
-		px, py, over := viewport.PointerPosition()
-		pointer := ui.Point{X: px, Y: py}
-		var photoRect ui.Rect
 		viewport.Children(func() {
 			photo := previewPhoto(c.Key(struct{ ID string }{asset.ID}), bitmap, previewPhotoRadius, a.Preferences.PreviewChecker, w.gray, ui.Contain).
 				Absolute().Label(asset.Name)
@@ -199,11 +196,9 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 			photoLeft, photoTop := (p.viewport.W-photoWidth)/2+p.Pan.X, (p.viewport.H-photoHeight)/2+p.Pan.Y
 			photo.Left(photoLeft).Top(photoTop).Size(photoWidth, photoHeight)
 			w.slideTransition(c, photo)
-			photoRect = ui.Rect{X: photoLeft, Y: photoTop, W: photoWidth, H: photoHeight}
 			if isLiveAsset(asset) {
-				w.liveOverlay(c, a, photoRect)
+				w.liveOverlay(c, a, ui.Rect{X: photoLeft, Y: photoTop, W: photoWidth, H: photoHeight})
 			}
-			w.annotationLayer(c, a, photoRect, pointer, over)
 			// 翻转、灰度只是这样看，在左上角标出来，免得以为原图就是这样。
 			var modes []string
 			if w.flipped {
@@ -212,9 +207,6 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 			if w.gray {
 				modes = append(modes, a.T("preview_gray"))
 			}
-			if w.notes.On {
-				modes = append(modes, a.T("preview_annotating"))
-			}
 			if len(modes) > 0 {
 				ui.Row(c.Key("preview-view-modes")).Absolute().Top(space8).Left(space8).Height(22).Padding(0, space8).Radius(radiusSmall + 2).
 					Background(ui.RGBA(0, 0, 0, .55)).AlignItems(ui.Center).IgnoreInput(true).Children(func() {
@@ -222,11 +214,7 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 				})
 			}
 		})
-		if w.notes.On {
-			// 批注模式下拖动是画框，不拖图；双击也不切换缩放。
-			viewport.Cursor(ui.CursorCrosshair)
-			w.annotationInput(viewport, a, photoRect, pointer)
-		} else if p.canPan() {
+		if p.canPan() {
 			viewport.Cursor(ui.CursorGrab)
 			if dx, dy, held := viewport.Dragged(); held {
 				viewport.Cursor(ui.CursorGrabbing)
@@ -235,7 +223,7 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 				p.clampPan()
 			}
 		}
-		if !w.notes.On && viewport.DoubleClicked() {
+		if viewport.DoubleClicked() {
 			if math.Abs(float64(p.Zoom-p.fitZoom)) < .001 {
 				w.actualSize()
 			} else {

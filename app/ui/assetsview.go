@@ -137,7 +137,6 @@ func (a *App) assetArea(c *ui.Context) {
 	}
 	a.assetPreviewShortcut(c, scroll)
 	a.assetArrowKeys(c, inset, height)
-	a.assetRatingKeys(c, inset, height)
 	if len(a.Visible) == 0 {
 		p := paletteFor(c.Theme())
 		art, title, hint := "scope-empty", a.T("scope_empty"), a.T("scope_empty_hint")
@@ -225,6 +224,9 @@ func listThumbnailSize(width, height int) (float32, float32) {
 
 // 卡片左上角的心和右上角的尺寸角标照旧版：高 16，红心用系统红。
 const assetBadgeHeight = 16
+
+// 尺寸、时长、实况角标共用的底色，压在亮色照片上也要看得清白字。
+var assetBadgeFill = ui.RGBA(0, 0, 0, .62)
 
 var favoriteRed = ui.Hex("#FF3B30")
 
@@ -390,7 +392,7 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 			// 视频右下角：播放标记加时长，和尺寸角标同一套样式。
 			if isVideoAsset(asset) {
 				ui.Row(c.Key("duration")).Absolute().Bottom(space8).Right(space8).Height(assetBadgeHeight).Padding(0, 5).Gap(3).AlignItems(ui.Center).
-					Radius(5).Background(ui.RGBA(0, 0, 0, .34)).PassThrough().Children(func() {
+					Radius(5).Background(assetBadgeFill).PassThrough().Children(func() {
 					appIconSelected(c, "play", true).Size(8, 8).TextColor(ui.RGBA(255, 255, 255, .82))
 					// 读不出时长的视频（有些录屏 WebM 不写时长）只显示播放标记。
 					if d := assetDuration(asset); d > 0 {
@@ -402,7 +404,7 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 			// 实况照片右下角：实况标记加「实况」，和视频时长同一个位置、同一套样式。
 			if isLiveAsset(asset) {
 				ui.Row(c.Key("live")).Absolute().Bottom(space8).Right(space8).Height(assetBadgeHeight).Padding(0, 5).Gap(3).AlignItems(ui.Center).
-					Radius(5).Background(ui.RGBA(0, 0, 0, .34)).PassThrough().Children(func() {
+					Radius(5).Background(assetBadgeFill).PassThrough().Children(func() {
 					appIcon(c, "live-photo").Size(12, 12).TextColor(ui.RGBA(255, 255, 255, .82))
 					ui.Text(c, a.T("live_photo")).FontSize(10).FontWeight(500).TextColor(ui.RGBA(255, 255, 255, .82))
 				})
@@ -411,7 +413,7 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 			// 尺寸角标照旧版：常驻右上角，黑色半透明底、白字。读不出尺寸的（Windows、Linux 上的 RAW 等）不显示。
 			if width > 0 && height > 0 {
 				badge := ui.Text(c.Key("dimensions"), fmt.Sprintf("%d × %d", width, height)).Absolute().Top(space8).Right(space8).
-					Radius(5).Background(ui.RGBA(0, 0, 0, .34)).
+					Radius(5).Background(assetBadgeFill).
 					FontFeatures("tnum").FontSize(10).FontWeight(500).TextColor(ui.RGBA(255, 255, 255, .82)).PassThrough()
 				centeredTextHeight(badge, assetBadgeHeight, 3)
 			}
@@ -510,10 +512,12 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 		if !asset.Trashed {
 			m.Separator()
 			if menuItem(m, a.T("rename_assets"), "text-field-focus").Chosen() {
-				a.OpenRename(a.orderedIDs(ids))
-			}
-			if !isVideoAsset(asset) && menuItem(m, a.T("add_annotation"), "chat-square").Chosen() {
-				a.AnnotateAsset(asset.ID, "")
+				// 一张就是直接改名；多张才用批量重命名的格式和替换。
+				if len(ids) == 1 {
+					a.RenameAsset(asset)
+				} else {
+					a.OpenRename(a.orderedIDs(ids))
+				}
 			}
 			if menuItem(m, a.T("new_folder_with_selection"), "folder-plus").Chosen() {
 				// 在文件夹里时新文件夹建在它下面。

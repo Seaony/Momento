@@ -50,26 +50,27 @@ func (a *App) tags(c *ui.Context) {
 	search := strings.TrimSpace(a.Tags.Search)
 	tags := a.visibleTags()
 	counts := a.Index.Counts().Tags
+	if len(tags) == 0 {
+		// 空状态和素材区一样，在工具栏下方的整块区域里上下左右居中。
+		fadeMotion(ui.Column(c.Key("tag-empty"))).Grow(1).FillWidth().Padding(a.contentTopInset(), space24, space24, space24).Center().Gap(space8).Children(func() {
+			art := "no-tags"
+			if search != "" {
+				art = "search-empty"
+			}
+			emptyArt(c.Key("tag-empty-art"), art, emptyArtLarge).Margin(0, 0, space8, 0)
+			if search == "" {
+				ui.Text(c, a.T("no_tags")).FontSize(fontTitle).FontWeight(600).TextColor(p.Text)
+				ui.Text(c, a.T("no_tags_hint")).FontSize(fontBody).TextColor(p.TextSecondary)
+			} else {
+				ui.Text(c, a.T("no_tag_results", search)).FontSize(fontBody)
+			}
+		})
+		return
+	}
 	scroll := ui.Scroll(c.Key("tag-list")).Scrollbars(false).TrackScroll(&a.Tags.Scroll).Grow(1).FillWidth().Label(a.T("tag_management")).Role(ui.RoleList)
 	inset := scroll.AnimateTo("header-inset", a.contentTopInset(), motionSpring)
 	scroll.Padding(inset+space16, space24, space24, space24)
 	scroll.Children(func() {
-		if len(tags) == 0 {
-			fadeMotion(ui.Column(c.Key("tag-empty"))).MinHeight(220).FillWidth().Center().Gap(space8).Children(func() {
-				art := "no-tags"
-				if search != "" {
-					art = "search-empty"
-				}
-				emptyArt(c.Key("tag-empty-art"), art, emptyArtLarge).Margin(0, 0, space8, 0)
-				if search == "" {
-					ui.Text(c, a.T("no_tags")).FontSize(fontTitle).FontWeight(600).TextColor(p.Text)
-					ui.Text(c, a.T("no_tags_hint")).FontSize(fontBody).TextColor(p.TextSecondary)
-				} else {
-					ui.Text(c, a.T("no_tag_results", search)).FontSize(fontBody)
-				}
-			})
-			return
-		}
 		_, height := c.Size()
 		if bounds := scroll.LayoutBounds(); bounds.H > 0 {
 			height = bounds.H
