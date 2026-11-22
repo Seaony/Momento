@@ -191,7 +191,7 @@ var assetReflowEase = ui.CubicBezier(.25, 1, .5, 1)
 // 列表行：缩略图宽固定 112，行高跟着缩略图的实际高度走，上下各留 12；名称和尺寸两行至少要 40 高。
 const (
 	listRowRadius     float32 = radiusPanel // 悬停底色和选中框的圆角
-	listThumbnail     float32 = 112
+	listThumbnail     float32 = 72
 	listRowPadding    float32 = space12
 	listRowMinContent float32 = 40
 	listMetaGap               = 7 // 标题和下面尺寸、大小一行的间距
@@ -429,11 +429,11 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 				Justify(ui.Center).AlignItems(ui.Center).Padding(0)
 			// 旧版：图片左上角一颗白色心，不带底；鼠标移到心上才出黑色半透明底，收藏后变成红色实心。悬停才出现，收藏了常驻。
 			if list {
-				// 列表里贴着缩略图（在 112 宽的框里居中）的左上角。
+				// 列表里贴着缩略图（在 72 宽的框里居中）的左上角；很扁的全景图放不下就在图里上下居中。
 				w, h := listThumbnailSize(width, height)
 				left := listRowPadding + (listThumbnail-w)/2
 				top := listRowPadding + (max(h, listRowMinContent)-h)/2
-				button.Top(top+listFavoriteInset).Left(left+listFavoriteInset-1).Size(22, assetBadgeHeight).Radius(assetBadgeHeight / 2)
+				button.Top(top+min(listFavoriteInset, (h-assetBadgeHeight)/2)).Left(left+listFavoriteInset-1).Size(22, assetBadgeHeight).Radius(assetBadgeHeight / 2)
 			} else {
 				button.Top(space8).Left(7).Size(22, assetBadgeHeight).Radius(assetBadgeHeight / 2)
 			}
@@ -489,34 +489,33 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 			return []model.Asset{asset}
 		}, a.ShowError, a.MarkAssetsUsed)
 	}
+	// 右键菜单分五组：查看打开、整理、复制导出、重新处理、删除；回收站里的素材没有整理和重新处理两组。
 	card.ContextMenu(func(m *ui.Menu) {
 		ids := a.selectedIDs()
 		if !a.Selected.Has(asset.ID) {
 			ids = []string{asset.ID}
 		}
-		if m.Item(a.T("preview")).Chosen() {
+		if menuItem(m, a.T("preview"), "eye").Chosen() {
 			a.ShowPreview(asset.ID, false)
 		}
-		if !isVideoAsset(asset) && !asset.Trashed && m.Item(a.T("add_annotation")).Chosen() {
-			a.AnnotateAsset(asset.ID, "")
-		}
-		if !isVideoAsset(asset) && m.Item(a.T("start_slideshow_here")).Chosen() {
+		if !isVideoAsset(asset) && menuItem(m, a.T("start_slideshow_here"), "play").Chosen() {
 			a.StartSlideshow(asset.ID)
 		}
-		if m.Item(a.T("open_default_app")).Chosen() {
+		if menuItem(m, a.T("open_default_app"), "arrow-square-out").Chosen() {
 			a.OpenAssetExternally(asset)
 		}
-		if m.Item(a.T("export")).Chosen() {
-			if !a.Selected.Has(asset.ID) {
-				a.selectAsset(asset.ID, index, 0)
-			}
-			a.ExportSelected()
+		if menuItem(m, a.T("reveal"), "folder-open").Chosen() {
+			a.Reveal(asset)
 		}
 		if !asset.Trashed {
-			if m.Item(a.T("rename_assets")).Chosen() {
+			m.Separator()
+			if menuItem(m, a.T("rename_assets"), "text-field-focus").Chosen() {
 				a.OpenRename(a.orderedIDs(ids))
 			}
-			if m.Item(a.T("new_folder_with_selection")).Chosen() {
+			if !isVideoAsset(asset) && menuItem(m, a.T("add_annotation"), "chat-square").Chosen() {
+				a.AnnotateAsset(asset.ID, "")
+			}
+			if menuItem(m, a.T("new_folder_with_selection"), "folder-plus").Chosen() {
 				// 在文件夹里时新文件夹建在它下面。
 				parent := ""
 				if a.Query.Scope == "folder" {
@@ -524,7 +523,27 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 				}
 				a.ShowNewFolder(parent, "", ids)
 			}
-			if m.Item(a.T("refresh_thumbnail")).Chosen() {
+		}
+		m.Separator()
+		if !isVideoAsset(asset) && menuItem(m, a.T("copy_image"), "copy").Chosen() {
+			a.CopyAssetImage(asset)
+		}
+		if menuItem(m, a.T("copy_file_path"), "clipboard-text").Chosen() {
+			if a.Selected.Has(asset.ID) {
+				a.CopyAssetPaths(a.SelectedAssets())
+			} else {
+				a.CopyAssetPaths([]model.Asset{asset})
+			}
+		}
+		if menuItem(m, a.T("export"), "upload-simple").Chosen() {
+			if !a.Selected.Has(asset.ID) {
+				a.selectAsset(asset.ID, index, 0)
+			}
+			a.ExportSelected()
+		}
+		if !asset.Trashed {
+			m.Separator()
+			if menuItem(m, a.T("refresh_thumbnail"), "arrow-clockwise").Chosen() {
 				service := a.Assets
 				a.Run("refresh_thumbnail", func(ctx context.Context) error {
 					err := service.RefreshThumbnails(ctx, []model.Asset{asset})
@@ -532,34 +551,21 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 					return err
 				})
 			}
-			if m.Item(a.T("reanalyze_colors")).Chosen() {
+			if menuItem(m, a.T("reanalyze_colors"), "palette").Chosen() {
 				service := a.Assets
 				a.Run("reanalyze_colors", func(ctx context.Context) error { return service.ReanalyzeColors(ctx, []model.Asset{asset}) })
 			}
 		}
-		if m.Item(a.T("reveal")).Chosen() {
-			a.Reveal(asset)
-		}
-		if !isVideoAsset(asset) && m.Item(a.T("copy_image")).Chosen() {
-			a.CopyAssetImage(asset)
-		}
-		if m.Item(a.T("copy_file_path")).Chosen() {
-			if a.Selected.Has(asset.ID) {
-				a.CopyAssetPaths(a.SelectedAssets())
-			} else {
-				a.CopyAssetPaths([]model.Asset{asset})
-			}
-		}
 		m.Separator()
 		if asset.Trashed {
-			if m.Item(a.T("restore")).Chosen() {
+			if menuItem(m, a.T("restore"), "arrow-counter-clockwise").Chosen() {
 				a.Restore(ids)
 			}
-			if m.Item(a.T("delete_permanently")).Chosen() {
+			if menuItem(m, a.T("delete_permanently"), "trash").Chosen() {
 				a.RequestDelete(ids)
 			}
 		} else {
-			if m.Item(a.T("move_to_trash")).Chosen() {
+			if menuItem(m, a.T("move_to_trash"), "trash").Chosen() {
 				a.RequestDelete(ids)
 			}
 		}

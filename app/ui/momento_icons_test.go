@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -72,7 +74,7 @@ func TestMomentoIconScreenshots(t *testing.T) {
 				c.SetTheme(momentoTheme(appearance, false))
 				ui.Column(c).Fill().Background(c.Theme().Background).Padding(24).Gap(20).Children(func() {
 					ui.Text(c, "Momento · Solar 图标").FontSize(20).Bold().TextColor(titleColor(c.Theme()))
-					ui.Text(c, "每项 Regular 18 / 16 / 14px · 侧栏当前行额外显示主题色 Fill 18px").FontSize(12).TextColor(c.Theme().TextMuted)
+					ui.Text(c, "每项 Regular 18 / 16 / 14px · 侧栏当前行额外显示主题色加粗线性 16px").FontSize(12).TextColor(c.Theme().TextMuted)
 					for start := 0; start < len(names); start += 6 {
 						ui.Row(c).Gap(16).TextColor(c.Theme().TextMuted).Children(func() {
 							for _, name := range names[start:min(start+6, len(names))] {
@@ -82,7 +84,7 @@ func TestMomentoIconScreenshots(t *testing.T) {
 											svgIcon(c, name, false).Size(size, size)
 										}
 										if selected[name] {
-											svgIcon(c, name, true).Size(18, 18).TextColor(c.Theme().Accent)
+											sidebarAppIcon(c, name).TextColor(c.Theme().Accent)
 										}
 									})
 									ui.Text(c, name).FontSize(11).SingleLine()
@@ -96,5 +98,33 @@ func TestMomentoIconScreenshots(t *testing.T) {
 			tt.Frame()
 			writeScreenshot(t, filepath.Join(dir, "native-"+appearance+".png"), tt)
 		})
+	}
+}
+
+// 右键菜单引用的图标名都要在图标库里、能生成原生菜单图标；名字拼错时菜单只会少一个图标，界面上看不出来，所以在这里拦住。
+func TestMenuItemIconsExist(t *testing.T) {
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	pattern := regexp.MustCompile(`menuItem\(m, [^\n]*?, "([a-z0-9-]+)"\)`)
+	found := 0
+	for _, file := range files {
+		if strings.HasSuffix(file, "_test.go") {
+			continue
+		}
+		source, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, match := range pattern.FindAllStringSubmatch(string(source), -1) {
+			found++
+			if MenuIcon(match[1]) == nil {
+				t.Errorf("%s 里的菜单图标 %q 生成不出来", file, match[1])
+			}
+		}
+	}
+	if found == 0 {
+		t.Fatal("没找到任何 menuItem 调用，检查正则")
 	}
 }

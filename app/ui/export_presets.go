@@ -71,7 +71,7 @@ func (a *App) exportPresetChips(c *ui.Context) {
 					a.applyExportPreset(preset)
 				}
 				chip.ContextMenu(func(m *ui.Menu) {
-					if m.Item(a.T("export_delete_preset")).Chosen() {
+					if menuItem(m, a.T("export_delete_preset"), "trash").Chosen() {
 						remove = i
 					}
 				})

@@ -44,9 +44,10 @@ func animateColors(e ui.Element, background, text ui.Color) {
 	e.Background(e.AnimateColor("surface-color", background, motionColor)).TextColor(e.AnimateColor("text-color", text, motionColor))
 }
 
+// 弹层要干脆：150ms 减速出现、100ms 收起，不用弹簧，免得尾巴拖长。
 func popupMotion(e ui.Element) ui.Element {
-	return e.AttachedOrigin().Transition(ui.ElementTransition{Animation: &motionSpring, Position: true,
-		Enter: &ui.Motion{Scale: .96, Y: -4, Flip: true}, Exit: &ui.Motion{Scale: .96, Y: -4, Flip: true}})
+	return e.AttachedOrigin().Transition(ui.ElementTransition{Duration: 150 * time.Millisecond, ExitDuration: 100 * time.Millisecond, Position: true,
+		Enter: &ui.Motion{Scale: .98, Y: -4, Flip: true}, Exit: &ui.Motion{Scale: .98, Y: -4, Flip: true}})
 }
 
 func dialogMotion(backdrop, panel ui.Element) {

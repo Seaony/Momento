@@ -317,6 +317,29 @@ func TestRatingFilterAndSort(t *testing.T) {
 	}
 }
 
+func TestTypeAndTagCounts(t *testing.T) {
+	index := New(model.Snapshot{Assets: []model.Asset{
+		{ID: "a", Name: "a", Extension: ".JPG", TagIDs: []string{"cat"}, Rating: 5},
+		{ID: "b", Name: "b", Extension: "jpg", TagIDs: []string{"cat", "dog"}},
+		{ID: "c", Name: "c", Extension: "mp4", Kind: model.KindVideo, TagIDs: []string{"dog"}, Rating: 5},
+	}})
+	// 自己这一组的条件不影响自己的数量，其他条件照常生效。
+	extensions, kinds := index.TypeCounts(Query{Extensions: []string{"mp4"}, Ratings: []int{5}})
+	if extensions["jpg"] != 1 || extensions["mp4"] != 1 || kinds[model.KindVideo] != 1 {
+		t.Fatalf("类型数量：%v %v", extensions, kinds)
+	}
+	if counts := index.TagCounts(Query{Extensions: []string{"jpg"}}); counts["cat"] != 2 || counts["dog"] != 1 {
+		t.Fatalf("标签数量：%v", counts)
+	}
+	// 标签素材页：范围就是这个标签，别的标签只数和它同时出现的。
+	if counts := index.TagCounts(Query{TagIDs: []string{"cat"}}); counts["cat"] != 2 || counts["dog"] != 1 {
+		t.Fatalf("标签页里的标签数量：%v", counts)
+	}
+	if counts := index.TagCounts(Query{TagIDs: []string{"dog"}, Extensions: []string{"mp4"}}); counts["cat"] != 0 || counts["dog"] != 1 {
+		t.Fatalf("标签页里按类型筛后的标签数量：%v", counts)
+	}
+}
+
 func TestIncludeSubfolders(t *testing.T) {
 	index := New(model.Snapshot{
 		Folders: []model.Folder{{ID: "top"}, {ID: "child", ParentID: "top"}, {ID: "grand", ParentID: "child"}, {ID: "other"}, {ID: "loop-a", ParentID: "loop-b"}, {ID: "loop-b", ParentID: "loop-a"}},

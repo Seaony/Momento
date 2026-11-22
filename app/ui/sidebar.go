@@ -117,7 +117,7 @@ func (a *App) sidebarFooter(c *ui.Context, trashCount int) {
 			a.SetScope("trash", "")
 		}
 		trash.ContextMenu(func(m *ui.Menu) {
-			if m.Item(a.T("empty_trash")).Disabled(trashCount == 0 || a.Busy).Chosen() {
+			if menuItem(m, a.T("empty_trash"), "trash").Disabled(trashCount == 0 || a.Busy).Chosen() {
 				a.ConfirmEmptyTrash()
 			}
 		})
@@ -140,7 +140,7 @@ func sidebarFooterButton(c *ui.Context, label, icon string, selected bool) ui.El
 		background, ink = p.Hover, p.Text
 	}
 	animateColors(button, background, ink)
-	button.Children(func() { sidebarAppIcon(c, icon, false) })
+	button.Children(func() { sidebarAppIcon(c, icon) })
 	return button
 }
 
@@ -157,7 +157,7 @@ func (a *App) sidebarTopBar(c *ui.Context) {
 		}
 		// 收起按钮比侧栏图标小一号，平时更淡，悬停才变成正文色。
 		button := ui.ButtonBase(c.Key("sidebar-toggle")).Size(sidebarToggleSize, sidebarToggleSize).Padding(0).Radius(radiusCard).Cursor(ui.CursorPointer).Label(a.T("toggle_sidebar")).Tooltip(a.T("toggle_sidebar")).Children(func() {
-			sidebarAppIcon(c, "sidebar", false).Size(iconMedium, iconMedium)
+			sidebarAppIcon(c, "sidebar").Size(iconMedium, iconMedium)
 		})
 		sidebarControlColors(c, button, true)
 		if button.Clicked() {
@@ -184,7 +184,7 @@ func sidebarAddRow(c *ui.Context, label, icon string) ui.Element {
 	animateColors(row, background, ink)
 	row.Children(func() {
 		ui.Box(c).Size(sidebarIconBox, sidebarIconBox).Shrink(0).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
-			sidebarAppIcon(c, icon, false)
+			sidebarAppIcon(c, icon)
 		})
 		ui.Text(c, label).SingleLine().Grow(1).MinWidth(0)
 	})
@@ -235,17 +235,17 @@ func sidebarRowStyle(c *ui.Context, row ui.Element, selected bool) ui.Color {
 	return ink
 }
 
-// 侧栏行图标：选中时换填充版并用品牌橘，其余跟随本行文字色。
+// 侧栏行图标：选中时用品牌色，其余跟随本行文字色；图形和粗细不随选中变化。
 func sidebarNavIcon(c *ui.Context, name string, selected bool) {
 	ui.Box(c).Size(sidebarIconBox, sidebarIconBox).Shrink(0).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
-		icon := sidebarAppIcon(c, name, selected)
+		icon := sidebarAppIcon(c, name)
 		if selected {
 			icon.TextColor(paletteFor(c.Theme()).Accent)
 		}
 	})
 }
 
-// 文件夹行的图标：没选图标时和原来一样（选中换实心版）；选了图标的用它的加粗线性版，选中时上品牌色。
+// 文件夹行的图标：没选图标时用默认文件夹图标；选了图标的用它的加粗线性版；选中时都上品牌色。
 func sidebarFolderIcon(c *ui.Context, icon string, selected bool) {
 	if folderIconID(icon) == "folder" {
 		sidebarNavIcon(c, "文件夹", selected)
@@ -273,8 +273,8 @@ func sidebarControlColors(c *ui.Context, control ui.Element, muted bool) {
 	animateColors(control, background, text)
 }
 
-func sidebarRowIcon(c *ui.Context, name string, selected, hovered bool) ui.Element {
-	icon := appIconSelected(c, name, selected)
+// 给行里的图标上色：选中品牌色，悬停正文色，平时次要文字色。
+func sidebarRowIconColor(c *ui.Context, icon ui.Element, selected, hovered bool) ui.Element {
 	color := paletteFor(c.Theme()).TextSecondary
 	if selected {
 		color = paletteFor(c.Theme()).Accent
@@ -348,18 +348,19 @@ func (a *App) sidebarFolders(c *ui.Context, counts catalog.Counts) {
 				}
 			}
 			a.sidebarFolderDrop(c, row, folder)
+			// 和智能文件夹同一套分组：新建编辑、固定到快速访问、删除。
 			row.ContextMenu(func(m *ui.Menu) {
-				a.QuickAccessMenu(m, "folder", folder.ID)
-				m.Separator()
-				if m.Item(a.T("new_subfolder")).Disabled(a.Busy).Chosen() {
+				if menuItem(m, a.T("new_subfolder"), "folder-plus").Disabled(a.Busy).Chosen() {
 					*open = true
 					a.sidebarCreateFolder(folder.ID)
 				}
-				if m.Item(a.T("edit_folder")).Disabled(a.Busy).Chosen() {
+				if menuItem(m, a.T("edit_folder"), "pencil-simple").Disabled(a.Busy).Chosen() {
 					a.renameSidebarFolder(folder)
 				}
 				m.Separator()
-				if m.Item(a.T("delete_folder")).Disabled(a.Busy).Chosen() {
+				a.QuickAccessMenu(m, "folder", folder.ID)
+				m.Separator()
+				if menuItem(m, a.T("delete_folder"), "trash").Disabled(a.Busy).Chosen() {
 					a.Confirm(a.T("delete_folder"), a.T("delete_folder_detail", folder.Name), a.T("delete"), func() {
 						lib := a.Library
 						if a.Query.Scope == "folder" && sidebarFolderContains(a.Snapshot.Folders, folder.ID, a.Query.FolderID) {
@@ -447,7 +448,7 @@ func (a *App) sidebarMoveFolder(drag AssetsDrag, targetID string, position folde
 }
 
 func sidebarChevron(c *ui.Context, open bool) ui.Element {
-	arrow := sidebarAppIcon(c, "chevron-right", false).Size(iconSmall, iconSmall)
+	arrow := sidebarAppIcon(c, "chevron-right").Size(iconSmall, iconSmall)
 	angle := float32(0)
 	if open {
 		angle = 90

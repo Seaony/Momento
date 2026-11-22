@@ -56,14 +56,14 @@ func (a *App) sidebarQuickAccess(c *ui.Context) {
 			a.openQuickAccess(entry)
 		}
 		row.ContextMenu(func(m *ui.Menu) {
-			if m.Item(a.T("quick_move_up")).Disabled(a.Busy || i == 0).Chosen() {
+			if menuItem(m, a.T("quick_move_up"), "arrow-up").Disabled(a.Busy || i == 0).Chosen() {
 				a.moveVisibleQuickAccess(entries, i, i-1)
 			}
-			if m.Item(a.T("quick_move_down")).Disabled(a.Busy || i == len(entries)-1).Chosen() {
+			if menuItem(m, a.T("quick_move_down"), "arrow-down").Disabled(a.Busy || i == len(entries)-1).Chosen() {
 				a.moveVisibleQuickAccess(entries, i, i+1)
 			}
 			m.Separator()
-			if m.Item(a.T("quick_unpin")).Disabled(a.Busy).Chosen() {
+			if menuItem(m, a.T("quick_unpin"), "pin").Disabled(a.Busy).Chosen() {
 				a.unpinQuickAccess(entry.ID)
 			}
 		})
@@ -81,10 +81,10 @@ func (a *App) PinQuickAccess(kind, id string) {
 func (a *App) QuickAccessMenu(m *ui.Menu, kind, id string) {
 	entry, exists := a.pinnedQuickAccess(kind, id)
 	if exists {
-		if m.Item(a.T("quick_unpin")).Disabled(a.Busy).Chosen() {
+		if menuItem(m, a.T("quick_unpin"), "pin").Disabled(a.Busy).Chosen() {
 			a.unpinQuickAccess(entry.ID)
 		}
-	} else if m.Item(a.T("quick_pin")).Disabled(a.Busy || a.Library == nil).Chosen() {
+	} else if menuItem(m, a.T("quick_pin"), "pin").Disabled(a.Busy || a.Library == nil).Chosen() {
 		a.PinQuickAccess(kind, id)
 	}
 }

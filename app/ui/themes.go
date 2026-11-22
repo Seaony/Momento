@@ -22,30 +22,30 @@ type designPalette struct {
 }
 
 var lightPalette = designPalette{
-	Background: ui.Hex("#FCFBFF"), Sidebar: ui.Hex("#F7F5FF"), Raised: ui.Hex("#FFFFFF"),
-	Subtle: ui.Hex("#F1EEFD"), Hover: ui.Hex("#ECE8FB"), Pressed: ui.Hex("#E3DEF8"), Selected: ui.Hex("#FFFFFF"),
-	BorderSubtle: ui.Hex("#E7E3F7"), Border: ui.Hex("#DAD4F0"),
-	Text: ui.Hex("#221F2E"), TextSecondary: ui.Hex("#5F5A72"), TextTertiary: ui.Hex("#6E6882"),
+	Background: ui.Hex("#F9FCFF"), Sidebar: ui.Hex("#F0F8FF"), Raised: ui.Hex("#FFFFFF"),
+	Subtle: ui.Hex("#E7F2FE"), Hover: ui.Hex("#DFEDFC"), Pressed: ui.Hex("#D1E5F9"), Selected: ui.Hex("#FFFFFF"),
+	BorderSubtle: ui.Hex("#D9E8F8"), Border: ui.Hex("#C6DBF2"),
+	Text: ui.Hex("#17232F"), TextSecondary: ui.Hex("#4D6073"), TextTertiary: ui.Hex("#5B6F84"),
 	SegmentSelected: ui.Hex("#FFFFFF"),
-	Field:           ui.Hex("#F2EFFC"), FieldHover: ui.Hex("#EDE9FA"),
-	// 品牌色取 logo 刺猬背上的靛紫，白字在上面对比度 5.2。
-	Accent: ui.Hex("#6553F0"), AccentHover: ui.Hex("#6E5CF4"), AccentPressed: ui.Hex("#5845E0"),
-	OnAccent: ui.Hex("#FFFFFF"), Focus: ui.Hex("#5B49E8"), Link: ui.Hex("#4B3BC9"),
+	Field:           ui.Hex("#E9F2FD"), FieldHover: ui.Hex("#E1EDFB"),
+	// 品牌蓝取自 logo 的天蓝底，加深到白字对比度 5.2，主按钮上的字才看得清。
+	Accent: ui.Hex("#1069DA"), AccentHover: ui.Hex("#1C71E2"), AccentPressed: ui.Hex("#0B5FC8"),
+	OnAccent: ui.Hex("#FFFFFF"), Focus: ui.Hex("#0462D3"), Link: ui.Hex("#0555B7"),
 	Danger: ui.Hex("#B91C1C"), Warning: ui.Hex("#8F4500"), Success: ui.Hex("#166534"),
-	Shadow: ui.RGBA(40, 32, 96, .07), Scrim: ui.RGBA(34, 31, 46, .25),
+	Shadow: ui.RGBA(0, 48, 92, .07), Scrim: ui.RGBA(23, 35, 47, .25),
 }
 
-// 深色以近黑为主，只带一点冷紫；靛紫只在强调色上出现。
+// 深色以近黑为主，只带一点冷蓝；品牌蓝只在强调色上出现。
 var darkPalette = designPalette{
-	Background: ui.Hex("#101012"), Sidebar: ui.Hex("#161619"), Raised: ui.Hex("#1F1E23"),
-	Subtle: ui.Hex("#19191D"), Hover: ui.Hex("#25242A"), Pressed: ui.Hex("#2D2C33"), Selected: ui.Hex("#222127"),
-	BorderSubtle: ui.Hex("#242329"), Border: ui.Hex("#312F37"),
-	Text: ui.Hex("#F1F0F5"), TextSecondary: ui.Hex("#AEACB8"), TextTertiary: ui.Hex("#8C8A96"),
-	SegmentSelected: ui.Hex("#2D2C33"),
-	Field:           ui.Hex("#19191D"), FieldHover: ui.Hex("#1F1E23"),
-	// 品牌色和浅色一样；焦点框和链接文字用浅一些的紫，深底上好认。
-	Accent: ui.Hex("#6553F0"), AccentHover: ui.Hex("#6E5CF4"), AccentPressed: ui.Hex("#5845E0"),
-	OnAccent: ui.Hex("#FFFFFF"), Focus: ui.Hex("#8B80FA"), Link: ui.Hex("#B4ADFF"),
+	Background: ui.Hex("#0F1112"), Sidebar: ui.Hex("#141719"), Raised: ui.Hex("#1B1F23"),
+	Subtle: ui.Hex("#161A1D"), Hover: ui.Hex("#21262A"), Pressed: ui.Hex("#282E33"), Selected: ui.Hex("#1E2327"),
+	BorderSubtle: ui.Hex("#202529"), Border: ui.Hex("#2B3138"),
+	Text: ui.Hex("#EEF1F5"), TextSecondary: ui.Hex("#A6AFB9"), TextTertiary: ui.Hex("#848D96"),
+	SegmentSelected: ui.Hex("#282E33"),
+	Field:           ui.Hex("#161A1D"), FieldHover: ui.Hex("#1B1F23"),
+	// 品牌色和浅色一样；焦点框和链接文字用浅一些的蓝，深底上好认。
+	Accent: ui.Hex("#1069DA"), AccentHover: ui.Hex("#1C71E2"), AccentPressed: ui.Hex("#0B5FC8"),
+	OnAccent: ui.Hex("#FFFFFF"), Focus: ui.Hex("#5A98F3"), Link: ui.Hex("#92BDFB"),
 	Danger: ui.Hex("#FF9B9B"), Warning: ui.Hex("#FCD478"), Success: ui.Hex("#88DDA9"),
 	Shadow: ui.RGBA(0, 0, 0, .36), Scrim: ui.RGBA(0, 0, 0, .55),
 }

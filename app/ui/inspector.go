@@ -63,6 +63,8 @@ const (
 	inspectorFolderRowH     = 26
 	inspectorFolderIndent   = 22
 	inspectorSectionTitleSz = 10
+	// 可编辑行的内边距 6 加边框 1：标题、备注往外伸这么多，文字和小标题对齐，悬停底色伸到两边留白里。
+	inspectorEditBleed      = 7
 	inspectorEditLineHeight = 1.4 // 可编辑文字显示态和输入框用同一个行高，点进编辑时高度不变，下面的内容不跳
 	inspectorTitleWeight    = 600 // 图片标题比正文大一号、加粗，一眼能和下面的信息分开
 )
@@ -247,12 +249,12 @@ func (a *App) inspectorTitle(c *ui.Context, asset model.Asset) {
 			if cancel || strings.TrimSpace(a.Inspector.Title) == "" {
 				a.Inspector.Title = a.Inspector.SourceTitle
 			}
-		}).FontWeight(inspectorTitleWeight)
+		}).FontWeight(inspectorTitleWeight).Margin(0, -inspectorEditBleed)
 		return
 	}
 	a.inspectorEditable(c, "title-display", a.T("edit_title"), func(p *designPalette) {
 		ui.Text(c, a.Inspector.Title).FontSize(fontLead).FontWeight(inspectorTitleWeight).TextColor(p.Text).FillWidth()
-	}, func() { a.Inspector.Editing = "title" })
+	}, func() { a.Inspector.Editing = "title" }).Margin(0, -inspectorEditBleed)
 }
 
 // 星级评分：多选时星级都一样才亮出来，不一样显示空星，点一下给全部打同样的星。
@@ -264,7 +266,7 @@ func (a *App) inspectorRating(c *ui.Context, selected []model.Asset) {
 			break
 		}
 	}
-	if ratingStars(c.Key("rating"), &value, a.T("rating")).Margin(0, 0, 0, 6).Changed() {
+	if ratingStars(c.Key("rating"), &value, a.T("rating")).Changed() {
 		ids := make([]string, len(selected))
 		for i, asset := range selected {
 			ids[i] = asset.ID
@@ -287,7 +289,8 @@ func ratingStars(c *ui.Context, value *int, label string) ui.Element {
 // 可原地编辑的文字：悬停铺浅底和细边，点一下进入编辑。
 func (a *App) inspectorEditable(c *ui.Context, key, label string, content func(p *designPalette), edit func()) ui.Element {
 	p := paletteFor(c.Theme())
-	button := ui.ButtonBase(c.Key(key)).Label(label).FillWidth().Padding(space4, 6).LineHeight(inspectorEditLineHeight).Radius(inspectorEditRadius).Cursor(ui.CursorPointer).AlignItems(ui.Start)
+	// 不设 FillWidth，靠父列拉伸占满：这样调用方加负外边距时会两边一起伸出，FillWidth 只会整体左移。
+	button := ui.ButtonBase(c.Key(key)).Label(label).Padding(space4, 6).LineHeight(inspectorEditLineHeight).Radius(inspectorEditRadius).Cursor(ui.CursorPointer).AlignItems(ui.Start)
 	background, border := ui.Transparent, ui.Transparent
 	if button.Hovered() || button.Focused() {
 		background, border = p.Text.Alpha(themeValue(c, .045, .06)), p.BorderSubtle
@@ -305,7 +308,7 @@ func (a *App) inspectorEditable(c *ui.Context, key, label string, content func(p
 func (a *App) inspectorEditor(c *ui.Context, key string, value *string, label, placeholder string, size float32, lines int, single bool, done func(cancel bool)) ui.Element {
 	p := paletteFor(c.Theme())
 	input := ui.TextArea(c.Key(key), value).Lines(1, lines).Label(label).Placeholder(placeholder).PlaceholderColor(placeholderColor(c)).
-		FillWidth().MinHeight(0).Padding(space4, 6).FontSize(size).LineHeight(inspectorEditLineHeight).Radius(inspectorEditRadius).Background(p.Raised).Border(1, p.Accent.Alpha(.65)).
+		MinHeight(0).Padding(space4, 6).FontSize(size).LineHeight(inspectorEditLineHeight).Radius(inspectorEditRadius).Background(p.Raised).Border(1, p.Accent.Alpha(.65)).
 		FocusRing(false).Scrollbars(false).AutoFocus()
 	// 回车、Esc 在输入框处理之前拦下，记下来留到下一帧处理：单行字段回车不插换行，光标停在哪都不改内容。
 	input.OnTextKey(func(k ui.TextKey) bool {
@@ -446,7 +449,7 @@ func (a *App) inspectorNotes(c *ui.Context, asset model.Asset) {
 				if cancel {
 					a.Inspector.Note = a.Inspector.SourceNote
 				}
-			})
+			}).Margin(0, -inspectorEditBleed)
 			return
 		}
 		a.inspectorEditable(c, "note-display", a.T("asset_note"), func(p *designPalette) {
@@ -455,7 +458,7 @@ func (a *App) inspectorNotes(c *ui.Context, asset model.Asset) {
 				return
 			}
 			ui.Text(c, a.Inspector.Note).FontSize(fontSecondary).TextColor(p.Text).FillWidth()
-		}, func() { a.Inspector.Editing = "note" })
+		}, func() { a.Inspector.Editing = "note" }).Margin(0, -inspectorEditBleed)
 	})
 }
 
@@ -488,7 +491,7 @@ func (a *App) inspectorMultiDetails(c *ui.Context, selected []model.Asset) {
 					if !cancel {
 						a.applyMultiDetail(field.key)
 					}
-				})
+				}).Margin(0, -inspectorEditBleed)
 				continue
 			}
 			a.inspectorEditable(c, editing+"-display", field.label, func(p *designPalette) {
@@ -507,7 +510,7 @@ func (a *App) inspectorMultiDetails(c *ui.Context, selected []model.Asset) {
 				}
 				a.Inspector.Editing, a.Inspector.MultiIDs = editing, ids
 				a.Inspector.MultiDraft, a.Inspector.MultiOriginal, a.Inspector.MultiMixed = common, common, mixed
-			})
+			}).Margin(0, -inspectorEditBleed)
 		}
 	})
 }
@@ -558,7 +561,8 @@ func (a *App) inspectorEXIF(c *ui.Context, asset model.Asset) {
 	open := !a.Preferences.EXIFCollapsed
 	ui.Column(c.Key("inspector-exif")).FillWidth().Children(func() {
 		ui.Box(c).Height(1).FillWidth().Background(p.hairline())
-		header := ui.ButtonBase(c.Key("exif-toggle")).Label(a.T("exif")).Expanded(open).FillWidth().Height(space32).Padding(0).
+		// 上下各留 12：小标题离分隔线的距离和其他区块一样。
+		header := ui.ButtonBase(c.Key("exif-toggle")).Label(a.T("exif")).Expanded(open).FillWidth().Padding(space12, 0).
 			AlignItems(ui.Center).Gap(space4).Cursor(ui.CursorPointer)
 		ink := inspectorSectionInk(c, p)
 		if header.Hovered() {
@@ -578,7 +582,7 @@ func (a *App) inspectorEXIF(c *ui.Context, asset model.Asset) {
 		if !open {
 			return
 		}
-		body := ui.Column(c.Key("exif-body")).FillWidth().Gap(space12).Padding(space4, 0, 0, 0)
+		body := ui.Column(c.Key("exif-body")).FillWidth().Gap(space12)
 		body.Transition(ui.ElementTransition{Animation: &motionSpring, Enter: &ui.Motion{Collapse: true}, Exit: &ui.Motion{Collapse: true}})
 		body.Children(func() {
 			for _, item := range items {

@@ -53,18 +53,19 @@ func (a *App) sidebarSmartRows(c *ui.Context) {
 			a.BrowseSmartFolder(folder.ID)
 		}
 		row.ContextMenu(func(m *ui.Menu) {
-			if m.Item(a.T("edit_smart_folder")).Disabled(a.Busy).Chosen() {
+			if menuItem(m, a.T("edit_smart_folder"), "funnel-simple").Disabled(a.Busy).Chosen() {
 				a.EditSmartFolder(folder.ID)
 			}
-			if m.Item(a.T("rename_smart_folder")).Disabled(a.Busy).Chosen() {
+			if menuItem(m, a.T("rename_smart_folder"), "text-field-focus").Disabled(a.Busy).Chosen() {
 				lib := a.Library
 				a.Ask("pencil-simple", a.T("rename_smart_folder"), folder.Name, func(name string) {
 					a.Run("rename_smart_folder", func(ctx context.Context) error { return lib.RenameSmartFolder(ctx, folder.ID, name) })
 				})
 			}
+			m.Separator()
 			a.QuickAccessMenu(m, "smart", folder.ID)
 			m.Separator()
-			if m.Item(a.T("delete_smart_folder")).Disabled(a.Busy).Chosen() {
+			if menuItem(m, a.T("delete_smart_folder"), "trash").Disabled(a.Busy).Chosen() {
 				a.Confirm(a.T("delete_smart_folder"), a.T("delete_smart_folder_detail", folder.Name), a.T("delete"), func() {
 					if a.Query.Scope == "smart" && a.Query.SmartFolderID == folder.ID {
 						a.SetScope("all", "")
@@ -221,7 +222,7 @@ func smartSelect(c *ui.Context, value *string, options []string, label func(stri
 	control := menuFieldStyle(c, selectParts.Trigger.Height(controlHeight).Padding(space4, space12).Gap(space8).Cursor(ui.CursorPointer))
 	control.Children(func() {
 		ui.Text(c, chosen).FontSize(fontBody).SingleLine().Grow(1).MinWidth(0)
-		sidebarRowIcon(c, "chevron-down", false, control.Hovered()).Size(iconSmall, iconSmall).Shrink(0)
+		sidebarRowIconColor(c, appIcon(c, "chevron-down"), false, control.Hovered()).Size(iconSmall, iconSmall).Shrink(0)
 	})
 	selectParts.Popup(func(panel ui.Element) {
 		elevated(popupMotion(panel), c.Theme()).Margin(space4, 0, 0, 0).Padding(space4).Radius(radiusPanel).Background(panelColor(c.Theme())).Border(1, paletteFor(c.Theme()).BorderSubtle)

@@ -102,3 +102,26 @@ func (idx *Index) RatingCounts(q Query) [6]int {
 	})
 	return counts
 }
+
+// TypeCounts 是按当前其他条件（不算文件类型条件本身）各扩展名、各种类有多少素材，给筛选面板标数量。
+func (idx *Index) TypeCounts(q Query) (extensions, kinds map[string]int) {
+	extensions, kinds = map[string]int{}, map[string]int{}
+	q.Extensions, q.Kinds = nil, nil
+	idx.eachMatching(q, func(i int) {
+		extensions[idx.entries[i].extension]++
+		kinds[idx.snapshot.Assets[i].Kind]++
+	})
+	return extensions, kinds
+}
+
+// TagCounts 是按查询条件各标签有多少素材。调用方先去掉筛选里的标签条件再传进来：
+// 在某个标签的素材页里，范围本身就是用 TagIDs 限定的，这里不能一起清掉。
+func (idx *Index) TagCounts(q Query) map[string]int {
+	counts := map[string]int{}
+	idx.eachMatching(q, func(i int) {
+		for _, id := range idx.snapshot.Assets[i].TagIDs {
+			counts[id]++
+		}
+	})
+	return counts
+}

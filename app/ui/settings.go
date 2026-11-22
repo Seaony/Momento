@@ -94,7 +94,10 @@ func (a *App) settingsView(c *ui.Context, update UpdateCheckStatus) {
 						Transition(ui.ElementTransition{Animation: &motionColor, Shadows: true})
 					animateColors(row, background, text)
 					row.Children(func() {
-						sidebarRowIcon(c, tab.icon, a.Settings.Tab == i, row.Hovered()).Size(iconSize, iconSize).Shrink(0)
+						// 和主侧栏同一套加粗图标、同样大小，选中只换颜色。
+						ui.Box(c).Size(sidebarIconBox, sidebarIconBox).Shrink(0).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
+							sidebarRowIconColor(c, sidebarAppIcon(c, tab.icon), a.Settings.Tab == i, row.Hovered())
+						})
 						label := ui.Text(c, a.T(tab.key)).FontSize(fontBody).SingleLine().Grow(1).MinWidth(0)
 						if i == a.Settings.Tab {
 							label.FontWeight(600)

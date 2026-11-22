@@ -27,6 +27,11 @@ type toolbarState struct {
 	ScrubOffset   ui.Point // 透明拖动层跟着指针的位移，松手弹回 0
 	shapeKey      string
 	shapeCount    map[string]int
+	typeKey       string
+	typeExtCount  map[string]int
+	typeKindCount map[string]int
+	tagKey        string
+	tagCount      map[string]int
 	ratingKey     string
 	ratingCount   [6]int
 }
@@ -630,10 +635,11 @@ func (a *App) filterPanel(c *ui.Context) {
 					popEmpty(c, a.T("no_tags"))
 					return
 				}
+				counts := a.tagCounts()
 				ui.Row(c.Key("tag-chips")).FillWidth().Wrap().Gap(popChipGap).Children(func() {
 					for _, tag := range tags {
 						chosen := slices.Contains(a.Query.TagIDs, tag.ID)
-						if popChip(c.Key("filter-tag-"+tag.ID), &chosen, "", tag.Name).Changed() {
+						if popCountChip(c.Key("filter-tag-"+tag.ID), &chosen, "", tag.Name, counts[tag.ID]).Changed() {
 							a.Query.TagIDs = toolbarToggle(a.Query.TagIDs, tag.ID, chosen)
 							a.Refine()
 						}
@@ -646,25 +652,26 @@ func (a *App) filterPanel(c *ui.Context) {
 					popEmpty(c, a.T("no_file_types"))
 					return
 				}
+				extensions, kinds := a.typeCounts()
 				ui.Row(c.Key("type-chips")).FillWidth().Wrap().Gap(popChipGap).Children(func() {
 					// 图库里有视频时，最前面放一个「视频」，一次选中所有视频格式。
 					if a.libraryHasKind(model.KindVideo) {
 						chosen := slices.Contains(a.Query.Kinds, model.KindVideo)
-						if popChip(c.Key("kind-video"), &chosen, "type-video", a.T("filter_kind_video")).Changed() {
+						if popCountChip(c.Key("kind-video"), &chosen, "type-video", a.T("filter_kind_video"), kinds[model.KindVideo]).Changed() {
 							a.Query.Kinds = toolbarToggle(a.Query.Kinds, model.KindVideo, chosen)
 							a.Refine()
 						}
 					}
 					if a.libraryHasKind(model.KindLive) {
 						chosen := slices.Contains(a.Query.Kinds, model.KindLive)
-						if popChip(c.Key("kind-live"), &chosen, "type-live", a.T("filter_kind_live")).Changed() {
+						if popCountChip(c.Key("kind-live"), &chosen, "type-live", a.T("filter_kind_live"), kinds[model.KindLive]).Changed() {
 							a.Query.Kinds = toolbarToggle(a.Query.Kinds, model.KindLive, chosen)
 							a.Refine()
 						}
 					}
 					for _, ext := range types {
 						chosen := slices.Contains(a.Query.Extensions, ext)
-						if popChip(c.Key("extension-"+ext), &chosen, extensionIcon(ext), strings.ToUpper(ext)).Changed() {
+						if popCountChip(c.Key("extension-"+ext), &chosen, extensionIcon(ext), strings.ToUpper(ext), extensions[ext]).Changed() {
 							a.Query.Extensions = toolbarToggle(a.Query.Extensions, ext, chosen)
 							a.Refine()
 						}
@@ -680,11 +687,12 @@ func (a *App) filterPanel(c *ui.Context) {
 						if counts[shape] == 0 && !chosen {
 							continue
 						}
-						label := shape
+						// 横图、竖图、方图、全景带形状图标，16:9 这类比例只写数字。
+						label, icon := shape, ""
 						if !strings.Contains(shape, ":") {
-							label = a.T("shape_" + shape)
+							label, icon = a.T("shape_"+shape), "shape-"+shape
 						}
-						if popCountChip(c.Key("shape-"+shape), &chosen, label, counts[shape]).Changed() {
+						if popCountChip(c.Key("shape-"+shape), &chosen, icon, label, counts[shape]).Changed() {
 							a.Query.Shapes = toolbarToggle(a.Query.Shapes, shape, chosen)
 							a.Refine()
 						}
@@ -700,7 +708,7 @@ func (a *App) filterPanel(c *ui.Context) {
 							if counts[rating] == 0 && !chosen {
 								continue
 							}
-							if popCountChip(c.Key(fmt.Sprint("rating-", rating)), &chosen, a.ratingLabel(rating), counts[rating]).Changed() {
+							if popCountChip(c.Key(fmt.Sprint("rating-", rating)), &chosen, "", a.ratingLabel(rating), counts[rating]).Changed() {
 								if chosen {
 									a.Query.Ratings = append(a.Query.Ratings, rating)
 								} else {
@@ -760,10 +768,19 @@ func (a *App) colorSwatch(c *ui.Context, id, hex string, chosen bool) ui.Element
 	return button
 }
 
-// popChip 是标签和文件类型共用的圆角开关：平时浅底，选中反色；icon 为空时只有文字。
+// popChip 是筛选弹层的圆角开关：平时浅底，选中反色；icon 为空时只有文字，不带数量。
 func popChip(c *ui.Context, on *bool, icon, label string) ui.Element {
+	return popCountChip(c, on, icon, label, -1)
+}
+
+// popCountChip 是带数量的筛选胶囊：可带种类图标，数量用淡一级的颜色跟在名字后面；count 小于 0 时不显示数量。
+func popCountChip(c *ui.Context, on *bool, icon, label string, count int) ui.Element {
 	p := paletteFor(c.Theme())
-	chip := ui.ToggleBase(c, on).Label(label).Height(popChipHeight).Padding(0, space8+1).Gap(popChipIconGap).Radius(popChipRadius).Cursor(ui.CursorPointer).AlignItems(ui.Center).MaxWidth(popChipMaxWidth)
+	accessible := label
+	if count >= 0 {
+		accessible = fmt.Sprintf("%s %d", label, count)
+	}
+	chip := ui.ToggleBase(c, on).Label(accessible).Height(popChipHeight).Padding(0, space8+1).Gap(popChipIconGap).Radius(popChipRadius).Cursor(ui.CursorPointer).AlignItems(ui.Center).MaxWidth(popChipMaxWidth)
 	background, text := popFill(p, .05), p.Text
 	switch {
 	case *on:
@@ -781,27 +798,12 @@ func popChip(c *ui.Context, on *bool, icon, label string) ui.Element {
 		if icon != "" {
 			toolbarIcon(c, icon).Size(iconSmall, iconSmall).Shrink(0)
 		}
-		ui.Text(c, label).FontSize(fontSecondary).SingleLine().MinWidth(0)
-	})
-}
-
-// popCountChip 是带数量的筛选胶囊，数量用淡一级的颜色跟在名字后面。
-func popCountChip(c *ui.Context, on *bool, label string, count int) ui.Element {
-	p := paletteFor(c.Theme())
-	chip := ui.ToggleBase(c, on).Label(fmt.Sprintf("%s %d", label, count)).Height(popChipHeight).Padding(0, space8+1).Gap(space4).Radius(popChipRadius).Cursor(ui.CursorPointer).AlignItems(ui.Center).MaxWidth(popChipMaxWidth)
-	background, text := popFill(p, .05), p.Text
-	switch {
-	case *on:
-		background, text = p.Text, p.Raised
-	case chip.Pressed():
-		background = popFill(p, .12)
-	case chip.Hovered():
-		background = popFill(p, .085)
-	}
-	animateColors(chip, background, text)
-	return chip.Children(func() {
-		ui.Text(c, label).FontSize(fontSecondary).SingleLine().MinWidth(0)
-		ui.Text(c, fmt.Sprint(count)).FontSize(fontSecondary).FontFeatures("tnum").TextColor(text.Alpha(.55)).SingleLine().Shrink(0)
+		ui.Row(c).Gap(space4).AlignItems(ui.Center).MinWidth(0).Children(func() {
+			ui.Text(c, label).FontSize(fontSecondary).SingleLine().MinWidth(0)
+			if count >= 0 {
+				ui.Text(c, fmt.Sprint(count)).FontSize(fontSecondary).FontFeatures("tnum").TextColor(text.Alpha(.55)).SingleLine().Shrink(0)
+			}
+		})
 	})
 }
 
@@ -954,6 +956,35 @@ func (a *App) shapeCounts() map[string]int {
 		a.Toolbar.shapeKey, a.Toolbar.shapeCount = key, a.Index.ShapeCounts(q)
 	}
 	return a.Toolbar.shapeCount
+}
+
+// typeCounts 是筛选面板里各扩展名、各种类的数量，缓存方式同 shapeCounts。
+func (a *App) typeCounts() (extensions, kinds map[string]int) {
+	if a.Index == nil {
+		return nil, nil
+	}
+	q := a.browseQuery(a.Query)
+	q.Extensions, q.Kinds = nil, nil
+	if key := a.countKey(q); a.Toolbar.typeKey != key {
+		a.Toolbar.typeExtCount, a.Toolbar.typeKindCount = a.Index.TypeCounts(q)
+		a.Toolbar.typeKey = key
+	}
+	return a.Toolbar.typeExtCount, a.Toolbar.typeKindCount
+}
+
+// tagCounts 是筛选面板里各标签的数量，缓存方式同 shapeCounts。
+func (a *App) tagCounts() map[string]int {
+	if a.Index == nil {
+		return nil
+	}
+	// 先去掉筛选里的标签再套范围：在标签页里，范围本身就是按标签限定的，不能一起去掉。
+	q := a.Query
+	q.TagIDs = nil
+	q = a.browseQuery(q)
+	if key := a.countKey(q); a.Toolbar.tagKey != key {
+		a.Toolbar.tagKey, a.Toolbar.tagCount = key, a.Index.TagCounts(q)
+	}
+	return a.Toolbar.tagCount
 }
 
 // ratingCounts 是筛选面板里 0～5 星各自的数量，缓存方式同 shapeCounts。

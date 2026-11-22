@@ -9,6 +9,7 @@ import (
 )
 
 // 图库可选的图标，按图标网格里的顺序排；编号存进图库的 manifest。空编号用应用图标。
+// 图标后来全换成了动物（mountain 现在是柴犬……），编号已经存在用户的图库里，所以不改名，只换图和显示名。
 var libraryIconIDs = []string{
 	"mountain", "wave", "tree", "flower", "cloud", "moon",
 	"city", "landmark", "travel", "portrait", "culture", "food",

@@ -28,14 +28,14 @@ func TestMotionColorUsesIntermediateFrames(t *testing.T) {
 	}
 }
 
-// 侧栏、设置导航会显示选中态，它们用到的图标都要有填充版。
+// 已收藏的心形和视频播放暂停用填充版表示状态，它们都要有填充版。
 func TestIconFoundationHasBothWeights(t *testing.T) {
 	for name, regular := range iconRegular {
 		if regular == nil {
 			t.Fatalf("%s 缺少线性版", name)
 		}
 	}
-	for _, name := range []string{"images", "clock-counter-clockwise", "heart", "shuffle", "tray", "tag-simple", "tag", "folder", "folder-simple-star", "trash", "gear-six", "palette", "mouse-simple", "keyboard", "bell", "lock-simple", "globe", "info"} {
+	for _, name := range []string{"heart", "play", "pause"} {
 		if iconFill[name] == nil {
 			t.Fatalf("%s 缺少填充版", name)
 		}
