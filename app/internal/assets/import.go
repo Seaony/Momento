@@ -44,6 +44,7 @@ type candidate struct {
 	extension string
 	createdAt time.Time
 	motion    *motionSource // 配成实况照片时的那段视频
+	pairErr   error
 }
 type prepared struct {
 	asset               model.Asset
@@ -389,6 +390,10 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 	}
 	hashed := 0
 	if err = parallel(ctx, total, ioWorkers(), func(ctx context.Context, i int) error {
+		if pairErr := candidates[i].pairErr; pairErr != nil {
+			fail(i, pairErr)
+			return nil
+		}
 		stageErr := stageHash(ctx, &candidates[i], stage, i)
 		var source sourceError
 		if errors.As(stageErr, &source) && ctx.Err() == nil {
@@ -659,6 +664,7 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 				repaired[c.hash] = true
 				slog.Info("已补回图库缺失的原图和缩略图", "id", c.hash, "path", relative)
 			}
+			repairedMotion := false
 			if m := c.motion; m != nil {
 				if motionPath == "" {
 					// 图库里已有这张图但没有视频（比如以前单独导入过）：补存视频，升级成实况照片，源视频才能放心移走。
@@ -675,15 +681,17 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 					}
 					slog.Info("已有的图片补上实况视频", "id", c.hash)
 				} else if stored, pathErr := s.assetPath(motionPath); errors.Is(pathErr, os.ErrNotExist) {
-					// 记录里的视频文件丢了：这段视频和图片的实况内容 ID 一致（配对时核对过），用它补回。
-					// 和补原图一样，记录本来就在，补回的文件即使这批回滚也留着。
-					if _, _, err = s.installFile(ctx, m.staged, motionPath, m.hash, true); err != nil {
-						return result, err
+					dst, placed, installErr := s.installFile(ctx, m.staged, motionPath, m.hash, true)
+					if placed {
+						installed = append(installed, dst)
 					}
-					// 补回的视频时长可能和丢掉的那段不同，记录跟着改，检查器和按时长的智能文件夹才对得上。
+					if installErr != nil {
+						return result, installErr
+					}
 					if _, err = tx.ExecContext(ctx, "UPDATE assets SET duration_ms=?,updated_at=? WHERE id=?", m.durationMS, nowText(), c.hash); err != nil {
 						return result, err
 					}
+					repairedMotion = true
 					slog.Warn("图库里缺少实况视频，用这次导入的视频补回", "id", c.hash, "path", motionPath)
 				} else if pathErr != nil {
 					return result, pathErr
@@ -702,6 +710,9 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 			if trashed {
 				result.Imported++
 				result.Restored++
+			} else if repairedMotion {
+				result.Imported++
+				skipped--
 			} else {
 				result.Skipped++
 			}

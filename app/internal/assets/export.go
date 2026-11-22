@@ -207,37 +207,8 @@ func (s *Service) ExportWithOptions(ctx context.Context, items []model.Asset, de
 		}
 		final := requested
 		if directory {
-			// 导出到文件夹：重名时自动改成「名字 2.ext」，不覆盖已有文件；带视频时两个名字都要空着，配对才不会乱。
-			number := max(1, nextNumber[requested])
-			for ; ; number++ {
-				final = numberedPath(requested, number)
-				if withMotion {
-					if _, statErr := os.Lstat(motionExportPath(final)); statErr == nil {
-						continue
-					}
-				}
-				// 找空名可能要一会儿（同名很多、外置盘慢）：发布前再看一次是否已取消。
-				if e = ctx.Err(); e != nil {
-					break
-				}
-				if e = publishFile(staged, final); os.IsExist(e) {
-					continue
-				}
-				if e != nil || !withMotion {
-					break
-				}
-				if e = publishFile(stagedMotion, motionExportPath(final)); e == nil {
-					break
-				}
-				// 视频没放上：撤回刚放的图片，不留单独的静态图；视频名刚被别人占了就换下一个编号。
-				if removeErr := os.Remove(final); removeErr != nil {
-					e = errors.Join(e, removeErr)
-					break
-				}
-				if !os.IsExist(e) {
-					break
-				}
-			}
+			var number int
+			final, number, e = publishExportToDirectory(ctx, requested, staged, stagedMotion, max(1, nextNumber[requested]), publishFile)
 			if e == nil {
 				nextNumber[requested] = number + 1
 			}
@@ -271,6 +242,49 @@ func (s *Service) ExportWithOptions(ctx context.Context, items []model.Asset, de
 		}
 	}
 	return paths, nil
+}
+
+func publishExportToDirectory(ctx context.Context, requested, staged, stagedMotion string, start int, publish func(string, string) error) (string, int, error) {
+	for number := start; ; number++ {
+		if err := ctx.Err(); err != nil {
+			return "", 0, err
+		}
+		final := numberedPath(requested, number)
+		var motionPath string
+		if stagedMotion != "" {
+			motionPath = motionExportPath(final)
+			if _, err := os.Lstat(motionPath); err == nil {
+				continue
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return "", 0, err
+			}
+		}
+		if err := publish(staged, final); errors.Is(err, os.ErrExist) {
+			continue
+		} else if err != nil {
+			return "", 0, err
+		}
+		if motionPath == "" {
+			return final, number, nil
+		}
+		err := publish(stagedMotion, motionPath)
+		if err == nil {
+			return final, number, nil
+		}
+		if !errors.Is(err, os.ErrExist) {
+			return "", 0, errors.Join(err, os.Remove(final))
+		}
+		_, statErr := os.Lstat(staged)
+		var undoErr error
+		if errors.Is(statErr, os.ErrNotExist) {
+			undoErr = os.Rename(final, staged)
+		} else {
+			undoErr = errors.Join(statErr, os.Remove(final))
+		}
+		if undoErr != nil {
+			return "", 0, errors.Join(err, undoErr)
+		}
+	}
 }
 
 // fitLongestEdge 把最长边缩到 maxEdge 以内，保持比例；maxEdge 为 0 或图本来就不大时原样返回。

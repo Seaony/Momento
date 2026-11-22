@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -106,6 +107,50 @@ func TestImportLivePhotoContentIDMismatchImportsSeparately(t *testing.T) {
 	}
 	if kinds[model.KindImage] != 1 || kinds[model.KindVideo] != 1 {
 		t.Fatalf("种类不对：%v", kinds)
+	}
+}
+
+func TestImportPairsMatchingStillAmongSameNameImages(t *testing.T) {
+	ctx, lib, s := testLibrary(t)
+	dir := t.TempDir()
+	_, motion := livePair(t, dir, "IMG")
+	matching := fixtureCopy(t, "jpg", filepath.Join(dir, "IMG.JPG"))
+	readImageContentID = func(path string) (string, error) {
+		if path == matching {
+			return liveContentID, nil
+		}
+		return "OTHER", nil
+	}
+	result, err := s.Import(ctx, model.ImportRequest{Paths: []string{dir}}, nil)
+	if err != nil || result.Imported != 2 || len(result.Errors) != 0 || !slices.Equal(result.Motion, []string{motion}) {
+		t.Fatalf("导入结果不对：%+v %v", result, err)
+	}
+	for _, asset := range snapshot(t, ctx, lib).Assets {
+		if asset.Extension == "jpg" && asset.Kind != model.KindLive || asset.Extension == "heic" && asset.Kind != model.KindImage {
+			t.Fatalf("配到了错误的素材：%+v", asset)
+		}
+	}
+}
+
+func TestImportLiveContentIDReadErrorRejectsStillAndMotion(t *testing.T) {
+	ctx, lib, s := testLibrary(t)
+	dir := t.TempDir()
+	still, motion := livePair(t, dir, "IMG")
+	fixtureCopy(t, "png", filepath.Join(dir, "good.png"))
+	readErr := errors.New("读取图片实况内容 ID 失败")
+	readImageContentID = func(string) (string, error) { return "", readErr }
+	result, err := s.Import(ctx, model.ImportRequest{Paths: []string{dir}}, nil)
+	if err != nil || result.Imported != 1 || len(result.Motion) != 0 || !slices.Equal(result.Failed, []string{still, motion}) || len(result.Errors) != 2 {
+		t.Fatalf("导入结果不对：%+v %v", result, err)
+	}
+	for _, cause := range result.Errors {
+		if !errors.Is(cause, readErr) {
+			t.Fatalf("丢失读取原因：%v", cause)
+		}
+	}
+	assets := snapshot(t, ctx, lib).Assets
+	if len(assets) != 1 || assets[0].OriginalFileName != "good.png" {
+		t.Fatalf("应只导入正常图片：%+v", assets)
 	}
 }
 
@@ -292,15 +337,13 @@ func TestPairLivePhotosRequiresMatchingContentID(t *testing.T) {
 	t.Cleanup(func() { readImageContentID = previousImage })
 	for name, ids := range map[string]struct {
 		image, video string
-		imageErr     error
 	}{
-		"图片没有内容 ID":   {video: "ID"},
-		"视频没有内容 ID":   {image: "ID"},
-		"两边都没有":       {},
-		"图片内容 ID 读不出": {video: "ID", imageErr: errors.New("bad exif")},
+		"图片没有内容 ID": {video: "ID"},
+		"视频没有内容 ID": {image: "ID"},
+		"两边都没有":     {},
 	} {
 		probeVideo = func(string) (media.Info, error) { return media.Info{Duration: time.Second, ContentID: ids.video}, nil }
-		readImageContentID = func(string) (string, error) { return ids.image, ids.imageErr }
+		readImageContentID = func(string) (string, error) { return ids.image, nil }
 		got := pairLivePhotos([]candidate{{path: "/x/IMG.JPG", extension: "jpg"}, {path: "/x/IMG.MOV", extension: "mov"}})
 		if len(got) != 2 || got[0].motion != nil {
 			t.Fatalf("%s：不该配成实况照片：%+v", name, got)
@@ -330,7 +373,7 @@ func TestImportSameNameWithoutContentIDImportsSeparately(t *testing.T) {
 	}
 }
 
-// 图库里实况照片的视频文件丢了，重新导入原来那对：用这段视频补回，整对算重复，源视频记进 Motion。
+// 图库里实况照片的视频文件丢了，重导应计为导入，并记录已处理的源视频。
 // 视频位置被别的东西占着时仍然拒绝。
 func TestImportRepairsMissingLiveMotion(t *testing.T) {
 	ctx, lib, s := testLibrary(t)
@@ -344,15 +387,22 @@ func TestImportRepairsMissingLiveMotion(t *testing.T) {
 	if err := os.Remove(stored); err != nil {
 		t.Fatal(err)
 	}
-	result, err := s.Import(ctx, model.ImportRequest{Paths: []string{still, motion}}, nil)
-	if err != nil || result.Skipped != 1 || len(result.Motion) != 1 || result.Motion[0] != motion || len(result.Failed) != 0 {
+	if _, err := lib.DB.ExecContext(ctx, "UPDATE assets SET duration_ms=1 WHERE id=?", asset.ID); err != nil {
+		t.Fatal(err)
+	}
+	var progress model.ImportProgress
+	result, err := s.Import(ctx, model.ImportRequest{Paths: []string{still, motion}}, func(update model.ImportProgress) { progress = update })
+	if err != nil || result.Imported != 1 || result.Skipped != 0 || !slices.Equal(result.AssetIDs, []string{asset.ID}) || !slices.Equal(result.Motion, []string{motion}) || len(result.Failed) != 0 {
 		t.Fatalf("重导应补回视频：%+v %v", result, err)
+	}
+	if progress.Imported != 1 || progress.Skipped != 0 {
+		t.Fatalf("最终进度应记录补回：%+v", progress)
 	}
 	want, _ := os.ReadFile(motion)
 	if got, err := os.ReadFile(stored); err != nil || !bytes.Equal(got, want) {
 		t.Fatal("补回的视频不对", err)
 	}
-	if after := snapshot(t, ctx, lib).Assets[0]; after.Kind != model.KindLive || after.MotionPath != asset.MotionPath {
+	if after := snapshot(t, ctx, lib).Assets[0]; after.Kind != model.KindLive || after.MotionPath != asset.MotionPath || after.DurationMS != asset.DurationMS {
 		t.Fatalf("补回后记录不对：%+v", after)
 	}
 
@@ -371,6 +421,38 @@ func TestImportRepairsMissingLiveMotion(t *testing.T) {
 	}
 	if _, statErr := os.Stat(outside); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("不该顺着链接写到图库外：%v", statErr)
+	}
+}
+
+func TestImportMissingLiveMotionRollsBackOnCommitFailure(t *testing.T) {
+	ctx, lib, s := testLibrary(t)
+	dir := t.TempDir()
+	livePair(t, dir, "IMG")
+	if _, err := s.Import(ctx, model.ImportRequest{Paths: []string{dir}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	asset := snapshot(t, ctx, lib).Assets[0]
+	stored := filepath.Join(lib.Root, filepath.FromSlash(asset.MotionPath))
+	if err := os.Remove(stored); err != nil {
+		t.Fatal(err)
+	}
+	_, err := lib.DB.ExecContext(ctx, `
+		UPDATE assets SET duration_ms=1;
+		CREATE TABLE commit_guard(folder_id TEXT REFERENCES folders(id) DEFERRABLE INITIALLY DEFERRED);
+		CREATE TRIGGER reject_motion_commit AFTER UPDATE OF duration_ms ON assets
+		BEGIN INSERT INTO commit_guard(folder_id) VALUES('missing-folder'); END;`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := s.Import(ctx, model.ImportRequest{Paths: []string{dir}}, nil)
+	if err == nil || result.Imported != 0 || result.Skipped != 0 || len(result.Motion) != 0 || len(result.AssetIDs) != 0 {
+		t.Fatalf("提交失败应清空结果：%+v %v", result, err)
+	}
+	if _, err := os.Stat(stored); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("提交失败后留下了视频：%v", err)
+	}
+	if after := snapshot(t, ctx, lib).Assets[0]; after.DurationMS != 1 || after.MotionPath != asset.MotionPath {
+		t.Fatalf("提交失败却更改了视频记录：%+v", after)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Seaony/Momento/app/internal/i18n"
 	"github.com/Seaony/Momento/app/internal/media"
 )
 
@@ -36,12 +37,11 @@ func pairLivePhotos(candidates []candidate) []candidate {
 		base := filepath.Base(c.path)
 		return filepath.Join(filepath.Dir(c.path), strings.ToLower(strings.TrimSuffix(base, filepath.Ext(base))))
 	}
-	stills := map[string]int{}
+	stills := map[string][]int{}
 	for i, c := range candidates {
 		if isLiveStill(c.extension) {
-			if _, taken := stills[key(c)]; !taken {
-				stills[key(c)] = i
-			}
+			name := key(c)
+			stills[name] = append(stills[name], i)
 		}
 	}
 	absorbed := map[int]bool{}
@@ -49,8 +49,8 @@ func pairLivePhotos(candidates []candidate) []candidate {
 		if c.extension != "mov" {
 			continue
 		}
-		still, ok := stills[key(c)]
-		if !ok || candidates[still].motion != nil {
+		group := stills[key(c)]
+		if len(group) == 0 {
 			continue
 		}
 		info, err := probeVideo(c.path)
@@ -58,16 +58,26 @@ func pairLivePhotos(candidates []candidate) []candidate {
 			slog.Warn("同名视频读不出来，不配成实况照片", "file", filepath.Base(c.path), "error", err)
 			continue
 		}
-		imageID, err := readImageContentID(candidates[still].path)
-		if err != nil {
-			slog.Warn("读不出图片的实况内容 ID，同名图片和视频当两个素材导入", "file", filepath.Base(candidates[still].path), "error", err)
+		match := -1
+		for _, index := range group {
+			still := &candidates[index]
+			if still.motion != nil {
+				continue
+			}
+			var imageID string
+			if still.pairErr == nil {
+				imageID, still.pairErr = readImageContentID(still.path)
+			}
+			if still.pairErr != nil {
+				candidates[i].pairErr = i18n.WrapError(still.pairErr, "error_import_read", filepath.Base(still.path))
+			} else if match == -1 && imageID != "" && imageID == info.ContentID {
+				match = index
+			}
+		}
+		if candidates[i].pairErr != nil || match == -1 {
 			continue
 		}
-		if imageID == "" || info.ContentID == "" || imageID != info.ContentID {
-			slog.Info("同名图片和视频没有一致的实况内容 ID，当两个素材导入", "image", filepath.Base(candidates[still].path), "video", filepath.Base(c.path), "imageID", imageID, "videoID", info.ContentID)
-			continue
-		}
-		candidates[still].motion = &motionSource{path: c.path, durationMS: info.Duration.Milliseconds()}
+		candidates[match].motion = &motionSource{path: c.path, durationMS: info.Duration.Milliseconds()}
 		absorbed[i] = true
 	}
 	if len(absorbed) == 0 {

@@ -44,6 +44,47 @@ func TestExportBatchNumbersEachNameAndPreservesOccupiedPaths(t *testing.T) {
 	}
 }
 
+func TestPublishLiveExportRetriesAfterMotionNameTaken(t *testing.T) {
+	for _, mode := range []struct {
+		name    string
+		publish func(string, string) error
+	}{{"hardlink", os.Link}, {"rename", os.Rename}} {
+		t.Run(mode.name, func(t *testing.T) {
+			dir := t.TempDir()
+			imageStage := filepath.Join(dir, ".still")
+			motionStage := filepath.Join(dir, ".motion")
+			requested := filepath.Join(dir, "photo.jpg")
+			blockedMotion := motionExportPath(requested)
+			for path, content := range map[string]string{imageStage: "still", motionStage: "motion"} {
+				if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			publish := func(source, destination string) error {
+				if destination == blockedMotion {
+					if err := os.WriteFile(destination, []byte("external"), 0600); err != nil {
+						t.Fatal(err)
+					}
+					return &os.PathError{Op: "open", Path: destination, Err: os.ErrExist}
+				}
+				return mode.publish(source, destination)
+			}
+			final, number, err := publishExportToDirectory(t.Context(), requested, imageStage, motionStage, 1, publish)
+			if err != nil || number != 2 || final != filepath.Join(dir, "photo 2.jpg") {
+				t.Fatalf("没有换名重试：%q, %d, %v", final, number, err)
+			}
+			if _, err := os.Lstat(requested); !os.IsNotExist(err) {
+				t.Fatalf("第一次发布留下了未配对图片：%v", err)
+			}
+			for path, want := range map[string]string{final: "still", motionExportPath(final): "motion", blockedMotion: "external"} {
+				if data, err := os.ReadFile(path); err != nil || string(data) != want {
+					t.Fatalf("%s: 实际 %q，预期 %q，错误 %v", path, data, want, err)
+				}
+			}
+		})
+	}
+}
+
 func BenchmarkBatchExportSameName(b *testing.B) {
 	root := b.TempDir()
 	const relative = "photo.jpg"
