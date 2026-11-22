@@ -192,8 +192,8 @@ func TestQueryMatchesReferenceImplementation(t *testing.T) {
 				used[asset.ID] = true
 			}
 		}
-		idx.UpdateLastUsed(used, now.Add(-time.Duration(r.IntN(48))*time.Hour))
-		check("（更新使用时间后）")
+		idx.MoveRecent(used, now.Add(-time.Duration(r.IntN(48))*time.Hour))
+		check("（增量更新使用时间后）")
 	}
 }
 

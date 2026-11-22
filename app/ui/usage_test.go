@@ -22,11 +22,15 @@ func TestRecentScopeReordersAfterUse(t *testing.T) {
 	}
 	a.Selected.Add("old")
 	a.selectedIndex = 1
+	visible := a.previewVisibleIDs()
 	a.applyAssetsUsed([]string{"old"}, now)
 	if a.Visible[0].ID != "old" || a.selectedIndex != 0 || !a.Selected.Has("old") {
 		t.Fatalf("用过的图没有排到最前或选中丢了：%v，当前 %d", a.Visible, a.selectedIndex)
 	}
 	if !a.assetByID["old"].LastUsedAt.Equal(now) {
 		t.Fatal("素材数据里的使用时间没更新")
+	}
+	if a.Preview.visibleVersion != a.visibleVersion || !visible["old"] || !visible["new"] {
+		t.Fatal("仅改顺序时应保留已经缓存的可见成员")
 	}
 }

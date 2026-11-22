@@ -7,8 +7,10 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Seaony/Momento/app/internal/catalog"
 	"github.com/Seaony/Momento/app/internal/model"
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
 )
 
 func (a *App) ShowMainWindow() {
@@ -127,8 +129,29 @@ func (a *App) selectImportResult(ids []string) {
 	if len(ids) == 0 {
 		return
 	}
-	a.Query.Search = ""
-	a.applyBrowseSelection(browseLocation{Scope: "all"}, ids)
+	if (a.Query.Scope == "all" || a.Query.Scope == "") && !a.TagPage && a.Query.Search == "" {
+		a.Selected.Clear()
+		compare := catalog.AssetOrder(a.Query)
+		missing := false
+		for _, id := range ids {
+			if asset, exists := a.assetByID[id]; exists {
+				if _, visible := slices.BinarySearchFunc(a.Visible, &asset, compare); visible {
+					a.Selected.Add(id)
+				} else if a.Index.Matches(a.Query, id) {
+					missing = true
+					a.Selected.Add(id)
+				}
+			}
+		}
+		a.scroll = ui.ScrollState{}
+		a.Toolbar.SortOpen = false
+		if missing {
+			a.refine(true)
+		}
+	} else {
+		a.Query.Search = ""
+		a.applyBrowseSelection(browseLocation{Scope: "all"}, ids)
+	}
 	a.RevealInspector()
 	a.FollowPreviewSelection()
 }

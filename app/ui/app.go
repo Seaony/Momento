@@ -422,40 +422,131 @@ func (a *App) patchAssets(ids []string, apply func(*model.Asset)) {
 	for _, id := range ids {
 		targets[id] = true
 	}
+	before := make(map[string]model.Asset, len(ids))
+	for _, id := range ids {
+		if asset, ok := a.assetByID[id]; ok {
+			before[id] = asset
+		}
+	}
 	now := time.Now().UTC()
-	for _, i := range a.Index.Patch(targets, func(asset *model.Asset) {
+	changed := a.Index.Patch(targets, func(asset *model.Asset) {
 		apply(asset)
 		asset.UpdatedAt = now
-	}) {
-		asset := a.Snapshot.Assets[i]
-		a.assetByID[asset.ID] = asset
-	}
+	})
 	a.snapshotVersion++
 	a.indexVersion++
-	a.refine(false)
+	a.applyVisibleChanges(before, changed)
 }
 
-// mergeAssets 把只读了几张素材的快照（SnapshotAssets）并进内存：这几张换成新数据，新导入的接在后面，
-// 文件夹、标签等换成最新的，再重建索引。
 func (a *App) mergeAssets(partial model.Snapshot) {
-	fresh := make(map[string]int, len(partial.Assets))
-	for i, asset := range partial.Assets {
-		fresh[asset.ID] = i
-	}
-	snapshot := partial
-	snapshot.Assets = a.Snapshot.Assets
-	for i := range snapshot.Assets {
-		if j, ok := fresh[snapshot.Assets[i].ID]; ok {
-			snapshot.Assets[i] = partial.Assets[j]
-			delete(fresh, snapshot.Assets[i].ID)
-		}
-	}
+	before := make(map[string]model.Asset, len(partial.Assets))
 	for _, asset := range partial.Assets {
-		if _, added := fresh[asset.ID]; added {
-			snapshot.Assets = append(snapshot.Assets, asset)
+		if old, exists := a.assetByID[asset.ID]; exists {
+			before[asset.ID] = old
 		}
 	}
-	a.applySnapshot(snapshot)
+	merged, changed, metadataChanged := a.Index.Merge(partial)
+	a.Snapshot = merged
+	a.snapshotVersion++
+	a.indexVersion++
+	if metadataChanged {
+		for _, index := range changed {
+			asset := merged.Assets[index]
+			a.assetByID[asset.ID] = asset
+		}
+		a.refine(false)
+		a.pruneAutoImportTargets()
+		return
+	}
+	a.applyVisibleChanges(before, changed)
+}
+
+func (a *App) applyVisibleChanges(before map[string]model.Asset, changed []int) {
+	for _, index := range changed {
+		asset := a.Snapshot.Assets[index]
+		a.assetByID[asset.ID] = asset
+	}
+	if len(changed) == 0 {
+		return
+	}
+	if len(changed) > 64 || a.Query.Scope == "random" {
+		a.refine(false)
+		return
+	}
+	query := a.browseQuery(a.Query)
+	if query.Now.IsZero() {
+		query.Now = time.Now()
+	}
+	compare := catalog.AssetOrder(query)
+	layoutChanged := false
+	currentID, anchorID := a.visibleIDAt(a.selectedIndex), a.visibleIDAt(a.anchor)
+	visibleIDs := a.Preview.visibleIDs
+	if a.Preview.visibleVersion != a.visibleVersion {
+		visibleIDs = nil
+	}
+	for _, index := range changed {
+		asset := a.Snapshot.Assets[index]
+		old, existed := before[asset.ID]
+		position, visible := 0, false
+		if existed {
+			position, visible = slices.BinarySearchFunc(a.Visible, &old, compare)
+		}
+		matches := a.Index.Matches(query, asset.ID)
+		if visible && matches && compare(old, &asset) == 0 {
+			a.Visible[position] = asset
+			layoutChanged = layoutChanged || old.Width != asset.Width || old.Height != asset.Height || old.Rotation != asset.Rotation
+			continue
+		}
+		if visible {
+			a.Visible = slices.Delete(a.Visible, position, position+1)
+			delete(visibleIDs, asset.ID)
+		}
+		if matches {
+			position, _ = slices.BinarySearchFunc(a.Visible, &asset, compare)
+			a.Visible = slices.Insert(a.Visible, position, asset)
+			if visibleIDs != nil {
+				visibleIDs[asset.ID] = true
+			}
+		} else if visible {
+			a.Selected.Remove(asset.ID)
+		}
+		layoutChanged = layoutChanged || visible || matches
+	}
+	if query.Scope == "recent" {
+		cutoff := query.Now.AddDate(0, 0, -30)
+		last := len(a.Visible)
+		for last > 0 && a.Visible[last-1].LastUsedAt.Before(cutoff) {
+			last--
+			id := a.Visible[last].ID
+			a.Selected.Remove(id)
+			delete(visibleIDs, id)
+		}
+		if last != len(a.Visible) {
+			a.Visible = slices.Delete(a.Visible, last, len(a.Visible))
+			layoutChanged = true
+		}
+	}
+	if layoutChanged {
+		find := func(id string) int {
+			if asset, exists := a.assetByID[id]; exists {
+				if position, ok := slices.BinarySearchFunc(a.Visible, &asset, compare); ok {
+					return position
+				}
+			}
+			return -1
+		}
+		a.anchor, a.selectedIndex = find(anchorID), find(currentID)
+		a.visibleVersion++
+		a.Preview.visibleIDs, a.Preview.visibleVersion = visibleIDs, a.visibleVersion
+	}
+	a.FollowPreviewSelection()
+}
+
+func (a *App) visibleIDAt(index int) string {
+	if index >= 0 && index < len(a.Visible) {
+		return a.Visible[index].ID
+	}
+	return ""
 }
 
 // 和数据库里一样：成员 ID 去重并按升序排好。

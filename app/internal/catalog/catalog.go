@@ -1,7 +1,6 @@
 package catalog
 
 import (
-	"cmp"
 	"maps"
 	"slices"
 	"strings"
@@ -78,9 +77,11 @@ type orderKey struct {
 
 // 结构变化后重建索引；使用时间不影响搜索项和计数，可直接更新。
 type Index struct {
-	snapshot model.Snapshot
-	entries  []entry
-	counts   Counts
+	snapshot  model.Snapshot
+	entries   []entry
+	positions map[string]int
+	names     map[string]string
+	counts    Counts
 	// 每种排序方式第一次用到时把全部素材排一次，之后搜索、筛选只在这份顺序上过滤。
 	mu     sync.Mutex
 	orders map[orderKey][]int32
@@ -94,11 +95,12 @@ func New(snapshot model.Snapshot) *Index {
 			Assets: snapshot.Assets, Folders: slices.Clone(snapshot.Folders), Tags: slices.Clone(snapshot.Tags),
 			SmartFolders: cloneSmartFolders(snapshot.SmartFolders), QuickAccess: slices.Clone(snapshot.QuickAccess),
 		},
-		entries: make([]entry, len(snapshot.Assets)),
-		counts:  Counts{Folders: make(map[string]int), Tags: make(map[string]int)},
-		orders:  map[orderKey][]int32{},
+		entries:   make([]entry, len(snapshot.Assets)),
+		counts:    Counts{Folders: make(map[string]int), Tags: make(map[string]int)},
+		positions: make(map[string]int, len(snapshot.Assets)),
+		orders:    map[orderKey][]int32{},
 	}
-	tagNames := idx.tagNames()
+	idx.names = idx.tagNames()
 	for _, tag := range snapshot.Tags {
 		idx.counts.Tags[tag.ID] = 0
 	}
@@ -106,8 +108,9 @@ func New(snapshot model.Snapshot) *Index {
 		idx.counts.Folders[folder.ID] = 0
 	}
 	for i := range snapshot.Assets {
-		idx.entries[i] = newEntry(&snapshot.Assets[i], tagNames)
+		idx.entries[i] = newEntry(&snapshot.Assets[i], idx.names)
 		idx.count(&snapshot.Assets[i], 1)
+		idx.positions[snapshot.Assets[i].ID] = i
 	}
 	return idx
 }
@@ -156,27 +159,27 @@ func (idx *Index) count(asset *model.Asset, delta int) {
 // 名称变了才作废排好的顺序。返回改到的素材下标。apply 不能原地改素材里的切片，要换成新切片。
 func (idx *Index) Patch(ids map[string]bool, apply func(*model.Asset)) []int {
 	var changed []int
-	var tagNames map[string]string
-	renamed := false
-	for i := range idx.snapshot.Assets {
-		asset := &idx.snapshot.Assets[i]
-		if !ids[asset.ID] {
+	var reordered []int
+	for id, selected := range ids {
+		i, exists := idx.positions[id]
+		if !selected || !exists {
 			continue
 		}
-		if tagNames == nil {
-			tagNames = idx.tagNames()
-		}
+		asset := &idx.snapshot.Assets[i]
+		old := *asset
 		idx.count(asset, -1)
 		apply(asset)
 		idx.count(asset, 1)
-		e := newEntry(asset, tagNames)
-		renamed = renamed || e.name != idx.entries[i].name
+		e := newEntry(asset, idx.names)
+		if e.name != idx.entries[i].name || old.Size != asset.Size || !old.CreatedAt.Equal(asset.CreatedAt) || !old.LastUsedAt.Equal(asset.LastUsedAt) {
+			reordered = append(reordered, i)
+		}
 		idx.entries[i] = e
 		changed = append(changed, i)
 	}
-	if renamed {
+	if len(reordered) > 0 {
 		idx.mu.Lock()
-		clear(idx.orders)
+		idx.updateOrders(reordered, reordered, false)
 		idx.mu.Unlock()
 	}
 	return changed
@@ -205,6 +208,15 @@ func (idx *Index) Query(q Query) []model.Asset {
 
 // eachMatching 按存放顺序对命中查询全部条件的素材下标调用 fn；智能文件夹找不到或条件无效时一个都不算。
 func (idx *Index) eachMatching(q Query, fn func(int)) {
+	matches := idx.matcher(q)
+	for i := range idx.snapshot.Assets {
+		if matches(i) {
+			fn(i)
+		}
+	}
+}
+
+func (idx *Index) matcher(q Query) func(int) bool {
 	search := strings.ToLower(strings.TrimSpace(q.Search))
 	if q.Now.IsZero() {
 		q.Now = time.Now()
@@ -218,31 +230,25 @@ func (idx *Index) eachMatching(q Query, fn func(int)) {
 			}
 		}
 		if smart == nil || ValidateSmartFolder(*smart) != nil {
-			return
+			return func(int) bool { return false }
 		}
 	}
 	if q.Scope == "folder" && q.IncludeSubfolders {
 		q.folderSet = FolderTree(idx.snapshot.Folders, q.FolderID)
 	}
 	extensions := normalizedExtensions(q.Extensions)
-	for i := range idx.snapshot.Assets {
+	return func(i int) bool {
 		asset := &idx.snapshot.Assets[i]
 		if !inScope(asset, q) || (smart != nil && !matchesValidatedSmart(asset, smart)) || !matchesColors(asset.Colors, q.ColorFamilies) || !matchesAny(asset.TagIDs, q.TagIDs) {
-			continue
+			return false
 		}
-		if !idx.matchesFilters(i, extensions, q.Kinds, search) || !matchesShapes(asset, q.Shapes) {
-			continue
-		}
-		fn(i)
+		return idx.matchesFilters(i, extensions, q.Kinds, search) && matchesShapes(asset, q.Shapes)
 	}
 }
 
 // order 返回按查询的排序方式排好的全部素材下标；排序是全序（最后按 ID 定），所以先排全部再过滤和先过滤再排结果一样。
 func (idx *Index) order(q Query) []int32 {
-	key := orderKey{field: "added", descending: q.Descending || q.Sort == "", recent: q.Scope == "recent"}
-	if q.Sort == "name" || q.Sort == "size" {
-		key.field = q.Sort
-	}
+	key := queryOrder(q)
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 	if order, ok := idx.orders[key]; ok {
@@ -253,31 +259,7 @@ func (idx *Index) order(q Query) []int32 {
 		order[i] = int32(i)
 	}
 	slices.SortFunc(order, func(left, right int32) int {
-		a, b := &idx.snapshot.Assets[left], &idx.snapshot.Assets[right]
-		var result int
-		if key.recent {
-			if result = b.LastUsedAt.Compare(a.LastUsedAt); result != 0 {
-				return result
-			}
-		}
-		switch key.field {
-		case "name":
-			result = strings.Compare(idx.entries[left].name, idx.entries[right].name)
-		case "size":
-			result = cmp.Compare(a.Size, b.Size)
-		default:
-			result = a.CreatedAt.Compare(b.CreatedAt)
-		}
-		if result != 0 {
-			if key.descending {
-				return -result
-			}
-			return result
-		}
-		if result = strings.Compare(idx.entries[left].name, idx.entries[right].name); result != 0 {
-			return result
-		}
-		return strings.Compare(a.ID, b.ID)
+		return idx.compare(key, left, right)
 	})
 	idx.orders[key] = order
 	return order
@@ -289,16 +271,9 @@ func (idx *Index) UpdateLastUsed(ids map[string]bool, at time.Time) []int {
 	if len(ids) == 0 {
 		return nil
 	}
-	var changed []int
-	for i := range idx.snapshot.Assets {
-		asset := &idx.snapshot.Assets[i]
-		if ids[asset.ID] && at.After(asset.LastUsedAt) {
-			asset.LastUsedAt = at
-			changed = append(changed, i)
-		}
-	}
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
+	changed := idx.updateLastUsed(ids, at)
 	for key := range idx.orders {
 		if key.recent {
 			delete(idx.orders, key)

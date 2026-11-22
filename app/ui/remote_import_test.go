@@ -2,9 +2,11 @@ package ui
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/Seaony/Momento/app/internal/browser"
+	"github.com/Seaony/Momento/app/internal/catalog"
 	"github.com/Seaony/Momento/app/internal/i18n"
 	"github.com/Seaony/Momento/app/internal/model"
 )
@@ -90,5 +92,35 @@ func TestMergeAssetsReplacesAndAppends(t *testing.T) {
 	}
 	if counts := a.Index.Counts(); counts.All != 3 || counts.Tags["t"] != 1 {
 		t.Fatalf("索引没有跟着更新：%+v", counts)
+	}
+	if !reflect.DeepEqual(a.Visible, a.Index.Query(a.Query)) {
+		t.Fatalf("增量可见列表与完整查询结果不同：%+v", a.Visible)
+	}
+}
+
+func TestMergeAssetsUpdatesSortedFilteredVisibleList(t *testing.T) {
+	a := &App{Query: catalog.Query{Sort: "name", Descending: true, Extensions: []string{"jpg"}}, selectedIndex: -1, anchor: -1}
+	a.applySnapshot(model.Snapshot{Assets: []model.Asset{
+		{ID: "a", Name: "Alpha", Extension: "jpg"},
+		{ID: "b", Name: "Bravo", Extension: "jpg"},
+		{ID: "c", Name: "Charlie", Extension: "jpg"},
+	}})
+	a.Selected.Add("a")
+	a.Selected.Add("c")
+	a.selectedIndex, a.anchor = 2, 0
+	a.previewVisibleIDs()
+	a.mergeAssets(model.Snapshot{Assets: []model.Asset{
+		{ID: "a", Name: "Delta", Extension: "jpg"},
+		{ID: "c", Name: "Charlie", Extension: "png"},
+		{ID: "d", Name: "Echo", Extension: "jpg"},
+	}})
+	if want := a.Index.Query(a.Query); !reflect.DeepEqual(a.Visible, want) {
+		t.Fatalf("增量列表 %v，完整查询 %v", a.Visible, want)
+	}
+	if a.selectedIndex != 1 || a.anchor != -1 || a.Selected.Len() != 1 || !a.Selected.Has("a") {
+		t.Fatal("排序或筛选变化后没有保留有效选中状态")
+	}
+	if visible := a.previewVisibleIDs(); visible["c"] || !visible["d"] {
+		t.Fatalf("预览成员缓存没有更新：%v", visible)
 	}
 }

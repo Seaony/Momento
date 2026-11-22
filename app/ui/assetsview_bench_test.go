@@ -248,12 +248,132 @@ func benchmarkAssetsView100K(b *testing.B, scroll bool) {
 
 // 收藏一张图后只改内存、不整库重读，10 万张时的耗时。
 func BenchmarkAssetsView100KPatchFavorite(b *testing.B) {
-	f := newAssetsViewPerformanceFixture(b, 800, 0)
-	id := f.app.Visible[0].ID
-	value := false
-	b.ReportAllocs()
-	for b.Loop() {
-		value = !value
-		f.app.patchAssets([]string{id}, func(asset *model.Asset) { asset.Favorite = value })
+	for _, baseline := range []bool{true, false} {
+		b.Run(performanceCase(baseline), func(b *testing.B) {
+			f := newAssetsViewPerformanceFixture(b, 800, 0)
+			id := f.app.Visible[0].ID
+			ids := []string{id}
+			targets := map[string]bool{id: true}
+			value := false
+			b.ReportAllocs()
+			for b.Loop() {
+				value = !value
+				change := func(asset *model.Asset) { asset.Favorite = value }
+				if baseline {
+					for _, asset := range f.app.Snapshot.Assets {
+						if targets[asset.ID] {
+							indices := f.app.Index.Patch(targets, change)
+							f.app.assetByID[id] = f.app.Snapshot.Assets[indices[0]]
+						}
+					}
+					f.app.refine(false)
+				} else {
+					f.app.patchAssets(ids, change)
+				}
+			}
+		})
 	}
+}
+
+func BenchmarkAssetsView100KMerge100(b *testing.B) {
+	for _, baseline := range []bool{true, false} {
+		b.Run(performanceCase(baseline), func(b *testing.B) {
+			fixture := newAssetsViewPerformanceFixture(b, 800, 0)
+			app := fixture.app
+			initial := app.Snapshot
+			partials := make([]model.Snapshot, 100)
+			at := app.Visible[0].CreatedAt
+			for index := range partials {
+				partials[index] = initial
+				partials[index].Assets = []model.Asset{{
+					ID: fmt.Sprintf("new-%d", index), Name: "New", Extension: "jpg",
+					CreatedAt: at.Add(time.Duration(index+1) * time.Second),
+				}}
+			}
+			b.ReportAllocs()
+			for b.Loop() {
+				b.StopTimer()
+				app.applySnapshot(initial)
+				b.StartTimer()
+				for _, partial := range partials {
+					if baseline {
+						matched := make(map[string]int, len(partial.Assets))
+						for index, asset := range partial.Assets {
+							matched[asset.ID] = index
+						}
+						merged := partial
+						merged.Assets = app.Snapshot.Assets
+						for index, asset := range merged.Assets {
+							if updated, ok := matched[asset.ID]; ok {
+								merged.Assets[index] = partial.Assets[updated]
+								delete(matched, asset.ID)
+							}
+						}
+						for _, asset := range partial.Assets {
+							if _, added := matched[asset.ID]; added {
+								merged.Assets = append(merged.Assets, asset)
+							}
+						}
+						app.applySnapshot(merged)
+					} else {
+						app.mergeAssets(partial)
+					}
+				}
+				if len(app.Visible) != 100_100 {
+					b.Fatalf("合并后显示 %d 张", len(app.Visible))
+				}
+			}
+		})
+	}
+}
+
+func BenchmarkAssetsView100KRecentStep(b *testing.B) {
+	for _, baseline := range []bool{true, false} {
+		b.Run(performanceCase(baseline), func(b *testing.B) {
+			fixture := newAssetsViewPerformanceFixture(b, 800, 0)
+			app := fixture.app
+			app.Query.Scope = "recent"
+			now := time.Now()
+			app.Query.Now = now.Add(time.Hour)
+			for index := range app.Snapshot.Assets {
+				app.Snapshot.Assets[index].LastUsedAt = now.Add(-time.Duration(index) * time.Second)
+			}
+			app.applySnapshot(app.Snapshot)
+			items := previewOrder(app.Visible)
+			size := len(items)
+			window := &previewWindow{root: app.Library.Root, items: items, asset: app.Visible[0], position: 0}
+			app.previewVisibleIDs()
+			step := 1
+			b.ReportAllocs()
+			for b.Loop() {
+				asset, ok := app.previewStep(window, step)
+				if !ok {
+					b.Fatalf("无法翻到预览 %d", step)
+				}
+				window.asset, window.position = asset, step
+				now = now.Add(time.Nanosecond)
+				if baseline {
+					targets := map[string]bool{asset.ID: true}
+					for _, previous := range app.Snapshot.Assets {
+						if targets[previous.ID] {
+							changed := app.Index.UpdateLastUsed(targets, now)
+							app.assetByID[asset.ID] = app.Snapshot.Assets[changed[0]]
+						}
+					}
+					app.indexVersion++
+					app.refine(false)
+				} else {
+					app.applyAssetsUsed([]string{asset.ID}, now)
+				}
+				step = (step + 1) % size
+			}
+		})
+	}
+}
+
+func performanceCase(baseline bool) string {
+	if baseline {
+		return "baseline"
+	}
+	return "incremental"
 }
