@@ -59,13 +59,31 @@ func (a *App) RefreshLaunchAtLogin() {
 }
 
 func (a *App) importFeedback(event string, result model.ImportResult) {
-	if a.Preferences.SelectImported && (result.Imported > 0 || result.Restored > 0) && len(result.AssetIDs) > 0 && !a.IsLocked() {
+	a.importFeedbackFor(event, result, a.importDestination(), false)
+}
+
+type importDestination struct {
+	root, id, name string
+}
+
+func (a *App) importDestination() importDestination {
+	if a.Library == nil {
+		return importDestination{}
+	}
+	return importDestination{root: a.Library.Root, id: a.libraryID(), name: a.manifest.DisplayName}
+}
+
+func (a *App) importFeedbackFor(event string, result model.ImportResult, destination importDestination, showLibraryName bool) {
+	if a.Preferences.SelectImported && (result.Imported > 0 || result.Restored > 0) && len(result.AssetIDs) > 0 && !a.IsLocked() && a.importDestination().root == destination.root {
 		a.selectImportResult(result.AssetIDs)
 	}
 	message := a.T("import_complete", result.Imported, result.Skipped)
 	if len(result.Errors) > 0 {
 		message = a.T("import_complete_failed", result.Imported, result.Skipped, len(result.Errors))
 		a.showImportFailures(result.Errors)
+	}
+	if showLibraryName && destination.name != "" {
+		message = a.T("import_complete_library", destination.name, message)
 	}
 	a.Notify(message)
 	if !a.Preferences.Notify || a.Window == nil || a.Window.IsFocused() || a.SettingsWindow != nil && a.SettingsWindow.IsFocused() {
@@ -75,14 +93,10 @@ func (a *App) importFeedback(event string, result model.ImportResult) {
 		return
 	}
 	ids := slices.Clone(result.AssetIDs)
-	root := ""
-	if a.Library != nil {
-		root = a.Library.Root
-	}
-	note := mygo.NewNotification(mygo.NotificationOptions{Title: "Momento", Body: message, Silent: !a.Preferences.NotifySound, Group: a.libraryID()})
+	note := mygo.NewNotification(mygo.NotificationOptions{Title: "Momento", Body: message, Silent: !a.Preferences.NotifySound, Group: destination.id})
 	note.OnClick(func() {
 		a.ShowMainWindow()
-		if a.Library != nil && a.Library.Root == root && !a.IsLocked() {
+		if a.Library != nil && a.Library.Root == destination.root && !a.IsLocked() {
 			a.selectImportResult(ids)
 		}
 		note.Close()

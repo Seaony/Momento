@@ -486,7 +486,7 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 				return a.SelectedAssets()
 			}
 			return []model.Asset{asset}
-		}, a.ShowError, a.MarkAssetsUsed)
+		}, a.ShowError, a.MarkAssetsUsed, a.reportDragCleanup)
 	}
 	// 右键菜单分五组：查看打开、整理、复制导出、重新处理、删除；回收站里的素材没有整理和重新处理两组。
 	card.ContextMenu(func(m *ui.Menu) {

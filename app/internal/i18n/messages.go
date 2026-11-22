@@ -104,6 +104,8 @@ var messages = map[string][3]string{
 	"import_files":                    {"导入图片", "Import Images", "画像を読み込む"},
 	"import_folder":                   {"导入文件夹", "Import Folder", "フォルダを読み込む"},
 	"import_complete":                 {"已导入 %d 个素材，跳过 %d 个重复", "Imported %d images, skipped %d duplicates", "%d枚を読み込み、重複した%d枚をスキップしました"},
+	"import_complete_library":         {"「%s」 · %s", "“%s” · %s", "「%s」 · %s"},
+	"error_drag_cleanup":              {"清理图库 %s 的拖出临时文件失败", "Couldn't clean up temporary drag files for library %s", "ライブラリ %s のドラッグ用一時ファイルを削除できませんでした"},
 	"quit_without_saving_preferences": {"再退出一次会直接退出，最近的设置改动不会保存。", "Quit again to quit anyway. Recent changes to settings won't be saved.", "もう一度終了するとそのまま終了します。最近の設定の変更は保存されません。"},
 	"delete_library_changed":          {"已经换成了别的图库，没有删除。", "Another library is open now, so nothing was deleted.", "別のライブラリに切り替わったため、削除しませんでした。"},
 	"error_drop_library_mixed":        {"一次只能打开一个图库，图库也不能和图片一起拖进来。", "Open one library at a time, and don't drop a library together with images.", "ライブラリは一度に1つだけ開けます。画像と一緒にドロップすることもできません。"},

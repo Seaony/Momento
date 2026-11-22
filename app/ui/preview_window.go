@@ -62,14 +62,13 @@ func previewOrder(assets []model.Asset) []previewItem {
 }
 
 type previewWindow struct {
-	window   *mygo.Window
-	picture  previewState
-	root     string
-	asset    model.Asset
-	items    []previewItem
-	position int // 当前素材在 items 里的位置，翻页时先看这里，对不上再找
-	// frozen 是换图库前按 items 顺序取下的素材数据：固定住的预览换图库后还能在原来那批里翻页。
-	frozen                    []model.Asset
+	window                    *mygo.Window
+	picture                   previewState
+	root                      string
+	asset                     model.Asset
+	items                     []previewItem
+	position                  int // 当前素材在 items 里的位置，翻页时先看这里，对不上再找
+	frozen                    map[string]model.Asset
 	placeholder               *ui.Bitmap
 	lastSelectionID           string
 	mainSelection             []string
@@ -623,11 +622,8 @@ func (w *previewWindow) indexOf(id string) int {
 func (a *App) previewStep(w *previewWindow, i int) (model.Asset, bool) {
 	item := w.items[i]
 	if a.Library == nil || a.Library.Root != w.root {
-		// 换了图库：只能在换之前取下的那批里翻。
-		if i < len(w.frozen) {
-			return w.frozen[i], w.frozen[i].ID != ""
-		}
-		return model.Asset{}, false
+		asset, exists := w.frozen[item.id]
+		return asset, exists && asset.Trashed == item.trashed
 	}
 	visible := a.previewVisibleIDs()
 	// 直接查 ID 表：彻底删掉一大段后往后翻，每张都去扫一遍主列表会卡住。
@@ -652,12 +648,7 @@ func (a *App) freezePreviews() {
 		if w == nil || a.Library == nil || w.root != a.Library.Root {
 			continue
 		}
-		w.frozen = make([]model.Asset, len(w.items))
-		for i, item := range w.items {
-			if asset, ok := a.assetByID[item.id]; ok && asset.Trashed == item.trashed {
-				w.frozen[i] = asset
-			}
-		}
+		w.frozen = a.assetByID
 	}
 }
 

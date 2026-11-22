@@ -232,7 +232,7 @@ func TestAttachFileDragPreparesAtGestureAndCleansOnEscape(t *testing.T) {
 	selections := 0
 	tt := ui.NewTester(func(c *ui.Context) {
 		element := ui.Box(c).Size(100, 60).Label("source").Drag("internal-asset")
-		AttachFileDrag(element, root, func() []model.Asset { selections++; return []model.Asset{item} }, func(err error) { reported = err }, nil)
+		AttachFileDrag(element, root, func() []model.Asset { selections++; return []model.Asset{item} }, func(err error) { reported = err }, nil, func(root string, err error) { t.Errorf("清理 %s 失败：%v", root, err) })
 	}, 200, 100)
 	if selections != 0 {
 		t.Fatal("渲染界面时就准备了文件")
@@ -322,7 +322,7 @@ func TestDragSessionsOutliveDropAndAreSweptLater(t *testing.T) {
 			t.Fatalf("超出上限时第 %d 个会话保留=%v", i, kept)
 		}
 	}
-	if err := ClearDragSessions(root); err != nil {
+	if err := sweepDragSessions(root, now.Add(time.Minute), 0, 0); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(sessions[2]); !os.IsNotExist(err) {

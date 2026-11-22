@@ -722,9 +722,8 @@ func (a *App) OpenLibrary(path string) {
 			}
 			if a.Library != nil {
 				a.freezePreviews()
-				if err := ClearDragSessions(a.Library.Root); err != nil {
-					slog.Error("切换图库时清理拖出临时文件失败", "error", err)
-					a.ShowError(err)
+				if a.Library.Root != lib.Root {
+					a.ClearDragSessionsAsync(a.Library.Root, nil)
 				}
 				if err := a.Library.Close(); err != nil {
 					a.ShowError(err)

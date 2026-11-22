@@ -18,14 +18,10 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
-// 后台清理旧拖出临时文件：同一时刻只跑一个；清不掉的错误留到下一次拖出时在主线程提示。
-var (
-	dragSweeping atomic.Bool
-	dragSweepErr atomic.Pointer[error]
-)
+var dragSweeping atomic.Bool
 
 // 文件路径和进程内 Drag 值可以同时挂在一张卡片上。
-func AttachFileDrag(element ui.Element, root string, selected func() []model.Asset, report func(error), used func([]string)) {
+func AttachFileDrag(element ui.Element, root string, selected func() []model.Asset, report func(error), used func([]string), reportCleanup func(string, error)) {
 	var session *fileDragSession
 	preparationFailed := false
 	fail := func(err error) {
@@ -33,10 +29,6 @@ func AttachFileDrag(element ui.Element, root string, selected func() []model.Ass
 		report(err)
 	}
 	element.DragDataFrom(func() transfer.Data {
-		// 上一次后台清理没清干净的错误，在这里（主线程）提示；卡片重画后闭包会换，所以存在包级变量里。
-		if e := dragSweepErr.Swap(nil); e != nil {
-			fail(*e)
-		}
 		var err error
 		items := selected()
 		session, err = prepareFileDrag(root, items, cloneOrCopyDragFile)
@@ -45,8 +37,7 @@ func AttachFileDrag(element ui.Element, root string, selected func() []model.Ass
 			go func() {
 				defer dragSweeping.Store(false)
 				if err := sweepDragSessions(root, time.Now(), dragSessionKeep, dragSessionLimit); err != nil {
-					slog.Error("清理拖出临时文件失败", "error", err)
-					dragSweepErr.Store(&err)
+					reportCleanup(root, err)
 				}
 			}()
 		}
@@ -91,9 +82,23 @@ const (
 	dragSessionLimit = 20               // 最多留这么多次拖出的临时目录，超出时先删最旧的
 )
 
-// ClearDragSessions 删掉图库里所有拖出临时文件，图库关闭或应用退出时调用。
-func ClearDragSessions(root string) error {
-	return sweepDragSessions(root, time.Now(), 0, 0)
+func (a *App) ClearDragSessionsAsync(root string, done func(error)) {
+	at := time.Now()
+	go func() {
+		err := sweepDragSessions(root, at, 0, 0)
+		if err != nil {
+			a.reportDragCleanup(root, err)
+		}
+		if done != nil {
+			a.Window.Update(func() { done(err) })
+		}
+	}()
+}
+
+func (a *App) reportDragCleanup(root string, cause error) {
+	err := i18n.WrapError(cause, "error_drag_cleanup", root)
+	slog.Error("清理拖出临时文件失败", "library", root, "error", err)
+	a.Window.Update(func() { a.ShowError(err) })
 }
 
 // 删掉 .drag-out 里超过 keep 的拖出临时目录；剩下的超过 limit-1 个时再删最旧的，给马上要建的新目录留位置。limit 为 0 时不留。
@@ -141,6 +146,9 @@ func sweepDragSessions(root string, now time.Time, keep time.Duration, limit int
 			continue
 		}
 		path := filepath.Join(parent, entry.Name())
+		if limit == 0 && info.ModTime().After(now) {
+			continue
+		}
 		if now.Sub(info.ModTime()) >= keep {
 			errs = append(errs, os.RemoveAll(path))
 			continue

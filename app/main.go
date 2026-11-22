@@ -68,6 +68,7 @@ func main() {
 	})
 	mygo.App.OnQuit(func() { cancel() })
 	preferencesQuitWarned := false
+	dragCleanupPending, dragCleanupRoot := false, ""
 	mygo.App.OnBeforeQuit(func(e *mygo.QuitEvent) {
 		if app != nil {
 			if app.PasswordOperationPending() && !e.SessionEnding {
@@ -94,14 +95,31 @@ func main() {
 				}
 				slog.Error("设置保存失败，按用户再次要求退出", "error", err)
 			}
-			app.CloseAllPreviewWindows()
-			app.Quitting = true
-			// 拖出给别的应用的临时副本，退出时清掉；清不掉只能记日志，窗口马上就关了。
-			if app.Library != nil {
-				if err := appui.ClearDragSessions(app.Library.Root); err != nil {
-					slog.Error("退出时清理拖出临时文件失败", "error", err)
+			if dragCleanupPending && !e.SessionEnding {
+				e.PreventDefault()
+				return
+			}
+			if app.Library != nil && app.Library.Root != dragCleanupRoot {
+				root := app.Library.Root
+				if e.SessionEnding {
+					app.ClearDragSessionsAsync(root, nil)
+				} else {
+					e.PreventDefault()
+					dragCleanupPending = true
+					app.ClearDragSessionsAsync(root, func(err error) {
+						dragCleanupPending, dragCleanupRoot = false, root
+						if err != nil {
+							app.ShowMainWindow()
+							return
+						}
+						mygo.App.Quit()
+					})
+					return
 				}
 			}
+			dragCleanupRoot = ""
+			app.CloseAllPreviewWindows()
+			app.Quitting = true
 		}
 	})
 	mygo.App.OnQuitCanceled(func() {

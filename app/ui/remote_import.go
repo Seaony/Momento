@@ -28,10 +28,11 @@ type remoteBatch struct {
 	// gen 是选位置时的图库：中途换了图库，旧的文件夹和标签不能再用，要重新问。
 	gen uint64
 	// library 是这一批导进的图库，第一张开始写入时定下；之后换了图库，剩下的不再导入，报出来。
-	library uint64
-	result  model.ImportResult
-	done    int
-	updated time.Time
+	library     uint64
+	destination importDestination
+	result      model.ImportResult
+	done        int
+	updated     time.Time
 }
 
 // ImportRemote 处理浏览器扩展和深度链接的一次导入，等真实结果再返回，不能排上队就说成功。
@@ -76,6 +77,7 @@ func (a *App) ImportRemote(ctx context.Context, r browser.Request) error {
 		}
 		select {
 		case <-ctx.Done():
+			a.Window.Update(func() { a.remoteFeedback(r, model.ImportResult{}, ctx.Err(), choiceGen) })
 			return ctx.Err()
 		case <-time.After(remoteBusyPoll):
 		}
@@ -91,6 +93,7 @@ func (a *App) remoteBatchLibraryChanged(id string) bool {
 	}
 	if b.library == 0 {
 		b.library = a.generation
+		b.destination = a.importDestination()
 	}
 	return b.library != a.generation
 }
@@ -229,7 +232,11 @@ func (a *App) remoteFeedback(r browser.Request, result model.ImportResult, err e
 	if b.library != 0 && b.library != a.generation {
 		total.AssetIDs = nil
 	}
-	a.importFeedback("extension", total)
+	destination := b.destination
+	if b.library == 0 {
+		destination = a.importDestination()
+	}
+	a.importFeedbackFor("extension", total, destination, true)
 }
 
 // hasKey 判断错误链上有没有这个本地化错误。
