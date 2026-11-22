@@ -2,12 +2,7 @@ package ui
 
 import (
 	"context"
-	"crypto/sha256"
-	"database/sql"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
-	"io"
 	"log/slog"
 	"net/url"
 	"os"
@@ -233,8 +228,8 @@ func (a *App) ConfigureAutoImport() {
 				}
 				a.InvalidateWindows()
 			})
-		}, func(ctx context.Context, paths []string) (map[string]watch.AssetStatus, error) {
-			return autoImportAssetStatus(ctx, lib, paths)
+		}, func(ctx context.Context, paths []string, motionOwners map[string]string) (map[string]watch.AssetStatus, error) {
+			return autoImportAssetStatus(ctx, lib, paths, motionOwners)
 		})
 	}
 	a.Import.WatchLibrary = libraryID
@@ -253,120 +248,39 @@ func (a *App) ConfigureAutoImport() {
 	go a.Import.Watcher.Run(ctx)
 }
 
-func autoImportAssetStatus(ctx context.Context, lib *library.Library, paths []string) (map[string]watch.AssetStatus, error) {
-	root, err := os.OpenRoot(lib.Root)
-	if err != nil {
-		return nil, err
-	}
-	defer root.Close()
+func autoImportAssetStatus(ctx context.Context, lib *library.Library, paths []string, motionOwners map[string]string) (map[string]watch.AssetStatus, error) {
 	statuses := make(map[string]watch.AssetStatus, len(paths))
-	verified := map[string]string{}
+	sourceHashes := make(map[string]string, len(paths))
+	rowIDs := make([]string, 0, len(paths))
 	for _, path := range paths {
-		source, err := os.Open(path)
-		if err != nil {
-			return nil, err
-		}
-		hash, err := autoImportHash(ctx, source)
-		source.Close()
-		if err != nil {
-			return nil, err
-		}
-		ids := watch.MotionAssetIDs(ctx, path)
-		var rowQuery string
-		var arg string
-		if len(ids) == 0 {
-			rowQuery = "SELECT id,trashed,relative_path,motion_path FROM assets WHERE id=?"
-			arg = hash
-		} else {
-			encoded, err := json.Marshal(ids)
+		id := motionOwners[path]
+		if id == "" {
+			hash, err := assets.HashFile(ctx, path)
 			if err != nil {
 				return nil, err
 			}
-			rowQuery = "SELECT assets.id,trashed,relative_path,motion_path FROM json_each(?) JOIN assets ON assets.id=json_each.value WHERE kind='live'"
-			arg = string(encoded)
+			sourceHashes[path] = hash
+			id = hash
 		}
-		rows, err := lib.DB.QueryContext(ctx, rowQuery, arg)
-		if err != nil {
-			return nil, err
+		rowIDs = append(rowIDs, id)
+	}
+	rows, err := lib.AssetStatuses(ctx, rowIDs)
+	if err != nil {
+		return nil, err
+	}
+	for _, path := range paths {
+		id := motionOwners[path]
+		if id == "" {
+			id = sourceHashes[path]
 		}
-		status, err := checkAutoImportCopies(ctx, rows, root, hash, len(ids) > 0, verified)
-		if err != nil {
-			return nil, err
+		row := rows[id]
+		active := row.OriginalExists
+		if motionOwners[path] != "" {
+			active = active && row.MotionExists
 		}
-		statuses[path] = status
+		statuses[path] = watch.AssetStatus{Active: active, Trashed: row.Trashed}
 	}
 	return statuses, nil
-}
-
-func checkAutoImportCopies(ctx context.Context, rows *sql.Rows, root *os.Root, sourceHash string, motion bool, verified map[string]string) (watch.AssetStatus, error) {
-	defer rows.Close()
-	var status watch.AssetStatus
-	fileHash := func(relative string) (string, error) {
-		if hash, ok := verified[relative]; ok {
-			return hash, nil
-		}
-		file, err := root.Open(filepath.FromSlash(relative))
-		if errors.Is(err, os.ErrNotExist) {
-			return "", nil
-		}
-		if err != nil {
-			return "", err
-		}
-		defer file.Close()
-		hash, err := autoImportHash(ctx, file)
-		if err == nil {
-			verified[relative] = hash
-		}
-		return hash, err
-	}
-	for rows.Next() {
-		var id, original, video string
-		var trashed bool
-		if err := rows.Scan(&id, &trashed, &original, &video); err != nil {
-			return watch.AssetStatus{}, err
-		}
-		if motion {
-			if video == "" {
-				continue
-			}
-			hash, err := fileHash(video)
-			if err != nil {
-				return watch.AssetStatus{}, err
-			}
-			if hash != sourceHash {
-				continue
-			}
-		}
-		hash, err := fileHash(original)
-		if err != nil {
-			return watch.AssetStatus{}, err
-		}
-		if hash == id {
-			if !trashed {
-				return watch.AssetStatus{Active: true}, nil
-			}
-			status.Trashed = true
-		}
-	}
-	return status, rows.Err()
-}
-
-func autoImportHash(ctx context.Context, file *os.File) (string, error) {
-	hash := sha256.New()
-	var buffer [32 * 1024]byte
-	for {
-		if err := ctx.Err(); err != nil {
-			return "", err
-		}
-		count, err := file.Read(buffer[:])
-		hash.Write(buffer[:count])
-		if errors.Is(err, io.EOF) {
-			return hex.EncodeToString(hash.Sum(nil)), nil
-		}
-		if err != nil {
-			return "", err
-		}
-	}
 }
 
 // 只返回属于当前这个图库包的规则。规则记的图库位置还在、但不是当前位置，说明当前打开的是一份副本：副本不监视，在设置里说明原因。

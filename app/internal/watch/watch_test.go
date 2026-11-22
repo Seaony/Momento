@@ -25,7 +25,7 @@ func newTestWatcher(root string, importFile ImportFunc, trash func(string) error
 				event(item)
 			}
 		}
-	}, func(_ context.Context, paths []string) (map[string]AssetStatus, error) {
+	}, func(_ context.Context, paths []string, _ map[string]string) (map[string]AssetStatus, error) {
 		statuses := make(map[string]AssetStatus, len(paths))
 		for _, path := range paths {
 			statuses[path] = AssetStatus{Active: true}
@@ -759,7 +759,10 @@ func TestWatcherRechecksAssetBeforeTrashAfterRulesRestart(t *testing.T) {
 			watcher := New(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
 				imports++
 				if imports == 1 {
-					return model.ImportResult{AssetIDs: []string{"owner"}, Imported: 1, Motion: []string{paths[1]}}, nil
+					return model.ImportResult{
+						Imported: 1, Motion: []string{paths[1]},
+						MotionOwners: []model.MotionOwner{{SourcePath: paths[1], AssetID: "owner"}},
+					}, nil
 				}
 				if !slices.Equal(sources, paths[1:]) {
 					t.Fatalf("应只重新导入剩下的源文件：%v", sources)
@@ -773,10 +776,10 @@ func TestWatcherRechecksAssetBeforeTrashAfterRulesRestart(t *testing.T) {
 				return os.Remove(source)
 			}, func(_ context.Context, events []Event) {
 				last = events[len(events)-1]
-			}, func(ctx context.Context, sources []string) (map[string]AssetStatus, error) {
+			}, func(_ context.Context, sources []string, motionOwners map[string]string) (map[string]AssetStatus, error) {
 				checks++
-				if !slices.Equal(sources, paths[1:]) || !slices.Equal(MotionAssetIDs(ctx, paths[1]), []string{"owner"}) {
-					t.Fatalf("规则重启后丢失实况视频归属：%v", sources)
+				if !slices.Equal(sources, paths[1:]) || motionOwners[paths[1]] != "owner" {
+					t.Fatalf("规则重启后丢失实况视频归属：%v %v", sources, motionOwners)
 				}
 				return map[string]AssetStatus{paths[1]: test.status}, test.err
 			})

@@ -30,7 +30,7 @@ func TestAutoImportWatcherRestartsForReopenedLibrary(t *testing.T) {
 }
 
 func TestAutoImportRechecksBothPartsOfLivePhotoBeforeMovingSource(t *testing.T) {
-	for _, check := range []string{"active", "trashed", "missing-owner", "missing-still", "changed-video"} {
+	for _, check := range []string{"active", "trashed", "missing-owner", "missing-still", "missing-motion"} {
 		t.Run(check, func(t *testing.T) {
 			ctx := context.Background()
 			lib, err := library.Create(ctx, filepath.Join(t.TempDir(), "Library.momento"), "Library")
@@ -64,15 +64,18 @@ func TestAutoImportRechecksBothPartsOfLivePhotoBeforeMovingSource(t *testing.T) 
 			watcher := watch.New(lib.Root, func(_ context.Context, paths []string, _ string) (model.ImportResult, error) {
 				imports++
 				if imports == 1 {
-					return model.ImportResult{Imported: 1, AssetIDs: []string{ownerID}, Motion: paths[1:]}, nil
+					return model.ImportResult{
+						Imported: 1, AssetIDs: []string{ownerID}, Motion: paths[1:],
+						MotionOwners: []model.MotionOwner{{SourcePath: paths[1], AssetID: ownerID}},
+					}, nil
 				}
 				return model.ImportResult{Skipped: 1}, nil
 			}, func(path string) error {
 				moves++
 				stop()
 				return os.Remove(path)
-			}, nil, func(ctx context.Context, paths []string) (map[string]watch.AssetStatus, error) {
-				return autoImportAssetStatus(ctx, lib, paths)
+			}, nil, func(ctx context.Context, paths []string, motionOwners map[string]string) (map[string]watch.AssetStatus, error) {
+				return autoImportAssetStatus(ctx, lib, paths, motionOwners)
 			})
 			rules := []watch.Rule{{Path: folder, Enabled: true}}
 			watcher.Update(rules)
@@ -85,8 +88,8 @@ func TestAutoImportRechecksBothPartsOfLivePhotoBeforeMovingSource(t *testing.T) 
 				_, err = lib.DB.ExecContext(ctx, "DELETE FROM assets WHERE id=?", ownerID)
 			case "missing-still":
 				err = os.Remove(filepath.Join(lib.Root, "assets", "still.heic"))
-			case "changed-video":
-				err = os.WriteFile(filepath.Join(lib.Root, "assets", "paired.mov"), []byte("other video"), 0600)
+			case "missing-motion":
+				err = os.Remove(filepath.Join(lib.Root, "assets", "paired.mov"))
 			}
 			if err != nil {
 				t.Fatal(err)

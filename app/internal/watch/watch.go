@@ -49,13 +49,13 @@ const (
 )
 
 type fileState struct {
-	info      os.FileInfo
-	rulePath  string
-	attempted bool
-	failures  int       // 已经失败的次数
-	retryAt   time.Time // 这之前不重试
-	imported  bool
-	motionIDs []string
+	info        os.FileInfo
+	rulePath    string
+	attempted   bool
+	failures    int       // 已经失败的次数
+	retryAt     time.Time // 这之前不重试
+	imported    bool
+	motionOwner string
 }
 
 // 导入本身就不可能成功的错误：重试没有意义。
@@ -105,15 +105,7 @@ type AssetStatus struct {
 	Trashed bool
 }
 
-type AssetStatusFunc func(ctx context.Context, paths []string) (map[string]AssetStatus, error)
-
-type motionIDsKey struct{}
-
-// MotionAssetIDs 返回源视频第一次入库时同批提交的素材 ID，供状态查询核对实况视频。
-func MotionAssetIDs(ctx context.Context, path string) []string {
-	batches, _ := ctx.Value(motionIDsKey{}).(map[string][]string)
-	return batches[path]
-}
+type AssetStatusFunc func(ctx context.Context, paths []string, motionOwners map[string]string) (map[string]AssetStatus, error)
 
 // 一个已经写完、等着导入的文件。
 type readyFile struct {
@@ -398,20 +390,20 @@ func (w *Watcher) scanDirectory(ctx context.Context, path string, now time.Time,
 
 func (w *Watcher) importBatch(ctx context.Context, folderID string, files []readyFile, events []Event) []Event {
 	var retries []string
-	motionIDs := map[string][]string{}
+	motionOwners := map[string]string{}
 	for _, file := range files {
 		state := w.files[file.path]
 		if state.imported {
 			retries = append(retries, file.path)
-			if len(state.motionIDs) > 0 {
-				motionIDs[file.path] = state.motionIDs
+			if state.motionOwner != "" {
+				motionOwners[file.path] = state.motionOwner
 			}
 		}
 	}
 	var statuses map[string]AssetStatus
 	var statusErr error
 	if len(retries) > 0 {
-		statuses, statusErr = w.status(context.WithValue(ctx, motionIDsKey{}, motionIDs), retries)
+		statuses, statusErr = w.status(ctx, retries, motionOwners)
 		if ctx.Err() != nil {
 			return events
 		}
@@ -445,6 +437,10 @@ func (w *Watcher) importBatch(ctx context.Context, folderID string, files []read
 		}
 	}
 	motions := make(map[string]bool, len(result.Motion))
+	owners := make(map[string]string, len(result.MotionOwners))
+	for _, motion := range result.MotionOwners {
+		owners[motion.SourcePath] = motion.AssetID
+	}
 	for _, path := range result.Motion {
 		motions[path] = true
 	}
@@ -465,9 +461,9 @@ func (w *Watcher) importBatch(ctx context.Context, folderID string, files []read
 				fileErr = failed[file.path]
 			}
 			state.imported = fileErr == nil
-			state.motionIDs = nil
+			state.motionOwner = ""
 			if state.imported && motions[file.path] {
-				state.motionIDs = result.AssetIDs
+				state.motionOwner = owners[file.path]
 			}
 		}
 		if fileErr == nil {
@@ -490,7 +486,7 @@ func (w *Watcher) importBatch(ctx context.Context, folderID string, files []read
 		case fileErr == nil:
 			state.attempted = true
 			state.imported = false
-			state.motionIDs = nil
+			state.motionOwner = ""
 		case permanent(fileErr):
 			state.attempted = true
 		default:

@@ -118,6 +118,13 @@ type ImportResult struct {
 	Failed []string
 	// Motion 是配进实况照片、跟着图片一起导入（或一起算重复）的视频源文件；它们不单独计入 Imported 和 Skipped。
 	Motion []string
+	// MotionOwners 记录每个被吸收的视频源文件对应的实况素材 ID，自动导入重试移源时直接按它核对，不再重新猜配对。
+	MotionOwners []MotionOwner
+}
+
+type MotionOwner struct {
+	SourcePath string
+	AssetID    string
 }
 
 type ImportRequest struct {

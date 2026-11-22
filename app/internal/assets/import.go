@@ -35,6 +35,16 @@ func hashReader(ctx context.Context, r io.Reader) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
+// HashFile 是给导入状态核对这类外部入口用的内容哈希；图库内文件身份用素材 ID，不再重复算。
+func HashFile(ctx context.Context, path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	return hashReader(ctx, file)
+}
+
 type candidate struct {
 	path      string
 	folders   []string
@@ -728,6 +738,7 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 		}
 		if c.motion != nil && motionFailed[i] == nil {
 			result.Motion = append(result.Motion, c.motion.path)
+			result.MotionOwners = append(result.MotionOwners, model.MotionOwner{SourcePath: c.motion.path, AssetID: c.hash})
 		}
 		for _, tagID := range request.TagIDs {
 			if _, err = tx.ExecContext(ctx, "INSERT OR IGNORE INTO asset_tags(asset_id,tag_id) VALUES(?,?)", c.hash, tagID); err != nil {
