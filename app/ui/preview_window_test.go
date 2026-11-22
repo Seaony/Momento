@@ -367,7 +367,7 @@ func TestPreviewFollowsSelectionOutsideInitialSession(t *testing.T) {
 	a.Selected.Add("new-a")
 	a.selectedIndex = 0
 	a.FollowPreviewSelection()
-	if w.asset.ID != "new-a" || len(w.items) != 2 || w.items[0].ID != "new-a" {
+	if w.asset.ID != "new-a" || len(w.items) != 2 || w.items[0].id != "new-a" {
 		t.Fatal("跨范围跟随仍使用旧会话顺序")
 	}
 	w.move(a, 1)
@@ -390,7 +390,7 @@ func TestPreviewMultiSelectionRefreshKeepsLastMainSelection(t *testing.T) {
 	w := a.Preview.active
 	a.Visible = append(a.Visible, model.Asset{ID: "two", Name: "第二张"})
 	a.assetByID = map[string]model.Asset{"one": a.Visible[0], "two": a.Visible[1]}
-	w.items = append([]model.Asset(nil), a.Visible...)
+	w.items = previewOrder(a.Visible)
 	a.Selected.Add("one")
 	a.Selected.Add("two")
 	a.selectedIndex = -1
@@ -481,8 +481,9 @@ func TestPreviewFocusedWindowShortcutsWithoutElementFocus(t *testing.T) {
 	w := a.Preview.active
 	w.hasFocus = true
 	bitmap := w.picture.Bitmap
-	w.items = append(w.items, model.Asset{ID: "two", Name: "第二张", Width: 288, Height: 192})
-	a.Visible = append(a.Visible, w.items[len(w.items)-1]) // 翻页只走主窗口列表里还在的图
+	two := model.Asset{ID: "two", Name: "第二张", Width: 288, Height: 192}
+	w.items = append(w.items, previewItem{id: two.ID})
+	a.Visible = append(a.Visible, two) // 翻页只走主窗口列表里还在的图
 	tt := ui.NewTester(func(c *ui.Context) { w.view(c, a) }, 600, 400)
 	tt.Key(0, ui.KeyRight)
 	if w.asset.ID != "two" {

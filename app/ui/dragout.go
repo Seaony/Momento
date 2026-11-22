@@ -9,12 +9,19 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Seaony/Momento/app/internal/i18n"
 	"github.com/Seaony/Momento/app/internal/model"
 	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
+)
+
+// 后台清理旧拖出临时文件：同一时刻只跑一个；清不掉的错误留到下一次拖出时在主线程提示。
+var (
+	dragSweeping atomic.Bool
+	dragSweepErr atomic.Pointer[error]
 )
 
 // 文件路径和进程内 Drag 值可以同时挂在一张卡片上。
@@ -26,13 +33,23 @@ func AttachFileDrag(element ui.Element, root string, selected func() []model.Ass
 		report(err)
 	}
 	element.DragDataFrom(func() transfer.Data {
-		// 顺手清掉早先拖出留下的临时文件；清不掉只提示，不挡这次拖出。
-		if err := sweepDragSessions(root, time.Now(), dragSessionKeep, dragSessionLimit); err != nil {
-			fail(err)
+		// 上一次后台清理没清干净的错误，在这里（主线程）提示；卡片重画后闭包会换，所以存在包级变量里。
+		if e := dragSweepErr.Swap(nil); e != nil {
+			fail(*e)
 		}
 		var err error
 		items := selected()
-		session, err = prepareFileDrag(root, items, os.Link)
+		session, err = prepareFileDrag(root, items, cloneOrCopyDragFile)
+		// 旧临时文件放到后台清，不拖慢拖动起点；同一时刻只跑一个。
+		if dragSweeping.CompareAndSwap(false, true) {
+			go func() {
+				defer dragSweeping.Store(false)
+				if err := sweepDragSessions(root, time.Now(), dragSessionKeep, dragSessionLimit); err != nil {
+					slog.Error("清理拖出临时文件失败", "error", err)
+					dragSweepErr.Store(&err)
+				}
+			}()
+		}
 		preparationFailed = err != nil
 		if err != nil {
 			fail(err)
@@ -154,7 +171,20 @@ type fileDragSession struct {
 
 func (s *fileDragSession) cleanup() error { return os.RemoveAll(s.directory) }
 
-func prepareFileDrag(root string, items []model.Asset, link func(string, string) error) (session *fileDragSession, err error) {
+// 不支持写时复制时用这个值通知调用方改为普通复制。
+var errCloneUnsupported = errors.New("clone not supported")
+
+// 先试写时复制，不支持才复制全部内容；其他错误照实返回。
+func cloneOrCopyDragFile(source, destination string) error {
+	err := cloneDragFile(source, destination)
+	if !errors.Is(err, errCloneUnsupported) {
+		return err
+	}
+	slog.Debug("拖出暂存不能写时复制，改为复制", "source", source)
+	return copyDragFile(source, destination)
+}
+
+func prepareFileDrag(root string, items []model.Asset, stage func(string, string) error) (session *fileDragSession, err error) {
 	if len(items) == 0 {
 		return nil, i18n.NewError("error_drag_empty")
 	}
@@ -189,6 +219,7 @@ func prepareFileDrag(root string, items []model.Asset, link func(string, string)
 		}
 	}()
 	used := make(map[string]bool, len(items))
+	next := make(map[string]int) // 每个重名的下一个可用编号，免得每次从 2 数起
 	for _, asset := range items {
 		if !filepath.IsLocal(filepath.FromSlash(asset.RelativePath)) {
 			return session, i18n.NewError("error_asset_path_escape", asset.Name)
@@ -211,16 +242,19 @@ func prepareFileDrag(root string, items []model.Asset, link func(string, string)
 		name := dragFileName(asset)
 		ext := filepath.Ext(name)
 		stem := strings.TrimSuffix(name, ext)
-		for n := 2; used[strings.ToLower(name)]; n++ {
+		key := strings.ToLower(name)
+		if used[key] {
+			n := max(next[key], 2)
+			for used[strings.ToLower(fmt.Sprintf("%s %d%s", stem, n, ext))] {
+				n++
+			}
+			next[key] = n + 1
 			name = fmt.Sprintf("%s %d%s", stem, n, ext)
 		}
 		used[strings.ToLower(name)] = true
 		destination := filepath.Join(directory, name)
-		if e := link(source, destination); e != nil {
-			slog.Debug("拖出硬链接不可用，改为复制", "error", e)
-			if e := copyDragFile(source, destination); e != nil {
-				return session, i18n.WrapError(e, "error_drag_prepare", name)
-			}
+		if e := stage(source, destination); e != nil {
+			return session, i18n.WrapError(e, "error_drag_prepare", name)
 		}
 		session.paths = append(session.paths, destination)
 	}

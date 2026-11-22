@@ -1,11 +1,9 @@
 package ui
 
 import (
-	"slices"
 	"testing"
 
 	"github.com/Seaony/Momento/app/internal/catalog"
-	"github.com/Seaony/Momento/app/internal/model"
 )
 
 func TestPreviewFollowsImportSelectionOutsideItsOriginalItems(t *testing.T) {
@@ -20,7 +18,7 @@ func TestPreviewFollowsImportSelectionOutsideItsOriginalItems(t *testing.T) {
 	if a.Preview.active != w || w.asset.ID != imported.ID || !a.Selected.Has(imported.ID) {
 		t.Fatal("导入后自动选中关闭了预览或没有跟随新素材")
 	}
-	if !slices.ContainsFunc(w.items, func(item model.Asset) bool { return item.ID == imported.ID }) {
+	if w.indexOf(imported.ID) < 0 {
 		t.Fatal("预览跟随后没有有效的翻页位置")
 	}
 }

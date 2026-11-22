@@ -21,7 +21,21 @@ import (
 //   - 素材按表里的存放顺序读，不按 ID 排（界面自己排序）；
 //   - 不读 EXIF（Asset.EXIF 为空），选中时用 AssetEXIF 单独读；
 //   - 每个素材的 FolderIDs、TagIDs 仍按 ID 升序，界面的内存补丁依赖这个顺序；Colors 按 sort_index 排。
-func (l *Library) Snapshot(ctx context.Context) (snapshot model.Snapshot, err error) {
+func (l *Library) Snapshot(ctx context.Context) (model.Snapshot, error) {
+	return l.snapshot(ctx, nil)
+}
+
+// SnapshotAssets 和 Snapshot 一样，但素材只读 ids 这几张（不存在的不返回）；文件夹、标签、智能文件夹、快速访问照常全读。
+// 导入几张后用它刷新界面，不用整库重读（十万张要半秒）。
+func (l *Library) SnapshotAssets(ctx context.Context, ids []string) (model.Snapshot, error) {
+	if ids == nil {
+		ids = []string{}
+	}
+	return l.snapshot(ctx, ids)
+}
+
+// snapshot 在 ids 为 nil 时读全部素材，否则只读这些。
+func (l *Library) snapshot(ctx context.Context, ids []string) (snapshot model.Snapshot, err error) {
 	tx, err := l.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return snapshot, err
@@ -33,9 +47,23 @@ func (l *Library) Snapshot(ctx context.Context) (snapshot model.Snapshot, err er
 	}()
 	// 扩展名、色彩配置、颜色分类、文件夹和标签 ID 大量重复，同样的字符串只留一份。
 	strs := interner{}
-	var total int
-	if err = tx.QueryRowContext(ctx, "SELECT count(*) FROM assets").Scan(&total); err != nil {
-		return snapshot, err
+	// filter 是只读部分素材时加在素材、颜色、成员表查询后面的条件。
+	filter, args := "", []any(nil)
+	if ids != nil {
+		if len(ids) == 0 {
+			ids = []string{""}
+		}
+		filter = " WHERE asset_id IN (?" + strings.Repeat(",?", len(ids)-1) + ")"
+		args = make([]any, len(ids))
+		for i, id := range ids {
+			args[i] = id
+		}
+	}
+	total := len(ids)
+	if ids == nil {
+		if err = tx.QueryRowContext(ctx, "SELECT count(*) FROM assets").Scan(&total); err != nil {
+			return snapshot, err
+		}
 	}
 	snapshot.Assets = make([]model.Asset, 0, total)
 	extra := ",last_used_at,rotation"
@@ -49,7 +77,7 @@ func (l *Library) Snapshot(ctx context.Context) (snapshot model.Snapshot, err er
 		extra += ",'image',0,''"
 	}
 	// 不加 ORDER BY：按 id 排要走索引逐行回表，10 万张时比顺序扫表慢得多。
-	rows, err := tx.QueryContext(ctx, "SELECT id,name,original_file_name,extension,media_type,size,width,height,orientation,color_profile,note,source_url,relative_path,favorite,trashed,created_at,updated_at"+extra+" FROM assets")
+	rows, err := tx.QueryContext(ctx, "SELECT id,name,original_file_name,extension,media_type,size,width,height,orientation,color_profile,note,source_url,relative_path,favorite,trashed,created_at,updated_at"+extra+" FROM assets"+strings.Replace(filter, "asset_id", "id", 1), args...)
 	if err != nil {
 		return snapshot, err
 	}
@@ -91,7 +119,7 @@ func (l *Library) Snapshot(ctx context.Context) (snapshot model.Snapshot, err er
 	if err = errors.Join(rows.Err(), rows.Close()); err != nil {
 		return snapshot, err
 	}
-	if err = loadColors(ctx, tx, snapshot.Assets, byID, strs); err != nil {
+	if err = loadColors(ctx, tx, snapshot.Assets, byID, strs, filter, args); err != nil {
 		return snapshot, err
 	}
 	// 升级前的旧库（只在升级流程里读）还没有 icon 列。
@@ -130,7 +158,7 @@ func (l *Library) Snapshot(ctx context.Context) (snapshot model.Snapshot, err er
 		return snapshot, err
 	}
 	for _, relationship := range []struct{ table, column string }{{"asset_folders", "folder_id"}, {"asset_tags", "tag_id"}} {
-		rows, err = tx.QueryContext(ctx, "SELECT asset_id,"+relationship.column+" FROM "+relationship.table+" ORDER BY asset_id,"+relationship.column)
+		rows, err = tx.QueryContext(ctx, "SELECT asset_id,"+relationship.column+" FROM "+relationship.table+filter+" ORDER BY asset_id,"+relationship.column, args...)
 		if err != nil {
 			return snapshot, err
 		}
@@ -199,9 +227,9 @@ func (l *Library) Snapshot(ctx context.Context) (snapshot model.Snapshot, err er
 }
 
 // loadColors 顺序扫颜色表，再按 (素材, sort_index) 归位；所有素材的颜色放在同一个底层数组里，省掉几十万次小分配。
-func loadColors(ctx context.Context, tx *sql.Tx, assets []model.Asset, byID map[string]int32, strs interner) error {
+func loadColors(ctx context.Context, tx *sql.Tx, assets []model.Asset, byID map[string]int32, strs interner, filter string, args []any) error {
 	var total int
-	if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM asset_colors").Scan(&total); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM asset_colors"+filter, args...).Scan(&total); err != nil {
 		return err
 	}
 	colors := make([]model.Color, 0, total)
@@ -212,7 +240,7 @@ func loadColors(ctx context.Context, tx *sql.Tx, assets []model.Asset, byID map[
 	}
 	compare := func(a, b colorKey) int { return cmp.Or(cmp.Compare(a.asset, b.asset), cmp.Compare(a.sort, b.sort)) }
 	keys := make([]colorKey, 0, total)
-	rows, err := tx.QueryContext(ctx, "SELECT asset_id,hex,proportion,family,sort_index FROM asset_colors")
+	rows, err := tx.QueryContext(ctx, "SELECT asset_id,hex,proportion,family,sort_index FROM asset_colors"+filter, args...)
 	if err != nil {
 		return err
 	}

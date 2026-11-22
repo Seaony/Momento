@@ -156,6 +156,7 @@ func randomQuery(r *rand.Rand, now time.Time) Query {
 		Now:           now,
 		Scope:         one("", "all", "recent", "favorites", "uncategorized", "untagged", "folder", "smart", "tag", "trash", "unknown"),
 		FolderID:      one("f1", "f2", "missing"),
+		ScopeTagID:    one("t1", "t2", "missing"),
 		SmartFolderID: one("s-all", "s-any", "s-bad", "missing"),
 		ColorFamilies: some("red", "green", "blue"),
 		TagIDs:        some("t1", "t2", "t3"),

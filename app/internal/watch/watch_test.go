@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Seaony/Momento/app/internal/assets"
+	"github.com/Seaony/Momento/app/internal/i18n"
 	"github.com/Seaony/Momento/app/internal/library"
 	"github.com/Seaony/Momento/app/internal/model"
 )
@@ -476,5 +477,211 @@ func TestWatcherTrashesLivePhotoMotion(t *testing.T) {
 	w.Scan(context.Background())
 	if !slices.Equal(trashed, paths) {
 		t.Fatalf("实况照片的两个源文件应都移走：%v", trashed)
+	}
+}
+
+// 给测试用的可调时钟。
+type clock struct{ t time.Time }
+
+func (c *clock) now() time.Time { return c.t }
+
+func TestWatcherRetriesTemporaryImportFailureWithBackoff(t *testing.T) {
+	root, folder, path := fixture(t)
+	clk := &clock{t: time.Now()}
+	calls, trashed := 0, 0
+	problem := errors.New("磁盘已满")
+	w := New(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
+		calls++
+		if calls < 3 {
+			return model.ImportResult{}, problem
+		}
+		return model.ImportResult{Imported: len(sources)}, nil
+	}, func(source string) error { trashed++; return os.Remove(source) }, nil)
+	w.now = clk.now
+	w.Update([]Rule{{Path: folder, Enabled: true}})
+	w.Scan(context.Background())
+	w.Scan(context.Background())
+	if calls != 1 {
+		t.Fatalf("第一次尝试次数 %d", calls)
+	}
+	w.Scan(context.Background())
+	if calls != 1 {
+		t.Fatal("退避时间内重试了")
+	}
+	clk.t = clk.t.Add(retryBackoff)
+	w.Scan(context.Background())
+	if calls != 2 {
+		t.Fatalf("退避结束后没有重试：%d", calls)
+	}
+	clk.t = clk.t.Add(retryBackoff + time.Second)
+	w.Scan(context.Background())
+	if calls != 2 {
+		t.Fatal("第二次失败后退避没有翻倍")
+	}
+	clk.t = clk.t.Add(retryBackoff)
+	w.Scan(context.Background())
+	if calls != 3 || trashed != 1 {
+		t.Fatalf("临时障碍解除后没有导入并移源：%d/%d", calls, trashed)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("源文件还在")
+	}
+}
+
+// 临时失败一直按封顶间隔重试（磁盘清出空间后能自己导进来），格式无法识别只试一次。
+func TestWatcherKeepsRetryingTemporaryFailureAndStopsOnPermanentError(t *testing.T) {
+	root, folder, _ := fixture(t)
+	clk := &clock{t: time.Now()}
+	calls := 0
+	w := New(root, func(context.Context, []string, string) (model.ImportResult, error) {
+		calls++
+		return model.ImportResult{}, errors.New("没权限")
+	}, func(string) error { return nil }, nil)
+	w.now = clk.now
+	w.Update([]Rule{{Path: folder, Enabled: true}})
+	w.Scan(context.Background())
+	for i := 0; i < 10; i++ {
+		w.Scan(context.Background())
+		// 每轮都超过封顶间隔，每轮都该再试一次。
+		clk.t = clk.t.Add(retryCeiling + time.Second)
+	}
+	if calls != 10 {
+		t.Fatalf("临时失败应每轮重试：%d 次", calls)
+	}
+
+	root, folder, path := fixture(t)
+	calls = 0
+	w = New(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
+		calls++
+		return model.ImportResult{Failed: sources, Errors: []error{i18n.NewError("error_import_unsupported_file", "image.png")}}, nil
+	}, func(string) error { t.Fatal("不应移源"); return nil }, nil)
+	w.now = clk.now
+	w.Update([]Rule{{Path: folder, Enabled: true}})
+	w.Scan(context.Background())
+	for i := 0; i < 4; i++ {
+		w.Scan(context.Background())
+		clk.t = clk.t.Add(time.Hour)
+	}
+	if calls != 1 {
+		t.Fatalf("格式无法识别应只尝试一次：%d", calls)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal("源文件丢了")
+	}
+}
+
+// 入库了但移源失败：重试时只移源，不再导入。
+func TestWatcherRetriesOnlyTrashAfterImportSucceeded(t *testing.T) {
+	root, folder, path := fixture(t)
+	clk := &clock{t: time.Now()}
+	imports, trashCalls := 0, 0
+	w := New(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
+		imports++
+		return model.ImportResult{Imported: len(sources)}, nil
+	}, func(source string) error {
+		trashCalls++
+		if trashCalls == 1 {
+			return errors.New("废纸篓不可用")
+		}
+		return os.Remove(source)
+	}, nil)
+	w.now = clk.now
+	w.Update([]Rule{{Path: folder, Enabled: true}})
+	w.Scan(context.Background())
+	w.Scan(context.Background())
+	clk.t = clk.t.Add(retryBackoff)
+	w.Scan(context.Background())
+	if imports != 1 || trashCalls != 2 {
+		t.Fatalf("应只重试移源：导入 %d 次，移源 %d 次", imports, trashCalls)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("源文件还在")
+	}
+}
+
+func TestWatcherTrashRetryChecksFileIdentity(t *testing.T) {
+	root, folder, path := fixture(t)
+	clk := &clock{t: time.Now()}
+	imports, trashCalls := 0, 0
+	w := New(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
+		imports++
+		return model.ImportResult{Imported: len(sources)}, nil
+	}, func(string) error { trashCalls++; return errors.New("废纸篓不可用") }, nil)
+	w.now = clk.now
+	w.Update([]Rule{{Path: folder, Enabled: true}})
+	w.Scan(context.Background())
+	w.Scan(context.Background())
+	// 文件被换了内容：不能当作已入库的那份去移走，要重新走完整流程。
+	if err := os.WriteFile(path, []byte("another content"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	clk.t = clk.t.Add(retryBackoff)
+	w.Scan(context.Background())
+	if trashCalls != 1 {
+		t.Fatalf("文件变了还去移源：%d", trashCalls)
+	}
+	w.Scan(context.Background())
+	if imports != 2 {
+		t.Fatalf("文件变了应重新导入：%d", imports)
+	}
+}
+
+func TestWatcherCancelStopsTrashingRemainingFiles(t *testing.T) {
+	root, folder, _ := fixture(t)
+	paths := writeFiles(t, folder, "a.png", "b.png", "c.png")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var trashed []string
+	imports := 0
+	w := New(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
+		imports++
+		return model.ImportResult{Imported: len(sources)}, nil
+	}, func(source string) error {
+		trashed = append(trashed, source)
+		cancel() // 移第一个文件时停用规则
+		return os.Remove(source)
+	}, nil)
+	w.Update([]Rule{{Path: folder, Enabled: true}})
+	w.Scan(context.Background())
+	w.Scan(ctx)
+	if len(trashed) != 1 {
+		t.Fatalf("取消后还在移源：%v", trashed)
+	}
+	for _, path := range paths[1:] {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatal("取消后未处理的源文件应保持原地")
+		}
+	}
+	// 之后重新启用：已入库的不再导入，只补做移源。
+	w.Scan(context.Background())
+	if len(trashed) != 4 {
+		t.Fatalf("重新扫描后没有补做移源：%v", trashed)
+	}
+	if imports != 1 {
+		t.Fatalf("导入 %d 次", imports)
+	}
+}
+
+// 实况视频和库里配的那段对不上：不重试，免得视频下次没有图片可配、被当成单独素材导进去再移走。
+func TestWatcherKeepsLiveMotionConflict(t *testing.T) {
+	root, folder, path := fixture(t)
+	clk := &clock{t: time.Now()}
+	calls := 0
+	w := New(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
+		calls++
+		return model.ImportResult{Failed: sources, Errors: []error{i18n.NewError("error_live_motion_conflict", "image.mov")}}, nil
+	}, func(string) error { t.Fatal("不应移源"); return nil }, nil)
+	w.now = clk.now
+	w.Update([]Rule{{Path: folder, Enabled: true}})
+	w.Scan(context.Background())
+	for i := 0; i < 4; i++ {
+		w.Scan(context.Background())
+		clk.t = clk.t.Add(retryCeiling + time.Second)
+	}
+	if calls != 1 {
+		t.Fatalf("配对冲突应只尝试一次：%d", calls)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal("源文件丢了")
 	}
 }

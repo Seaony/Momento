@@ -7,18 +7,19 @@ import (
 )
 
 type gBrowsingState struct {
-	QuickList   ui.ListState
-	SmartOpen   bool
-	SmartID     string
-	SmartName   string
-	SmartMatch  int
-	SmartRules  []model.SmartRule
-	SmartError  string
-	Saving      bool
-	RulesScroll ui.ScrollState
-	CountsIndex *catalog.Index
-	Counts      catalog.Counts
-	SmartCounts map[string]int
+	QuickList     ui.ListState
+	SmartOpen     bool
+	SmartID       string
+	SmartName     string
+	SmartMatch    int
+	SmartRules    []model.SmartRule
+	SmartError    string
+	Saving        bool
+	RulesScroll   ui.ScrollState
+	countsVersion uint64 // 计数按 snapshotVersion 缓存；索引会原地更新，不能按指针判断
+	countsReady   bool
+	Counts        catalog.Counts
+	SmartCounts   map[string]int
 }
 
 func (a *App) BrowseSmartFolder(id string) {
@@ -84,10 +85,11 @@ func (a *App) openQuickAccess(entry model.QuickAccess) {
 }
 
 func (a *App) gBrowsingCounts() {
-	if a.GBrowsing.CountsIndex == a.Index {
+	// 按素材数据版本缓存：只改使用时间不算（智能文件夹的条件里没有使用时间），打开预览、翻页时不用把每个智能文件夹重查一遍。
+	if a.GBrowsing.countsReady && a.GBrowsing.countsVersion == a.snapshotVersion {
 		return
 	}
-	a.GBrowsing.CountsIndex = a.Index
+	a.GBrowsing.countsReady, a.GBrowsing.countsVersion = true, a.snapshotVersion
 	a.GBrowsing.SmartCounts = map[string]int{}
 	a.GBrowsing.Counts = catalog.Counts{}
 	if a.Index != nil {

@@ -68,7 +68,7 @@ func TestUpgradePreservesLegacyAssetsAndRelationships(t *testing.T) {
 	if err := old.SetAssetTags(t.Context(), []string{"a"}, []string{tag.ID}, true); err != nil {
 		t.Fatal(err)
 	}
-	if err := old.UpdateAssetDetails(t.Context(), "a", "旧备注", "https://example.com/original"); err != nil {
+	if err := old.SaveAssetEdit(t.Context(), "a", "", false, "旧备注", "https://example.com/original", true); err != nil {
 		t.Fatal(err)
 	}
 	before := snapshot(t, old)

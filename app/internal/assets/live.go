@@ -29,7 +29,7 @@ func isLiveStill(extension string) bool {
 }
 
 // pairLivePhotos 把同一批里同一文件夹、同名的「图片 + MOV」配成实况照片：视频挂到图片上，不再单独导入。
-// 两边都读得到内容 ID 时再核对一次，对不上就当两个素材；视频读不出来也不配，让它自己报错。
+// 只有两边都读得到内容 ID 且一致才配：只是同名的普通照片和视频各导各的；视频读不出来也不配，让它自己报错。
 func pairLivePhotos(candidates []candidate) []candidate {
 	// 文件夹按原样比（区分大小写的磁盘上 A/ 和 a/ 是两个文件夹），只有文件名不分大小写。
 	key := func(c candidate) string {
@@ -60,11 +60,11 @@ func pairLivePhotos(candidates []candidate) []candidate {
 		}
 		imageID, err := readImageContentID(candidates[still].path)
 		if err != nil {
-			// 图片的 EXIF 坏了不影响配对，按同名配上。
-			slog.Warn("读取实况照片内容 ID 失败，按同名配对", "file", filepath.Base(candidates[still].path), "error", err)
+			slog.Warn("读不出图片的实况内容 ID，同名图片和视频当两个素材导入", "file", filepath.Base(candidates[still].path), "error", err)
+			continue
 		}
-		if imageID != "" && info.ContentID != "" && imageID != info.ContentID {
-			slog.Info("同名图片和视频的内容 ID 不同，当两个素材导入", "image", filepath.Base(candidates[still].path), "video", filepath.Base(c.path))
+		if imageID == "" || info.ContentID == "" || imageID != info.ContentID {
+			slog.Info("同名图片和视频没有一致的实况内容 ID，当两个素材导入", "image", filepath.Base(candidates[still].path), "video", filepath.Base(c.path), "imageID", imageID, "videoID", info.ContentID)
 			continue
 		}
 		candidates[still].motion = &motionSource{path: c.path, durationMS: info.Duration.Milliseconds()}

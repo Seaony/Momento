@@ -19,6 +19,13 @@ type inspectorEdit struct {
 	Rename, Details, Failed bool
 }
 
+// 多选时一起改的备注或链接：写入完成前一直留在队列里，失败了可以重试，放弃时记进日志。
+type inspectorMultiEdit struct {
+	Field, Value string
+	IDs          []string
+	Failed       bool
+}
+
 type inspectorState struct {
 	LibraryID                                   string
 	AssetID, Title, SourceTitle                 string
@@ -42,8 +49,8 @@ type inspectorState struct {
 	MultiIDs      []string
 	MultiOriginal string
 	MultiMixed    bool
-	// MultiSaving 为真时一起改的那批还没写完，退出和换图库要等它。
-	MultiSaving bool
+	// MultiPending 是一起改、还没写进图库的那几批（正在写或写失败），退出和换图库要等它。
+	MultiPending []inspectorMultiEdit
 }
 
 // 照旧版 macOS 检查器的规格。
@@ -139,6 +146,17 @@ func (a *App) syncInspectorAsset(asset model.Asset) {
 	a.Inspector.AssetID, a.Inspector.Title, a.Inspector.SourceTitle = asset.ID, asset.Name, asset.Name
 	a.Inspector.Note, a.Inspector.SourceNote = asset.Note, asset.Note
 	a.Inspector.SourceURL, a.Inspector.SavedSourceURL = asset.SourceURL, asset.SourceURL
+	// 一起改、还没写进去的备注和链接也带上：这张单独再改别的字段时，一起提交的是用户写的值，不是库里的旧值。
+	for _, edit := range a.Inspector.MultiPending {
+		if slices.Contains(edit.IDs, asset.ID) {
+			// 基准也换成它：用户没动时不算新修改，不会一换选中就单独提交；只改另一项时，这一项照样带着用户写的值。
+			if edit.Field == "note" {
+				a.Inspector.Note, a.Inspector.SourceNote = edit.Value, edit.Value
+			} else {
+				a.Inspector.SourceURL, a.Inspector.SavedSourceURL = edit.Value, edit.Value
+			}
+		}
+	}
 	for _, edit := range a.Inspector.Pending {
 		if edit.ID == asset.ID {
 			if edit.Rename {
@@ -442,12 +460,10 @@ func (a *App) inspectorMultiDetails(c *ui.Context, selected []model.Asset) {
 			{"note", a.T("asset_note"), a.T("asset_note_placeholder"), a.T("multiple_notes"), func(x model.Asset) string { return x.Note }, 10},
 			{"source", a.T("source_url"), a.T("source_url_placeholder"), a.T("multiple_links"), func(x model.Asset) string { return x.SourceURL }, 4},
 		} {
-			common, mixed := field.value(selected[0]), false
-			for _, asset := range selected[1:] {
-				if field.value(asset) != common {
-					common, mixed = "", true
-					break
-				}
+			common, mixed := a.selectionCommon(field.key, field.value)
+			// 还没写进去（正在写或写失败）的那份是用户最新的输入，按它显示，重新点开也从它接着改。
+			if edit, ok := a.multiPendingFor(field.key, selected); ok {
+				common, mixed = edit.Value, false
 			}
 			editing := "multi-" + field.key
 			if a.Inspector.Editing == editing {
@@ -488,35 +504,102 @@ func (a *App) applyMultiDetail(field string) {
 	if field == "source" {
 		value = strings.TrimSpace(value)
 	}
-	if (a.Inspector.MultiMixed && strings.TrimSpace(value) == "") || (!a.Inspector.MultiMixed && value == a.Inspector.MultiOriginal) {
-		return
-	}
 	ids := make([]string, 0, len(a.Inspector.MultiIDs))
 	for _, id := range a.Inspector.MultiIDs {
 		if _, ok := a.assetByID[id]; ok {
 			ids = append(ids, id)
 		}
 	}
+	// 选中项是无序的：排好序，同一批素材才能认出是同一次修改。
+	slices.Sort(ids)
+	same := func(p inspectorMultiEdit) bool { return p.Field == field && slices.Equal(p.IDs, ids) }
+	// 这批之前没写进去的修改还在：原样再提交一次也算重试，不能因为值没变就跳过。
+	retry := slices.ContainsFunc(a.Inspector.MultiPending, same)
+	if (a.Inspector.MultiMixed && strings.TrimSpace(value) == "") || (!a.Inspector.MultiMixed && value == a.Inspector.MultiOriginal && !retry) {
+		return
+	}
 	if len(ids) == 0 || a.Library == nil {
 		return
 	}
-	lib := a.Library
-	write, patch := lib.SetAssetsNote, func(asset *model.Asset) { asset.Note = value }
-	if field == "source" {
-		write, patch = lib.SetAssetsSourceURL, func(asset *model.Asset) { asset.SourceURL = value }
+	edit := inspectorMultiEdit{Field: field, Value: value, IDs: ids}
+	a.supersedeEdits(ids, field)
+	a.Inspector.MultiPending = append(slices.DeleteFunc(a.Inspector.MultiPending, same), edit)
+	a.ContinueInspectorEdits()
+}
+
+// supersedeEdits 在这些素材的这一项有了新修改时调用：之前排着没写进去的旧值不能再写，否则重试时会盖掉新值。
+// field 是 note、source，或者 details（单张一起改备注和链接）。
+func (a *App) supersedeEdits(ids []string, field string) {
+	covered := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		covered[id] = true
 	}
-	a.Inspector.MultiSaving = true
-	a.RunPatch("update_asset_details", ids, func(ctx context.Context) error {
-		err := write(ctx, ids, value)
-		a.Window.Update(func() {
-			a.Inspector.MultiSaving = false
-			// 没写进去：错误照常弹出，等着退出或换图库的这次先不走，免得以为存好了。
-			if err != nil {
-				a.quitAfterInspector, a.pendingLibraryAfterEdits = false, ""
+	next := a.Inspector.MultiPending[:0]
+	for _, edit := range a.Inspector.MultiPending {
+		if field == "details" || edit.Field == field {
+			edit.IDs = slices.DeleteFunc(slices.Clone(edit.IDs), func(id string) bool { return covered[id] })
+		}
+		if len(edit.IDs) > 0 {
+			next = append(next, edit)
+		}
+	}
+	a.Inspector.MultiPending = next
+	if field == "details" {
+		return
+	}
+	// 单张排着的备注和链接是一起写的，换成这次的新值，免得旧值盖回来。
+	for i, edit := range a.Inspector.Pending {
+		if edit.Details && covered[edit.ID] {
+			if field == "note" {
+				a.Inspector.Pending[i].Note = a.Inspector.MultiDraft
+			} else {
+				a.Inspector.Pending[i].Source = strings.TrimSpace(a.Inspector.MultiDraft)
 			}
-		})
+		}
+	}
+}
+
+// multiPendingFor 找正好针对当前这批选中素材、这一项的未写入修改。
+func (a *App) multiPendingFor(field string, selected []model.Asset) (inspectorMultiEdit, bool) {
+	for _, edit := range a.Inspector.MultiPending {
+		if edit.Field != field || len(edit.IDs) != len(selected) {
+			continue
+		}
+		if !slices.ContainsFunc(edit.IDs, func(id string) bool { return !a.Selected.Has(id) }) {
+			return edit, true
+		}
+	}
+	return inspectorMultiEdit{}, false
+}
+
+func (a *App) runInspectorMultiEdit(edit inspectorMultiEdit) {
+	lib := a.Library
+	write, patch := lib.SetAssetsNote, func(asset *model.Asset) { asset.Note = edit.Value }
+	if edit.Field == "source" {
+		write, patch = lib.SetAssetsSourceURL, func(asset *model.Asset) { asset.SourceURL = edit.Value }
+	}
+	a.RunPatch("update_asset_details", edit.IDs, func(ctx context.Context) error {
+		err := write(ctx, edit.IDs, edit.Value)
+		a.Window.Update(func() { a.inspectorMultiEditFinished(edit, err) })
 		return err
 	}, patch)
+}
+
+func (a *App) inspectorMultiEditFinished(edit inspectorMultiEdit, err error) {
+	// 写入期间同一批又改了新值时，队列里已换成新版本：只认这次提交的这一版。
+	submitted := func(p inspectorMultiEdit) bool {
+		return p.Field == edit.Field && p.Value == edit.Value && slices.Equal(p.IDs, edit.IDs)
+	}
+	if err != nil {
+		a.Inspector.SaveError = a.Texts.Error(err)
+		for i := range a.Inspector.MultiPending {
+			if submitted(a.Inspector.MultiPending[i]) {
+				a.Inspector.MultiPending[i].Failed = true
+			}
+		}
+		return
+	}
+	a.Inspector.MultiPending = slices.DeleteFunc(a.Inspector.MultiPending, submitted)
 }
 
 func (a *App) inspectorEXIF(c *ui.Context, asset model.Asset) {
@@ -937,11 +1020,8 @@ func (a *App) createInspectorMembership(selected []model.Asset, name string, fol
 	}
 	a.Inspector.TagsOpen, a.Inspector.TagSearch = false, ""
 	a.Run("create_asset_tag", func(ctx context.Context) error {
-		item, err := lib.CreateTag(ctx, name)
-		if err != nil {
-			return err
-		}
-		return lib.SetAssetTags(ctx, ids, []string{item.ID}, true)
+		_, err := lib.CreateTagWithAssets(ctx, name, ids)
+		return err
 	})
 }
 
@@ -978,11 +1058,12 @@ func (a *App) inspectorDraft() (inspectorEdit, bool) {
 func (a *App) InspectorEditsPending() bool {
 	_, dirty := a.inspectorDraft()
 	_, multi := strings.CutPrefix(a.Inspector.Editing, "multi-")
-	return dirty || len(a.Inspector.Pending) > 0 || multi || a.Inspector.MultiSaving
+	return dirty || len(a.Inspector.Pending) > 0 || multi || len(a.Inspector.MultiPending) > 0
 }
 
 func (a *App) InspectorEditsFailed() bool {
-	return slices.ContainsFunc(a.Inspector.Pending, func(edit inspectorEdit) bool { return edit.Failed })
+	return slices.ContainsFunc(a.Inspector.Pending, func(edit inspectorEdit) bool { return edit.Failed }) ||
+		slices.ContainsFunc(a.Inspector.MultiPending, func(edit inspectorMultiEdit) bool { return edit.Failed })
 }
 
 func (a *App) saveInspectorEdits() {
@@ -1001,6 +1082,9 @@ func (a *App) saveInspectorEdits() {
 	if !found {
 		a.Inspector.Pending = append(a.Inspector.Pending, edit)
 	}
+	if edit.Details {
+		a.supersedeEdits([]string{edit.ID}, "details")
+	}
 	a.ContinueInspectorEdits()
 }
 
@@ -1014,6 +1098,9 @@ func (a *App) FlushInspectorEdits() {
 	a.saveInspectorEdits()
 	for i := range a.Inspector.Pending {
 		a.Inspector.Pending[i].Failed = false
+	}
+	for i := range a.Inspector.MultiPending {
+		a.Inspector.MultiPending[i].Failed = false
 	}
 	a.ContinueInspectorEdits()
 }
@@ -1029,22 +1116,19 @@ func (a *App) ContinueInspectorEdits() {
 			return
 		}
 	}
+	for _, edit := range a.Inspector.MultiPending {
+		if !edit.Failed {
+			a.runInspectorMultiEdit(edit)
+			return
+		}
+	}
 }
 
 func (a *App) runInspectorEdit(edit inspectorEdit) {
 	lib := a.Library
 	a.RunPatch("update_asset_details", []string{edit.ID}, func(ctx context.Context) error {
-		err := func() error {
-			if edit.Rename {
-				if err := lib.RenameAsset(ctx, edit.ID, edit.Name); err != nil {
-					return err
-				}
-			}
-			if edit.Details {
-				return lib.UpdateAssetDetails(ctx, edit.ID, edit.Note, edit.Source)
-			}
-			return nil
-		}()
+		// 名称和详情在一个事务里写，不会只改一半。
+		err := lib.SaveAssetEdit(ctx, edit.ID, edit.Name, edit.Rename, edit.Note, edit.Source, edit.Details)
 		a.Window.Update(func() { a.inspectorEditFinished(edit, err) })
 		return err
 	}, func(asset *model.Asset) {
@@ -1131,8 +1215,12 @@ func (a *App) DiscardInspectorEdits(reason string) bool {
 	for _, edit := range edits {
 		slog.Warn("放弃未保存的检查器修改", "reason", reason, "asset", edit.ID, "name", edit.Name, "note", edit.Note, "source", edit.Source)
 	}
+	multi := a.Inspector.MultiPending
+	for _, edit := range multi {
+		slog.Warn("放弃未保存的多选修改", "reason", reason, "field", edit.Field, "value", edit.Value, "assets", edit.IDs)
+	}
 	a.Inspector = inspectorState{}
-	return len(edits) > 0
+	return len(edits)+len(multi) > 0
 }
 
 // 分组标题比下面的字段名（类型、尺寸……）再浅一档，一眼能分出是标题还是字段。

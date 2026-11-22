@@ -26,22 +26,27 @@ func (a *App) MarkAssetsUsed(ids []string) {
 				a.ShowError(err)
 				return
 			}
-			used := make(map[string]bool, len(ids))
-			for _, id := range ids {
-				used[id] = true
-			}
-			for i := range a.Snapshot.Assets {
-				asset := &a.Snapshot.Assets[i]
-				if used[asset.ID] && at.After(asset.LastUsedAt) {
-					asset.LastUsedAt = at
-					a.assetByID[asset.ID] = *asset
-				}
-			}
-			a.Index.UpdateLastUsed(used, at)
-			// 「最近使用」的范围变了，筛选面板里的数量要重算。
-			a.indexVersion++
+			a.applyAssetsUsed(ids, at)
 		})
 	}()
+}
+
+// applyAssetsUsed 在界面线程把使用时间写进内存里的素材和索引。
+func (a *App) applyAssetsUsed(ids []string, at time.Time) {
+	used := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		used[id] = true
+	}
+	for _, i := range a.Index.UpdateLastUsed(used, at) {
+		asset := a.Snapshot.Assets[i]
+		a.assetByID[asset.ID] = asset
+	}
+	// 「最近使用」的范围变了，筛选面板里的数量要重算。snapshotVersion 不动：它管的缓存（选中项、智能文件夹计数）都不看使用时间。
+	a.indexVersion++
+	// 正在看「最近使用」时，刚用过的要排到前面；选中项按素材找回位置。预览窗口有自己的翻页顺序，不受影响。
+	if a.Query.Scope == "recent" {
+		a.refine(false)
+	}
 }
 
 func (a *App) CopySelected() {

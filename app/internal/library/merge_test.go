@@ -27,10 +27,10 @@ func TestMergeAssets(t *testing.T) {
 	if err := l.SetAssetFolders(t.Context(), []string{"dup2"}, []string{folder.ID}, true); err != nil {
 		t.Fatal(err)
 	}
-	if err := l.UpdateAssetDetails(t.Context(), "keep", "原备注", ""); err != nil {
+	if err := l.SaveAssetEdit(t.Context(), "keep", "", false, "原备注", "", true); err != nil {
 		t.Fatal(err)
 	}
-	if err := l.UpdateAssetDetails(t.Context(), "dup1", "另一段", "https://example.com/1"); err != nil {
+	if err := l.SaveAssetEdit(t.Context(), "dup1", "", false, "另一段", "https://example.com/1", true); err != nil {
 		t.Fatal(err)
 	}
 	assets := snapshot(t, l).Assets

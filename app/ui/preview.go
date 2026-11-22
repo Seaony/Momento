@@ -30,6 +30,7 @@ type previewState struct {
 	initialized, fitMode            bool
 	animation                       *previewAnimation
 	animationLoading                bool
+	limited                         bool // 动图太大，只显示首帧；底栏给说明
 	nextFrameAt, wheelAt            time.Time
 	slideDirection                  float32
 	slideFrames                     int
@@ -45,6 +46,7 @@ type previewPicture struct {
 	bitmap    *ui.Bitmap
 	pixelated bool
 	animation *previewAnimation
+	limited   bool // 动图太大，只解了首帧
 }
 
 func (p *previewState) target(root, id string, rotation int) {
@@ -56,7 +58,7 @@ func (p *previewState) target(root, id string, rotation int) {
 	}
 	p.Generation++
 	p.targetRoot, p.targetID, p.targetRotation = root, id, rotation
-	p.Bitmap, p.animation, p.errorText = nil, nil, ""
+	p.Bitmap, p.animation, p.errorText, p.limited = nil, nil, "", false
 	p.Loading, p.animationLoading, p.initialized = false, false, false
 	p.Zoom, p.Pan, p.fitZoom = 1, ui.Point{}, 1
 	p.nextFrameAt = time.Time{}
@@ -78,7 +80,7 @@ func (p *previewState) finish(generation uint64, bitmap *ui.Bitmap, err error) {
 func (p *previewState) finishPicture(generation uint64, picture previewPicture, err error) {
 	p.finish(generation, picture.bitmap, err)
 	if generation == p.Generation && p.Open && err == nil {
-		p.pixelated, p.animation = picture.pixelated, picture.animation
+		p.pixelated, p.animation, p.limited = picture.pixelated, picture.animation, picture.limited
 	}
 }
 
@@ -93,7 +95,19 @@ func previewBitmap(img image.Image, pixelated bool) *ui.Bitmap {
 
 // GIF 只保留当前帧的位图，切到别的素材后不再解码。
 func readPreviewPicture(path string, rotation int, pixelated bool) (previewPicture, error) {
-	if strings.EqualFold(filepath.Ext(path), ".gif") {
+	animated := strings.EqualFold(filepath.Ext(path), ".gif")
+	if animated {
+		// 帧像素太多就不全量解码，退回显示静态首帧（下面的 PreviewImage）。
+		if err := assets.CheckGIFDecodeSize(path); err != nil {
+			if !hasKey(err, "error_animation_too_large") {
+				return previewPicture{}, err
+			}
+			slog.Warn("GIF 太大，预览只显示首帧", "path", path, "error", err)
+			animated = false
+		}
+	}
+	limited := !animated && strings.EqualFold(filepath.Ext(path), ".gif")
+	if animated {
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return previewPicture{}, err
@@ -110,7 +124,7 @@ func readPreviewPicture(path string, rotation int, pixelated bool) (previewPictu
 		if err != nil {
 			return previewPicture{}, err
 		}
-		return previewPicture{previewBitmap(img, pixelated), pixelated, &previewAnimation{decoder, frame.Duration, rotation, pixelated}}, nil
+		return previewPicture{bitmap: previewBitmap(img, pixelated), pixelated: pixelated, animation: &previewAnimation{decoder, frame.Duration, rotation, pixelated}}, nil
 	}
 	img, err := assets.PreviewImage(path)
 	if err != nil {
@@ -120,7 +134,7 @@ func readPreviewPicture(path string, rotation int, pixelated bool) (previewPictu
 	if err != nil {
 		return previewPicture{}, err
 	}
-	return previewPicture{bitmap: previewBitmap(img, pixelated), pixelated: pixelated}, nil
+	return previewPicture{bitmap: previewBitmap(img, pixelated), pixelated: pixelated, limited: limited}, nil
 }
 func (animation *previewAnimation) next() (previewPicture, error) {
 	frame, err := animation.decoder.Next()
@@ -136,7 +150,7 @@ func (animation *previewAnimation) next() (previewPicture, error) {
 	if err != nil {
 		return previewPicture{}, err
 	}
-	return previewPicture{previewBitmap(img, animation.pixelated), animation.pixelated, &previewAnimation{animation.decoder, frame.Duration, animation.rotation, animation.pixelated}}, nil
+	return previewPicture{bitmap: previewBitmap(img, animation.pixelated), pixelated: animation.pixelated, animation: &previewAnimation{animation.decoder, frame.Duration, animation.rotation, animation.pixelated}}, nil
 }
 
 // 图片占底栏以上、四周留白后的区域，图片和放大后的裁切框都是小圆角；可缩放、拖动，翻页时左右滑入。

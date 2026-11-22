@@ -2,18 +2,22 @@ package assets
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
+	"errors"
 	"hash/crc32"
 	"image"
 	"image/color"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
 
+	"github.com/Seaony/Momento/app/internal/i18n"
 	"github.com/Seaony/Momento/app/internal/model"
 	"github.com/gen2brain/avif"
 	"golang.org/x/image/bmp"
@@ -430,5 +434,85 @@ func TestExportComposesFileOrientationWithLibraryRotationOnce(t *testing.T) {
 			t.Fatal(err)
 		}
 		equalImage(t, img, expected)
+	}
+}
+
+// 画布大、帧数多但文件只有几百字节的 GIF：每帧只有最小的 LZW 数据，解码会失败，
+// 所以预检若漏拦，错误就不会是 error_animation_too_large。
+func hugeTinyGIF(frames int, side uint16) []byte {
+	var b bytes.Buffer
+	b.WriteString("GIF89a")
+	binary.Write(&b, binary.LittleEndian, []uint16{side, side})
+	b.Write([]byte{0x00, 0, 0})
+	for i := 0; i < frames; i++ {
+		b.Write([]byte{0x21, 0xF9, 4, 0, 10, 0, 0, 0}) // 图形控制扩展
+		b.WriteByte(0x2C)
+		binary.Write(&b, binary.LittleEndian, []uint16{0, 0, side, side})
+		b.Write([]byte{0x80, 0, 0, 0, 255, 255, 255}) // 局部颜色表 2 色
+		b.Write([]byte{2, 2, 0x44, 0x01, 0})          // 最小码长 + 一小块数据
+	}
+	b.WriteByte(0x3B)
+	return b.Bytes()
+}
+
+func TestGIFDecodeCostScansWithoutDecoding(t *testing.T) {
+	data := hugeTinyGIF(30, 10000)
+	if len(data) > 4096 {
+		t.Fatalf("测试文件应该很小：%d", len(data))
+	}
+	frames, size, err := GIFDecodeCost(bytes.NewReader(data))
+	if err != nil || frames != 30 || size != 30*(10000*10000+gifFrameOverhead+2*20)+10000*10000*8 {
+		t.Fatalf("预检结果不对：%d 帧 %d 字节 %v", frames, size, err)
+	}
+}
+
+// 逻辑画布很大、每帧只改 1×1 像素：帧本身几乎不占内存，但播放要分配整张画布，预检也要拦。
+func TestGIFDecodeCostCountsLogicalCanvas(t *testing.T) {
+	var b bytes.Buffer
+	b.WriteString("GIF89a")
+	binary.Write(&b, binary.LittleEndian, []uint16{16000, 12000})
+	b.Write([]byte{0x00, 0, 0})
+	b.WriteByte(0x2C)
+	binary.Write(&b, binary.LittleEndian, []uint16{0, 0, 1, 1})
+	b.Write([]byte{0x80, 0, 0, 0, 255, 255, 255})
+	b.Write([]byte{2, 2, 0x44, 0x01, 0})
+	b.WriteByte(0x3B)
+	source := filepath.Join(t.TempDir(), "canvas.gif")
+	if err := os.WriteFile(source, b.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var localized *i18n.LocalizedError
+	if err := CheckGIFDecodeSize(source); !errors.As(err, &localized) || localized.Key != "error_animation_too_large" {
+		t.Fatalf("大画布小帧的 GIF 应被拒绝：%v", err)
+	}
+}
+
+func TestRotatedOriginalGIFRejectsHugeAnimationBeforeDecoding(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "huge.gif")
+	if err := os.WriteFile(source, hugeTinyGIF(30, 10000), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckGIFDecodeSize(source); !errors.As(err, new(*i18n.LocalizedError)) {
+		t.Fatalf("预检应该拒绝：%v", err)
+	}
+	var out bytes.Buffer
+	err := writeRotatedOriginal(context.Background(), &out, source, model.Asset{Extension: "gif", Rotation: 90}, 0.9)
+	var localized *i18n.LocalizedError
+	if !errors.As(err, &localized) || localized.Key != "error_animation_too_large" || out.Len() != 0 {
+		t.Fatalf("旋转导出应在解码前拒绝：%v", err)
+	}
+}
+
+func TestRotatedOriginalRejectsAnimatedAVIFFromHeader(t *testing.T) {
+	// 只有 ftyp 盒、品牌是 avis：解码库没被调用也能拒绝。
+	box := append([]byte{0, 0, 0, 16}, []byte("ftypavis\x00\x00\x00\x00")...)
+	source := filepath.Join(t.TempDir(), "anim.avif")
+	if err := os.WriteFile(source, box, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := writeRotatedOriginal(context.Background(), io.Discard, source, model.Asset{Extension: "avif", Rotation: 90}, 0.9)
+	var localized *i18n.LocalizedError
+	if !errors.As(err, &localized) || localized.Key != "error_export_rotation_animation" {
+		t.Fatalf("动态 AVIF 应在文件头处拒绝：%v", err)
 	}
 }

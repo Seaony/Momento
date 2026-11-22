@@ -46,6 +46,9 @@ func writeRotatedOriginal(ctx context.Context, w io.Writer, source string, asset
 	extension := strings.ToLower(asset.Extension)
 	switch extension {
 	case "gif":
+		if err := CheckGIFDecodeSize(source); err != nil {
+			return err
+		}
 		animation, err := gif.DecodeAll(contextReader{ctx: ctx, r: f})
 		if err != nil {
 			return err
@@ -71,6 +74,12 @@ func writeRotatedOriginal(ctx context.Context, w io.Writer, source string, asset
 		animation.Config.Width, animation.Config.Height = size.X, size.Y
 		return gif.EncodeAll(w, animation)
 	case "avif":
+		// 动态 AVIF 本来就不支持旋转导出：先看文件头拒绝，不用解开所有帧再检查。
+		if animated, err := animatedAVIF(f); err != nil {
+			return err
+		} else if animated {
+			return i18n.NewError("error_export_rotation_animation", "AVIF")
+		}
 		animation, err := avif.DecodeAll(contextReader{ctx: ctx, r: f}, avif.Options{AutoRotate: true})
 		if err != nil {
 			return err

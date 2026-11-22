@@ -42,14 +42,34 @@ type previewWindows struct {
 	gesture      *previewWindow
 	spaceDown    time.Time
 	inputPending bool
+	// 主窗口当前列表里有哪些素材，翻页时判断用；列表变了才重建。
+	visibleIDs     map[string]bool
+	visibleVersion uint64
+}
+
+// 预览翻页的顺序：只记打开那一刻的素材 ID 和是否在回收站，素材数据翻到时再取最新的，十万张时不用整份复制。
+type previewItem struct {
+	id      string
+	trashed bool
+}
+
+func previewOrder(assets []model.Asset) []previewItem {
+	items := make([]previewItem, len(assets))
+	for i, asset := range assets {
+		items[i] = previewItem{asset.ID, asset.Trashed}
+	}
+	return items
 }
 
 type previewWindow struct {
-	window                    *mygo.Window
-	picture                   previewState
-	root                      string
-	asset                     model.Asset
-	items                     []model.Asset
+	window   *mygo.Window
+	picture  previewState
+	root     string
+	asset    model.Asset
+	items    []previewItem
+	position int // 当前素材在 items 里的位置，翻页时先看这里，对不上再找
+	// frozen 是换图库前按 items 顺序取下的素材数据：固定住的预览换图库后还能在原来那批里翻页。
+	frozen                    []model.Asset
 	placeholder               *ui.Bitmap
 	lastSelectionID           string
 	mainSelection             []string
@@ -114,7 +134,7 @@ func (a *App) ShowPreview(id string, held bool) {
 	}
 	now := time.Now()
 	selection, preferred, _ := a.previewMainSelection("")
-	w := &previewWindow{root: a.Library.Root, asset: asset, items: append([]model.Asset(nil), a.Visible...), openedAt: now, lastSelectionID: preferred.ID, mainSelection: selection}
+	w := &previewWindow{root: a.Library.Root, asset: asset, items: previewOrder(a.Visible), position: a.selectedIndex, openedAt: now, lastSelectionID: preferred.ID, mainSelection: selection}
 	w.picture.Open = true
 	if held {
 		w.pressedAt = a.Preview.spaceDown
@@ -323,8 +343,8 @@ func (a *App) FollowPreviewSelection() {
 		w.close(a, time.Now())
 		return
 	}
-	if !slices.ContainsFunc(w.items, func(item model.Asset) bool { return item.ID == asset.ID }) {
-		w.items = append([]model.Asset(nil), a.Visible...)
+	if w.indexOf(asset.ID) < 0 {
+		w.items = previewOrder(a.Visible)
 	}
 	w.setAsset(a, asset)
 }
@@ -572,44 +592,84 @@ func (w *previewWindow) setAsset(a *App, asset model.Asset) {
 	w.invalidate()
 }
 func (w *previewWindow) move(a *App, delta int) {
-	w.items = a.previewItems(w)
-	index := slices.IndexFunc(w.items, func(asset model.Asset) bool { return asset.ID == w.asset.ID })
-	if index < 0 || index+delta < 0 || index+delta >= len(w.items) {
+	index := w.indexOf(w.asset.ID)
+	if index < 0 {
 		return
 	}
-	w.picture.slideDirection, w.picture.slideFrames = float32(delta), 0
-	w.setAsset(a, w.items[index+delta])
-	if a.Library != nil && a.Library.Root == w.root {
-		a.MarkAssetsUsed([]string{w.asset.ID})
+	for i := index + delta; i >= 0 && i < len(w.items); i += delta {
+		if asset, ok := a.previewStep(w, i); ok {
+			w.position = i
+			w.picture.slideDirection, w.picture.slideFrames = float32(delta), 0
+			w.setAsset(a, asset)
+			if a.Library != nil && a.Library.Root == w.root {
+				a.MarkAssetsUsed([]string{w.asset.ID})
+			}
+			return
+		}
 	}
 }
 
-// 翻页时按打开那一刻的顺序走（最近使用排序会随翻页重排，不能跟着变），但去掉之后删掉或被筛掉的图，并换成最新的素材数据。
-// 当前图还在主窗口列表里时，只留仍在列表里的；当前图已不在列表里（换了范围），只去掉已不存在或进出回收站的。
-func (a *App) previewItems(w *previewWindow) []model.Asset {
+// indexOf 找素材在翻页顺序里的位置，找不到是 -1。
+func (w *previewWindow) indexOf(id string) int {
+	if w.position >= 0 && w.position < len(w.items) && w.items[w.position].id == id {
+		return w.position
+	}
+	w.position = slices.IndexFunc(w.items, func(item previewItem) bool { return item.id == id })
+	return w.position
+}
+
+// 翻页时按打开那一刻的顺序走（最近使用排序会随翻页重排，不能跟着变），但跳过之后删掉或被筛掉的图，并换成最新的素材数据。
+// 当前图还在主窗口列表里时，只停在仍在列表里的；当前图已不在列表里（换了范围），只跳过已不存在或进出回收站的。
+func (a *App) previewStep(w *previewWindow, i int) (model.Asset, bool) {
+	item := w.items[i]
 	if a.Library == nil || a.Library.Root != w.root {
-		return w.items
+		// 换了图库：只能在换之前取下的那批里翻。
+		if i < len(w.frozen) {
+			return w.frozen[i], w.frozen[i].ID != ""
+		}
+		return model.Asset{}, false
 	}
-	visible := make(map[string]model.Asset, len(a.Visible))
-	for _, asset := range a.Visible {
-		visible[asset.ID] = asset
+	visible := a.previewVisibleIDs()
+	// 直接查 ID 表：彻底删掉一大段后往后翻，每张都去扫一遍主列表会卡住。
+	current, ok := a.assetByID[item.id]
+	if a.assetByID == nil {
+		current, ok = a.previewAsset(item.id)
 	}
-	_, inView := visible[w.asset.ID]
-	items := make([]model.Asset, 0, len(w.items))
-	for _, item := range w.items {
-		if item.ID == w.asset.ID {
-			items = append(items, w.asset)
+	if !ok {
+		return model.Asset{}, false
+	}
+	if visible[w.asset.ID] {
+		return current, visible[item.id]
+	}
+	return current, current.Trashed == item.trashed
+}
+
+// freezePreviews 在换图库前调用：还开着的预览把翻页要用的素材数据取下来，换库后照样能翻。
+func (a *App) freezePreviews() {
+	windows := append([]*previewWindow{a.Preview.active}, a.Preview.pinned...)
+	for _, w := range windows {
+		// 每次离开它所属的图库都重新取：中途回到过这个图库、改过或删过素材，用的得是最新的。
+		if w == nil || a.Library == nil || w.root != a.Library.Root {
 			continue
 		}
-		if inView {
-			if current, ok := visible[item.ID]; ok {
-				items = append(items, current)
+		w.frozen = make([]model.Asset, len(w.items))
+		for i, item := range w.items {
+			if asset, ok := a.assetByID[item.id]; ok && asset.Trashed == item.trashed {
+				w.frozen[i] = asset
 			}
-		} else if current, ok := a.previewAsset(item.ID); ok && current.Trashed == item.Trashed {
-			items = append(items, current)
 		}
 	}
-	return items
+}
+
+func (a *App) previewVisibleIDs() map[string]bool {
+	if a.Preview.visibleIDs == nil || a.Preview.visibleVersion != a.visibleVersion {
+		ids := make(map[string]bool, len(a.Visible))
+		for _, asset := range a.Visible {
+			ids[asset.ID] = true
+		}
+		a.Preview.visibleIDs, a.Preview.visibleVersion = ids, a.visibleVersion
+	}
+	return a.Preview.visibleIDs
 }
 
 // 预览窗口的底：和侧栏同色，窗口本身透明只为露出圆角。
@@ -712,6 +772,9 @@ func (w *previewWindow) footer(c *ui.Context, a *App, now time.Time) {
 					}
 					if isVideoAsset(w.asset) && w.asset.DurationMS > 0 {
 						previewInfo(c, "play", videoDuration(assetDuration(w.asset)))
+					}
+					if w.picture.limited {
+						previewInfo(c, "info", a.T("preview_animation_limited"))
 					}
 
 				})

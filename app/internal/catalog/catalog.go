@@ -16,6 +16,8 @@ type Query struct {
 	Now           time.Time
 	Scope         string
 	FolderID      string
+	// ScopeTagID 是标签范围（Scope 为 "tag"）要看的标签，和 TagIDs 筛选条件分开，两者同时生效。
+	ScopeTagID    string
 	ColorFamilies []string
 	TagIDs        []string
 	Extensions    []string
@@ -84,8 +86,8 @@ type Index struct {
 	orders map[orderKey][]int32
 }
 
-// New 直接接管 snapshot.Assets（不复制，省一份素材内存），调用方之后不能再改这个切片和其中的素材；
-// UpdateLastUsed 会原地改它。其他字段会复制。
+// New 直接接管 snapshot.Assets（不复制，省一份素材内存），调用方之后只能通过 Patch、UpdateLastUsed 改这个切片里的素材，
+// 这两个方法会原地改它。其他字段会复制。
 func New(snapshot model.Snapshot) *Index {
 	idx := &Index{
 		snapshot: model.Snapshot{
@@ -96,42 +98,88 @@ func New(snapshot model.Snapshot) *Index {
 		counts:  Counts{Folders: make(map[string]int), Tags: make(map[string]int)},
 		orders:  map[orderKey][]int32{},
 	}
-	tagNames := make(map[string]string, len(snapshot.Tags))
+	tagNames := idx.tagNames()
 	for _, tag := range snapshot.Tags {
-		tagNames[tag.ID] = strings.ToLower(tag.Name)
 		idx.counts.Tags[tag.ID] = 0
 	}
 	for _, folder := range snapshot.Folders {
 		idx.counts.Folders[folder.ID] = 0
 	}
-	for i, asset := range snapshot.Assets {
-		e := entry{name: strings.ToLower(asset.Name), extension: normalizedExtension(asset.Extension), note: strings.ToLower(asset.Note), source: strings.ToLower(asset.SourceURL)}
-		for _, id := range asset.TagIDs {
-			e.tagNames = append(e.tagNames, tagNames[id])
-		}
-		idx.entries[i] = e
-		if asset.Trashed {
-			idx.counts.Trash++
-			continue
-		}
-		idx.counts.All++
-		if asset.Favorite {
-			idx.counts.Favorites++
-		}
-		if len(asset.FolderIDs) == 0 {
-			idx.counts.Uncategorized++
-		}
-		if len(asset.TagIDs) == 0 {
-			idx.counts.Untagged++
-		}
-		for _, id := range asset.FolderIDs {
-			idx.counts.Folders[id]++
-		}
-		for _, id := range asset.TagIDs {
-			idx.counts.Tags[id]++
-		}
+	for i := range snapshot.Assets {
+		idx.entries[i] = newEntry(&snapshot.Assets[i], tagNames)
+		idx.count(&snapshot.Assets[i], 1)
 	}
 	return idx
+}
+
+func (idx *Index) tagNames() map[string]string {
+	names := make(map[string]string, len(idx.snapshot.Tags))
+	for _, tag := range idx.snapshot.Tags {
+		names[tag.ID] = strings.ToLower(tag.Name)
+	}
+	return names
+}
+
+func newEntry(asset *model.Asset, tagNames map[string]string) entry {
+	e := entry{name: strings.ToLower(asset.Name), extension: normalizedExtension(asset.Extension), note: strings.ToLower(asset.Note), source: strings.ToLower(asset.SourceURL)}
+	for _, id := range asset.TagIDs {
+		e.tagNames = append(e.tagNames, tagNames[id])
+	}
+	return e
+}
+
+// count 把一张素材算进（delta 为 1）或移出（delta 为 -1）各项计数。
+func (idx *Index) count(asset *model.Asset, delta int) {
+	if asset.Trashed {
+		idx.counts.Trash += delta
+		return
+	}
+	idx.counts.All += delta
+	if asset.Favorite {
+		idx.counts.Favorites += delta
+	}
+	if len(asset.FolderIDs) == 0 {
+		idx.counts.Uncategorized += delta
+	}
+	if len(asset.TagIDs) == 0 {
+		idx.counts.Untagged += delta
+	}
+	for _, id := range asset.FolderIDs {
+		idx.counts.Folders[id] += delta
+	}
+	for _, id := range asset.TagIDs {
+		idx.counts.Tags[id] += delta
+	}
+}
+
+// Patch 原地改 ids 里的素材，只重算这几张的搜索项和计数，不重建整个索引（十万张重建一次要几十毫秒）。
+// 名称变了才作废排好的顺序。返回改到的素材下标。apply 不能原地改素材里的切片，要换成新切片。
+func (idx *Index) Patch(ids map[string]bool, apply func(*model.Asset)) []int {
+	var changed []int
+	var tagNames map[string]string
+	renamed := false
+	for i := range idx.snapshot.Assets {
+		asset := &idx.snapshot.Assets[i]
+		if !ids[asset.ID] {
+			continue
+		}
+		if tagNames == nil {
+			tagNames = idx.tagNames()
+		}
+		idx.count(asset, -1)
+		apply(asset)
+		idx.count(asset, 1)
+		e := newEntry(asset, tagNames)
+		renamed = renamed || e.name != idx.entries[i].name
+		idx.entries[i] = e
+		changed = append(changed, i)
+	}
+	if renamed {
+		idx.mu.Lock()
+		clear(idx.orders)
+		idx.mu.Unlock()
+	}
+	return changed
 }
 
 // Query 按范围、筛选、搜索、排序处理；空排序采用添加时间倒序。
@@ -235,16 +283,18 @@ func (idx *Index) order(q Query) []int32 {
 	return order
 }
 
-// UpdateLastUsed 原地改素材的使用时间，New 时传入的切片（调用方手里的快照）会一起变。
-// 调用方可能已经先改过同一个切片，所以只要有 ids 就作废「最近使用」的排序，不看这里有没有改动。
-func (idx *Index) UpdateLastUsed(ids map[string]bool, at time.Time) {
+// UpdateLastUsed 原地改素材的使用时间，New 时传入的切片（调用方手里的快照）会一起变；返回改到的素材下标。
+// 只要有 ids 就作废「最近使用」的排序。
+func (idx *Index) UpdateLastUsed(ids map[string]bool, at time.Time) []int {
 	if len(ids) == 0 {
-		return
+		return nil
 	}
+	var changed []int
 	for i := range idx.snapshot.Assets {
 		asset := &idx.snapshot.Assets[i]
 		if ids[asset.ID] && at.After(asset.LastUsedAt) {
 			asset.LastUsedAt = at
+			changed = append(changed, i)
 		}
 	}
 	idx.mu.Lock()
@@ -254,6 +304,7 @@ func (idx *Index) UpdateLastUsed(ids map[string]bool, at time.Time) {
 			delete(idx.orders, key)
 		}
 	}
+	return changed
 }
 
 func (idx *Index) Counts() Counts {
@@ -280,8 +331,10 @@ func inScope(asset *model.Asset, q Query) bool {
 	switch q.Scope {
 	case "recent":
 		return !asset.LastUsedAt.IsZero() && !asset.LastUsedAt.Before(q.Now.AddDate(0, 0, -30)) && !asset.LastUsedAt.After(q.Now)
-	case "smart", "tag":
+	case "smart":
 		return true
+	case "tag":
+		return slices.Contains(asset.TagIDs, q.ScopeTagID)
 	case "", "all":
 		return true
 	case "favorites":

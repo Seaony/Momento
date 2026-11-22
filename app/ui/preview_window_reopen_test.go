@@ -43,6 +43,7 @@ func TestPreviewPagingSkipsRemovedAssets(t *testing.T) {
 	w := a.Preview.active
 	// b 被删掉或筛掉，c 移到最前（最近使用排序）。
 	a.Visible = []model.Asset{{ID: "c"}, {ID: "a"}, {ID: "d"}}
+	a.visibleVersion++
 	w.move(a, 1)
 	if w.asset.ID != "c" {
 		t.Fatalf("翻到了已不在列表里的图：%s", w.asset.ID)
@@ -53,6 +54,7 @@ func TestPreviewPagingSkipsRemovedAssets(t *testing.T) {
 	}
 	// 当前图已不在主窗口列表（换了范围）：只去掉已不存在或进了回收站的图。
 	a.Visible = []model.Asset{{ID: "x"}}
+	a.visibleVersion++
 	a.assetByID = map[string]model.Asset{"a": {ID: "a"}, "c": {ID: "c", Trashed: true}, "d": {ID: "d"}}
 	w.move(a, -1)
 	if w.asset.ID != "a" {

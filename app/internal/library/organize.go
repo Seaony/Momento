@@ -32,6 +32,11 @@ func (l *Library) transaction(ctx context.Context, run func(*sql.Tx) error) erro
 }
 
 func (l *Library) CreateFolder(ctx context.Context, name, parentID, icon string) (model.Folder, error) {
+	return l.CreateFolderWithAssets(ctx, name, parentID, icon, nil)
+}
+
+// CreateFolderWithAssets 新建文件夹并把这些素材放进去，同一个事务：放不进去就连文件夹也不建。
+func (l *Library) CreateFolderWithAssets(ctx context.Context, name, parentID, icon string, assetIDs []string) (model.Folder, error) {
 	name, err := cleanName(name)
 	if err != nil {
 		return model.Folder{}, err
@@ -41,8 +46,10 @@ func (l *Library) CreateFolder(ctx context.Context, name, parentID, icon string)
 		if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(sort_index)+1,0) FROM folders WHERE parent_id IS ?", parentValue(parentID)).Scan(&folder.SortIndex); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, "INSERT INTO folders(id,name,parent_id,sort_index,icon) VALUES(?,?,?,?,?)", folder.ID, name, parentValue(parentID), folder.SortIndex, icon)
-		return err
+		if _, err := tx.ExecContext(ctx, "INSERT INTO folders(id,name,parent_id,sort_index,icon) VALUES(?,?,?,?,?)", folder.ID, name, parentValue(parentID), folder.SortIndex, icon); err != nil {
+			return err
+		}
+		return setMembershipsTx(ctx, tx, "asset_folders", "folder_id", assetIDs, []string{folder.ID}, true)
 	})
 	return folder, err
 }
@@ -133,6 +140,11 @@ func NormalizeTag(name string) string {
 }
 
 func (l *Library) CreateTag(ctx context.Context, name string) (model.Tag, error) {
+	return l.CreateTagWithAssets(ctx, name, nil)
+}
+
+// CreateTagWithAssets 新建标签（同名已有就用已有的）并加到这些素材上，同一个事务：加不上就连标签也不建。
+func (l *Library) CreateTagWithAssets(ctx context.Context, name string, assetIDs []string) (model.Tag, error) {
 	name, err := cleanName(name)
 	if err != nil {
 		return model.Tag{}, err
@@ -142,7 +154,10 @@ func (l *Library) CreateTag(ctx context.Context, name string) (model.Tag, error)
 		if _, err := tx.ExecContext(ctx, "INSERT INTO tags(id,name,normalized_name,color_hex) VALUES(?,?,?,?) ON CONFLICT(normalized_name) DO NOTHING", tag.ID, tag.Name, tag.NormalizedName, tag.ColorHex); err != nil {
 			return err
 		}
-		return tx.QueryRowContext(ctx, "SELECT id,name,normalized_name,color_hex FROM tags WHERE normalized_name=?", tag.NormalizedName).Scan(&tag.ID, &tag.Name, &tag.NormalizedName, &tag.ColorHex)
+		if err := tx.QueryRowContext(ctx, "SELECT id,name,normalized_name,color_hex FROM tags WHERE normalized_name=?", tag.NormalizedName).Scan(&tag.ID, &tag.Name, &tag.NormalizedName, &tag.ColorHex); err != nil {
+			return err
+		}
+		return setMembershipsTx(ctx, tx, "asset_tags", "tag_id", assetIDs, []string{tag.ID}, true)
 	})
 	return tag, err
 }
@@ -169,24 +184,31 @@ func (l *Library) SetAssetTags(ctx context.Context, assetIDs, tagIDs []string, a
 
 func (l *Library) setMemberships(ctx context.Context, table, column string, assetIDs, memberIDs []string, add bool) error {
 	return l.transaction(ctx, func(tx *sql.Tx) error {
-		query := "DELETE FROM " + table + " WHERE asset_id=? AND " + column + "=?"
-		if add {
-			query = "INSERT OR IGNORE INTO " + table + "(asset_id," + column + ") VALUES(?,?)"
-		}
-		stmt, err := tx.PrepareContext(ctx, query)
-		if err != nil {
-			return err
-		}
-		defer stmt.Close()
-		for _, assetID := range assetIDs {
-			for _, memberID := range memberIDs {
-				if _, err := stmt.ExecContext(ctx, assetID, memberID); err != nil {
-					return err
-				}
+		return setMembershipsTx(ctx, tx, table, column, assetIDs, memberIDs, add)
+	})
+}
+
+func setMembershipsTx(ctx context.Context, tx *sql.Tx, table, column string, assetIDs, memberIDs []string, add bool) error {
+	if len(assetIDs) == 0 || len(memberIDs) == 0 {
+		return nil
+	}
+	query := "DELETE FROM " + table + " WHERE asset_id=? AND " + column + "=?"
+	if add {
+		query = "INSERT OR IGNORE INTO " + table + "(asset_id," + column + ") VALUES(?,?)"
+	}
+	stmt, err := tx.PrepareContext(ctx, query)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, assetID := range assetIDs {
+		for _, memberID := range memberIDs {
+			if _, err := stmt.ExecContext(ctx, assetID, memberID); err != nil {
+				return err
 			}
 		}
-		return nil
-	})
+	}
+	return nil
 }
 
 func (l *Library) SetFavorite(ctx context.Context, assetIDs []string, value bool) error {

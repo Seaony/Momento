@@ -23,6 +23,39 @@ type renameState struct {
 	Find     string
 	With     string
 	Regex    bool
+	// plan 是按当前规则算好的结果。对话框每帧都画，全选十万张时每帧重算会卡，规则或数据变了才重算。
+	plan *renamePlanCache
+}
+
+type renameKey struct {
+	mode                        int
+	template, start, find, with string
+	regex                       bool
+	snapshot                    uint64
+	language                    string // 缓存里的错误提示是翻译好的，换了语言要重算
+}
+
+type renamePlanCache struct {
+	key     renameKey
+	assets  []model.Asset
+	names   []string
+	changed int
+	problem string
+}
+
+// currentRenamePlan 返回这批素材和按当前规则算出的新名称，规则、图库数据都没变就用上次的。
+func (a *App) currentRenamePlan() *renamePlanCache {
+	state := &a.Rename
+	key := renameKey{state.Mode, state.Template, state.Start, state.Find, state.With, state.Regex, a.snapshotVersion, a.Texts.Language}
+	if state.plan != nil && state.plan.key == key {
+		return state.plan
+	}
+	plan := &renamePlanCache{key: key, assets: a.renameAssets()}
+	if len(plan.assets) > 0 {
+		plan.names, plan.changed, plan.problem = a.renamePlan(plan.assets)
+	}
+	state.plan = plan
+	return plan
 }
 
 // OpenRename 给这些素材打开重命名对话框；第一次打开时格式是原名，什么都不改，用户在上面加序号、日期等。
@@ -96,16 +129,18 @@ func (a *App) renamePlan(assets []model.Asset) (names []string, changed int, pro
 func (a *App) renameDialog(c *ui.Context) {
 	state := &a.Rename
 	if !state.Open {
+		// 关着时不留算好的整批结果，免得一直占着那批素材的内存。
+		state.plan = nil
 		return
 	}
 	p := paletteFor(c.Theme())
-	assets := a.renameAssets()
+	plan := a.currentRenamePlan()
+	assets, names, changed, problem := plan.assets, plan.names, plan.changed, plan.problem
 	// 换了图库或素材都被删了，就没有可改的了。
 	if len(assets) == 0 {
 		state.Open = false
 		return
 	}
-	names, changed, problem := a.renamePlan(assets)
 	dialogPanel(c.Key("rename"), &state.Open, panelWide, "edit", a.T("rename_title", len(assets)), func() {
 		choiceMenu(c.Key("rename-mode"), a.T("rename_mode"), state.Mode, []string{a.T("rename_format"), a.T("rename_replace")}, func(i int) { state.Mode = i }).AlignSelf(ui.Start)
 		if state.Mode == 0 {

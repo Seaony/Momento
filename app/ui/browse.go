@@ -77,11 +77,10 @@ func (a *App) shuffleBrowse() {
 	}
 }
 
-// browseQuery 把界面上的浏览位置换成目录查询：标签页按标签筛，随便看看先取全部再打乱，文件夹按设置决定带不带子文件夹。
+// browseQuery 把界面上的浏览位置换成目录查询：标签页限定在这个标签里（工具栏的标签筛选照常叠加），随便看看先取全部再打乱，文件夹按设置决定带不带子文件夹。
 func (a *App) browseQuery(query catalog.Query) catalog.Query {
 	if query.Scope == "tag" {
-		query.Scope = "all"
-		query.TagIDs = []string{a.Browse.TagID}
+		query.ScopeTagID = a.Browse.TagID
 	}
 	if query.Scope == "random" {
 		query.Scope = "all"

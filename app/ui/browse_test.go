@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Seaony/Momento/app/internal/catalog"
+	"github.com/Seaony/Momento/app/internal/i18n"
 	"github.com/Seaony/Momento/app/internal/model"
 	"github.com/egoist/mygo/ui"
 )
@@ -131,6 +132,31 @@ func TestBrowseTagShowsItsAssetsAndClearsPreviousScope(t *testing.T) {
 	a.SetScope("trash", "")
 	if a.Query.Scope != "trash" || a.Browse.TagID != "" || a.TagPage {
 		t.Fatal("切换回收站后仍保留标签范围")
+	}
+}
+
+// 标签页里再勾工具栏的其他标签，结果要同时满足两个标签，数量也按同一口径算。
+func TestBrowseTagCombinesToolbarTagFilter(t *testing.T) {
+	a := &App{Preferences: DefaultPreferences(), Texts: i18n.Catalog{Language: "en"}, Query: catalog.Query{Sort: "added", Descending: true}}
+	a.Snapshot = model.Snapshot{
+		Assets: []model.Asset{
+			{ID: "a", Name: "Only A", Extension: "jpg", CreatedAt: time.Unix(1, 0), TagIDs: []string{"A"}},
+			{ID: "ab", Name: "Both", Extension: "jpg", CreatedAt: time.Unix(2, 0), TagIDs: []string{"A", "B"}},
+			{ID: "b", Name: "Only B", Extension: "jpg", CreatedAt: time.Unix(3, 0), TagIDs: []string{"B"}},
+		}, Tags: []model.Tag{{ID: "A", Name: "A"}, {ID: "B", Name: "B"}},
+	}
+	a.Index = catalog.New(a.Snapshot)
+	a.BrowseTag("A")
+	if len(a.Visible) != 2 {
+		t.Fatalf("标签 A 页应有 2 张，实际 %d", len(a.Visible))
+	}
+	a.Query.TagIDs = []string{"B"}
+	a.Refine()
+	if len(a.Visible) != 1 || a.Visible[0].ID != "ab" {
+		t.Fatalf("标签 A 页筛选标签 B 应只剩 ab，实际 %v", a.Visible)
+	}
+	if counts := a.tagCounts(); counts["B"] != 1 || counts["A"] != 2 {
+		t.Fatalf("标签数量没按标签 A 的范围算：%v", counts)
 	}
 }
 

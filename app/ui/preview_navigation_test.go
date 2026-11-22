@@ -41,7 +41,7 @@ func TestPreviewReopenCapturesNewOrder(t *testing.T) {
 	a.CloseAllPreviewWindows()
 	a.Visible = []model.Asset{{ID: "c"}, {ID: "b"}, {ID: "a"}}
 	a.ShowPreview("c", false)
-	if a.Preview.active == first || a.Preview.active.items[0].ID != "c" || a.Preview.active.items[2].ID != "a" {
+	if a.Preview.active == first || a.Preview.active.items[0].id != "c" || a.Preview.active.items[2].id != "a" {
 		t.Fatal("新会话没有采用新顺序")
 	}
 }

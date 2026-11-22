@@ -197,6 +197,13 @@ func (s *Service) ExportWithOptions(ctx context.Context, items []model.Asset, de
 			return paths, errors.Join(e, removeIfExists(staged))
 		}
 		withMotion := motion && a.MotionPath != ""
+		// 实况照片的视频也先完整暂存好，两个文件都齐了才发布，免得只放上一张静态图或换掉了旧图却没有视频。
+		var stagedMotion string
+		if withMotion {
+			if stagedMotion, e = s.stageMotionExport(ctx, a, filepath.Dir(requested)); e != nil {
+				return paths, errors.Join(e, removeIfExists(staged))
+			}
+		}
 		final := requested
 		if directory {
 			// 导出到文件夹：重名时自动改成「名字 2.ext」，不覆盖已有文件；带视频时两个名字都要空着，配对才不会乱。
@@ -207,7 +214,24 @@ func (s *Service) ExportWithOptions(ctx context.Context, items []model.Asset, de
 						continue
 					}
 				}
-				e = publishFile(staged, final)
+				// 找空名可能要一会儿（同名很多、外置盘慢）：发布前再看一次是否已取消。
+				if e = ctx.Err(); e != nil {
+					break
+				}
+				if e = publishFile(staged, final); os.IsExist(e) {
+					continue
+				}
+				if e != nil || !withMotion {
+					break
+				}
+				if e = publishFile(stagedMotion, motionExportPath(final)); e == nil {
+					break
+				}
+				// 视频没放上：撤回刚放的图片，不留单独的静态图；视频名刚被别人占了就换下一个编号。
+				if removeErr := os.Remove(final); removeErr != nil {
+					e = errors.Join(e, removeErr)
+					break
+				}
 				if !os.IsExist(e) {
 					break
 				}
@@ -216,24 +240,29 @@ func (s *Service) ExportWithOptions(ctx context.Context, items []model.Asset, de
 			// 保存框只确认了替换图片，同名视频不能悄悄覆盖。
 			e = i18n.NewError("error_export_motion_exists", filepath.Base(motionExportPath(final)))
 		} else {
-			// 保存对话框选的路径，重名时用户已确认替换：暂存文件写完后原子替换，中途失败旧文件还在。
-			e = os.Rename(staged, final)
+			// 保存对话框选的路径，重名时用户已确认替换。先放视频（目标不存在，不会覆盖谁），再原子替换图片；
+			// 图片没换成就撤回视频，旧图片从头到尾不动。
+			if withMotion {
+				e = publishFile(stagedMotion, motionExportPath(final))
+			}
 			if e == nil {
-				slog.Info("导出覆盖目标文件", "path", final)
+				if e = os.Rename(staged, final); e == nil {
+					slog.Info("导出覆盖目标文件", "path", final)
+				} else if withMotion {
+					e = errors.Join(e, os.Remove(motionExportPath(final)))
+				}
 			}
 		}
 		cleanupErr := removeIfExists(staged)
+		if withMotion {
+			cleanupErr = errors.Join(cleanupErr, removeIfExists(stagedMotion))
+		}
 		if e != nil {
 			return paths, errors.Join(e, cleanupErr)
 		}
 		paths = append(paths, final)
 		if cleanupErr != nil {
 			return paths, cleanupErr
-		}
-		if withMotion {
-			if e = s.exportMotion(ctx, a, motionExportPath(final)); e != nil {
-				return paths, e
-			}
 		}
 	}
 	return paths, nil
@@ -262,30 +291,34 @@ func motionExportPath(image string) string {
 	return strings.TrimSuffix(image, filepath.Ext(image)) + ".mov"
 }
 
-// exportMotion 把实况照片的视频复制到 target，先写暂存再改名，中途失败不留半个文件。
-func (s *Service) exportMotion(ctx context.Context, a model.Asset, target string) (err error) {
+// stageMotionExport 把实况照片的视频完整复制到 dir 里的暂存文件，返回暂存路径；由调用方和图片一起发布。
+func (s *Service) stageMotionExport(ctx context.Context, a model.Asset, dir string) (staged string, err error) {
 	source, err := s.assetPath(a.MotionPath)
 	if err != nil {
-		return err
+		return "", err
 	}
 	in, err := os.Open(source)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer in.Close()
-	temp, err := os.CreateTemp(filepath.Dir(target), ".momento-export-*")
+	temp, err := os.CreateTemp(dir, ".momento-export-*")
 	if err != nil {
-		return err
+		return "", err
 	}
-	staged := temp.Name()
+	staged = temp.Name()
 	_, err = io.Copy(temp, contextReader{ctx: ctx, r: in})
 	if err == nil {
 		err = temp.Sync()
 	}
 	if err = errors.Join(err, temp.Close()); err == nil {
-		err = publishFile(staged, target)
+		// 复制完到发布之间被取消，也不能接着发布。
+		err = ctx.Err()
 	}
-	return errors.Join(err, removeIfExists(staged))
+	if err != nil {
+		return "", errors.Join(err, removeIfExists(staged))
+	}
+	return staged, nil
 }
 
 // insideLibrary 按文件身份判断 path 是否在图库包里（不分大小写的文件系统、链接都算上）。

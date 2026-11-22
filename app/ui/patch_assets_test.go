@@ -82,7 +82,7 @@ func TestAssetPatchesMatchDatabase(t *testing.T) {
 			if err := lib.RenameAsset(ctx, ids[0], "Renamed"); err != nil {
 				return err
 			}
-			return lib.UpdateAssetDetails(ctx, ids[0], "note", "https://example.com")
+			return lib.SaveAssetEdit(ctx, ids[0], "", false, "note", "https://example.com", true)
 		}, nil},
 	}
 	for _, step := range steps {

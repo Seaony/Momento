@@ -23,6 +23,7 @@ import (
 
 	"github.com/Seaony/Momento/app/internal/i18n"
 	"github.com/Seaony/Momento/app/internal/library"
+	"github.com/Seaony/Momento/app/internal/media"
 	"github.com/Seaony/Momento/app/internal/model"
 )
 
@@ -1073,5 +1074,65 @@ func TestExportRefusesDestinationInsideLibrary(t *testing.T) {
 	}
 	if after, _ := os.ReadFile(original); !bytes.Equal(before, after) {
 		t.Fatal("图库原图被改动")
+	}
+}
+
+// 视频重新分析颜色用封面截帧来算；取不到封面时报出封面错误。实况照片用它的静态图。
+func TestReanalyzeColorsUsesVideoPosterAndLiveStill(t *testing.T) {
+	ctx, lib, s := testLibrary(t)
+	if _, err := s.Import(ctx, model.ImportRequest{Paths: []string{mediaFixture("probe_h264.mp4")}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	video := snapshot(t, ctx, lib).Assets[0]
+	if _, err := lib.DB.ExecContext(ctx, "DELETE FROM asset_colors"); err != nil {
+		t.Fatal(err)
+	}
+	cover := image.NewRGBA(image.Rect(0, 0, 64, 36))
+	for i := range cover.Pix {
+		cover.Pix[i] = 0xff
+		if i%4 == 1 || i%4 == 2 {
+			cover.Pix[i] = 0
+		}
+	}
+	previous := videoPoster
+	t.Cleanup(func() { videoPoster = previous })
+	var gotAt time.Duration
+	var gotSize int
+	videoPoster = func(_ context.Context, _ string, at time.Duration, size int) (image.Image, error) {
+		gotAt, gotSize = at, size
+		return cover, nil
+	}
+	if err := s.ReanalyzeColors(ctx, []model.Asset{video}); err != nil {
+		t.Fatal(err)
+	}
+	if gotAt != posterAt || gotSize != thumbnailSize {
+		t.Fatalf("没按导入时的封面参数截帧：%v %d", gotAt, gotSize)
+	}
+	if colors := snapshot(t, ctx, lib).Assets[0].Colors; len(colors) == 0 || !reflect.DeepEqual(colors, Palette(cover)) {
+		t.Fatalf("视频颜色没按封面算：%v", colors)
+	}
+
+	videoPoster = func(context.Context, string, time.Duration, int) (image.Image, error) {
+		return nil, media.ErrPosterUnavailable
+	}
+	err := s.ReanalyzeColors(ctx, []model.Asset{video})
+	var localized *i18n.LocalizedError
+	if !errors.As(err, &localized) || localized.Key != "error_colors_refresh" || !errors.Is(err, media.ErrPosterUnavailable) {
+		t.Fatalf("取不到封面应报出封面错误：%v", err)
+	}
+	if cause, ok := localized.Cause.(*i18n.LocalizedError); !ok || cause.Key != "error_video_poster" {
+		t.Fatalf("错误里没有封面这一层：%v", err)
+	}
+
+	ctx, lib, s = testLibrary(t)
+	live := importLive(t, s, lib)
+	if _, err = lib.DB.ExecContext(ctx, "DELETE FROM asset_colors"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.ReanalyzeColors(ctx, []model.Asset{live}); err != nil {
+		t.Fatal(err)
+	}
+	if got := snapshot(t, ctx, lib).Assets[0].Colors; len(got) == 0 || !reflect.DeepEqual(got, live.Colors) {
+		t.Fatalf("实况照片的颜色没按静态图算：%v，期望 %v", got, live.Colors)
 	}
 }

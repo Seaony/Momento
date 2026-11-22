@@ -909,7 +909,7 @@ func (a *App) clearFilters() {
 
 // countKey 是筛选面板数量缓存的键：图库或任何条件变了就重算。
 func (a *App) countKey(q catalog.Query) string {
-	return fmt.Sprintf("%d|%s|%s|%s|%v|%v|%v|%v|%v|%v|%s", a.indexVersion, q.Scope, q.FolderID, q.SmartFolderID, q.ColorFamilies, q.TagIDs, q.Extensions, q.Kinds, q.Shapes, q.IncludeSubfolders, q.Search)
+	return fmt.Sprintf("%d|%s|%s|%s|%s|%v|%v|%v|%v|%v|%v|%s", a.indexVersion, q.Scope, q.FolderID, q.ScopeTagID, q.SmartFolderID, q.ColorFamilies, q.TagIDs, q.Extensions, q.Kinds, q.Shapes, q.IncludeSubfolders, q.Search)
 }
 
 // shapeCounts 是筛选面板里各形状的数量，条件和图库没变就用上次算的。
@@ -944,10 +944,8 @@ func (a *App) tagCounts() map[string]int {
 	if a.Index == nil {
 		return nil
 	}
-	// 先去掉筛选里的标签再套范围：在标签页里，范围本身就是按标签限定的，不能一起去掉。
-	q := a.Query
+	q := a.browseQuery(a.Query)
 	q.TagIDs = nil
-	q = a.browseQuery(q)
 	if key := a.countKey(q); a.Toolbar.tagKey != key {
 		a.Toolbar.tagKey, a.Toolbar.tagCount = key, a.Index.TagCounts(q)
 	}

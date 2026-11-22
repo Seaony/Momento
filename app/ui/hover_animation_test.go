@@ -2,7 +2,9 @@ package ui
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
+	"errors"
 	"hash/crc32"
 	"image"
 	"image/color"
@@ -43,7 +45,7 @@ func TestOpenHoverAnimation(t *testing.T) {
 	if err := os.WriteFile(gifPath, animated.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	player, err := openHoverAnimation(gifPath, "gif")
+	player, err := openHoverAnimation(context.Background(), gifPath, "gif")
 	if err != nil || player == nil {
 		t.Fatalf("GIF 打不开：%v", err)
 	}
@@ -58,7 +60,7 @@ func TestOpenHoverAnimation(t *testing.T) {
 	if err := os.WriteFile(pngPath, still.Bytes(), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if player, err := openHoverAnimation(pngPath, "png"); err != nil || player != nil {
+	if player, err := openHoverAnimation(context.Background(), pngPath, "png"); err != nil || player != nil {
 		t.Fatalf("普通 PNG 被当成动画：%v %v", player, err)
 	}
 	if animated, _ := assets.IsAnimatedImage(bytes.NewReader(still.Bytes())); animated {
@@ -75,5 +77,23 @@ func TestOpenHoverAnimation(t *testing.T) {
 	apng := append(append(append([]byte{}, data[:ihdrEnd]...), chunk...), data[ihdrEnd:]...)
 	if animated, _ := assets.IsAnimatedImage(bytes.NewReader(apng)); !animated {
 		t.Fatal("没认出 APNG")
+	}
+}
+
+func TestHoverHugeGIFIsNotDecoded(t *testing.T) {
+	path := writeHugeGIF(t)
+	player, err := openHoverAnimation(context.Background(), path, "gif")
+	// 报「太大」，卡片据此给提示，不当成打不开。
+	if !errors.Is(err, errHoverAnimationTooLarge) || player != nil {
+		t.Fatalf("大 GIF 不该解码播放：%v %v", player, err)
+	}
+}
+
+func TestHoverAnimationCancelledBeforeDecoding(t *testing.T) {
+	path := writePreviewGIF(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if player, err := openHoverAnimation(ctx, path, "gif"); !errors.Is(err, context.Canceled) || player != nil {
+		t.Fatalf("取消后不该继续解码：%v %v", player, err)
 	}
 }

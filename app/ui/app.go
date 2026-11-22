@@ -412,22 +412,47 @@ func (a *App) run(label string, work func(context.Context) error, patch *assetPa
 	}()
 }
 
-// 按 ID 改内存里的素材再重建索引。旧切片可能还被索引和别处引用，所以复制一份再改，不原地改。
+// 按 ID 原地改内存里的素材，索引只重算这几张。快照的素材切片只有界面线程在读，交给后台的都是副本，所以可以原地改；
+// apply 里换新切片，不原地改成员切片，选中缓存等副本里的旧值才不会跟着变。
 func (a *App) patchAssets(ids []string, apply func(*model.Asset)) {
-	if apply == nil || len(ids) == 0 {
+	if apply == nil || len(ids) == 0 || a.Index == nil {
 		return
 	}
 	targets := make(map[string]bool, len(ids))
 	for _, id := range ids {
 		targets[id] = true
 	}
-	snapshot := a.Snapshot
-	snapshot.Assets = slices.Clone(snapshot.Assets)
 	now := time.Now().UTC()
+	for _, i := range a.Index.Patch(targets, func(asset *model.Asset) {
+		apply(asset)
+		asset.UpdatedAt = now
+	}) {
+		asset := a.Snapshot.Assets[i]
+		a.assetByID[asset.ID] = asset
+	}
+	a.snapshotVersion++
+	a.indexVersion++
+	a.refine(false)
+}
+
+// mergeAssets 把只读了几张素材的快照（SnapshotAssets）并进内存：这几张换成新数据，新导入的接在后面，
+// 文件夹、标签等换成最新的，再重建索引。
+func (a *App) mergeAssets(partial model.Snapshot) {
+	fresh := make(map[string]int, len(partial.Assets))
+	for i, asset := range partial.Assets {
+		fresh[asset.ID] = i
+	}
+	snapshot := partial
+	snapshot.Assets = a.Snapshot.Assets
 	for i := range snapshot.Assets {
-		if asset := &snapshot.Assets[i]; targets[asset.ID] {
-			apply(asset)
-			asset.UpdatedAt = now
+		if j, ok := fresh[snapshot.Assets[i].ID]; ok {
+			snapshot.Assets[i] = partial.Assets[j]
+			delete(fresh, snapshot.Assets[i].ID)
+		}
+	}
+	for _, asset := range partial.Assets {
+		if _, added := fresh[asset.ID]; added {
+			snapshot.Assets = append(snapshot.Assets, asset)
 		}
 	}
 	a.applySnapshot(snapshot)
@@ -522,13 +547,15 @@ func (a *App) refine(resetScroll bool) {
 			}
 		}
 	}
-	valid := make(map[string]bool, len(a.Visible))
-	for _, v := range a.Visible {
-		valid[v.ID] = true
-	}
-	for id := range a.Selected.All() {
-		if !valid[id] {
-			a.Selected.Remove(id)
+	if a.Selected.Len() > 0 {
+		valid := make(map[string]bool, len(a.Visible))
+		for _, v := range a.Visible {
+			valid[v.ID] = true
+		}
+		for id := range a.Selected.All() {
+			if !valid[id] {
+				a.Selected.Remove(id)
+			}
 		}
 	}
 	a.FollowPreviewSelection()
@@ -599,6 +626,7 @@ func (a *App) OpenLibrary(path string) {
 				return
 			}
 			if a.Library != nil {
+				a.freezePreviews()
 				if err := ClearDragSessions(a.Library.Root); err != nil {
 					slog.Error("切换图库时清理拖出临时文件失败", "error", err)
 					a.ShowError(err)
@@ -756,6 +784,7 @@ func (a *App) closeLibrary(reason string) bool {
 	discarded := a.DiscardInspectorEdits(reason)
 	a.StopSlideshow()
 	a.ClosePreview()
+	a.freezePreviews()
 	a.closeHoverVideo()
 	a.cancelExtensionPicker()
 	if a.Import.WatchCancel != nil {
@@ -765,6 +794,7 @@ func (a *App) closeLibrary(reason string) bool {
 	a.Library, a.Assets, a.Index = nil, nil, nil
 	a.Snapshot, a.manifest = model.Snapshot{}, model.Manifest{}
 	a.Visible, a.assetByID = nil, nil
+	a.visibleVersion++
 	a.Selected.Clear()
 	a.queuedRuns = nil
 	a.scroll = ui.ScrollState{}

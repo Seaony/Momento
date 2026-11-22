@@ -24,6 +24,12 @@ type selectionCache struct {
 	ids          []string
 	tagCounts    map[string]int
 	folderCounts map[string]int
+	details      map[string]commonValue // 多选详情里各字段的共同值，按字段名缓存
+}
+
+type commonValue struct {
+	value string
+	mixed bool
 }
 
 func (a *App) currentSelection() *selectionCache {
@@ -94,4 +100,27 @@ func (a *App) selectionMembers(id string, folder bool) int {
 		}
 	}
 	return (*counts)[id]
+}
+
+// selectionCommon 是选中素材这一项的共同值；不全一样时 mixed 为 true。全选十万张时每帧都要用，只在选区或数据变了才重算。
+func (a *App) selectionCommon(field string, value func(model.Asset) string) (string, bool) {
+	cache := a.currentSelection()
+	if result, ok := cache.details[field]; ok {
+		return result.value, result.mixed
+	}
+	var result commonValue
+	if len(cache.assets) > 0 {
+		result.value = value(cache.assets[0])
+		for _, asset := range cache.assets[1:] {
+			if value(asset) != result.value {
+				result = commonValue{mixed: true}
+				break
+			}
+		}
+	}
+	if cache.details == nil {
+		cache.details = map[string]commonValue{}
+	}
+	cache.details[field] = result
+	return result.value, result.mixed
 }

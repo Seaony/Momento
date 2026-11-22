@@ -343,3 +343,55 @@ func TestIncludeSubfolders(t *testing.T) {
 		t.Fatalf("有环的文件夹：%v", got)
 	}
 }
+
+// 原地补丁后的计数、搜索和排序要和用改好的数据重新建索引完全一样。
+func TestPatchMatchesRebuild(t *testing.T) {
+	patches := []struct {
+		name  string
+		ids   []string
+		apply func(*model.Asset)
+	}{
+		{"收藏", []string{"b", "d"}, func(a *model.Asset) { a.Favorite = !a.Favorite }},
+		{"改标签", []string{"a", "c"}, func(a *model.Asset) { a.TagIDs = []string{"landscape", "unused"} }},
+		{"移出文件夹", []string{"b"}, func(a *model.Asset) { a.FolderIDs = nil }},
+		{"改名影响排序", []string{"d"}, func(a *model.Asset) { a.Name = "Aardvark" }},
+		{"改备注影响搜索", []string{"a"}, func(a *model.Asset) { a.Note = "Dusk Light" }},
+		{"移到回收站", []string{"a", "b"}, func(a *model.Asset) { a.Trashed = true }},
+		{"从回收站恢复", []string{"e"}, func(a *model.Asset) { a.Trashed = false }},
+	}
+	queries := []Query{
+		{}, {Scope: "favorites"}, {Scope: "untagged"}, {Scope: "uncategorized"}, {Scope: "trash"},
+		{TagIDs: []string{"landscape"}}, {Search: "dusk"}, {Search: "landscape"}, {Sort: "name"}, {Sort: "name", Descending: true},
+	}
+	for _, p := range patches {
+		t.Run(p.name, func(t *testing.T) {
+			patched := New(sampleSnapshot())
+			// 先排一次序，确认补丁会作废旧顺序。
+			for _, q := range queries {
+				patched.Query(q)
+			}
+			ids := map[string]bool{}
+			for _, id := range p.ids {
+				ids[id] = true
+			}
+			if changed := patched.Patch(ids, p.apply); len(changed) != len(p.ids) {
+				t.Fatalf("改到 %d 张，应为 %d 张", len(changed), len(p.ids))
+			}
+			expected := sampleSnapshot()
+			for i := range expected.Assets {
+				if ids[expected.Assets[i].ID] {
+					p.apply(&expected.Assets[i])
+				}
+			}
+			rebuilt := New(expected)
+			if got, want := patched.Counts(), rebuilt.Counts(); !reflect.DeepEqual(got, want) {
+				t.Fatalf("计数不同：%+v，应为 %+v", got, want)
+			}
+			for _, q := range queries {
+				if got, want := assetIDs(patched.Query(q)), assetIDs(rebuilt.Query(q)); !slices.Equal(got, want) {
+					t.Fatalf("查询 %+v 得到 %v，应为 %v", q, got, want)
+				}
+			}
+		})
+	}
+}

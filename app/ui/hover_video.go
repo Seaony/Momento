@@ -2,6 +2,8 @@ package ui
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -25,9 +27,11 @@ type hoverVideo struct {
 	id      string
 	since   time.Time
 	player  *ui.VideoPlayer
-	failed  bool    // 这个视频打不开或播放出错，悬停期间不再重试
-	opening bool    // 动图正在后台读文件和解码
-	lastX   float32 // 上一帧鼠标在卡片里的横坐标，变了才拖进度；-1 表示刚进来
+	failed  bool               // 这个视频打不开或播放出错，悬停期间不再重试
+	limited bool               // 动图太大不播，卡片上给提示
+	opening bool               // 动图正在后台读文件和解码
+	cancel  context.CancelFunc // 鼠标离开时取消后台解码
+	lastX   float32            // 上一帧鼠标在卡片里的横坐标，变了才拖进度；-1 表示刚进来
 }
 
 // 动图超过这么大就不在网格里悬停播放：GIF 要整个解码进内存。
@@ -44,17 +48,38 @@ func hoverAnimation(asset model.Asset) string {
 	return ""
 }
 
+// errHoverAnimationTooLarge 表示动图太大、不悬停播放（文件超过 maxHoverAnimationBytes，或 GIF 解码要占的内存超过上限）。
+var errHoverAnimationTooLarge = errors.New("hover animation too large")
+
 // openHoverAnimation 在后台读出动图做成播放器；不是动画的 PNG 返回 nil。
-func openHoverAnimation(path, format string) (*ui.VideoPlayer, error) {
+func openHoverAnimation(ctx context.Context, path, format string) (*ui.VideoPlayer, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, err
 	}
 	if info.Size() > maxHoverAnimationBytes {
-		return nil, nil
+		slog.Info("动图文件太大，不悬停播放", "path", path, "size", info.Size())
+		return nil, errHoverAnimationTooLarge
+	}
+	if format == "gif" {
+		// 帧像素太多不解码，网格里继续显示缩略图。
+		if err := assets.CheckGIFDecodeSize(path); err != nil {
+			if !hasKey(err, "error_animation_too_large") {
+				return nil, err
+			}
+			slog.Warn("GIF 太大，不悬停播放", "path", path, "error", err)
+			return nil, errHoverAnimationTooLarge
+		}
+	}
+	// 鼠标已经离开就不读文件、不解码。
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	var decoder ui.VideoDecoder
@@ -67,6 +92,9 @@ func openHoverAnimation(path, format string) (*ui.VideoPlayer, error) {
 		decoder, err = ui.NewAPNGDecoder(data)
 	}
 	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	return ui.NewVideoPlayer(decoder)
@@ -89,6 +117,9 @@ func (a *App) hoverVideoOverlay(c *ui.Context, card ui.Element, asset model.Asse
 		a.closeHoverVideo()
 		h.id, h.since, h.lastX = asset.ID, c.Now(), -1
 	}
+	if h.limited {
+		card.Tooltip(a.T("preview_animation_limited"))
+	}
 	if h.failed {
 		return
 	}
@@ -103,10 +134,13 @@ func (a *App) hoverVideoOverlay(c *ui.Context, card ui.Element, asset model.Asse
 			if !h.opening {
 				h.opening = true
 				id := asset.ID
+				ctx, cancel := context.WithCancel(context.Background())
+				h.cancel = cancel
 				go func() {
-					player, err := openHoverAnimation(path, animation)
+					player, err := openHoverAnimation(ctx, path, animation)
 					a.Window.Update(func() {
-						if a.hoverVideoState.id != id || !a.hoverVideoState.opening {
+						// ctx 已取消说明这次悬停已经结束（可能又移回了同一张、开了新的一次），结果不能算到新的那次上。
+						if ctx.Err() != nil || a.hoverVideoState.id != id || !a.hoverVideoState.opening {
 							if player != nil {
 								player.Close()
 							}
@@ -114,6 +148,8 @@ func (a *App) hoverVideoOverlay(c *ui.Context, card ui.Element, asset model.Asse
 						}
 						a.hoverVideoState.opening = false
 						switch {
+						case errors.Is(err, errHoverAnimationTooLarge):
+							a.hoverVideoState.failed, a.hoverVideoState.limited = true, true
 						case err != nil:
 							slog.Warn("悬停播放打不开动图", "id", id, "error", err)
 							a.hoverVideoState.failed = true
@@ -175,6 +211,9 @@ func (a *App) hoverVideoOverlay(c *ui.Context, card ui.Element, asset model.Asse
 // closeHoverVideo 关掉悬停播放器；鼠标离开卡片、换图库、关掉设置开关时调用。
 func (a *App) closeHoverVideo() {
 	h := &a.hoverVideoState
+	if h.cancel != nil {
+		h.cancel()
+	}
 	if h.player != nil {
 		h.player.Close()
 	}

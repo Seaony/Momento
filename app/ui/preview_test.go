@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Seaony/Momento/app/internal/assets"
 	"github.com/Seaony/Momento/app/internal/library"
 	"github.com/Seaony/Momento/app/internal/model"
 	"github.com/egoist/mygo/ui"
@@ -62,7 +63,7 @@ func TestPreviewFailureVisibleAndCloseDropsPendingResult(t *testing.T) {
 func readyPreviewApp() *App {
 	asset := model.Asset{ID: "one", Name: "Preview original", RelativePath: "assets/one.png", Width: 240, Height: 160}
 	a := &App{Library: &library.Library{Root: "library.momento"}, Visible: []model.Asset{asset}, Preferences: DefaultPreferences()}
-	w := &previewWindow{root: a.Library.Root, asset: asset, items: append([]model.Asset(nil), a.Visible...)}
+	w := &previewWindow{root: a.Library.Root, asset: asset, items: previewOrder(a.Visible)}
 	w.picture.Open = true
 	w.picture.target(w.root, asset.ID, 0)
 	w.picture.Bitmap = ui.NewBitmap(image.NewRGBA(image.Rect(0, 0, 240, 160)))
@@ -161,7 +162,7 @@ func TestPreviewPinchPanAndDoubleClick(t *testing.T) {
 func TestPreviewWheelPreferencesAndBounds(t *testing.T) {
 	a := previewFixture(288, 192)
 	a.Visible = append(a.Visible, model.Asset{ID: "two"})
-	a.Preview.active.items = append([]model.Asset(nil), a.Visible...)
+	a.Preview.active.items = previewOrder(a.Visible)
 	a.Preferences.PreviewWheel = "zoom"
 	tt := ui.NewTester(previewTestView(a), 1100, 640)
 	tt.Advance(5 * time.Millisecond)
@@ -287,7 +288,7 @@ func previewFixture(width, height int) *App {
 	a.Preferences = DefaultPreferences()
 	a.Visible[0].Width, a.Visible[0].Height = width, height
 	a.Preview.active.asset = a.Visible[0]
-	a.Preview.active.items = append([]model.Asset(nil), a.Visible...)
+	a.Preview.active.items = previewOrder(a.Visible)
 	img := image.NewNRGBA(image.Rect(0, 0, width, height))
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
@@ -343,5 +344,55 @@ func TestPreviewUsesCustomShortcutAndPausesWhileRecording(t *testing.T) {
 	tt.Key(ui.Alt, ui.KeyZ)
 	if a.Preview.active.picture.Zoom != 1.25 {
 		t.Fatal("录制快捷键时仍操作预览")
+	}
+}
+
+// 画布大、帧数多的 GIF（同一张空白帧重复，文件很小）：帧像素总量超过上限。
+func writeHugeGIF(t *testing.T) string {
+	t.Helper()
+	frame := image.NewPaletted(image.Rect(0, 0, 2000, 2000), color.Palette{color.Black, color.White})
+	animation := &gif.GIF{}
+	for range 70 {
+		animation.Image = append(animation.Image, frame)
+		animation.Delay = append(animation.Delay, 10)
+	}
+	path := filepath.Join(t.TempDir(), "huge.gif")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = gif.EncodeAll(file, animation)
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestPreviewHugeGIFShowsStillFirstFrame(t *testing.T) {
+	path := writeHugeGIF(t)
+	if err := assets.CheckGIFDecodeSize(path); err == nil {
+		t.Fatal("测试 GIF 应该超过帧像素上限")
+	}
+	picture, err := readPreviewPicture(path, 0, false)
+	if err != nil || picture.bitmap == nil || picture.animation != nil || !picture.limited {
+		t.Fatalf("大 GIF 应只给静态首帧并标明受限：%v %+v", err, picture)
+	}
+}
+
+// 只显示首帧时，底栏尺寸那一行后面写明原因。
+func TestPreviewFooterExplainsLimitedAnimation(t *testing.T) {
+	a := previewFixture(288, 192)
+	w := a.Preview.active
+	tt := ui.NewTester(func(c *ui.Context) { w.view(c, a) }, 600, 400)
+	if tt.HasText(a.T("preview_animation_limited")) {
+		t.Fatal("普通图片不该有动图受限的说明")
+	}
+	w.picture.limited = true
+	tt.Frame()
+	if !tt.HasText(a.T("preview_animation_limited")) {
+		t.Fatal("底栏没有说明动图只显示首帧")
 	}
 }

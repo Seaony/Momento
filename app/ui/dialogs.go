@@ -437,10 +437,7 @@ func (a *App) saveFolderDialog(name string) {
 		return
 	}
 	a.Run("new_folder", func(ctx context.Context) error {
-		folder, err := lib.CreateFolder(ctx, name, state.Parent, state.Icon)
-		if err != nil || len(state.Assets) == 0 {
-			return err
-		}
-		return lib.SetAssetFolders(ctx, state.Assets, []string{folder.ID}, true)
+		_, err := lib.CreateFolderWithAssets(ctx, name, state.Parent, state.Icon, state.Assets)
+		return err
 	})
 }

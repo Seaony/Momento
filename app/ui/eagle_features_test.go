@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"errors"
+	"slices"
 	"testing"
 
 	"github.com/Seaony/Momento/app/internal/library"
@@ -97,7 +99,7 @@ func TestMultiDetailsEdit(t *testing.T) {
 	}
 	a.Inspector.Editing, a.Inspector.MultiIDs, a.Inspector.MultiMixed, a.Inspector.MultiDraft = "multi-note", ids, true, ""
 	a.applyMultiDetail("note")
-	if len(a.queuedRuns) != 0 {
+	if len(a.Inspector.MultiPending) != 0 {
 		t.Fatal("备注不一样时留空结束编辑，不应清空所有备注")
 	}
 	a.Inspector.MultiDraft = "统一备注"
@@ -105,13 +107,12 @@ func TestMultiDetailsEdit(t *testing.T) {
 	a.Selected.Add(a.Visible[3].ID)
 	tt := ui.NewTester(a.inspector, 320, 800)
 	tt.Frame()
-	if len(a.queuedRuns) != 1 || len(a.queuedRuns[0].patch.ids) != 2 || a.queuedRuns[0].patch.ids[0] != ids[0] || a.Inspector.Editing != "" {
-		t.Fatalf("换成单选后没有按开始时那批存下：%+v", a.queuedRuns)
+	pending := a.Inspector.MultiPending
+	if len(pending) != 1 || len(pending[0].IDs) != 2 || pending[0].IDs[0] != ids[0] || a.Inspector.Editing != "" {
+		t.Fatalf("换成单选后没有按开始时那批存下：%+v", pending)
 	}
-	var asset model.Asset
-	a.queuedRuns[0].patch.apply(&asset)
-	if asset.Note != "统一备注" {
-		t.Fatalf("备注内容不对：%q", asset.Note)
+	if pending[0].Field != "note" || pending[0].Value != "统一备注" {
+		t.Fatalf("备注内容不对：%+v", pending[0])
 	}
 }
 
@@ -155,8 +156,39 @@ func TestMultiDetailsFlushOnQuit(t *testing.T) {
 	if a.PrepareInspectorQuit() {
 		t.Fatal("多选编辑还没存就放行了退出")
 	}
-	if len(a.queuedRuns) != 1 || !a.Inspector.MultiSaving || a.Inspector.Editing != "" {
-		t.Fatalf("退出前没有把多选编辑存下：%+v", a.queuedRuns)
+	if len(a.Inspector.MultiPending) != 1 || a.Inspector.MultiPending[0].Value != "退出前写的" || a.Inspector.Editing != "" {
+		t.Fatalf("退出前没有把多选编辑存下：%+v", a.Inspector.MultiPending)
+	}
+}
+
+// 多选一起改备注写入失败：修改留在队列里标成失败，界面照旧显示用户写的内容，重新提交时再写一次。
+func TestMultiDetailsKeepDraftAfterSaveFailure(t *testing.T) {
+	a := assetViewFixture()
+	a.Library = &library.Library{}
+	a.Busy = true
+	ids := []string{a.Visible[0].ID, a.Visible[1].ID}
+	for _, id := range ids {
+		a.Selected.Add(id)
+	}
+	a.Inspector.Editing, a.Inspector.MultiIDs, a.Inspector.MultiDraft = "multi-note", ids, "写不进去的备注"
+	a.FlushInspectorEdits()
+	if len(a.Inspector.MultiPending) != 1 {
+		t.Fatalf("多选修改没有进待保存队列：%+v", a.Inspector.MultiPending)
+	}
+	a.inspectorMultiEditFinished(a.Inspector.MultiPending[0], errors.New("disk full"))
+	if !a.InspectorEditsFailed() || !a.InspectorEditsPending() || a.Inspector.SaveError == "" {
+		t.Fatal("写入失败后没有留下可重试的修改")
+	}
+	if edit, ok := a.multiPendingFor("note", a.SelectedAssets()); !ok || edit.Value != "写不进去的备注" {
+		t.Fatalf("界面没按未写入的内容显示：%+v", edit)
+	}
+	a.FlushInspectorEdits()
+	if a.InspectorEditsFailed() || len(a.Inspector.MultiPending) != 1 {
+		t.Fatal("再次提交时没有重试失败的多选修改")
+	}
+	a.inspectorMultiEditFinished(a.Inspector.MultiPending[0], nil)
+	if a.InspectorEditsPending() {
+		t.Fatal("写入成功后修改还留在队列里")
 	}
 }
 
@@ -205,5 +237,51 @@ func TestSimilarDialogMerge(t *testing.T) {
 	tt.Frame()
 	if a.Similar.Open {
 		t.Fatal("没有可合并的组时对话框应关掉")
+	}
+}
+
+// 多选改备注写入失败后，又单独给其中一张改了备注：重试旧的那批时不能盖掉这张的新备注。
+// 失败后原样再提交一次也要重试。
+func TestMultiDetailsRetryDoesNotOverwriteLaterEdit(t *testing.T) {
+	a := assetViewFixture()
+	a.Library = &library.Library{}
+	a.Busy = true
+	ids := []string{a.Visible[0].ID, a.Visible[1].ID}
+	for _, id := range ids {
+		a.Selected.Add(id)
+	}
+	a.Inspector.Editing, a.Inspector.MultiIDs, a.Inspector.MultiDraft = "multi-note", ids, "一起写的"
+	a.FlushInspectorEdits()
+	a.inspectorMultiEditFinished(a.Inspector.MultiPending[0], errors.New("disk full"))
+	// 失败后原样再提交：值和显示的一样，也要重新排队重试。
+	a.Inspector.Editing, a.Inspector.MultiIDs, a.Inspector.MultiDraft, a.Inspector.MultiOriginal = "multi-note", ids, "一起写的", "一起写的"
+	a.applyMultiDetail("note")
+	if len(a.Inspector.MultiPending) != 1 || a.Inspector.MultiPending[0].Failed {
+		t.Fatalf("原样提交没有重试：%+v", a.Inspector.MultiPending)
+	}
+	// 单独改第二张的备注。
+	second := a.assetByID[ids[1]]
+	a.Inspector = inspectorState{AssetID: second.ID, Title: second.Name, SourceTitle: second.Name, Note: "单独写的", MultiPending: a.Inspector.MultiPending}
+	a.saveInspectorEdits()
+	if len(a.Inspector.MultiPending) != 1 || !slices.Equal(a.Inspector.MultiPending[0].IDs, ids[:1]) {
+		t.Fatalf("旧的那批还会写第二张：%+v", a.Inspector.MultiPending)
+	}
+}
+
+// 多选备注写入失败后单选其中一张：编辑框显示用户写的备注，但没动过就不算新修改，换选中时不会单独提交。
+func TestMultiPendingShownWithoutAutoSubmit(t *testing.T) {
+	a := assetViewFixture()
+	a.Library = &library.Library{}
+	a.Busy = true
+	ids := []string{a.Visible[0].ID, a.Visible[1].ID}
+	slices.Sort(ids)
+	a.Inspector.MultiPending = []inspectorMultiEdit{{Field: "note", Value: "一起写的", IDs: ids, Failed: true}}
+	a.syncInspectorAsset(a.assetByID[ids[0]])
+	if a.Inspector.Note != "一起写的" {
+		t.Fatalf("编辑框没显示未写入的备注：%q", a.Inspector.Note)
+	}
+	a.saveInspectorEdits()
+	if len(a.Inspector.Pending) != 0 || !slices.Equal(a.Inspector.MultiPending[0].IDs, ids) {
+		t.Fatalf("没改动也单独提交了：%+v %+v", a.Inspector.Pending, a.Inspector.MultiPending)
 	}
 }

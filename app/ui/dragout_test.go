@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,7 +33,7 @@ func TestPrepareFileDragPreservesNamesAndOriginals(t *testing.T) {
 		dragAsset(t, root, "assets/bb/two.png", "原图.png", "另一个标题"),
 		dragAsset(t, root, "assets/cc/three.png", "", "没有原始文件名"),
 	}
-	session, err := prepareFileDrag(root, items, os.Link)
+	session, err := prepareFileDrag(root, items, cloneOrCopyDragFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +49,8 @@ func TestPrepareFileDragPreservesNamesAndOriginals(t *testing.T) {
 		if filepath.Base(path) != want[i] {
 			t.Fatalf("文件名 %q，想要 %q", filepath.Base(path), want[i])
 		}
-		original, err := os.Stat(filepath.Join(root, filepath.FromSlash(items[i].RelativePath)))
+		sourcePath := filepath.Join(root, filepath.FromSlash(items[i].RelativePath))
+		original, err := os.Stat(sourcePath)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -56,8 +58,15 @@ func TestPrepareFileDragPreservesNamesAndOriginals(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !os.SameFile(original, dragged) {
-			t.Fatal("没有使用硬链接")
+		if os.SameFile(original, dragged) {
+			t.Fatal("暂存文件和原件是同一个文件")
+		}
+		// 就地改写暂存文件，原件不能跟着变。
+		if err := os.WriteFile(path, []byte("edited"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := os.ReadFile(sourcePath); err != nil || string(got) != "original:"+items[i].RelativePath {
+			t.Fatalf("改写暂存文件影响了原件：%q %v", got, err)
 		}
 	}
 	data, err := transfer.FileData(session.paths...)
@@ -82,11 +91,14 @@ func TestPrepareFileDragPreservesNamesAndOriginals(t *testing.T) {
 	}
 }
 
-func TestPrepareFileDragCopiesWhenHardLinkFails(t *testing.T) {
+func TestPrepareFileDragCopiesWhenCloneUnsupported(t *testing.T) {
 	root := t.TempDir()
 	item := dragAsset(t, root, "assets/image.png", "image.png", "image")
-	links := 0
-	session, err := prepareFileDrag(root, []model.Asset{item}, func(string, string) error { links++; return os.ErrPermission })
+	links := 0 // 模拟不能写时复制，走普通复制
+	session, err := prepareFileDrag(root, []model.Asset{item}, func(src, dst string) error {
+		links++
+		return copyDragFile(src, dst)
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +113,7 @@ func TestPrepareFileDragCopiesWhenHardLinkFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	if os.SameFile(a, b) || links != 1 {
-		t.Fatal("没有走复制回退")
+		t.Fatal("暂存文件不是独立副本")
 	}
 	got, err := os.ReadFile(session.paths[0])
 	if err != nil || string(got) != "original:assets/image.png" {
@@ -112,13 +124,13 @@ func TestPrepareFileDragCopiesWhenHardLinkFails(t *testing.T) {
 func TestFailedFileDragRemovesOnlyItsSession(t *testing.T) {
 	root := t.TempDir()
 	first := dragAsset(t, root, "assets/image.png", "image.png", "image")
-	other, err := prepareFileDrag(root, []model.Asset{first}, os.Link)
+	other, err := prepareFileDrag(root, []model.Asset{first}, cloneOrCopyDragFile)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer other.cleanup()
 	missing := model.Asset{RelativePath: "assets/missing.png", Name: "missing", Extension: "png"}
-	failed, err := prepareFileDrag(root, []model.Asset{first, missing}, os.Link)
+	failed, err := prepareFileDrag(root, []model.Asset{first, missing}, cloneOrCopyDragFile)
 	if err == nil || failed != nil {
 		t.Fatal("缺失原图没有使整次拖出失败")
 	}
@@ -138,7 +150,7 @@ func TestFileDragRejectsPathsOutsideLibrary(t *testing.T) {
 	root := t.TempDir()
 	outside := dragAsset(t, t.TempDir(), "outside.png", "outside.png", "outside")
 	for _, relative := range []string{"../outside.png", filepath.Join(t.TempDir(), "absolute.png")} {
-		if session, err := prepareFileDrag(root, []model.Asset{{RelativePath: relative}}, os.Link); err == nil || session != nil {
+		if session, err := prepareFileDrag(root, []model.Asset{{RelativePath: relative}}, cloneOrCopyDragFile); err == nil || session != nil {
 			t.Fatalf("接受了越界路径 %q", relative)
 		}
 	}
@@ -149,7 +161,7 @@ func TestFileDragRejectsPathsOutsideLibrary(t *testing.T) {
 	if err := os.Symlink(outsidePath, filepath.Join(root, "symlink.png")); err != nil {
 		t.Fatal(err)
 	}
-	if session, err := prepareFileDrag(root, []model.Asset{{RelativePath: "symlink.png"}}, os.Link); err == nil || session != nil {
+	if session, err := prepareFileDrag(root, []model.Asset{{RelativePath: "symlink.png"}}, cloneOrCopyDragFile); err == nil || session != nil {
 		t.Fatal("接受了指向库外的符号链接")
 	}
 }
@@ -161,7 +173,7 @@ func TestFileDragRejectsSymlinkTemporaryDirectory(t *testing.T) {
 	if err := os.Symlink(outside, filepath.Join(root, ".drag-out")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := prepareFileDrag(root, []model.Asset{item}, os.Link); err == nil {
+	if _, err := prepareFileDrag(root, []model.Asset{item}, cloneOrCopyDragFile); err == nil {
 		t.Fatal("接受了指向库外的拖出目录")
 	}
 	entries, err := os.ReadDir(outside)
@@ -177,7 +189,7 @@ func TestFileDragCaseInsensitiveCollisionAndSafeName(t *testing.T) {
 		dragAsset(t, root, "assets/b.png", "photo.png", ""),
 		dragAsset(t, root, "assets/c.png", "../../escape.png", ""),
 	}
-	session, err := prepareFileDrag(root, items, os.Link)
+	session, err := prepareFileDrag(root, items, cloneOrCopyDragFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +202,7 @@ func TestFileDragCaseInsensitiveCollisionAndSafeName(t *testing.T) {
 			t.Fatalf("文件名逃逸会话目录：%s", path)
 		}
 	}
-	if _, err := prepareFileDrag(root, nil, os.Link); err == nil {
+	if _, err := prepareFileDrag(root, nil, cloneOrCopyDragFile); err == nil {
 		t.Fatal("接受了空选择")
 	}
 }
@@ -248,7 +260,7 @@ func TestAttachFileDragPreparesAtGestureAndCleansOnEscape(t *testing.T) {
 func TestDragSessionsOutliveDropAndAreSweptLater(t *testing.T) {
 	root := t.TempDir()
 	item := dragAsset(t, root, "assets/image.png", "image.png", "image")
-	dropped, err := prepareFileDrag(root, []model.Asset{item}, os.Link)
+	dropped, err := prepareFileDrag(root, []model.Asset{item}, cloneOrCopyDragFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +270,7 @@ func TestDragSessionsOutliveDropAndAreSweptLater(t *testing.T) {
 	if _, err := os.Stat(dropped.paths[0]); err != nil {
 		t.Fatal("放下后立刻删了临时文件，浏览器、Slack 读不到")
 	}
-	canceled, err := prepareFileDrag(root, []model.Asset{item}, os.Link)
+	canceled, err := prepareFileDrag(root, []model.Asset{item}, cloneOrCopyDragFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,7 +303,7 @@ func TestDragSessionsOutliveDropAndAreSweptLater(t *testing.T) {
 	}
 	var sessions []string
 	for i := range 3 {
-		session, err := prepareFileDrag(root, []model.Asset{item}, os.Link)
+		session, err := prepareFileDrag(root, []model.Asset{item}, cloneOrCopyDragFile)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -315,5 +327,26 @@ func TestDragSessionsOutliveDropAndAreSweptLater(t *testing.T) {
 	}
 	if _, err := os.Stat(sessions[2]); !os.IsNotExist(err) {
 		t.Fatal("关闭图库时没有清掉拖出临时文件")
+	}
+}
+
+func TestPrepareFileDragNumbersDuplicates(t *testing.T) {
+	root := t.TempDir()
+	var items []model.Asset
+	for i := 0; i < 4; i++ {
+		items = append(items, dragAsset(t, root, fmt.Sprintf("assets/%d.png", i), "同名.png", "x"))
+	}
+	// 原本就有一张叫「同名 2.png」，编号要跳过它。
+	items = append(items[:1], append([]model.Asset{dragAsset(t, root, "assets/n.png", "同名 2.png", "x")}, items[1:]...)...)
+	session, err := prepareFileDrag(root, items, cloneOrCopyDragFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.cleanup()
+	want := []string{"同名.png", "同名 2.png", "同名 3.png", "同名 4.png", "同名 5.png"}
+	for i, path := range session.paths {
+		if filepath.Base(path) != want[i] {
+			t.Fatalf("第 %d 个文件名 %q，想要 %q", i, filepath.Base(path), want[i])
+		}
 	}
 }

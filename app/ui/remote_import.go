@@ -26,7 +26,9 @@ type remoteBatch struct {
 	chosen   bool
 	canceled bool
 	// gen 是选位置时的图库：中途换了图库，旧的文件夹和标签不能再用，要重新问。
-	gen     uint64
+	gen uint64
+	// library 是这一批导进的图库，第一张开始写入时定下；之后换了图库，剩下的不再导入，报出来。
+	library uint64
 	result  model.ImportResult
 	done    int
 	updated time.Time
@@ -35,9 +37,9 @@ type remoteBatch struct {
 // ImportRemote 处理浏览器扩展和深度链接的一次导入，等真实结果再返回，不能排上队就说成功。
 // 本机正在导入时排队等着，不再回「忙」。
 func (a *App) ImportRemote(ctx context.Context, r browser.Request) error {
-	choice, err := a.remoteChoice(ctx, r)
+	choice, choiceGen, err := a.remoteChoice(ctx, r)
 	if err != nil {
-		a.Window.Update(func() { a.remoteFeedback(r, model.ImportResult{}, err) })
+		a.Window.Update(func() { a.remoteFeedback(r, model.ImportResult{}, err, a.generation) })
 		return err
 	}
 	var service *assets.Service
@@ -52,6 +54,12 @@ func (a *App) ImportRemote(ctx context.Context, r browser.Request) error {
 				readyErr = i18n.NewError("library_required")
 			case a.Busy:
 				readyErr, waiting = nil, true
+			// 等空闲期间换了图库：选好的文件夹和标签属于原来的图库，不能拿到新图库里用。
+			case choiceGen != 0 && choiceGen != a.generation:
+				readyErr = i18n.NewError("error_import_library_changed")
+			// 同一批前面的已经导进了别的图库，剩下的不能跟着换到当前图库。
+			case a.remoteBatchLibraryChanged(r.BatchID):
+				readyErr = i18n.NewError("error_import_library_changed")
 			default:
 				readyErr = nil
 				a.Busy = true
@@ -60,7 +68,7 @@ func (a *App) ImportRemote(ctx context.Context, r browser.Request) error {
 			}
 		})
 		if readyErr != nil {
-			a.Window.Update(func() { a.remoteFeedback(r, model.ImportResult{}, readyErr) })
+			a.Window.Update(func() { a.remoteFeedback(r, model.ImportResult{}, readyErr, a.generation) })
 			return readyErr
 		}
 		if !waiting {
@@ -75,26 +83,45 @@ func (a *App) ImportRemote(ctx context.Context, r browser.Request) error {
 	return a.performRemote(ctx, service, lib, gen, r, request)
 }
 
+// remoteBatchLibraryChanged 看这一批是否已经定在别的图库；还没定就定成当前图库。只在主线程调。
+func (a *App) remoteBatchLibraryChanged(id string) bool {
+	b := a.remoteBatch(id)
+	if b == nil {
+		return false
+	}
+	if b.library == 0 {
+		b.library = a.generation
+	}
+	return b.library != a.generation
+}
+
 // remoteChoice 在开着「保存时选位置」时问放到哪儿；同一批只问第一张，后面沿用（取消了就整批取消）。
-func (a *App) remoteChoice(ctx context.Context, r browser.Request) (importChoice, error) {
+// 返回的 gen 是选位置时的图库；没问位置时为 0。
+func (a *App) remoteChoice(ctx context.Context, r browser.Request) (importChoice, uint64, error) {
 	picker, reused, canceled := false, importChoice{}, false
-	found := false
+	found, moved := false, false
+	var gen uint64
 	mygo.RunOnMain(func() {
 		picker = a.Preferences.ExtensionPicker && !a.IsLocked()
-		if b := a.remoteBatch(r.BatchID); picker && b != nil && (b.chosen || b.canceled) && b.gen == a.generation {
+		gen = a.generation
+		b := a.remoteBatch(r.BatchID)
+		// 这一批已经导进了别的图库：不用再弹当前图库的位置选择，直接报出来。
+		moved = b != nil && b.library != 0 && b.library != a.generation
+		if picker && b != nil && (b.chosen || b.canceled) && b.gen == a.generation {
 			found, reused, canceled = true, b.choice, b.canceled
 		}
 	})
 	switch {
+	case moved:
+		return importChoice{}, 0, i18n.NewError("error_import_library_changed")
 	case !picker:
-		return importChoice{}, nil
+		// 不选位置也记下当时的图库：等空闲期间换了图库，就不往新图库里导。
+		return importChoice{}, gen, nil
 	case found && canceled:
-		return importChoice{}, i18n.NewError("import_canceled")
+		return importChoice{}, gen, i18n.NewError("import_canceled")
 	case found:
-		return reused, nil
+		return reused, gen, nil
 	}
-	var gen uint64
-	mygo.RunOnMain(func() { gen = a.generation })
 	choice, err := a.remoteImportChoice(ctx)
 	mygo.RunOnMain(func() {
 		if b := a.remoteBatch(r.BatchID); b != nil {
@@ -102,7 +129,7 @@ func (a *App) remoteChoice(ctx context.Context, r browser.Request) (importChoice
 			b.canceled = err != nil && hasKey(err, "import_canceled")
 		}
 	})
-	return choice, err
+	return choice, gen, err
 }
 
 func (a *App) performRemote(ctx context.Context, service *assets.Service, lib *library.Library, gen uint64, r browser.Request, request model.ImportRequest) error {
@@ -116,20 +143,24 @@ func (a *App) performRemote(ctx context.Context, service *assets.Service, lib *l
 	} else {
 		result, err = service.ImportDownload(ctx, assets.Download{URL: r.URL, PageURL: r.PageURL, Referer: r.Referer, Video: r.Kind == "video"}, request)
 	}
-	var snapshot model.Snapshot
+	// 只读这次导入碰到的几张，不整库重读：扩展一张张导入时，十万张的库每张都全量读一遍要半秒。
+	var partial model.Snapshot
 	if err == nil {
-		snapshot, err = lib.Snapshot(ctx)
+		partial, err = lib.SnapshotAssets(ctx, result.AssetIDs)
 	}
 	a.Window.Update(func() {
-		if gen != a.generation {
-			return
+		current := gen == a.generation
+		if current {
+			a.Busy = false
+			if err == nil {
+				a.mergeAssets(partial)
+			}
 		}
-		a.Busy = false
-		if err == nil {
-			a.applySnapshot(snapshot)
+		// 换了图库也要算进这一批，不然这批永远等不到最后一张、一直不通知。
+		a.remoteFeedback(r, result, err, gen)
+		if current {
+			a.drainPending()
 		}
-		a.remoteFeedback(r, result, err)
-		a.drainPending()
 	})
 	return err
 }
@@ -157,9 +188,13 @@ func (a *App) remoteBatch(id string) *remoteBatch {
 	return b
 }
 
-// remoteFeedback 告诉用户导入结果：单张按扩展要求通知；同一批攒到全部做完一起通知一次，失败的一起列出来。只在主线程调。
-func (a *App) remoteFeedback(r browser.Request, result model.ImportResult, err error) {
+// remoteFeedback 告诉用户导入结果：单张按扩展要求通知；同一批攒到全部做完一起通知一次，失败的一起列出来。
+// gen 是这次导进的图库；不是当前图库时只通知数量，不去选中（素材在另一个图库里）。只在主线程调。
+func (a *App) remoteFeedback(r browser.Request, result model.ImportResult, err error, gen uint64) {
 	canceled := hasKey(err, "import_canceled") || errors.Is(err, context.Canceled)
+	if gen != a.generation {
+		result.AssetIDs = nil
+	}
 	b := a.remoteBatch(r.BatchID)
 	if b == nil {
 		switch {
@@ -189,7 +224,12 @@ func (a *App) remoteFeedback(r browser.Request, result model.ImportResult, err e
 		slog.Info("浏览器扩展这一批导入已取消", "batch", r.BatchID)
 		return
 	}
-	a.importFeedback("extension", b.result)
+	total := b.result
+	// 这一批导进的图库已经关了：只报数量，不在当前图库里按这些 ID 选中。
+	if b.library != 0 && b.library != a.generation {
+		total.AssetIDs = nil
+	}
+	a.importFeedback("extension", total)
 }
 
 // hasKey 判断错误链上有没有这个本地化错误。

@@ -246,6 +246,18 @@ func (s *Service) loadForRefresh(ctx context.Context, a model.Asset) (image.Imag
 	return RotateImage(img.thumbnail, a.Rotation)
 }
 
+// colorPoster 按导入时取封面的时刻、尺寸和超时截一帧给颜色分析用。
+// 取不到封面时直接报错：通用纯色封面算不出有意义的颜色。
+func colorPoster(ctx context.Context, path string) (image.Image, error) {
+	posterCtx, cancel := context.WithTimeout(ctx, posterTimeout)
+	defer cancel()
+	thumb, err := videoPoster(posterCtx, path, posterAt, thumbnailSize)
+	if err != nil {
+		return nil, i18n.WrapError(err, "error_video_poster")
+	}
+	return thumb, nil
+}
+
 // collectFailures 按素材原来的顺序收起失败项。
 func collectFailures(items []*assetFailure) []assetFailure {
 	var out []assetFailure
@@ -281,6 +293,7 @@ func summarizeFailures(failures []assetFailure, key, moreKey string) error {
 }
 
 // ReanalyzeColors 并行重算主色（用缩略图大小的图算）。解不开的跳过，其余照常写入，最后一起报错。
+// 视频用导入时同样的封面截帧来算；实况照片的原件就是它的静态图。
 func (s *Service) ReanalyzeColors(ctx context.Context, items []model.Asset) error {
 	s.mutation.Lock()
 	defer s.mutation.Unlock()
@@ -289,9 +302,13 @@ func (s *Service) ReanalyzeColors(ctx context.Context, items []model.Asset) erro
 	err := parallel(ctx, len(items), decodeWorkers(), func(ctx context.Context, i int) error {
 		a := items[i]
 		path, err := s.assetPath(a.RelativePath)
-		var img preparedImage
-		if err == nil {
+		var thumb image.Image
+		if err == nil && isVideo(a.Extension) {
+			thumb, err = colorPoster(ctx, path)
+		} else if err == nil {
+			var img preparedImage
 			img, err = prepareThumbnail(ctx, path)
+			thumb = img.thumbnail
 		}
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
@@ -301,7 +318,7 @@ func (s *Service) ReanalyzeColors(ctx context.Context, items []model.Asset) erro
 			failures[i] = &assetFailure{name: a.Name, err: i18n.WrapError(err, "error_colors_refresh", a.Name)}
 			return nil
 		}
-		palettes[i] = Palette(img.thumbnail)
+		palettes[i] = Palette(thumb)
 		return nil
 	})
 	if err != nil {
