@@ -228,6 +228,10 @@ func TestPreviewGIFFramesLoopAndKeepSamplingVariants(t *testing.T) {
 	if picture.bitmap == nil || picture.animation == nil || picture.animation.delay != 100*time.Millisecond {
 		t.Fatal("没有准备GIF首帧")
 	}
+	release := picture.animation.decoder.release
+	var released int
+	picture.animation.decoder.release = func() { released++; release() }
+	t.Cleanup(func() { picture.animation.decoder.Close() })
 	first := renderPreviewPicture(picture)
 	second, err := picture.animation.next()
 	if err != nil {
@@ -248,8 +252,34 @@ func TestPreviewGIFFramesLoopAndKeepSamplingVariants(t *testing.T) {
 	p.target("library", "gif", 0)
 	p.finishPicture(p.Generation, picture, nil)
 	p.target("library", "another", 0)
-	if p.animation != nil {
+	if p.animation != nil || picture.animation.decoder.VideoDecoder != nil || released != 1 {
 		t.Fatal("切换素材没有释放动图")
+	}
+}
+
+func TestPreviewReleasesDiscardedGIFResult(t *testing.T) {
+	path := writePreviewGIF(t)
+	for _, closed := range []bool{false, true} {
+		p := previewState{Open: true}
+		p.target("library", "gif", 0)
+		generation := p.Generation
+		picture, err := readPreviewPicture(path, 0, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		release := picture.animation.decoder.release
+		var released bool
+		picture.animation.decoder.release = func() { released = true; release() }
+		t.Cleanup(func() { picture.animation.decoder.Close() })
+		if closed {
+			p.Open = false
+		} else {
+			p.target("library", "another", 0)
+		}
+		p.finishPicture(generation, picture, nil)
+		if !released || picture.animation.decoder.VideoDecoder != nil || p.animation != nil {
+			t.Fatalf("过期动图未释放（窗口已关闭 %t）", closed)
+		}
 	}
 }
 

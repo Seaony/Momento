@@ -44,6 +44,7 @@ func TestPreviewGIFRotatesEveryFrameAndLoops(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		t.Cleanup(func() { picture.animation.decoder.Close() })
 		checkPreviewRotation(t, picture, rotation, 0)
 		second, err := picture.animation.next()
 		if err != nil {

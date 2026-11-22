@@ -503,6 +503,44 @@ func TestRotatedOriginalGIFRejectsHugeAnimationBeforeDecoding(t *testing.T) {
 	}
 }
 
+type gifBudgetWriter func([]byte) (int, error)
+
+func (write gifBudgetWriter) Write(data []byte) (int, error) { return write(data) }
+
+func TestRotatedOriginalGIFReturnsBudgetAfterEncoding(t *testing.T) {
+	source := filepath.Join("testdata", "sample.gif")
+	data, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, cost, err := GIFDecodeCost(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	asset := model.Asset{Extension: "gif", Rotation: 90}
+	ctx := context.Background()
+	writeErr := errors.New("写入失败")
+	for _, outputErr := range []error{nil, writeErr} {
+		var wrote bool
+		writer := gifBudgetWriter(func(data []byte) (int, error) {
+			wrote = true
+			if decodeBudget.used != cost {
+				t.Errorf("写入时占用 %d 字节，预期 %d 字节", decodeBudget.used, cost)
+			}
+			if outputErr != nil {
+				return 0, outputErr
+			}
+			return len(data), nil
+		})
+		if err := writeRotatedOriginal(ctx, writer, source, asset, 0.9); !wrote || !errors.Is(err, outputErr) {
+			t.Fatalf("预期写入结果 %v，得到 %v（写入 %t）", outputErr, err, wrote)
+		}
+		if decodeBudget.used != 0 {
+			t.Fatalf("导出结束后还有 %d 字节未归还", decodeBudget.used)
+		}
+	}
+}
+
 func TestRotatedOriginalRejectsAnimatedAVIFFromHeader(t *testing.T) {
 	// 只有 ftyp 盒、品牌是 avis：解码库没被调用也能拒绝。
 	box := append([]byte{0, 0, 0, 16}, []byte("ftypavis\x00\x00\x00\x00")...)

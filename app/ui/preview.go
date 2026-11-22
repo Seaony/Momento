@@ -1,11 +1,11 @@
 package ui
 
 import (
+	"context"
 	"image"
 	"io"
 	"log/slog"
 	"math"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -30,6 +30,7 @@ type previewState struct {
 	initialized, fitMode            bool
 	animation                       *previewAnimation
 	animationLoading                bool
+	loadCancel                      context.CancelFunc
 	limited                         bool // 动图太大，只显示首帧；底栏给说明
 	nextFrameAt, wheelAt            time.Time
 	slideDirection                  float32
@@ -37,7 +38,7 @@ type previewState struct {
 }
 
 type previewAnimation struct {
-	decoder   ui.VideoDecoder
+	decoder   *budgetGIFDecoder
 	delay     time.Duration
 	rotation  int
 	pixelated bool
@@ -58,6 +59,13 @@ func (p *previewState) target(root, id string, rotation int) {
 	}
 	p.Generation++
 	p.targetRoot, p.targetID, p.targetRotation = root, id, rotation
+	if p.loadCancel != nil {
+		p.loadCancel()
+		p.loadCancel = nil
+	}
+	if p.animation != nil && !p.animationLoading {
+		p.animation.decoder.Close()
+	}
 	p.Bitmap, p.animation, p.errorText, p.limited = nil, nil, "", false
 	p.Loading, p.animationLoading, p.initialized = false, false, false
 	p.Zoom, p.Pan, p.fitZoom = 1, ui.Point{}, 1
@@ -81,6 +89,8 @@ func (p *previewState) finishPicture(generation uint64, picture previewPicture, 
 	p.finish(generation, picture.bitmap, err)
 	if generation == p.Generation && p.Open && err == nil {
 		p.pixelated, p.animation, p.limited = picture.pixelated, picture.animation, picture.limited
+	} else if picture.animation != nil {
+		picture.animation.decoder.Close()
 	}
 }
 
@@ -95,38 +105,27 @@ func previewBitmap(img image.Image, pixelated bool) *ui.Bitmap {
 
 // GIF 只保留当前帧的位图，切到别的素材后不再解码。
 func readPreviewPicture(path string, rotation int, pixelated bool) (previewPicture, error) {
-	animated := strings.EqualFold(filepath.Ext(path), ".gif")
-	if animated {
-		// 帧像素太多就不全量解码，退回显示静态首帧（下面的 PreviewImage）。
-		if err := assets.CheckGIFDecodeSize(path); err != nil {
-			if !hasKey(err, "error_animation_too_large") {
-				return previewPicture{}, err
+	return readPreviewPictureContext(context.Background(), path, rotation, pixelated)
+}
+
+func readPreviewPictureContext(ctx context.Context, path string, rotation int, pixelated bool) (previewPicture, error) {
+	limited := strings.EqualFold(filepath.Ext(path), ".gif")
+	if limited {
+		decoder, err := openGIFDecoder(ctx, path)
+		if err == nil {
+			animation := &previewAnimation{decoder: decoder, rotation: rotation, pixelated: pixelated}
+			picture, err := animation.next()
+			if err != nil {
+				decoder.Close()
 			}
-			slog.Warn("GIF 太大，预览只显示首帧", "path", path, "error", err)
-			animated = false
+			return picture, err
 		}
+		if !hasKey(err, "error_animation_too_large") {
+			return previewPicture{}, err
+		}
+		slog.Warn("GIF 太大，预览只显示首帧", "path", path, "error", err)
 	}
-	limited := !animated && strings.EqualFold(filepath.Ext(path), ".gif")
-	if animated {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return previewPicture{}, err
-		}
-		decoder, err := ui.NewGIFDecoder(data)
-		if err != nil {
-			return previewPicture{}, err
-		}
-		frame, err := decoder.Next()
-		if err != nil {
-			return previewPicture{}, err
-		}
-		img, err := assets.RotateImage(frame.Image, rotation)
-		if err != nil {
-			return previewPicture{}, err
-		}
-		return previewPicture{bitmap: previewBitmap(img, pixelated), pixelated: pixelated, animation: &previewAnimation{decoder, frame.Duration, rotation, pixelated}}, nil
-	}
-	img, err := assets.PreviewImage(path)
+	img, err := assets.PreviewImageContext(ctx, path)
 	if err != nil {
 		return previewPicture{}, err
 	}
@@ -150,7 +149,8 @@ func (animation *previewAnimation) next() (previewPicture, error) {
 	if err != nil {
 		return previewPicture{}, err
 	}
-	return previewPicture{bitmap: previewBitmap(img, animation.pixelated), pixelated: animation.pixelated, animation: &previewAnimation{animation.decoder, frame.Duration, animation.rotation, animation.pixelated}}, nil
+	animation.delay = frame.Duration
+	return previewPicture{bitmap: previewBitmap(img, animation.pixelated), pixelated: animation.pixelated, animation: animation}, nil
 }
 
 // 图片占底栏以上、四周留白后的区域，图片和放大后的裁切框都是小圆角；可缩放、拖动，翻页时左右滑入。
@@ -411,19 +411,30 @@ func (a *App) previewAsset(id string) (model.Asset, bool) {
 
 // 每个预览窗口同时只解一张原图：按住方向键快速翻页时，不给每张都开一个解码，等手上这张解完再解最新那张。
 func (w *previewWindow) load(a *App) {
+	if w.closing {
+		return
+	}
 	p := &w.picture
+	ctx, cancel := context.WithCancel(context.Background())
+	p.loadCancel = cancel
 	p.Loading, w.decoding = true, true
+	window := w.window
 	generation, asset, root, pixelated := p.Generation, w.asset, w.root, a.Preferences.PreviewPixelated
 	go func() {
-		picture, err := readPreviewPicture(filepath.Join(root, filepath.FromSlash(asset.RelativePath)), asset.Rotation, pixelated)
-		if err != nil {
+		defer cancel()
+		picture, err := readPreviewPictureContext(ctx, filepath.Join(root, filepath.FromSlash(asset.RelativePath)), asset.Rotation, pixelated)
+		if err != nil && ctx.Err() == nil {
 			slog.Error("原图预览加载失败", "asset", asset.ID, "error", err)
 		}
-		w.update(func() {
+		window.Update(func() {
 			w.decoding = false
-			if generation != p.Generation {
-				// 解完时已经翻到别的图了：这张丢掉，下一帧去解当前那张。
-				p.Loading = false
+			if generation == p.Generation {
+				p.loadCancel = nil
+			}
+			if w.closing {
+				if picture.animation != nil {
+					picture.animation.decoder.Close()
+				}
 				return
 			}
 			p.finishPicture(generation, picture, err)
@@ -435,7 +446,7 @@ func (w *previewWindow) load(a *App) {
 }
 func (w *previewWindow) animatePicture(c *ui.Context, a *App) {
 	p := &w.picture
-	if p.animation == nil || p.animationLoading || c.Preferences().ReduceMotion {
+	if w.window == nil || w.closing || p.animation == nil || p.animationLoading || c.Preferences().ReduceMotion {
 		return
 	}
 	if p.nextFrameAt.IsZero() {
@@ -446,18 +457,21 @@ func (w *previewWindow) animatePicture(c *ui.Context, a *App) {
 		return
 	}
 	p.animationLoading = true
+	window := w.window
 	generation, animation, id := p.Generation, p.animation, p.targetID
 	go func() {
 		picture, err := animation.next()
 		if err != nil {
 			slog.Error("预览动图播放失败", "asset", id, "error", err)
 		}
-		w.update(func() {
+		window.Update(func() {
 			if generation != p.Generation || !p.Open {
+				animation.decoder.Close()
 				return
 			}
 			p.animationLoading = false
 			if err != nil {
+				animation.decoder.Close()
 				p.animation = nil
 				p.errorText = a.Texts.Error(err)
 				return

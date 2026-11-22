@@ -91,14 +91,27 @@ func prepareSystemThumbnail(ctx context.Context, path, ext string) (preparedImag
 	return preparedImage{thumbnail: thumb, width: w, height: h, metadata: metadata, orientation: orientation, profile: profile}, nil
 }
 
-// decodeSystemImage 让系统解出转正后的全尺寸图，给预览和导出用。
-func decodeSystemImage(path string) (image.Image, error) {
-	if w, h, err := systemImageSize(path); err == nil {
+func admitSystemImage(ctx context.Context, path string) (func(), error) {
+	w, h, sizeErr := systemImageSize(path)
+	if sizeErr == nil {
 		if err := tooLarge(path, w, h); err != nil {
 			return nil, err
 		}
 	}
+	return decodeBudget.admit(ctx, image.Config{Width: w, Height: h}, sizeErr == nil)
+}
+
+// decodeSystemImage 让系统解出转正后的全尺寸图，给预览和导出用。
+func decodeSystemImage(ctx context.Context, path string) (image.Image, error) {
+	release, err := admitSystemImage(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	img, err := systemDecodeImage(path)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if errors.Is(err, media.ErrUnsupported) && systemOnly(strings.ToLower(filepath.Ext(path))) {
 		// 这台电脑解不了原图（Windows、Linux 上的 RAW、PSD 等）：说清楚只能导出原文件，不拿缩略图冒充。
 		return nil, i18n.WrapError(err, "error_system_decode_unavailable", strings.ToUpper(strings.TrimPrefix(filepath.Ext(path), ".")))
@@ -111,11 +124,23 @@ func decodeSystemImage(path string) (image.Image, error) {
 
 // PreviewImage 给空格预览用：和 PrepareImage 一样，但这台电脑解不了原图的格式退而用系统给的大缩略图。
 func PreviewImage(path string) (image.Image, error) {
-	img, _, _, _, err := PrepareImage(path)
-	if err == nil || !systemOnly(strings.ToLower(filepath.Ext(path))) {
+	return PreviewImageContext(context.Background(), path)
+}
+
+func PreviewImageContext(ctx context.Context, path string) (image.Image, error) {
+	img, _, _, _, err := prepareImage(ctx, path)
+	if err == nil || ctx.Err() != nil || !systemOnly(strings.ToLower(filepath.Ext(path))) {
 		return img, err
 	}
+	release, budgetErr := admitSystemImage(ctx, path)
+	if budgetErr != nil {
+		return nil, budgetErr
+	}
+	defer release()
 	preview, previewErr := systemPreviewImage(path)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if previewErr != nil {
 		return nil, err
 	}

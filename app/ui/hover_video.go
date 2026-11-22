@@ -48,6 +48,43 @@ func hoverAnimation(asset model.Asset) string {
 	return ""
 }
 
+type budgetGIFDecoder struct {
+	ui.VideoDecoder
+	release  func()
+	duration time.Duration
+}
+
+func (d *budgetGIFDecoder) Duration() time.Duration { return d.duration }
+
+func (d *budgetGIFDecoder) Close() error {
+	if d.VideoDecoder != nil {
+		d.VideoDecoder = nil
+		d.release()
+	}
+	return nil
+}
+
+func openGIFDecoder(ctx context.Context, path string) (*budgetGIFDecoder, error) {
+	data, release, err := assets.ReadGIFForDecode(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		release()
+		return nil, err
+	}
+	decoder, err := ui.NewGIFDecoder(data)
+	if err != nil {
+		release()
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		release()
+		return nil, err
+	}
+	return &budgetGIFDecoder{VideoDecoder: decoder, release: release, duration: decoder.(interface{ Duration() time.Duration }).Duration()}, nil
+}
+
 // errHoverAnimationTooLarge 表示动图太大、不悬停播放（文件超过 maxHoverAnimationBytes，或 GIF 解码要占的内存超过上限）。
 var errHoverAnimationTooLarge = errors.New("hover animation too large")
 
@@ -62,14 +99,19 @@ func openHoverAnimation(ctx context.Context, path, format string) (*ui.VideoPlay
 		return nil, errHoverAnimationTooLarge
 	}
 	if format == "gif" {
-		// 帧像素太多不解码，网格里继续显示缩略图。
-		if err := assets.CheckGIFDecodeSize(path); err != nil {
+		decoder, err := openGIFDecoder(ctx, path)
+		if err != nil {
 			if !hasKey(err, "error_animation_too_large") {
 				return nil, err
 			}
 			slog.Warn("GIF 太大，不悬停播放", "path", path, "error", err)
 			return nil, errHoverAnimationTooLarge
 		}
+		player, err := ui.NewVideoPlayer(decoder)
+		if err != nil {
+			decoder.Close()
+		}
+		return player, err
 	}
 	// 鼠标已经离开就不读文件、不解码。
 	if err := ctx.Err(); err != nil {
@@ -82,15 +124,10 @@ func openHoverAnimation(ctx context.Context, path, format string) (*ui.VideoPlay
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	var decoder ui.VideoDecoder
-	if format == "gif" {
-		decoder, err = ui.NewGIFDecoder(data)
-	} else {
-		if animated, _ := assets.IsAnimatedImage(bytes.NewReader(data)); !animated {
-			return nil, nil
-		}
-		decoder, err = ui.NewAPNGDecoder(data)
+	if animated, _ := assets.IsAnimatedImage(bytes.NewReader(data)); !animated {
+		return nil, nil
 	}
+	decoder, err := ui.NewAPNGDecoder(data)
 	if err != nil {
 		return nil, err
 	}

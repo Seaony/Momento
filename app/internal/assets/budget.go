@@ -9,7 +9,7 @@ import (
 	"sync"
 )
 
-// decodeBudget 限制同时解码的大图占用的内存，导入、重建缩略图和重算颜色共用。
+// decodeBudget 是预览、导出、导入和重建缩略图共用的解码内存预算。
 var decodeBudget = newMemoryBudget(1 << 30)
 
 // decodeEstimate 预估解码一张图要的内存：每像素按 RGBA 4 字节（16 位通道按 8 字节），
@@ -43,6 +43,9 @@ func newMemoryBudget(limit int64) *memoryBudget { return &memoryBudget{limit: li
 
 // acquire 拿到额度或 ctx 取消才返回；后来的不会插到排队中的大图前面。
 func (b *memoryBudget) acquire(ctx context.Context, bytes int64) (int64, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	bytes = min(max(bytes, 1), b.limit)
 	b.mu.Lock()
 	if len(b.waiting) == 0 && b.used+bytes <= b.limit {
@@ -55,6 +58,10 @@ func (b *memoryBudget) acquire(ctx context.Context, bytes int64) (int64, error) 
 	b.mu.Unlock()
 	select {
 	case <-w.ready:
+		if err := ctx.Err(); err != nil {
+			b.release(bytes)
+			return 0, err
+		}
 		return bytes, nil
 	case <-ctx.Done():
 		b.mu.Lock()
@@ -103,12 +110,17 @@ func (b *memoryBudget) admit(ctx context.Context, config image.Config, known boo
 	if known {
 		bytes = decodeEstimate(config)
 	}
+	release, err := b.reserve(ctx, bytes)
+	if err == nil && bytes > b.limit {
+		slog.Info("图片较大，单独解码", "width", config.Width, "height", config.Height)
+	}
+	return release, err
+}
+
+func (b *memoryBudget) reserve(ctx context.Context, bytes int64) (func(), error) {
 	granted, err := b.acquire(ctx, bytes)
 	if err != nil {
 		return nil, err
-	}
-	if granted == b.limit && bytes > b.limit {
-		slog.Info("图片较大，单独解码", "width", config.Width, "height", config.Height)
 	}
 	var once sync.Once
 	return func() { once.Do(func() { b.release(granted) }) }, nil

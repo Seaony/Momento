@@ -46,9 +46,11 @@ func writeRotatedOriginal(ctx context.Context, w io.Writer, source string, asset
 	extension := strings.ToLower(asset.Extension)
 	switch extension {
 	case "gif":
-		if err := CheckGIFDecodeSize(source); err != nil {
+		release, err := admitGIFDecode(ctx, f)
+		if err != nil {
 			return err
 		}
+		defer release()
 		animation, err := gif.DecodeAll(contextReader{ctx: ctx, r: f})
 		if err != nil {
 			return err
@@ -103,7 +105,7 @@ func writeRotatedOriginal(ctx context.Context, w io.Writer, source string, asset
 			return err
 		}
 	}
-	img, _, _, _, err := PrepareImage(source)
+	img, _, _, _, err := prepareImage(ctx, source)
 	if err != nil {
 		return err
 	}

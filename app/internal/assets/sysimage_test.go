@@ -1,14 +1,54 @@
 package assets
 
 import (
+	"context"
 	"errors"
 	"image"
 	"testing"
+	"testing/synctest"
 
 	"github.com/Seaony/Momento/app/internal/i18n"
 	"github.com/Seaony/Momento/app/internal/media"
 	"github.com/Seaony/Momento/app/internal/model"
 )
+
+func TestSystemFullDecodeSharesBudgetAndCancelsWhileWaiting(t *testing.T) {
+	previousSize, previousDecode := systemImageSize, systemDecodeImage
+	t.Cleanup(func() { systemImageSize, systemDecodeImage = previousSize, previousDecode })
+	systemImageSize = func(string) (int, int, error) { return 6000, 4000, nil }
+	systemDecodeImage = func(string) (image.Image, error) {
+		if want := int64(6000 * 4000 * 6); decodeBudget.used != want {
+			t.Errorf("系统解码占用 %d 字节，预期 %d 字节", decodeBudget.used, want)
+		}
+		return nil, media.ErrUnsupported
+	}
+	path := mediaFixture("image_sample.psd")
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		release, err := decodeBudget.reserve(ctx, decodeBudget.limit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer release()
+		result := make(chan error, 1)
+		go func() {
+			_, _, _, _, err := prepareImage(ctx, path)
+			result <- err
+		}()
+		synctest.Wait()
+		cancel()
+		if err := <-result; !errors.Is(err, context.Canceled) {
+			t.Fatalf("等待额度时取消，得到 %v", err)
+		}
+	})
+	if _, _, _, _, err := PrepareImage(path); !errors.Is(err, media.ErrUnsupported) {
+		t.Fatalf("系统解码失败原因丢失：%v", err)
+	}
+	if decodeBudget.used != 0 {
+		t.Fatalf("系统解码失败后还有 %d 字节未归还", decodeBudget.used)
+	}
+}
 
 // 系统给不了缩略图（Windows 没装解码器、Linux）：照样导入原文件，用印着格式名的通用封面，宽高记 0，不算颜色。
 func TestImportSystemFormatWithoutThumbnailUsesFormatPoster(t *testing.T) {
@@ -61,7 +101,12 @@ func TestSystemFormatWithoutFullDecode(t *testing.T) {
 	previousDecode, previousPreview := systemDecodeImage, systemPreviewImage
 	systemDecodeImage = func(string) (image.Image, error) { return nil, media.ErrUnsupported }
 	preview := image.NewRGBA(image.Rect(0, 0, 40, 30))
-	systemPreviewImage = func(string) (image.Image, error) { return preview, nil }
+	systemPreviewImage = func(string) (image.Image, error) {
+		if decodeBudget.used == 0 {
+			t.Error("系统预览解码时没有占用预算")
+		}
+		return preview, nil
+	}
 	t.Cleanup(func() { systemDecodeImage, systemPreviewImage = previousDecode, previousPreview })
 	path := mediaFixture("image_sample.psd")
 	_, _, _, _, err := PrepareImage(path)
@@ -71,5 +116,8 @@ func TestSystemFormatWithoutFullDecode(t *testing.T) {
 	}
 	if got, err := PreviewImage(path); err != nil || got != preview {
 		t.Fatalf("预览没有退而用系统缩略图：%v", err)
+	}
+	if decodeBudget.used != 0 {
+		t.Fatalf("系统预览结束后还有 %d 字节未归还", decodeBudget.used)
 	}
 }

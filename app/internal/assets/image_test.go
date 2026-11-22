@@ -2,6 +2,7 @@ package assets
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"errors"
 	"hash/crc32"
@@ -14,10 +15,58 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"testing/synctest"
 
 	"github.com/Seaony/Momento/app/internal/i18n"
 	"github.com/Seaony/Momento/app/internal/model"
 )
+
+func TestPrepareImageWaitsForSharedGIFBudget(t *testing.T) {
+	previousBudget := decodeBudget
+	decodeBudget = newMemoryBudget(1024)
+	t.Cleanup(func() { decodeBudget = previousBudget })
+
+	gifPath := filepath.Join("testdata", "sample.gif")
+	pngPath := filepath.Join("testdata", "sample.png")
+	synctest.Test(t, func(t *testing.T) {
+		_, release, err := ReadGIFForDecode(context.Background(), gifPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer release()
+		result := make(chan error, 1)
+		go func() {
+			_, _, _, _, err := PrepareImage(pngPath)
+			result <- err
+		}()
+		synctest.Wait()
+		select {
+		case err := <-result:
+			t.Fatalf("GIF 占用额度时已开始解静态图：%v", err)
+		default:
+		}
+		release()
+		if err := <-result; err != nil {
+			t.Fatal(err)
+		}
+		if decodeBudget.used != 0 {
+			t.Fatalf("静态图解完后还有 %d 字节未归还", decodeBudget.used)
+		}
+	})
+}
+
+func TestPrepareImageReleasesBudgetOnDecodeError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "broken.png")
+	if err := os.WriteFile(path, []byte("not a PNG"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, _, err := PrepareImage(path); err == nil {
+		t.Fatal("坏图应该解码失败")
+	}
+	if decodeBudget.used != 0 {
+		t.Fatalf("静态图解码失败后还有 %d 字节未归还", decodeBudget.used)
+	}
+}
 
 func TestImageOrientations(t *testing.T) {
 	src := image.NewNRGBA(image.Rect(3, 4, 5, 7))

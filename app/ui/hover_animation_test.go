@@ -13,9 +13,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/Seaony/Momento/app/internal/assets"
 	"github.com/Seaony/Momento/app/internal/model"
+	"github.com/egoist/mygo/ui"
 )
 
 func TestHoverAnimationFormats(t *testing.T) {
@@ -95,5 +97,41 @@ func TestHoverAnimationCancelledBeforeDecoding(t *testing.T) {
 	cancel()
 	if player, err := openHoverAnimation(ctx, path, "gif"); !errors.Is(err, context.Canceled) || player != nil {
 		t.Fatalf("取消后不该继续解码：%v %v", player, err)
+	}
+}
+
+func TestHoverGIFPlayerReleasesDecoderBudgetOnClose(t *testing.T) {
+	decoder, err := openGIFDecoder(context.Background(), writePreviewGIF(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	released := make(chan struct{})
+	release := decoder.release
+	decoder.release = func() {
+		release()
+		close(released)
+	}
+	player, err := ui.NewVideoPlayer(decoder)
+	if err != nil {
+		decoder.Close()
+		t.Fatal(err)
+	}
+	defer player.Close()
+	if player.Duration() != 200*time.Millisecond {
+		t.Fatalf("GIF 播放器没有报告原时长：%v", player.Duration())
+	}
+	select {
+	case <-released:
+		t.Fatal("播放期间提前归还了 GIF 额度")
+	default:
+	}
+	player.Close()
+	select {
+	case <-released:
+		if decoder.VideoDecoder != nil {
+			t.Fatal("归还额度时仍持有解码帧")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("关闭播放器没有归还 GIF 额度")
 	}
 }

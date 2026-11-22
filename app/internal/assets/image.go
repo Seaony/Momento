@@ -35,8 +35,8 @@ var maxImagePixels int64 = 200_000_000
 const thumbnailSize = 512
 
 // decodeImage 解出第一帧，还没转正。解码前先只读尺寸：像素太多直接拒绝；
-// admit 不为空时先拿尺寸去排队申请内存，返回的 release 由调用方在用完大图后调用。
-func decodeImage(ctx context.Context, path string, admit func(context.Context, image.Config, bool) (func(), error)) (image.Image, string, func(), error) {
+// 返回的 release 由调用方在用完大图后调用。
+func decodeImage(ctx context.Context, path string) (image.Image, string, func(), error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, "", nil, err
@@ -57,11 +57,9 @@ func decodeImage(ctx context.Context, path string, admit func(context.Context, i
 	if err == nil && int64(config.Width)*int64(config.Height) > maxImagePixels {
 		return nil, "", nil, i18n.WrapError(i18n.NewError("error_image_too_large", config.Width, config.Height), "error_decode_image", filepath.Base(path))
 	}
-	release := func() {}
-	if admit != nil {
-		if release, err = admit(ctx, config, err == nil); err != nil {
-			return nil, "", nil, err
-		}
+	release, err := decodeBudget.admit(ctx, config, err == nil)
+	if err != nil {
+		return nil, "", nil, err
 	}
 	if _, err = f.Seek(0, io.SeekStart); err != nil {
 		release()
@@ -79,6 +77,10 @@ func decodeImage(ctx context.Context, path string, admit func(context.Context, i
 		release()
 		return nil, "", nil, i18n.WrapError(err, "error_decode_image", filepath.Base(path))
 	}
+	if err := ctx.Err(); err != nil {
+		release()
+		return nil, "", nil, err
+	}
 	return img, ext, release, nil
 }
 
@@ -89,21 +91,26 @@ func decoderOriented(ext string) bool {
 
 // PrepareImage 返回全尺寸、已转正的第一帧和元数据，给预览和导出用。
 func PrepareImage(path string) (image.Image, map[string]string, int, string, error) {
+	return prepareImage(context.Background(), path)
+}
+
+func prepareImage(ctx context.Context, path string) (image.Image, map[string]string, int, string, error) {
 	if ext := strings.ToLower(filepath.Ext(path)); useSystemDecoder(ext) {
-		img, err := decodeSystemImage(path)
+		img, err := decodeSystemImage(ctx, path)
 		if err == nil {
 			metadata, orientation, profile := readMetadata(path, img)
 			return img, metadata, orientation, profile, nil
 		}
-		if systemOnly(ext) {
+		if systemOnly(ext) || ctx.Err() != nil {
 			return nil, nil, 0, "", err
 		}
 		slog.Warn("系统解不了这张图片，改用内置解码器", "file", filepath.Base(path), "error", err)
 	}
-	img, ext, _, err := decodeImage(context.Background(), path, nil)
+	img, ext, release, err := decodeImage(ctx, path)
 	if err != nil {
 		return nil, nil, 0, "", err
 	}
+	defer release()
 	metadata, orientation, profile := readMetadata(path, img)
 	if !decoderOriented(ext) {
 		img = orient(img, orientation)
@@ -133,7 +140,7 @@ func prepareThumbnail(ctx context.Context, path string) (preparedImage, error) {
 		}
 		slog.Warn("系统解不了这张图片，改用内置解码器", "file", filepath.Base(path), "error", err)
 	}
-	img, ext, release, err := decodeImage(ctx, path, decodeBudget.admit)
+	img, ext, release, err := decodeImage(ctx, path)
 	if err != nil {
 		return preparedImage{}, err
 	}

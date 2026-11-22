@@ -2,6 +2,7 @@ package assets
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -114,10 +115,47 @@ func CheckGIFDecodeSize(path string) error {
 	}
 	defer f.Close()
 	frames, size, _ := GIFDecodeCost(f) // 读到一半出错时已统计的部分照样比较
+	return checkGIFDecodeSize(frames, size)
+}
+
+func checkGIFDecodeSize(frames int, size int64) error {
 	if size > MaxGIFDecodeBytes {
 		return i18n.NewError("error_animation_too_large", frames, size>>20, MaxGIFDecodeBytes>>20)
 	}
 	return nil
+}
+
+func admitGIFDecode(ctx context.Context, f *os.File) (func(), error) {
+	frames, size, err := GIFDecodeCost(contextReader{ctx: ctx, r: f})
+	if limitErr := checkGIFDecodeSize(frames, size); limitErr != nil {
+		return nil, limitErr
+	}
+	if err != nil {
+		return nil, err
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+	return decodeBudget.reserve(ctx, size)
+}
+
+// ReadGIFForDecode 先申请解码额度再读入 GIF，解码失败或丢弃已解码的帧后由调用方归还。
+func ReadGIFForDecode(ctx context.Context, path string) ([]byte, func(), error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer f.Close()
+	release, err := admitGIFDecode(ctx, f)
+	if err != nil {
+		return nil, nil, err
+	}
+	data, err := io.ReadAll(contextReader{ctx: ctx, r: f})
+	if err != nil {
+		release()
+		return nil, nil, err
+	}
+	return data, release, nil
 }
 
 // animatedAVIF 读 ftyp 盒判断是不是动态 AVIF（品牌 avis）：解码库不提供只读帧数的接口，
