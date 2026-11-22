@@ -4,8 +4,8 @@ import (
 	"context"
 	"crypto/rand"
 	"log/slog"
-	"os"
 	"regexp"
+	"slices"
 	"sync"
 	"time"
 )
@@ -26,38 +26,45 @@ const (
 )
 
 type job struct {
-	id      string
-	request Request
-	ctx     context.Context
-	state   string
-	err     error
-	done    chan struct{}
+	id         string
+	request    Request
+	upload     *uploadFile
+	stopCancel func() bool
+	ctx        context.Context
+	state      string
+	err        error
+	done       chan struct{}
 }
 
 // jobQueue 让扩展的导入一个接一个做：先返回任务号，Momento 自己排队，不再回「忙」。
 type jobQueue struct {
-	run      ImportFunc
-	mu       sync.Mutex
-	jobs     map[string]*job
-	finished []string
-	pending  []*job
-	working  bool
+	run         ImportFunc
+	mu          sync.Mutex
+	jobs        map[string]*job
+	finished    []string
+	pending     []*job
+	working     bool
+	uploadLimit int64
+	uploadBytes int64
 }
 
 func newJobQueue(run ImportFunc) *jobQueue {
-	return &jobQueue{run: run, jobs: map[string]*job{}}
+	return &jobQueue{run: run, jobs: map[string]*job{}, uploadLimit: maxUploadBytesInFlight}
 }
 
 // submit 排进队列。ctx 是服务这次运行的上下文：关掉扩展服务时，没做完的任务一起取消。
-func (q *jobQueue) submit(ctx context.Context, request Request) (*job, bool) {
+func (q *jobQueue) submit(ctx context.Context, request Request, upload *uploadFile) (*job, bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	if len(q.pending) >= maxPendingJobs {
 		return nil, false
 	}
-	j := &job{id: rand.Text(), request: request, ctx: ctx, state: jobQueued, done: make(chan struct{})}
+	j := &job{id: rand.Text(), request: request, upload: upload, ctx: ctx, state: jobQueued, done: make(chan struct{})}
 	q.jobs[j.id] = j
 	q.pending = append(q.pending, j)
+	if upload != nil {
+		j.stopCancel = context.AfterFunc(ctx, func() { q.cancelQueuedUpload(j) })
+	}
 	if !q.working {
 		q.working = true
 		go q.loop()
@@ -76,6 +83,10 @@ func (q *jobQueue) loop() {
 		j := q.pending[0]
 		q.pending = q.pending[1:]
 		j.state = jobRunning
+		if j.stopCancel != nil {
+			j.stopCancel()
+			j.stopCancel = nil
+		}
 		q.mu.Unlock()
 
 		started := time.Now()
@@ -83,32 +94,47 @@ func (q *jobQueue) loop() {
 		if err == nil {
 			err = q.run(j.ctx, j.request)
 		}
-		if j.request.File != "" {
-			// 上传的临时文件导入时会被挪走；没挪走（失败、取消）就在这里删掉。
-			if removeErr := os.Remove(j.request.File); removeErr != nil && !os.IsNotExist(removeErr) {
-				slog.Warn("删除上传的临时文件失败", "error", removeErr)
-			}
-		}
-		code, _ := classify(err)
-		q.mu.Lock()
-		j.err = err
-		j.state = jobDone
-		if err != nil {
-			j.state = jobFailed
-		}
-		q.finished = append(q.finished, j.id)
-		for len(q.finished) > keptJobs {
-			delete(q.jobs, q.finished[0])
-			q.finished = q.finished[1:]
-		}
-		q.mu.Unlock()
-		if err != nil {
-			slog.Warn("浏览器扩展导入任务失败", "job", j.id, "code", code, "duration", time.Since(started), "error", redactURLs(err.Error()))
-		} else {
-			slog.Info("浏览器扩展导入任务完成", "job", j.id, "duration", time.Since(started))
-		}
-		close(j.done)
+		q.finish(j, err, started)
 	}
+}
+
+func (q *jobQueue) cancelQueuedUpload(j *job) {
+	q.mu.Lock()
+	if j.state != jobQueued {
+		q.mu.Unlock()
+		return
+	}
+	index := slices.Index(q.pending, j)
+	q.pending = slices.Delete(q.pending, index, index+1)
+	j.stopCancel = nil
+	q.mu.Unlock()
+	q.finish(j, j.ctx.Err(), time.Now())
+}
+
+func (q *jobQueue) finish(j *job, err error, started time.Time) {
+	if j.upload != nil {
+		j.upload.release()
+		j.upload = nil
+	}
+	code, _ := classify(err)
+	q.mu.Lock()
+	j.err = err
+	j.state = jobDone
+	if err != nil {
+		j.state = jobFailed
+	}
+	q.finished = append(q.finished, j.id)
+	for len(q.finished) > keptJobs {
+		delete(q.jobs, q.finished[0])
+		q.finished = q.finished[1:]
+	}
+	q.mu.Unlock()
+	if err != nil {
+		slog.Warn("浏览器扩展导入任务失败", "job", j.id, "code", code, "duration", time.Since(started), "error", redactURLs(err.Error()))
+	} else {
+		slog.Info("浏览器扩展导入任务完成", "job", j.id, "duration", time.Since(started))
+	}
+	close(j.done)
 }
 
 // view 是任务当前的状态，给查询接口用。

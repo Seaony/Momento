@@ -22,20 +22,24 @@ const extensionOrigin = "chrome-extension://bdholohelelbeepbpdapldbibidacaoo"
 
 func waitJob(t *testing.T, h http.Handler, id string) jobView {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		w := request(t, h, "GET", "/api/v1/import/"+id, "", extensionOrigin)
-		got := decodeResponse(t, w)
-		if w.Code != http.StatusOK || got.Job == nil {
-			t.Fatalf("查询任务 %d %+v", w.Code, got)
-		}
-		if got.Job.State == jobDone || got.Job.State == jobFailed {
-			return *got.Job
-		}
-		time.Sleep(5 * time.Millisecond)
+	queue := h.(*handler).jobs
+	queue.mu.Lock()
+	job := queue.jobs[id]
+	queue.mu.Unlock()
+	if job == nil {
+		t.Fatalf("找不到任务 %q", id)
 	}
-	t.Fatal("任务没有结束")
-	return jobView{}
+	select {
+	case <-job.done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("任务 %q 没有结束", id)
+	}
+	w := request(t, h, "GET", "/api/v1/import/"+id, "", extensionOrigin)
+	got := decodeResponse(t, w)
+	if w.Code != http.StatusOK || got.Job == nil {
+		t.Fatalf("查询任务 %d %+v", w.Code, got)
+	}
+	return *got.Job
 }
 
 func TestStatusCapabilities(t *testing.T) {
@@ -108,6 +112,13 @@ func TestImportValidatesNewFields(t *testing.T) {
 
 func upload(t *testing.T, h http.Handler, meta string, files map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, uploadRequest(t, meta, files))
+	return w
+}
+
+func uploadRequest(t *testing.T, meta string, files map[string]string) *http.Request {
+	t.Helper()
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	if meta != "" {
@@ -120,15 +131,17 @@ func upload(t *testing.T, h http.Handler, meta string, files map[string]string) 
 		if err != nil {
 			t.Fatal(err)
 		}
-		part.Write([]byte(content))
+		if _, err := part.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
 	}
-	writer.Close()
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
 	r := httptest.NewRequest("POST", "/api/v1/import/file", &body)
 	r.Header.Set("Content-Type", writer.FormDataContentType())
 	r.Header.Set("Origin", extensionOrigin)
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, r)
-	return w
+	return r
 }
 
 func TestUploadPassesFileAndRemovesTemp(t *testing.T) {

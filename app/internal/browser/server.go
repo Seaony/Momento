@@ -181,7 +181,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			fail(status, code, message)
 			return
 		}
-		j, ok := h.jobs.submit(runCtx, request)
+		j, ok := h.jobs.submit(runCtx, request, nil)
 		if !ok {
 			fail(http.StatusServiceUnavailable, codeBusy, "Too many imports are waiting.")
 			return
@@ -204,15 +204,9 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		reply(http.StatusOK, response{OK: true})
 	case "/api/v1/import/file":
-		request, status, code, message := readUpload(w, r)
+		j, status, code, message := h.submitUpload(w, r, runCtx)
 		if code != "" {
 			fail(status, code, message)
-			return
-		}
-		j, ok := h.jobs.submit(runCtx, request)
-		if !ok {
-			removeUpload(request.File)
-			fail(http.StatusServiceUnavailable, codeBusy, "Too many imports are waiting.")
 			return
 		}
 		reply(http.StatusAccepted, response{OK: true, JobID: j.id})
@@ -224,6 +218,27 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		reply(http.StatusOK, response{OK: true, Job: &view})
 	}
+}
+
+func (h *handler) submitUpload(w http.ResponseWriter, r *http.Request, runCtx context.Context) (queued *job, status int, code, message string) {
+	upload := &uploadFile{queue: h.jobs}
+	defer func() {
+		if queued == nil {
+			upload.release()
+		}
+	}()
+	request, status, code, message := readUpload(w, r, upload)
+	if code != "" {
+		return nil, status, code, message
+	}
+	if r.Context().Err() != nil {
+		return nil, http.StatusServiceUnavailable, codeCanceled, "Request was canceled."
+	}
+	j, ok := h.jobs.submit(runCtx, request, upload)
+	if !ok {
+		return nil, http.StatusServiceUnavailable, codeBusy, "Too many imports are waiting."
+	}
+	return j, 0, "", ""
 }
 
 // readRequest 读 JSON 导入请求并检查字段。
@@ -271,7 +286,7 @@ func validate(request *Request, needURL bool) string {
 }
 
 // readUpload 读 multipart 上传：meta 是和 /api/v1/import 一样的 JSON（不用填 url），file 是文件内容，写进临时文件。
-func readUpload(w http.ResponseWriter, r *http.Request) (request Request, status int, code, message string) {
+func readUpload(w http.ResponseWriter, r *http.Request, upload *uploadFile) (request Request, status int, code, message string) {
 	if mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type")); err != nil || mediaType != "multipart/form-data" {
 		return Request{}, http.StatusBadRequest, codeBadRequest, "Upload must be multipart/form-data."
 	}
@@ -281,11 +296,6 @@ func readUpload(w http.ResponseWriter, r *http.Request) (request Request, status
 		return Request{}, http.StatusBadRequest, codeBadRequest, "Cannot read upload."
 	}
 	var meta []byte
-	defer func() {
-		if code != "" {
-			removeUpload(request.File)
-		}
-	}()
 	for {
 		part, err := reader.NextPart()
 		if err == io.EOF {
@@ -312,14 +322,12 @@ func readUpload(w http.ResponseWriter, r *http.Request) (request Request, status
 			if err != nil {
 				return request, http.StatusInternalServerError, codeInternal, "Cannot store upload."
 			}
+			upload.file = f
 			request.File, request.FileName = f.Name(), part.FileName()
-			written, copyErr := io.Copy(f, io.LimitReader(part, MaxUploadSize+1))
+			_, copyErr := io.Copy(upload, io.LimitReader(part, MaxUploadSize+1))
 			if err := errors.Join(copyErr, f.Close()); err != nil {
 				status, code, message = uploadReadError(err)
 				return
-			}
-			if written > MaxUploadSize {
-				return request, http.StatusRequestEntityTooLarge, codeTooLarge, "File exceeds 512 MB."
 			}
 		}
 		part.Close()
@@ -342,19 +350,15 @@ func readUpload(w http.ResponseWriter, r *http.Request) (request Request, status
 
 func uploadReadError(err error) (int, string, string) {
 	var limit *http.MaxBytesError
-	if errors.As(err, &limit) {
+	switch {
+	case errors.Is(err, errUploadBudgetFull):
+		return http.StatusServiceUnavailable, codeBusy, errUploadBudgetFull.Error()
+	case errors.Is(err, errUploadTooLarge):
+		return http.StatusRequestEntityTooLarge, codeTooLarge, errUploadTooLarge.Error()
+	case errors.As(err, &limit):
 		return http.StatusRequestEntityTooLarge, codeTooLarge, "Upload exceeds 512 MB."
 	}
 	return http.StatusBadRequest, codeBadRequest, "Cannot read upload."
-}
-
-func removeUpload(path string) {
-	if path == "" {
-		return
-	}
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-		slog.Warn("删除上传的临时文件失败", "error", err)
-	}
 }
 
 func validURL(raw string) bool {
