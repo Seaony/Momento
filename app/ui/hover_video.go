@@ -22,6 +22,8 @@ const hoverVideoDelay = 350 * time.Millisecond
 // openHoverVideo 打开卡片悬停播放用的播放器，测试里可以换掉。
 var openHoverVideo = video.Open
 
+var readGIFForResidentDecode = assets.ReadGIFForResidentDecode
+
 // hoverVideo 是网格里正在悬停播放的那一个视频：同一时间只有一个，鼠标离开就关掉。
 type hoverVideo struct {
 	id      string
@@ -65,7 +67,7 @@ func (d *budgetGIFDecoder) Close() error {
 }
 
 func openGIFDecoder(ctx context.Context, path string) (*budgetGIFDecoder, error) {
-	data, release, err := assets.ReadGIFForDecode(ctx, path)
+	data, release, err := readGIFForResidentDecode(ctx, path)
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +103,10 @@ func openHoverAnimation(ctx context.Context, path, format string) (*ui.VideoPlay
 	if format == "gif" {
 		decoder, err := openGIFDecoder(ctx, path)
 		if err != nil {
+			if errors.Is(err, assets.ErrResidentBudgetBusy) {
+				slog.Warn("常驻动图额度已满，悬停只显示首帧", "path", path)
+				return nil, errHoverAnimationTooLarge
+			}
 			if !hasKey(err, "error_animation_too_large") {
 				return nil, err
 			}

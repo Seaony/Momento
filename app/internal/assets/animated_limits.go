@@ -158,6 +158,35 @@ func ReadGIFForDecode(ctx context.Context, path string) ([]byte, func(), error) 
 	return data, release, nil
 }
 
+// ReadGIFForResidentDecode 给预览和悬停这类常驻播放器用：只立即占常驻额度，拿不到时由调用方显示静态首帧。
+func ReadGIFForResidentDecode(ctx context.Context, path string) ([]byte, func(), error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer f.Close()
+	frames, size, err := GIFDecodeCost(contextReader{ctx: ctx, r: f})
+	if limitErr := checkGIFDecodeSize(frames, size); limitErr != nil {
+		return nil, nil, limitErr
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	if _, err = f.Seek(0, io.SeekStart); err != nil {
+		return nil, nil, err
+	}
+	release, ok := decodeBudget.tryReserveResident(size)
+	if !ok {
+		return nil, nil, ErrResidentBudgetBusy
+	}
+	data, err := io.ReadAll(contextReader{ctx: ctx, r: f})
+	if err != nil {
+		release()
+		return nil, nil, err
+	}
+	return data, release, nil
+}
+
 // animatedAVIF 读 ftyp 盒判断是不是动态 AVIF（品牌 avis）：解码库不提供只读帧数的接口，
 // 不先判断就只能 DecodeAll 把所有帧解开。
 func animatedAVIF(f *os.File) (bool, error) {

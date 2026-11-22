@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"image"
 	"image/color"
@@ -409,6 +410,18 @@ func TestPreviewHugeGIFShowsStillFirstFrame(t *testing.T) {
 	picture, err := readPreviewPicture(path, 0, false)
 	if err != nil || picture.bitmap == nil || picture.animation != nil || !picture.limited {
 		t.Fatalf("大 GIF 应只给静态首帧并标明受限：%v %+v", err, picture)
+	}
+}
+
+func TestPreviewBusyResidentBudgetShowsStillFirstFrame(t *testing.T) {
+	previousReader := readGIFForResidentDecode
+	readGIFForResidentDecode = func(context.Context, string) ([]byte, func(), error) {
+		return nil, nil, assets.ErrResidentBudgetBusy
+	}
+	t.Cleanup(func() { readGIFForResidentDecode = previousReader })
+	picture, err := readPreviewPicture(writePreviewGIF(t), 0, false)
+	if err != nil || picture.bitmap == nil || picture.animation != nil || !picture.limited {
+		t.Fatalf("常驻额度忙时应只给静态首帧：%v %+v", err, picture)
 	}
 }
 

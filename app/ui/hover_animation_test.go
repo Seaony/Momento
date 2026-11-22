@@ -91,6 +91,18 @@ func TestHoverHugeGIFIsNotDecoded(t *testing.T) {
 	}
 }
 
+func TestHoverBusyResidentBudgetIsNotDecoded(t *testing.T) {
+	previousReader := readGIFForResidentDecode
+	readGIFForResidentDecode = func(context.Context, string) ([]byte, func(), error) {
+		return nil, nil, assets.ErrResidentBudgetBusy
+	}
+	t.Cleanup(func() { readGIFForResidentDecode = previousReader })
+	player, err := openHoverAnimation(context.Background(), writePreviewGIF(t), "gif")
+	if player != nil || !errors.Is(err, errHoverAnimationTooLarge) {
+		t.Fatalf("常驻额度忙时不应排队解码：%v %v", player, err)
+	}
+}
+
 func TestHoverAnimationCancelledBeforeDecoding(t *testing.T) {
 	path := writePreviewGIF(t)
 	ctx, cancel := context.WithCancel(context.Background())

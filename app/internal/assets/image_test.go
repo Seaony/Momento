@@ -68,6 +68,23 @@ func TestPrepareImageReleasesBudgetOnDecodeError(t *testing.T) {
 	}
 }
 
+func TestResidentGIFBudgetLeavesRoomForOtherDecode(t *testing.T) {
+	releaseResident, ok := decodeBudget.tryReserveResident(residentAnimationBudgetLimit)
+	if !ok {
+		t.Fatal("常驻额度未能一次性占满")
+	}
+	defer releaseResident()
+	_, _, err := ReadGIFForResidentDecode(context.Background(), filepath.Join("testdata", "sample.gif"))
+	if !errors.Is(err, ErrResidentBudgetBusy) {
+		t.Fatalf("常驻额度满后没有立即拒绝：%v", err)
+	}
+	releaseOther, err := decodeBudget.reserve(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("缩略图类解码拿不到共享额度：%v", err)
+	}
+	releaseOther()
+}
+
 func TestImageOrientations(t *testing.T) {
 	src := image.NewNRGBA(image.Rect(3, 4, 5, 7))
 	for i := range 6 {

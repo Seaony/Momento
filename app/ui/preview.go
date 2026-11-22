@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"image"
 	"io"
 	"log/slog"
@@ -120,10 +121,10 @@ func readPreviewPictureContext(ctx context.Context, path string, rotation int, p
 			}
 			return picture, err
 		}
-		if !hasKey(err, "error_animation_too_large") {
+		if !hasKey(err, "error_animation_too_large") && !errors.Is(err, assets.ErrResidentBudgetBusy) {
 			return previewPicture{}, err
 		}
-		slog.Warn("GIF 太大，预览只显示首帧", "path", path, "error", err)
+		slog.Warn("GIF 常驻额度拿不到，预览只显示首帧", "path", path, "error", err)
 	}
 	img, err := assets.PreviewImageContext(ctx, path)
 	if err != nil {

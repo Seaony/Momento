@@ -2,6 +2,7 @@ package assets
 
 import (
 	"context"
+	"errors"
 	"image"
 	"image/color"
 	"log/slog"
@@ -11,6 +12,12 @@ import (
 
 // decodeBudget 是预览、导出、导入和重建缩略图共用的解码内存预算。
 var decodeBudget = newMemoryBudget(1 << 30)
+
+// residentAnimationBudgetLimit 给常驻播放的动图留一半共享预算，保证缩略图和导入总有额度可用。
+const residentAnimationBudgetLimit = 1 << 29
+
+// ErrResidentBudgetBusy 表示常驻动图要的额度现在拿不到；调用方应改走静态首帧，不要排队等待。
+var ErrResidentBudgetBusy = errors.New("resident animation budget is busy")
 
 // decodeEstimate 预估解码一张图要的内存：每像素按 RGBA 4 字节（16 位通道按 8 字节），
 // 再乘 1.5 留给解码器缓冲和缩小用的中间图。
@@ -28,10 +35,11 @@ func decodeWorkers() int { return max(runtime.NumCPU(), 2) }
 
 // memoryBudget 是按字节计数的先来先得排队器。单张超过总额时按总额算，等前面都做完后独自运行。
 type memoryBudget struct {
-	mu      sync.Mutex
-	limit   int64
-	used    int64
-	waiting []*budgetWaiter
+	mu           sync.Mutex
+	limit        int64
+	residentUsed int64
+	used         int64
+	waiting      []*budgetWaiter
 }
 
 type budgetWaiter struct {
@@ -88,6 +96,27 @@ func (b *memoryBudget) release(bytes int64) {
 	b.used -= bytes
 	b.wake()
 	b.mu.Unlock()
+}
+
+// tryReserveResident 立即拿额度；共享预算已有排队者时也不插队，拿不到就让常驻播放降级。
+func (b *memoryBudget) tryReserveResident(bytes int64) (func(), bool) {
+	bytes = min(max(bytes, 1), b.limit)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.waiting) > 0 || b.used+bytes > b.limit || b.residentUsed+bytes > residentAnimationBudgetLimit {
+		return nil, false
+	}
+	b.used += bytes
+	b.residentUsed += bytes
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			b.mu.Lock()
+			b.used, b.residentUsed = b.used-bytes, b.residentUsed-bytes
+			b.mu.Unlock()
+			b.wake()
+		})
+	}, true
 }
 
 // wake 按排队顺序放行装得下的，队首装不下就停，保证大图不会一直被小图插队。
