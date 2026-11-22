@@ -95,7 +95,7 @@ func (b *memoryBudget) release(bytes int64) {
 	b.mu.Lock()
 	b.used -= bytes
 	b.wake()
-	b.mu.Unlock()
+	defer b.mu.Unlock()
 }
 
 // tryReserveResident 立即拿额度；共享预算已有排队者时也不插队，拿不到就让常驻播放降级。
@@ -113,13 +113,13 @@ func (b *memoryBudget) tryReserveResident(bytes int64) (func(), bool) {
 		once.Do(func() {
 			b.mu.Lock()
 			b.used, b.residentUsed = b.used-bytes, b.residentUsed-bytes
-			b.mu.Unlock()
 			b.wake()
+			b.mu.Unlock()
 		})
 	}, true
 }
 
-// wake 按排队顺序放行装得下的，队首装不下就停，保证大图不会一直被小图插队。
+// wake 按排队顺序放行装得下的，队首装不下就停，保证大图不会一直被小图插队。调用方必须已持锁。
 func (b *memoryBudget) wake() {
 	for len(b.waiting) > 0 {
 		w := b.waiting[0]
