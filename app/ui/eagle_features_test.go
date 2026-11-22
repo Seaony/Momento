@@ -16,18 +16,18 @@ func TestRenameDialogQueuesOnlyChangedNames(t *testing.T) {
 	a.Busy = false
 	ids := []string{a.Visible[0].ID, a.Visible[1].ID, a.Visible[2].ID}
 	a.OpenRename(ids)
+	source := &renameSource{assets: a.renameAssets(), tagNames: a.renameTagNames()}
 	a.Rename.Mode, a.Rename.Find, a.Rename.With = 1, "Photo 1", "Cover"
-	assets := a.renameAssets()
-	names, changed, problem := a.renamePlan(assets)
-	if problem != "" || changed != 1 || names[1] != "Cover" || names[0] != "Photo 0" {
-		t.Fatalf("替换结果不对：%v，改了 %d 个，问题 %q", names, changed, problem)
+	plan := (&renameRequest{inputs: a.renameInputs(), source: source}).calculate()
+	if plan.problem != "" || len(plan.ids) != 1 || plan.ids[0] != ids[1] || plan.updates[ids[1]] != "Cover" {
+		t.Fatalf("只应改第二张的名字：%+v", plan)
 	}
 	a.Rename.Mode, a.Rename.Template = 0, "  "
-	if _, _, problem := a.renamePlan(assets); problem == "" {
+	if plan := (&renameRequest{inputs: a.renameInputs(), source: source}).calculate(); plan.problem == "" {
 		t.Fatal("新名称为空时没有拦下")
 	}
 	a.Rename.Template, a.Rename.Start = "{n}", "-1"
-	if _, _, problem := a.renamePlan(assets); problem == "" {
+	if plan := (&renameRequest{inputs: a.renameInputs(), source: source}).calculate(); plan.problem == "" {
 		t.Fatal("起始序号是负数时没有拦下")
 	}
 }
