@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/Seaony/Momento/app/internal/assets"
+	"github.com/Seaony/Momento/app/internal/catalog"
 	"github.com/Seaony/Momento/app/internal/i18n"
 	"github.com/Seaony/Momento/app/internal/library"
 	"github.com/Seaony/Momento/app/internal/model"
@@ -113,5 +114,28 @@ func TestAssetPatchesMatchDatabase(t *testing.T) {
 	}
 	if counts := a.Index.Counts(); counts.Trash != 1 || counts.Favorites != 1 {
 		t.Fatalf("计数没有跟着更新：%+v", counts)
+	}
+}
+
+func TestPatchVisibleKeepsRandomOrder(t *testing.T) {
+	snapshot := model.Snapshot{Assets: []model.Asset{{ID: "a", Name: "A"}, {ID: "b", Name: "B"}, {ID: "c", Name: "C"}}}
+	a := &App{Texts: i18n.Catalog{Language: "en"}, Preferences: DefaultPreferences(), Query: catalog.Query{Scope: "random"}}
+	a.applySnapshot(snapshot)
+	a.Browse.RandomOrder = map[string]int{"b": 0, "c": 1, "a": 2}
+	a.Refine()
+	wantIDs := make([]string, len(a.Visible))
+	for i, asset := range a.Visible {
+		wantIDs[i] = asset.ID
+	}
+	a.patchAssets([]string{"c"}, func(asset *model.Asset) { asset.Favorite = true })
+	gotIDs := make([]string, len(a.Visible))
+	for i, asset := range a.Visible {
+		gotIDs[i] = asset.ID
+	}
+	if !slices.Equal(gotIDs, wantIDs) {
+		t.Fatalf("随机浏览顺序变了：%v", a.Visible)
+	}
+	if !a.assetByID["c"].Favorite {
+		t.Fatal("随机浏览下的收藏没有写进素材数据")
 	}
 }
