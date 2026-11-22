@@ -15,6 +15,16 @@ import (
 	"github.com/Seaony/Momento/app/internal/model"
 )
 
+func newTestWatcher(root string, importFile ImportFunc, trash func(string) error, event func(Event)) *Watcher {
+	return New(root, importFile, trash, func(_ context.Context, events []Event) {
+		if event != nil {
+			for _, item := range events {
+				event(item)
+			}
+		}
+	})
+}
+
 func fixture(t *testing.T) (string, string, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -36,7 +46,7 @@ func TestWatcherWaitsForStableImageAndTrashesAfterImport(t *testing.T) {
 	root, folder, path := fixture(t)
 	var calls, trashed int
 	var events []Event
-	w := New(root, func(ctx context.Context, sources []string, destination string) (model.ImportResult, error) {
+	w := newTestWatcher(root, func(ctx context.Context, sources []string, destination string) (model.ImportResult, error) {
 		calls++
 		expected, err := filepath.EvalSymlinks(path)
 		if err != nil {
@@ -73,7 +83,7 @@ func TestWatcherRetainsSourcesOnFailureAndRetriesWhenReenabled(t *testing.T) {
 			var calls, trashed int
 			var events []Event
 			problem := errors.New("blocked")
-			w := New(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
+			w := newTestWatcher(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
 				calls++
 				switch failure {
 				case "import":
@@ -126,7 +136,7 @@ func TestWatcherRetainsSourcesOnFailureAndRetriesWhenReenabled(t *testing.T) {
 func TestWatcherRetriesBusyAndAllowsConfirmedDuplicate(t *testing.T) {
 	root, folder, path := fixture(t)
 	calls, trashed := 0, 0
-	w := New(root, func(context.Context, []string, string) (model.ImportResult, error) {
+	w := newTestWatcher(root, func(context.Context, []string, string) (model.ImportResult, error) {
 		calls++
 		if calls == 1 {
 			return model.ImportResult{}, assets.ErrImportBusy
@@ -172,7 +182,7 @@ func TestWatcherRejectsLibraryPathsAndReportsMissingFolder(t *testing.T) {
 	}
 	missing := filepath.Join(folder, "missing")
 	var events []Event
-	w := New(root, func(context.Context, []string, string) (model.ImportResult, error) {
+	w := newTestWatcher(root, func(context.Context, []string, string) (model.ImportResult, error) {
 		t.Fatal("不应导入")
 		return model.ImportResult{}, nil
 	}, func(string) error { t.Fatal("不应删除"); return nil }, func(e Event) { events = append(events, e) })
@@ -207,7 +217,7 @@ func TestWatcherSkipsHiddenLinksLibrariesAndOverlappingRules(t *testing.T) {
 	}
 	var imported []string
 	var events []Event
-	w := New(root, func(_ context.Context, paths []string, _ string) (model.ImportResult, error) {
+	w := newTestWatcher(root, func(_ context.Context, paths []string, _ string) (model.ImportResult, error) {
 		imported = append(imported, paths...)
 		return model.ImportResult{Imported: len(paths)}, nil
 	}, os.Remove, func(e Event) { events = append(events, e) })
@@ -219,6 +229,54 @@ func TestWatcherSkipsHiddenLinksLibrariesAndOverlappingRules(t *testing.T) {
 	}
 	if len(events) != 2 || !errors.Is(events[0].Err, ErrOverlappingFolders) {
 		t.Fatalf("重叠目录没有报错: %+v", events)
+	}
+}
+
+func TestWatcherFindsNewFilesUnderCachedParent(t *testing.T) {
+	root, folder, _ := fixture(t)
+	nested := filepath.Join(folder, "nested")
+	if err := os.Mkdir(nested, 0700); err != nil {
+		t.Fatal(err)
+	}
+	var imported []string
+	watcher := New(root, func(_ context.Context, paths []string, _ string) (model.ImportResult, error) {
+		imported = append(imported, paths...)
+		return model.ImportResult{Imported: len(paths)}, nil
+	}, os.Remove, nil)
+	clk := &clock{t: time.Now()}
+	watcher.now = clk.now
+	watcher.Update([]Rule{{Path: folder, Enabled: true}})
+	ctx := context.Background()
+	watcher.Scan(ctx)
+	subdir, err := os.Stat(nested)
+	if err != nil {
+		t.Fatal(err)
+	}
+	incoming := writeFiles(t, nested, "new.png")
+	changed := subdir.ModTime().Add(time.Second)
+	if err := os.Chtimes(nested, changed, changed); err != nil {
+		t.Fatal(err)
+	}
+	watcher.Scan(ctx)
+	watcher.Scan(ctx)
+	if !slices.Contains(imported, incoming[0]) {
+		t.Fatalf("父目录没有变化时漏扫了子目录的新文件：%v", imported)
+	}
+
+	subdir, err = os.Stat(nested)
+	if err != nil {
+		t.Fatal(err)
+	}
+	watcher.Scan(ctx)
+	incoming = writeFiles(t, nested, "same-time.png")
+	if err := os.Chtimes(nested, subdir.ModTime(), subdir.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	clk.t = clk.t.Add(time.Minute)
+	watcher.Scan(ctx)
+	watcher.Scan(ctx)
+	if !slices.Contains(imported, incoming[0]) {
+		t.Fatalf("重读目录后仍漏掉修改时间不变时的新文件：%v", imported)
 	}
 }
 
@@ -240,7 +298,7 @@ func TestWatcherRealImportCommitsBeforeRemovingSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	var count int
-	w := New(lib.Root, func(ctx context.Context, paths []string, folder string) (model.ImportResult, error) {
+	w := newTestWatcher(lib.Root, func(ctx context.Context, paths []string, folder string) (model.ImportResult, error) {
 		return service.Import(ctx, model.ImportRequest{Paths: paths, FolderID: folder}, nil)
 	}, func(source string) error {
 		snapshot, err := lib.Snapshot(ctx)
@@ -304,7 +362,7 @@ func TestWatcherRetainsSourceWhenRealTransactionCannotCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	var events []Event
-	w := New(lib.Root, func(ctx context.Context, paths []string, folder string) (model.ImportResult, error) {
+	w := newTestWatcher(lib.Root, func(ctx context.Context, paths []string, folder string) (model.ImportResult, error) {
 		return service.Import(ctx, model.ImportRequest{Paths: paths, FolderID: folder}, nil)
 	}, func(string) error { t.Fatal("失败事务调用了废纸篓"); return nil }, func(e Event) { events = append(events, e) })
 	w.Update([]Rule{{Path: folder, Enabled: true}})
@@ -324,7 +382,7 @@ func TestWatcherRetainsSourceWhenRealTransactionCannotCommit(t *testing.T) {
 
 func TestWatcherConfigurationCanChangeWhileScanning(t *testing.T) {
 	root, folder, _ := fixture(t)
-	w := New(root, func(context.Context, []string, string) (model.ImportResult, error) {
+	w := newTestWatcher(root, func(context.Context, []string, string) (model.ImportResult, error) {
 		return model.ImportResult{}, assets.ErrImportBusy
 	}, func(string) error { t.Fatal("繁忙时不能删除"); return nil }, nil)
 	done := make(chan struct{})
@@ -368,11 +426,15 @@ func TestWatcherBatchKeepsOnlyFailedFiles(t *testing.T) {
 	var calls [][]string
 	var trashed []string
 	var events []Event
+	var batches int
 	w := New(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
 		calls = append(calls, slices.Clone(sources))
 		// a 是新图，c 是图库里已有的重复图，b 解不开。
 		return model.ImportResult{Imported: 1, Skipped: 1, Errors: []error{problem}, Failed: []string{paths[1]}}, nil
-	}, func(source string) error { trashed = append(trashed, source); return os.Remove(source) }, func(e Event) { events = append(events, e) })
+	}, func(source string) error { trashed = append(trashed, source); return os.Remove(source) }, func(_ context.Context, batch []Event) {
+		batches++
+		events = append(events, batch...)
+	})
 	w.Update([]Rule{{Path: folder, FolderID: "f", Enabled: true}})
 	w.Scan(context.Background())
 	w.Scan(context.Background())
@@ -386,8 +448,13 @@ func TestWatcherBatchKeepsOnlyFailedFiles(t *testing.T) {
 		t.Fatal("失败的文件被移走了")
 	}
 	// 成功的先报、失败的最后报，按规则记错误的界面最后留下的是错误。
-	if len(events) != 3 || events[0].Err != nil || events[1].Err != nil || events[2].Path != paths[1] || !errors.Is(events[2].Err, problem) {
+	if batches != 1 || len(events) != 3 || events[0].Err != nil || events[1].Err != nil || events[2].Path != paths[1] || !errors.Is(events[2].Err, problem) {
 		t.Fatalf("事件不对：%+v", events)
+	}
+	for _, event := range events {
+		if event.RulePath != folder {
+			t.Fatalf("没带上规则原始路径：%+v", event)
+		}
 	}
 	w.Scan(context.Background())
 	if len(calls) != 1 {
@@ -401,7 +468,7 @@ func TestWatcherBatchErrorKeepsEveryFile(t *testing.T) {
 	problem := errors.New("数据库写不进去")
 	calls := 0
 	var events []Event
-	w := New(root, func(context.Context, []string, string) (model.ImportResult, error) {
+	w := newTestWatcher(root, func(context.Context, []string, string) (model.ImportResult, error) {
 		calls++
 		return model.ImportResult{}, problem
 	}, func(string) error { t.Fatal("整批失败时不能移走源文件"); return nil }, func(e Event) { events = append(events, e) })
@@ -439,7 +506,7 @@ func TestWatcherGroupsBatchesByTargetFolder(t *testing.T) {
 	three := writeFiles(t, folders[2], "d.png")
 	calls := map[string][]string{}
 	var order []string
-	w := New(root, func(_ context.Context, sources []string, folderID string) (model.ImportResult, error) {
+	w := newTestWatcher(root, func(_ context.Context, sources []string, folderID string) (model.ImportResult, error) {
 		if _, ok := calls[folderID]; ok {
 			t.Fatalf("同一目标文件夹导入了两次：%s", folderID)
 		}
@@ -469,7 +536,7 @@ func TestWatcherTrashesLivePhotoMotion(t *testing.T) {
 	}
 	paths := writeFiles(t, folder, "IMG_1.HEIC", "IMG_1.MOV")
 	var trashed []string
-	w := New(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
+	w := newTestWatcher(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
 		return model.ImportResult{Imported: 1, Motion: []string{paths[1]}}, nil
 	}, func(source string) error { trashed = append(trashed, source); return os.Remove(source) }, func(Event) {})
 	w.Update([]Rule{{Path: folder, FolderID: "f", Enabled: true}})
@@ -490,7 +557,7 @@ func TestWatcherRetriesTemporaryImportFailureWithBackoff(t *testing.T) {
 	clk := &clock{t: time.Now()}
 	calls, trashed := 0, 0
 	problem := errors.New("磁盘已满")
-	w := New(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
+	w := newTestWatcher(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
 		calls++
 		if calls < 3 {
 			return model.ImportResult{}, problem
@@ -533,7 +600,7 @@ func TestWatcherKeepsRetryingTemporaryFailureAndStopsOnPermanentError(t *testing
 	root, folder, _ := fixture(t)
 	clk := &clock{t: time.Now()}
 	calls := 0
-	w := New(root, func(context.Context, []string, string) (model.ImportResult, error) {
+	w := newTestWatcher(root, func(context.Context, []string, string) (model.ImportResult, error) {
 		calls++
 		return model.ImportResult{}, errors.New("没权限")
 	}, func(string) error { return nil }, nil)
@@ -551,7 +618,7 @@ func TestWatcherKeepsRetryingTemporaryFailureAndStopsOnPermanentError(t *testing
 
 	root, folder, path := fixture(t)
 	calls = 0
-	w = New(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
+	w = newTestWatcher(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
 		calls++
 		return model.ImportResult{Failed: sources, Errors: []error{i18n.NewError("error_import_unsupported_file", "image.png")}}, nil
 	}, func(string) error { t.Fatal("不应移源"); return nil }, nil)
@@ -575,7 +642,7 @@ func TestWatcherRetriesOnlyTrashAfterImportSucceeded(t *testing.T) {
 	root, folder, path := fixture(t)
 	clk := &clock{t: time.Now()}
 	imports, trashCalls := 0, 0
-	w := New(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
+	w := newTestWatcher(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
 		imports++
 		return model.ImportResult{Imported: len(sources)}, nil
 	}, func(source string) error {
@@ -603,7 +670,7 @@ func TestWatcherTrashRetryChecksFileIdentity(t *testing.T) {
 	root, folder, path := fixture(t)
 	clk := &clock{t: time.Now()}
 	imports, trashCalls := 0, 0
-	w := New(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
+	w := newTestWatcher(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
 		imports++
 		return model.ImportResult{Imported: len(sources)}, nil
 	}, func(string) error { trashCalls++; return errors.New("废纸篓不可用") }, nil)
@@ -633,7 +700,7 @@ func TestWatcherCancelStopsTrashingRemainingFiles(t *testing.T) {
 	defer cancel()
 	var trashed []string
 	imports := 0
-	w := New(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
+	w := newTestWatcher(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
 		imports++
 		return model.ImportResult{Imported: len(sources)}, nil
 	}, func(source string) error {
@@ -667,7 +734,7 @@ func TestWatcherKeepsLiveMotionConflict(t *testing.T) {
 	root, folder, path := fixture(t)
 	clk := &clock{t: time.Now()}
 	calls := 0
-	w := New(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
+	w := newTestWatcher(root, func(_ context.Context, sources []string, _ string) (model.ImportResult, error) {
 		calls++
 		return model.ImportResult{Failed: sources, Errors: []error{i18n.NewError("error_live_motion_conflict", "image.mov")}}, nil
 	}, func(string) error { t.Fatal("不应移源"); return nil }, nil)

@@ -33,6 +33,7 @@ type Rule struct {
 
 type Event struct {
 	Path     string
+	RulePath string
 	FolderID string
 	Result   model.ImportResult
 	Err      error
@@ -50,7 +51,7 @@ type fileState struct {
 	attempted bool
 	failures  int       // 已经失败的次数
 	retryAt   time.Time // 这之前不重试
-	imported  bool      // 已经入库、只是移源失败：重试时只移源，不再导入（实况照片的图片已移走，单独重导视频会变成独立素材）
+	imported  bool
 }
 
 // 导入本身就不可能成功的错误：重试没有意义。
@@ -88,34 +89,52 @@ type ImportFunc func(ctx context.Context, paths []string, folderID string) (mode
 
 // 一个已经写完、等着导入的文件。
 type readyFile struct {
-	key, path string
-	info      os.FileInfo
-	imported  bool
+	path, rulePath string
+	info           os.FileInfo
+}
+
+type scanEntry struct {
+	path string
+	dir  bool
+}
+
+type scanDirectory struct {
+	info    os.FileInfo
+	readAt  time.Time
+	entries []scanEntry
 }
 
 type Watcher struct {
 	root       string
 	importFile ImportFunc
 	trash      func(string) error
-	event      func(Event)
+	event      func(context.Context, []Event)
 	now        func() time.Time
 	mu         sync.Mutex
 	rules      []Rule
+	revision   uint64
 	scanMu     sync.Mutex
+	scanned    uint64
 	files      map[string]fileState
+	dirs       map[string]scanDirectory
 	ruleErrors map[string]string
 }
 
-// New 建一个监视器。每轮扫描里写完的文件按目标文件夹分组，每组调用一次 importFile。
-// 每个文件处理完都会 emit 一次 Event（Path 是这个文件）：同一批里先报成功、再报失败，按规则记错误的调用方最后留下的是错误。
-func New(libraryRoot string, importFile ImportFunc, trash func(string) error, event func(Event)) *Watcher {
-	return &Watcher{root: libraryRoot, importFile: importFile, trash: trash, event: event, now: time.Now, files: map[string]fileState{}, ruleErrors: map[string]string{}}
+func New(libraryRoot string, importFile ImportFunc, trash func(string) error, event func(context.Context, []Event)) *Watcher {
+	return &Watcher{
+		root: libraryRoot, importFile: importFile, trash: trash, event: event, now: time.Now,
+		files: map[string]fileState{}, ruleErrors: map[string]string{},
+	}
 }
 
 func (w *Watcher) Update(rules []Rule) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if slices.Equal(w.rules, rules) {
+		return
+	}
 	w.rules = slices.Clone(rules)
+	w.revision++
 }
 
 func (w *Watcher) Run(ctx context.Context) {
@@ -133,41 +152,46 @@ func (w *Watcher) Run(ctx context.Context) {
 }
 
 func ValidatePath(libraryRoot, path string) error {
+	_, err := resolveRule(libraryRoot, path)
+	return err
+}
+
+func resolveRule(libraryRoot, path string) (string, error) {
 	root, err := filepath.EvalSymlinks(libraryRoot)
 	if err != nil {
-		return err
+		return "", err
 	}
 	folder, err := filepath.EvalSymlinks(path)
 	if err != nil {
-		return err
+		return "", err
 	}
 	root, err = filepath.Abs(root)
 	if err != nil {
-		return err
+		return "", err
 	}
 	folder, err = filepath.Abs(folder)
 	if err != nil {
-		return err
+		return "", err
 	}
 	info, err := os.Stat(folder)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("%s: %w", path, fs.ErrInvalid)
+		return "", fmt.Errorf("%s: %w", path, fs.ErrInvalid)
 	}
 	for current := folder; ; current = filepath.Dir(current) {
 		if strings.EqualFold(filepath.Ext(current), ".momento") {
-			return ErrLibraryPath
+			return "", ErrLibraryPath
 		}
 		if filepath.Dir(current) == current {
 			break
 		}
 	}
 	if within(root, folder) || within(folder, root) {
-		return ErrLibraryPath
+		return "", ErrLibraryPath
 	}
-	return nil
+	return folder, nil
 }
 
 func within(parent, path string) bool {
@@ -181,10 +205,18 @@ func (w *Watcher) Scan(ctx context.Context) {
 	defer w.scanMu.Unlock()
 	w.mu.Lock()
 	rules := slices.Clone(w.rules)
+	revision := w.revision
 	w.mu.Unlock()
-	seen := map[string]bool{}
+	if w.scanned != revision {
+		clear(w.files)
+		w.scanned = revision
+	}
+	now := w.now()
+	seen := make(map[string]bool, len(w.files))
+	dirs := make(map[string]scanDirectory, len(w.dirs))
 	active := map[string]bool{}
 	var roots []string
+	var events []Event
 	// 目标文件夹 → 就绪文件；folders 记分组出现的先后，导入顺序固定。
 	ready := map[string][]readyFile{}
 	var folders []string
@@ -196,14 +228,7 @@ func (w *Watcher) Scan(ctx context.Context) {
 			continue
 		}
 		active[rule.Path] = true
-		err := ValidatePath(w.root, rule.Path)
-		var root string
-		if err == nil {
-			root, err = filepath.EvalSymlinks(rule.Path)
-			if err == nil {
-				root, err = filepath.Abs(root)
-			}
-		}
+		root, err := resolveRule(w.root, rule.Path)
 		if err == nil {
 			for _, other := range roots {
 				if within(root, other) || within(other, root) {
@@ -213,57 +238,30 @@ func (w *Watcher) Scan(ctx context.Context) {
 			}
 		}
 		if err != nil {
-			w.ruleError(rule, err)
+			events = w.ruleError(events, rule, err)
 			continue
 		}
 		roots = append(roots, root)
-		err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
+		err = w.scanDirectory(ctx, root, now, dirs, func(path string, info os.FileInfo) {
+			seen[path] = true
+			previous := w.files[path]
+			if !sameFile(previous.info, info) {
+				w.files[path] = fileState{info: info}
+				return
 			}
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			if path != root && strings.HasPrefix(entry.Name(), ".") {
-				if entry.IsDir() {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if entry.IsDir() {
-				if path != root && strings.EqualFold(filepath.Ext(path), ".momento") {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if !entry.Type().IsRegular() || !assets.Supported(path) {
-				return nil
-			}
-			info, err := entry.Info()
-			if err != nil {
-				return err
-			}
-			key := rule.Path + "\x00" + rule.FolderID + "\x00" + path
-			seen[key] = true
-			previous, ok := w.files[key]
-			if !ok || !sameFile(previous.info, info) {
-				w.files[key] = fileState{info: info}
-				return nil
-			}
-			if previous.attempted || w.now().Before(previous.retryAt) {
-				return nil
+			if previous.attempted || now.Before(previous.retryAt) {
+				return
 			}
 			if _, ok := ready[rule.FolderID]; !ok {
 				folders = append(folders, rule.FolderID)
 			}
-			ready[rule.FolderID] = append(ready[rule.FolderID], readyFile{key: key, path: path, info: info, imported: previous.imported})
-			return nil
+			ready[rule.FolderID] = append(ready[rule.FolderID], readyFile{path: path, rulePath: rule.Path, info: info})
 		})
 		if ctx.Err() != nil {
 			return
 		}
 		if err != nil {
-			w.ruleError(rule, err)
+			events = w.ruleError(events, rule, err)
 		} else {
 			delete(w.ruleErrors, rule.Path)
 		}
@@ -272,11 +270,12 @@ func (w *Watcher) Scan(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		w.importBatch(ctx, folderID, ready[folderID])
+		events = w.importBatch(ctx, folderID, ready[folderID], events)
 	}
-	for key := range w.files {
-		if !seen[key] {
-			delete(w.files, key)
+	w.dirs = dirs
+	for path := range w.files {
+		if !seen[path] {
+			delete(w.files, path)
 		}
 	}
 	for path := range w.ruleErrors {
@@ -284,16 +283,68 @@ func (w *Watcher) Scan(ctx context.Context) {
 			delete(w.ruleErrors, path)
 		}
 	}
+	if len(events) > 0 && w.event != nil {
+		w.event(ctx, events)
+	}
 }
 
-// importBatch 一次导入同一目标文件夹的文件。整批出错时所有源文件都不动；
-// 否则只把导入成功（含图库里已有的重复图）且导入期间没被改过的源文件移到废纸篓。
-// 已经入库、只是移源失败的文件不再导入，核对文件没变后只重试移源；文件变了会当新文件重新导入。
-// ctx 取消后不再移动剩下的源文件，它们保持原地。
-func (w *Watcher) importBatch(ctx context.Context, folderID string, files []readyFile) {
+func (w *Watcher) scanDirectory(ctx context.Context, path string, now time.Time, dirs map[string]scanDirectory, visit func(string, os.FileInfo)) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return nil
+	}
+	cached := w.dirs[path]
+	// 定期重读目录，覆盖外接卷时间精度较低或目录修改时间被保留的情况。
+	if cached.info == nil || !os.SameFile(info, cached.info) || !info.ModTime().Equal(cached.info.ModTime()) || now.Sub(cached.readAt) >= time.Minute {
+		entries, err := os.ReadDir(path)
+		if err != nil {
+			return err
+		}
+		cached = scanDirectory{info: info, readAt: now}
+		for _, entry := range entries {
+			if strings.HasPrefix(entry.Name(), ".") {
+				continue
+			}
+			entryPath := filepath.Join(path, entry.Name())
+			if entry.IsDir() && !strings.EqualFold(filepath.Ext(entryPath), ".momento") {
+				cached.entries = append(cached.entries, scanEntry{path: entryPath, dir: true})
+			} else if entry.Type().IsRegular() && assets.Supported(entryPath) {
+				cached.entries = append(cached.entries, scanEntry{path: entryPath})
+			}
+		}
+	}
+	for _, entry := range cached.entries {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if entry.dir {
+			if err := w.scanDirectory(ctx, entry.path, now, dirs, visit); err != nil && !errors.Is(err, fs.ErrNotExist) {
+				return err
+			}
+			continue
+		}
+		info, err := os.Lstat(entry.path)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if info.Mode().IsRegular() {
+			visit(entry.path, info)
+		}
+	}
+	dirs[path] = cached
+	return nil
+}
+
+func (w *Watcher) importBatch(ctx context.Context, folderID string, files []readyFile, events []Event) []Event {
 	var paths []string
 	for _, file := range files {
-		if !file.imported {
+		if !w.files[file.path].imported {
 			paths = append(paths, file.path)
 		}
 	}
@@ -303,12 +354,11 @@ func (w *Watcher) importBatch(ctx context.Context, folderID string, files []read
 	if len(paths) > 0 {
 		result, err = w.importFile(ctx, paths, folderID)
 		if errors.Is(err, assets.ErrImportBusy) {
-			// 别的导入在进行，这批下一轮再试。
-			return
+			return events
 		}
 		if err != nil && ctx.Err() != nil {
 			slog.Warn("自动导入被取消，源文件保留", "folder", folderID, "files", len(paths), "error", err)
-			return
+			return events
 		}
 		if err == nil {
 			err = checkResult(result, paths, failed)
@@ -321,10 +371,10 @@ func (w *Watcher) importBatch(ctx context.Context, folderID string, files []read
 	}
 	var failures []Event
 	for _, file := range files {
-		state := w.files[file.key]
+		state := w.files[file.path]
 		state.info = file.info
 		var fileErr error
-		if !file.imported {
+		if !state.imported {
 			fileErr = err
 			if fileErr == nil {
 				fileErr = failed[file.path]
@@ -339,9 +389,8 @@ func (w *Watcher) importBatch(ctx context.Context, folderID string, files []read
 				fileErr = ErrSourceChanged
 			}
 		}
-		// 紧挨着移源前再看一次：停用规则、换图库后，已入库的源文件留在原地，下次启用时按重复跳过再移走。
 		if fileErr == nil && ctx.Err() != nil {
-			w.files[file.key] = state
+			w.files[file.path] = state
 			slog.Warn("自动导入已取消，已入库的源文件保留原地", "path", file.path)
 			continue
 		}
@@ -358,17 +407,16 @@ func (w *Watcher) importBatch(ctx context.Context, folderID string, files []read
 			state.retryAt = w.now().Add(backoff(state.failures))
 			slog.Warn("自动导入失败，稍后重试", "path", file.path, "failures", state.failures, "retryAt", state.retryAt)
 		}
-		w.files[file.key] = state
-		event := Event{Path: file.path, FolderID: folderID, Result: result, Err: fileErr}
+		w.files[file.path] = state
+		event := Event{Path: file.path, RulePath: file.rulePath, FolderID: folderID, Result: result, Err: fileErr}
+		logEvent(event)
 		if fileErr != nil {
 			failures = append(failures, event)
 			continue
 		}
-		w.emit(event)
+		events = append(events, event)
 	}
-	for _, event := range failures {
-		w.emit(event)
-	}
+	return append(events, failures...)
 }
 
 // checkResult 把 result.Failed 和 Errors 对上号放进 failed；对不上或有文件下落不明时返回 ErrNotImported，整批都不移走。
@@ -377,20 +425,29 @@ func checkResult(result model.ImportResult, paths []string, failed map[string]er
 		slog.Error("导入结果的失败文件和错误数量对不上", "failed", len(result.Failed), "errors", len(result.Errors))
 		return ErrNotImported
 	}
+	var unmatched map[string]bool
+	if len(result.Failed)+len(result.Motion) > 0 {
+		unmatched = make(map[string]bool, len(paths))
+		for _, path := range paths {
+			unmatched[path] = true
+		}
+	}
 	for i, path := range result.Failed {
-		if !slices.Contains(paths, path) {
-			slog.Error("导入结果里的失败文件不在这批里", "path", path)
+		if !unmatched[path] || result.Errors[i] == nil {
+			slog.Error("导入结果没有唯一有效的失败记录", "path", path)
 			return ErrNotImported
 		}
+		delete(unmatched, path)
 		failed[path] = result.Errors[i]
 	}
 	// 每个没失败的文件都应算进导入或重复跳过；少了说明有文件被悄悄跳过，分不清是哪个，整批保留。
 	// 配进实况照片的视频跟着图片走，不单独计数。
 	for _, path := range result.Motion {
-		if !slices.Contains(paths, path) {
-			slog.Error("导入结果里的实况视频不在这批里", "path", path)
+		if !unmatched[path] {
+			slog.Error("导入结果没有唯一有效的实况视频记录", "path", path)
 			return ErrNotImported
 		}
+		delete(unmatched, path)
 	}
 	if confirmed := result.Imported + result.Skipped + len(failed) + len(result.Motion); confirmed != len(paths) {
 		slog.Error("导入结果没有覆盖这批的每个文件", "files", len(paths), "confirmed", confirmed)
@@ -403,21 +460,20 @@ func sameFile(first, second os.FileInfo) bool {
 	return first != nil && second != nil && first.Mode().IsRegular() && second.Mode().IsRegular() && os.SameFile(first, second) && first.Size() == second.Size() && first.ModTime().Equal(second.ModTime())
 }
 
-func (w *Watcher) ruleError(rule Rule, err error) {
+func (w *Watcher) ruleError(events []Event, rule Rule, err error) []Event {
 	if previous := w.ruleErrors[rule.Path]; previous == err.Error() {
-		return
+		return events
 	}
 	w.ruleErrors[rule.Path] = err.Error()
-	w.emit(Event{Path: rule.Path, FolderID: rule.FolderID, Err: err})
+	event := Event{Path: rule.Path, RulePath: rule.Path, FolderID: rule.FolderID, Err: err}
+	logEvent(event)
+	return append(events, event)
 }
 
-func (w *Watcher) emit(event Event) {
+func logEvent(event Event) {
 	if event.Err != nil {
 		slog.Error("自动导入失败，保留源文件", "path", event.Path, "error", event.Err)
 	} else {
 		slog.Info("自动导入完成，源文件已移到废纸篓", "path", event.Path)
-	}
-	if w.event != nil {
-		w.event(event)
 	}
 }

@@ -196,13 +196,17 @@ func (a *App) ConfigureAutoImport() {
 	a.Import.WatchLibrary = libraryID
 	a.Import.WatchGeneration = a.generation
 	a.Import.WatchRules = slices.Clone(rules)
-	if len(rules) == 0 {
+	var configs []watch.Rule
+	for _, rule := range rules {
+		configs = append(configs, watch.Rule{Path: rule.Path, FolderID: rule.FolderID, Enabled: rule.Enabled})
+	}
+	if !slices.ContainsFunc(configs, func(rule watch.Rule) bool { return rule.Enabled }) {
 		return
 	}
 	lib, service, gen := a.Library, a.Assets, a.generation
 	ctx, cancel := context.WithCancel(a.ctx)
 	a.Import.WatchCancel = cancel
-	w := watch.New(lib.Root, func(ctx context.Context, paths []string, folderID string) (model.ImportResult, error) {
+	watcher := watch.New(lib.Root, func(ctx context.Context, paths []string, folderID string) (model.ImportResult, error) {
 		ready := false
 		keywords := false
 		mygo.RunOnMain(func() {
@@ -216,29 +220,26 @@ func (a *App) ConfigureAutoImport() {
 			return model.ImportResult{}, assets.ErrImportBusy
 		}
 		return a.importFiles(ctx, service, lib, gen, model.ImportRequest{Paths: paths, FolderID: folderID, ImportKeywords: keywords}, "auto-import")
-	}, mygo.Shell.TrashItem, func(event watch.Event) {
+	}, mygo.Shell.TrashItem, func(ctx context.Context, events []watch.Event) {
 		a.Window.Update(func() {
-			if gen != a.generation {
+			if gen != a.generation || ctx.Err() != nil {
 				return
 			}
-			if a.Settings.AutoImportErrors == nil {
-				a.Settings.AutoImportErrors = map[string]string{}
-			}
-			if event.Err != nil && !errors.Is(event.Err, context.Canceled) {
-				a.Settings.AutoImportErrors[a.watchRulePath(event.Path)] = a.Texts.Error(event.Err)
-				slog.Error("自动导入失败", "path", event.Path, "error", event.Err)
-			} else {
-				delete(a.Settings.AutoImportErrors, a.watchRulePath(event.Path))
+			for _, event := range events {
+				if event.Err != nil && !errors.Is(event.Err, context.Canceled) {
+					if a.Settings.AutoImportErrors == nil {
+						a.Settings.AutoImportErrors = map[string]string{}
+					}
+					a.Settings.AutoImportErrors[event.RulePath] = a.Texts.Error(event.Err)
+				} else {
+					delete(a.Settings.AutoImportErrors, event.RulePath)
+				}
 			}
 			a.InvalidateWindows()
 		})
 	})
-	var configs []watch.Rule
-	for _, rule := range rules {
-		configs = append(configs, watch.Rule{Path: rule.Path, FolderID: rule.FolderID, Enabled: rule.Enabled})
-	}
-	w.Update(configs)
-	go w.Run(ctx)
+	watcher.Update(configs)
+	go watcher.Run(ctx)
 }
 
 // 只返回属于当前这个图库包的规则。规则记的图库位置还在、但不是当前位置，说明当前打开的是一份副本：副本不监视，在设置里说明原因。
@@ -392,20 +393,6 @@ func (a *App) extensionImportPicker(c *ui.Context) {
 			a.Import.PickerReply = nil
 		}
 	}
-}
-
-func (a *App) watchRulePath(path string) string {
-	for _, rule := range a.Preferences.AutoImport[a.libraryID()] {
-		root := rule.Path
-		if resolved, err := filepath.EvalSymlinks(root); err == nil {
-			root = resolved
-		}
-		rel, err := filepath.Rel(root, path)
-		if rule.Path == path || err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return rule.Path
-		}
-	}
-	return path
 }
 
 func (state *importState) watching(libraryID string, generation uint64, rules []AutoImportRule) bool {
