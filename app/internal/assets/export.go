@@ -122,6 +122,7 @@ func (s *Service) ExportWithOptions(ctx context.Context, items []model.Asset, de
 			}
 		}
 	}
+	nextNumber := map[string]int{}
 	for _, a := range items {
 		if err = ctx.Err(); err != nil {
 			return paths, err
@@ -207,8 +208,9 @@ func (s *Service) ExportWithOptions(ctx context.Context, items []model.Asset, de
 		final := requested
 		if directory {
 			// 导出到文件夹：重名时自动改成「名字 2.ext」，不覆盖已有文件；带视频时两个名字都要空着，配对才不会乱。
-			for index := 1; ; index++ {
-				final = numberedPath(requested, index)
+			number := max(1, nextNumber[requested])
+			for ; ; number++ {
+				final = numberedPath(requested, number)
 				if withMotion {
 					if _, statErr := os.Lstat(motionExportPath(final)); statErr == nil {
 						continue
@@ -235,6 +237,9 @@ func (s *Service) ExportWithOptions(ctx context.Context, items []model.Asset, de
 				if !os.IsExist(e) {
 					break
 				}
+			}
+			if e == nil {
+				nextNumber[requested] = number + 1
 			}
 		} else if _, statErr := os.Lstat(motionExportPath(final)); withMotion && statErr == nil {
 			// 保存框只确认了替换图片，同名视频不能悄悄覆盖。

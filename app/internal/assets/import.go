@@ -593,7 +593,7 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 			result = model.ImportResult{}
 		}
 	}()
-	folderCache := map[string]string{}
+	folders := importFolders{}
 	// 按名字传来的标签：去掉首尾空白和空名字，同名（忽略大小写）只留一个。
 	var tagNames []string
 	seenTags := map[string]bool{}
@@ -731,16 +731,10 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest, callb
 		}
 		parent := request.FolderID
 		for _, name := range c.folders {
-			key := parent + "\x00" + name
-			id, ok := folderCache[key]
-			if !ok {
-				id, err = ensureFolder(ctx, tx, name, parent)
-				if err != nil {
-					return result, err
-				}
-				folderCache[key] = id
+			parent, err = folders.ensureFolder(ctx, tx, name, parent)
+			if err != nil {
+				return result, err
 			}
-			parent = id
 		}
 		if parent != "" {
 			if _, err = tx.ExecContext(ctx, "INSERT OR IGNORE INTO asset_folders(asset_id,folder_id) VALUES(?,?)", c.hash, parent); err != nil {
@@ -876,22 +870,54 @@ func replaceColors(ctx context.Context, tx *sql.Tx, id string, colors []model.Co
 	}
 	return nil
 }
-func ensureFolder(ctx context.Context, tx *sql.Tx, name, parent string) (string, error) {
-	var id string
-	err := tx.QueryRowContext(ctx, "SELECT id FROM folders WHERE name=? AND COALESCE(parent_id,'')=? ORDER BY sort_index,id LIMIT 1", name, parent).Scan(&id)
-	if err == nil {
-		return id, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return "", err
-	}
-	id = rand.Text()
+
+type importFolders map[string]*importFolderChildren
+
+type importFolderChildren struct {
+	byName   map[string]string
+	nextSort int
+}
+
+const importFolderChildrenQuery = "SELECT id,name,sort_index FROM folders WHERE parent_id IS ? ORDER BY sort_index,id"
+
+func (folders importFolders) ensureFolder(ctx context.Context, tx *sql.Tx, name, parent string) (string, error) {
 	var parentValue any
 	if parent != "" {
 		parentValue = parent
 	}
-	_, err = tx.ExecContext(ctx, "INSERT INTO folders(id,name,parent_id,sort_index) VALUES(?,?,?,(SELECT COALESCE(MAX(sort_index)+1,0) FROM folders WHERE COALESCE(parent_id,'')=?))", id, name, parentValue, parent)
-	return id, err
+	children := folders[parent]
+	if children == nil {
+		rows, err := tx.QueryContext(ctx, importFolderChildrenQuery, parentValue)
+		if err != nil {
+			return "", err
+		}
+		children = &importFolderChildren{byName: map[string]string{}}
+		for rows.Next() {
+			var id, name string
+			var sortIndex int
+			if err = rows.Scan(&id, &name, &sortIndex); err != nil {
+				return "", errors.Join(err, rows.Close())
+			}
+			if _, exists := children.byName[name]; !exists {
+				children.byName[name] = id
+			}
+			children.nextSort = sortIndex + 1
+		}
+		if err = errors.Join(rows.Err(), rows.Close()); err != nil {
+			return "", err
+		}
+		folders[parent] = children
+	}
+	if id, exists := children.byName[name]; exists {
+		return id, nil
+	}
+	id := rand.Text()
+	if _, err := tx.ExecContext(ctx, "INSERT INTO folders(id,name,parent_id,sort_index) VALUES(?,?,?,?)", id, name, parentValue, children.nextSort); err != nil {
+		return "", err
+	}
+	children.byName[name] = id
+	children.nextSort++
+	return id, nil
 }
 
 // existingAssets 按素材 ID（内容哈希）查库里已有的素材，分批查，免得超过 SQLite 的参数个数上限。
