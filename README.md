@@ -41,7 +41,7 @@ If you collect references, screenshots or photos and would rather not hand them 
 
 ## Quick start
 
-**1 · Install.** Download from the **[latest release](https://github.com/Seaony/Momento/releases/latest)**: the DMG for macOS, the `setup` program for Windows, or DEB, RPM or tar.gz for Linux.
+**1 · Install.** Download from the **[latest release](https://github.com/Seaony/Momento/releases/latest)**: the DMG for macOS, the `setup` program for Windows, or DEB, RPM or tar.gz for Linux. For the browser extension, download the `Manual-Install` zip from the **[extension's latest release](https://github.com/Seaony/Momento-Chomre-Extension/releases/latest)** and load it into Chrome as its [install steps](https://github.com/Seaony/Momento-Chomre-Extension#安装) describe.
 
 <sub>The macOS app runs on Apple silicon and Intel, and is signed with a Developer ID and notarized by Apple. Momento checks GitHub Releases for updates; you can turn that off in Settings.</sub>
 
@@ -57,7 +57,7 @@ Masonry for scanning many images at once, justified rows for neat full-width row
 
 ### Find by color and tag
 
-Every image gets an 8-color palette on import. Filter by color, tag and extension, or search names, notes, source links and tags. Smart folders collect images by rules, such as "added this month, 4 stars or more, mostly blue PNGs".
+Every image gets an 8-color palette on import. Filter by color, tag and extension, or search names, notes, source links and tags. Smart folders collect images by rules, such as "added this month, wider than 2000 pixels, mostly blue PNGs".
 
 ### Organize
 

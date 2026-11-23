@@ -32,7 +32,16 @@ cp /tmp/mygo.json.bak mygo.json
 - 从 DMG 里拷出 App 启动一次，看主窗口和日志。
 - 草稿里应该有 DMG、两个 Windows 安装程序、DEB、RPM、各平台 tar.gz、`update-*.json`、`install.sh`、`install.ps1` 和 `SHA256SUMS`。
 
-检查都过了就直接公开：`gh release edit v<版本号> --repo Seaony/Momento --draft=false --latest`，再确认 `https://github.com/Seaony/Momento/releases/latest/download/update-darwin-universal.json` 能下载。
+检查都过了，先在 Release 正文末尾接上「下载哪个文件」（[release-downloads.md](release-downloads.md)，`{{VERSION}}` 换成版本号；只改网页正文，应用内更新说明取自 `update-*.json`，不受影响），再直接公开：
+
+```sh
+V=<版本号>
+gh release view v$V --repo Seaony/Momento --json body -q .body > /tmp/release-body.md
+sed "s/{{VERSION}}/$V/g" .github/release-downloads.md >> /tmp/release-body.md
+gh release edit v$V --repo Seaony/Momento --notes-file /tmp/release-body.md --draft=false --latest
+```
+
+最后确认 `https://github.com/Seaony/Momento/releases/latest/download/update-darwin-universal.json` 能下载。安装包文件名如果变了，同步改 `release-downloads.md`。
 
 ## GitHub Actions
 

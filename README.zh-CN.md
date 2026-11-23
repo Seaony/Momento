@@ -41,7 +41,7 @@ Momento 把它们收进一个图库，图库就是硬盘上的一个 `.momento` 
 
 ## 快速开始
 
-**1 · 安装。** 从 **[最新版本](https://github.com/Seaony/Momento/releases/latest)** 下载：macOS 用 DMG，Windows 用 `setup` 安装程序，Linux 用 DEB、RPM 或 tar.gz。
+**1 · 安装。** 从 **[最新版本](https://github.com/Seaony/Momento/releases/latest)** 下载：macOS 用 DMG，Windows 用 `setup` 安装程序，Linux 用 DEB、RPM 或 tar.gz。浏览器扩展从 **[扩展的最新版本](https://github.com/Seaony/Momento-Chomre-Extension/releases/latest)** 下载 `Manual-Install` 压缩包，按[扩展的安装说明](https://github.com/Seaony/Momento-Chomre-Extension#安装)加载到 Chrome。
 
 <sub>macOS 版同时支持 Apple 芯片和 Intel，已用 Developer ID 签名并通过 Apple 公证。Momento 会从 GitHub Releases 检查更新，可以在设置里关掉。</sub>
 
@@ -57,7 +57,7 @@ Momento 把它们收进一个图库，图库就是硬盘上的一个 `.momento` 
 
 ### 按颜色和标签找
 
-每张图导入时自动提取 8 色色板。可以按颜色、标签和扩展名筛选，也可以搜名称、备注、来源链接和标签。智能文件夹按条件自动收集图片，比如「这个月加的、4 星以上、偏蓝的 PNG」。
+每张图导入时自动提取 8 色色板。可以按颜色、标签和扩展名筛选，也可以搜名称、备注、来源链接和标签。智能文件夹按条件自动收集图片，比如「这个月加的、宽度超过 2000 像素、偏蓝的 PNG」。
 
 ### 整理
 
