@@ -191,3 +191,44 @@ func TestAssetArrowKeysAfterRefineAndEnter(t *testing.T) {
 		t.Fatalf("回车被之前点过的卡片拿走了：%v", a.Selected)
 	}
 }
+
+// 方向键走出视口时弹簧滚过去：按下后第一帧还在半路，不被焦点抢先一下跳到位。
+func TestAssetArrowKeysGlideIntoView(t *testing.T) {
+	a := assetViewFixture()
+	a.ViewMode = 2
+	tt := ui.NewTester(a.assetArea, 700, 300)
+	glided := false
+	for range 8 {
+		before := a.scroll.Y
+		tt.Key(0, ui.KeyDown)
+		tt.Frame()
+		tt.Advance(16 * time.Millisecond)
+		first := a.scroll.Y
+		tt.Advance(time.Second)
+		if after := a.scroll.Y; after > before+1 {
+			if first >= after-1 {
+				t.Fatalf("按下后第一帧就滚到了终点 %v，没有弹簧过程", after)
+			}
+			glided = true
+		}
+	}
+	if !glided {
+		t.Fatal("选中项走出视口时没有滚动")
+	}
+}
+
+// 卡片变列表的途中素材列表变了（搜索结果骤减）：旧序号作废，不越界崩溃。
+func TestViewMorphSurvivesVisibleChange(t *testing.T) {
+	a := assetViewFixture()
+	tt := ui.NewTester(a.assetArea, 700, 600)
+	tt.Frame()
+	a.ViewMode = 2
+	tt.Frame()
+	a.Query.Search = "no-such-asset"
+	a.Refine()
+	tt.Advance(50 * time.Millisecond)
+	tt.Advance(time.Second)
+	if len(a.Visible) != 0 {
+		t.Fatalf("搜索应筛空，实际还有 %d 张", len(a.Visible))
+	}
+}

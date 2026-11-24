@@ -38,6 +38,9 @@ type previewState struct {
 	slideFrames                     int
 	// zoomEase 为真时（双击、快捷键缩放）图片的框用弹簧过去；捏合、滚轮、拖动时为假，直接跟手。
 	zoomEase bool
+	// 这一帧画面上实际显示的缩放和平移：弹簧走到一半就被捏合、拖动接手时，从这里接着算，不先跳到终点。
+	shownZoom float32
+	shownPan  ui.Point
 }
 
 type previewAnimation struct {
@@ -215,6 +218,10 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 			photoLeft, photoTop := (p.viewport.W-photoWidth)/2+p.Pan.X, (p.viewport.H-photoHeight)/2+p.Pan.Y
 			shown := p.shownRect(photo, ui.Rect{X: photoLeft, Y: photoTop, W: photoWidth, H: photoHeight})
 			photoLeft, photoTop, photoWidth, photoHeight = shown.X, shown.Y, shown.W, shown.H
+			if bw > 0 {
+				p.shownZoom = shown.W / float32(bw)
+				p.shownPan = ui.Point{X: shown.X + shown.W/2 - p.viewport.W/2, Y: shown.Y + shown.H/2 - p.viewport.H/2}
+			}
 			photo.Left(photoLeft).Top(photoTop).Size(photoWidth, photoHeight)
 			w.slideTransition(c, photo)
 			if isLiveAsset(asset) {
@@ -246,9 +253,12 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 			viewport.Cursor(ui.CursorGrab)
 			if dx, dy, held := viewport.Dragged(); held {
 				viewport.Cursor(ui.CursorGrabbing)
+				// 只按下不动不接手，免得快捷键缩放停在半路。
+				if dx != 0 || dy != 0 {
+					p.takeOver()
+				}
 				p.Pan.X += dx
 				p.Pan.Y += dy
-				p.zoomEase = false
 				p.clampPan()
 			}
 		}
@@ -329,8 +339,13 @@ func (p *previewState) canPan() bool {
 	if p.Bitmap == nil {
 		return false
 	}
+	// 缩放弹簧途中按画面上的大小判断：缩回适应窗口的途中图还大，照样能拖住。
+	zoom := p.Zoom
+	if p.zoomEase && p.shownZoom > 0 {
+		zoom = p.shownZoom
+	}
 	w, h := p.Bitmap.Size()
-	return float32(w)*p.Zoom > p.viewport.W || float32(h)*p.Zoom > p.viewport.H
+	return float32(w)*zoom > p.viewport.W || float32(h)*zoom > p.viewport.H
 }
 func (p *previewState) clampPan() {
 	if p.Bitmap == nil {
@@ -341,6 +356,16 @@ func (p *previewState) clampPan() {
 	p.Pan.X = max(-x, min(x, p.Pan.X))
 	p.Pan.Y = max(-y, min(y, p.Pan.Y))
 }
+
+// takeOver 在手直接操作前调用：快捷键缩放的弹簧还没停时，从画面当前的样子接手，而不是从弹簧的终点。
+func (p *previewState) takeOver() {
+	if p.zoomEase && p.shownZoom > 0 {
+		p.Zoom, p.Pan = p.shownZoom, p.shownPan
+		p.fitMode = false
+	}
+	p.zoomEase = false
+}
+
 func (p *previewState) zoomAt(scale, x, y float32) {
 	if p.Bitmap == nil || !p.initialized || scale <= 0 || math.IsNaN(float64(scale)) || math.IsInf(float64(scale), 0) {
 		return
@@ -358,11 +383,13 @@ func (w *previewWindow) input(a *App, ev ui.InputEvent) bool {
 	p := &w.picture
 	switch ev.Kind {
 	case ui.InputZoom:
+		p.takeOver()
 		p.zoomAt(ev.Scale, ev.X, ev.Y)
 		return true
 	case ui.InputScroll:
 		if a.Preferences.PreviewWheel == "zoom" {
 			if ev.DY != 0 {
+				p.takeOver()
 				p.zoomAt(float32(math.Exp(float64(-ev.DY)*.005)), ev.X, ev.Y)
 			}
 		} else if ev.DY != 0 && !ev.Momentum && (p.wheelAt.IsZero() || ev.Time.Sub(p.wheelAt) >= 180*time.Millisecond) {

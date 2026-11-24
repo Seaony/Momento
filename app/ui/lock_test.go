@@ -273,3 +273,27 @@ func TestPasswordLockScreenAcceptsPaste(t *testing.T) {
 		t.Fatalf("锁屏密码框不能粘贴：%q", a.Lock.Password)
 	}
 }
+
+// 解锁淡出还没结束就重新锁定：锁定那一帧锁屏就完整盖住，和稳定锁定时一模一样，不透出下面的内容。
+func TestRelockDuringUnlockFadeCoversAtOnce(t *testing.T) {
+	a, _ := passwordTestApp(t)
+	a.Preferences.PasswordHash = "invalid-hash-still-locks"
+	a.InitPasswordLock()
+	tt := ui.NewTester(a.View, 1100, 640)
+	tt.Advance(time.Second)
+	steady := tt.Image()
+	a.Lock.Locked = false
+	tt.Frame()
+	tt.Advance(100 * time.Millisecond)
+	a.LockNow()
+	tt.Frame()
+	got := tt.Image()
+	b := steady.Bounds()
+	for y := b.Min.Y; y < b.Max.Y; y += 7 {
+		for x := b.Min.X; x < b.Max.X; x += 7 {
+			if steady.At(x, y) != got.At(x, y) {
+				t.Fatalf("重新锁定那一帧 (%d,%d) 和稳定锁屏不一样，下面的内容透出来了", x, y)
+			}
+		}
+	}
+}

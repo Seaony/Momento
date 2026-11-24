@@ -39,8 +39,9 @@ func (a *App) assetArea(c *ui.Context) {
 	// 上一帧鼠标已经离开那张视频卡片就关掉悬停播放器（上一帧的 hovered 这时已经算完整）。
 	a.finishHoverVideo()
 	a.hovered = ""
-	// 和标签管理页之间来回切时整页淡入淡出。
-	scroll := fadeMotion(ui.Scroll(c.Key("assets")).Scrollbars(false).Grow(1).FillWidth().TrackScroll(&a.scroll))
+	// 换浏览位置（或滚动中途换了筛选、回到顶部）、和标签管理页之间来回切时，整个滚动视口淡入淡出：
+	// 旧视口带着原来的滚动位置淡出，新的从顶部淡入，不会因为滚动先回到顶部而闪一下空白，卡片也不从旧坐标飞过来。
+	scroll := fadeMotion(ui.Scroll(c.Key(assetModeID{a.browseKey(), a.contentEpoch})).Scrollbars(false).Grow(1).FillWidth().TrackScroll(&a.scroll))
 	inset := scroll.AnimateTo("header-inset", a.contentTopInset(), motionSpring)
 	scroll.Padding(inset+space16, space16, space16)
 	box := scroll.Bounds()
@@ -108,11 +109,18 @@ func (a *App) assetArea(c *ui.Context) {
 	}
 	now := c.Now()
 	offset := inset + space16 + lead
+	// 变形途中素材列表变了（换位置、筛选、后台导入）：旧序号和滚动目标都对不上新列表，结束变形、滚动就地停下，交给列表变化自己的过渡。
+	if now.Before(state.morphUntil) && state.morphVersion != a.visibleVersion {
+		state.morphUntil, state.sources, state.scrollTarget = time.Time{}, state.sources[:0], -1
+		// 就地停住滚动弹簧：mygo 没有停止方法，ScrollTo 当前位置也会带着速度滑过头，只能丢掉进行中的滚动。
+		a.scroll = ui.ScrollState{Handle: a.scroll.Handle, X: a.scroll.X, Y: a.scroll.Y}
+	}
 	viewChanged := state.ready && state.mode != a.ViewMode
 	if viewChanged {
 		// 卡片变成列表（或反过来）：屏幕上的锚点卡片留在原来的高度，其余卡片围着它变形。
 		// 滚动和卡片走同一条曲线、同样的时长，锚点在屏幕上全程不动；旧内容高度先留着，滚动位置不会被截断跳一下。
 		state.morphUntil, state.morphHeight, state.morphTop, state.scrollTarget = now.Add(assetReflowDuration), state.contentHeight, viewportTop, -1
+		state.morphVersion = a.visibleVersion
 		// 原来屏幕上的那几张在新布局里的序号：变形期间一直排出来，它们才能从原位变过去。
 		state.sources = state.sources[:0]
 		anchor := -1
@@ -177,10 +185,8 @@ func (a *App) assetArea(c *ui.Context) {
 		if len(subfolders) > 0 {
 			openFolder, subfolderToggled = a.subfolderStrip(c, subfolders, width)
 		}
-		// 换浏览位置、滚动中途换了筛选（滚动回到顶部）时整块换掉：旧的淡出、新的淡入，卡片不从旧坐标飞过来。
 		// 换视图和调缩略图大小一样，容器不换，每张卡片从原来的位置和大小变到新的；同一位置里的筛选、排序、增删按身份移动卡片。
-		mode := ui.Box(c.Key(assetModeID{a.browseKey(), a.contentEpoch})).Height(boxHeight).FillWidth().Shrink(0).
-			Transition(ui.ElementTransition{Duration: motionEnter, ExitDuration: motionExit, Colors: true, Enter: &ui.Motion{}, Exit: &ui.Motion{}})
+		mode := ui.Box(c.Key("asset-cards")).Height(boxHeight).FillWidth().Shrink(0)
 		mode.Children(func() {
 			for _, item := range items {
 				asset := a.Visible[item.Index]
@@ -374,10 +380,9 @@ func morphDuration(morph bool) time.Duration {
 
 // arriveMotion：出现时淡入，消失时直接撤掉。切视图时目标视图才有的内容（列表文字、网格角标）用它：
 // 等卡片变形走过四成再淡入，和变形同时落定；不压在还没缩小的大图上，也不挂在还在变宽的卡片角上。
-func arriveMotion(e ui.Element) ui.Element {
-	delay := assetReflowDuration * 2 / 5
-	return e.Transition(ui.ElementTransition{Animation: &ui.Animation{Duration: assetReflowDuration - delay, Delay: delay}, Shadows: true, Enter: &ui.Motion{}})
-}
+func arriveMotion(e ui.Element) ui.Element { return e.Transition(arriveTransition) }
+
+var arriveTransition = ui.ElementTransition{Animation: &ui.Animation{Duration: assetReflowDuration * 3 / 5, Delay: assetReflowDuration * 2 / 5}, Shadows: true, Enter: stillMotion}
 
 type assetModeID struct {
 	location string
@@ -399,6 +404,7 @@ type assetLayoutState struct {
 	sources  []int
 	// 变形进行到什么时候、变形前的内容高度、滚动要去的视口顶部；scrollTarget 是下一帧要补滚的位置（没有时为 -1）。
 	morphUntil   time.Time
+	morphVersion uint64 // 变形开始时的可见列表版本；sources 是这一版里的序号
 	morphHeight  float32
 	morphTop     float32
 	scrollTarget float32
@@ -646,12 +652,13 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 		}
 		if !asset.Trashed && (hovered || asset.Favorite) {
 			// 这张在多选里时，心形对全部选中的生效；已收藏时文字和提示写「取消收藏」。
-			favoriteIDs := []string{asset.ID}
-			if hovered && a.Selected.Len() > 1 && a.Selected.Has(asset.ID) {
-				favoriteIDs = a.selectedIDs()
+			forSelection := hovered && a.Selected.Len() > 1 && a.Selected.Has(asset.ID)
+			willFavorite := !asset.Favorite
+			if forSelection {
+				willFavorite = a.selectionFavoriteValue()
 			}
 			favoriteLabel := a.T("favorite")
-			if !a.FavoriteValue(favoriteIDs) {
+			if !willFavorite {
 				favoriteLabel = a.T("unfavorite")
 			}
 			button := ui.ButtonBase(c.Key("favorite")).Label(favoriteLabel).Tooltip(favoriteLabel).Absolute().Cursor(ui.CursorPointer).
@@ -690,7 +697,11 @@ func (a *App) assetCard(c *ui.Context, asset model.Asset, index int, list bool, 
 			// 收藏和取消时心形换成实心或空心，和颜色一起过渡。
 			button.Children(func() { appIconSelected(c, "heart", asset.Favorite).Size(14, 14).ContentTransition(replaceMotion) })
 			if button.Clicked() {
-				a.ToggleFavorite(favoriteIDs)
+				ids := []string{asset.ID}
+				if forSelection {
+					ids = a.selectedIDs()
+				}
+				a.SetFavorite(ids, willFavorite)
 			}
 		}
 	})

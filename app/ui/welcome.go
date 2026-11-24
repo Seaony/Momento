@@ -103,7 +103,8 @@ func (a *App) welcomeRecentRow(c *ui.Context, recent library.Recent) {
 			a.Sidebar.LibraryMore[recent.Path] = state
 		}
 		moreOpen = *state
-		shown := row.Hovered() || moreOpen
+		// 键盘焦点在「打开」上时也显示，Tab 才能移到「…」菜单。
+		shown := row.Hovered() || row.FocusWithin() || moreOpen
 		showPose(a.libraryMoreMenu(c, recent, false, missing, state), shown).IgnoreInput(!shown)
 	})
 	background, text := p.Raised, p.TextSecondary

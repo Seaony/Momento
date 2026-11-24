@@ -123,3 +123,19 @@ func TestOverlayPolishScreenshots(t *testing.T) {
 		}
 	}
 }
+
+// ⌘+ 的弹簧还没停时捏合或拖动，从画面当前的缩放接手，不先跳到快捷键的终点。
+func TestPreviewGestureTakesOverZoomMidSpring(t *testing.T) {
+	a := previewFixture(288, 192)
+	tt := ui.NewTester(previewTestView(a), 400, 300)
+	p := &a.Preview.active.picture
+	start := p.Zoom
+	a.PreviewZoomIn()
+	target := p.Zoom
+	tt.Frame()
+	tt.Advance(60 * time.Millisecond)
+	p.takeOver()
+	if p.zoomEase || p.Zoom <= start+.001 || p.Zoom >= target-.001 {
+		t.Fatalf("接手时的缩放应在 %v 和 %v 之间，实际 %v", start, target, p.Zoom)
+	}
+}

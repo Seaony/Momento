@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"slices"
+
 	"github.com/Seaony/Momento/app/internal/model"
 	"github.com/egoist/mygo/ui"
 )
@@ -25,6 +27,9 @@ type selectionCache struct {
 	tagCounts    map[string]int
 	folderCounts map[string]int
 	details      map[string]commonValue // 多选详情里各字段的共同值，按字段名缓存
+	any          map[string]bool        // selectionAny 的结果，按问题缓存
+	mix          *exportMix             // 导出对话框要的各类数量
+	favorite     *bool                  // 点心形是收藏（有没收藏的）还是取消收藏
 }
 
 type commonValue struct {
@@ -78,6 +83,36 @@ func (a *App) selectedIDs() []string {
 	}
 	// 调用方会把 ID 交给后台任务，给一份自己的副本。
 	return append([]string(nil), cache.ids...)
+}
+
+// selectionAny 问选中的素材里有没有一张满足 match，按 key 缓存：检查器每帧都要问，全选十万张时不每帧重扫。
+func (a *App) selectionAny(key string, match func(model.Asset) bool) bool {
+	cache := a.currentSelection()
+	if result, ok := cache.any[key]; ok {
+		return result
+	}
+	if cache.any == nil {
+		cache.any = map[string]bool{}
+	}
+	result := slices.ContainsFunc(cache.assets, match)
+	cache.any[key] = result
+	return result
+}
+
+// selectionFavoriteValue 是对全部选中点一下心形的结果：有没收藏的就收藏，全收藏了就取消。悬停在多选卡片上时每帧都要问。
+func (a *App) selectionFavoriteValue() bool {
+	cache := a.currentSelection()
+	if cache.favorite == nil {
+		value := false
+		for _, asset := range cache.assets {
+			if !asset.Favorite {
+				value = true
+				break
+			}
+		}
+		cache.favorite = &value
+	}
+	return *cache.favorite
 }
 
 // 选中素材里有多少张属于这个标签（folder 为 true 时是文件夹）。

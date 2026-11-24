@@ -103,7 +103,9 @@ func (a *App) lockScreen(c *ui.Context) {
 		panel := ui.Column(c.Key("unlock-panel")).Width(panelDialog).MaxWidthPercent(100).Padding(space24).Center().Gap(space16).Radius(radiusPanel).
 			Background(panelColor(c.Theme()))
 		elevated(panel, c.Theme())
-		dialogMotion(backdrop, panel)
+		// 锁定那一帧整窗不播动画（见 View），背景立刻整块盖住图库；解锁时才淡出露出图库。
+		backdrop.Transition(ui.ElementTransition{ExitDuration: motionEnter, Colors: true, Exit: stillMotion})
+		panel.Transition(dialogPanelTransition)
 		a.rejectionShake(panel)
 		panel.Children(func() {
 			ui.Image(c, appLogo).Size(80, 80).Fit(ui.Contain)

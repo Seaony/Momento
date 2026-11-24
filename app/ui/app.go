@@ -176,7 +176,9 @@ type App struct {
 	// contentEpoch 在滚动中途换筛选、搜索或排序（列表回到顶部）时加一：素材区整块淡入新内容，卡片不从旧坐标飞过来。
 	contentEpoch uint64
 	// shownLibrary 是上一帧显示的图库：换了图库那一帧整窗直接换成新的，不让侧栏每一行、每张卡片各自进出。
-	shownLibrary    string
+	shownLibrary string
+	// shownLocked：上一帧是否在锁屏。锁定那一帧整窗不播动画，锁屏立刻盖住图库，即使打断了还没淡完的解锁。
+	shownLocked     bool
 	snapshotVersion uint64
 	selection       selectionCache
 
@@ -267,6 +269,12 @@ func (a *App) View(c *ui.Context) {
 			c.DisableAnimations()
 		}
 		a.shownLibrary = id
+	}
+	if locked := a.IsLocked(); locked != a.shownLocked {
+		if locked {
+			c.DisableAnimations()
+		}
+		a.shownLocked = locked
 	}
 	a.applyTheme(c)
 	a.SyncMenuFocus(c)

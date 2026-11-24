@@ -93,7 +93,7 @@ func (a *App) inspector(c *ui.Context) {
 		a.Inspector.AssetID, a.Inspector.Editing = "", ""
 		return
 	}
-	a.Inspector.ReadOnly = !slices.ContainsFunc(selected, func(asset model.Asset) bool { return !asset.Trashed })
+	a.Inspector.ReadOnly = !a.selectionAny("untrashed", func(asset model.Asset) bool { return !asset.Trashed })
 	if a.Inspector.ReadOnly && a.Inspector.Editing != "" {
 		// 选中的素材进了回收站，正在编辑的框不再画出来，先把改动存下。
 		if field, ok := strings.CutPrefix(a.Inspector.Editing, "multi-"); ok {
@@ -471,9 +471,9 @@ func (a *App) inspectorLink(c *ui.Context, asset model.Asset) {
 		if a.Inspector.ReadOnly {
 			return
 		}
-		// 平时透明且点不到，悬停这一行或键盘移到按钮上才淡入。
+		// 平时透明且点不到；悬停这一行，或键盘焦点进了这一行（Tab 到链接上）才淡入，再按 Tab 就能移到它上面。
 		edit := inspectorIconButton(c.Key("link-edit"), a.T("edit_link"), "edit").Size(space20, space20)
-		shown := row.Hovered() || edit.Focused()
+		shown := row.Hovered() || row.FocusWithin()
 		showPose(edit, shown).IgnoreInput(!shown)
 		if edit.Clicked() {
 			a.Inspector.Editing = "source"
@@ -513,7 +513,7 @@ func (a *App) inspectorNotes(c *ui.Context, asset model.Asset) {
 // 这时留空结束编辑不算清空，免得一不小心把每张不同的备注全抹掉。
 func (a *App) inspectorMultiDetails(c *ui.Context, selected []model.Asset) {
 	// 回收站里的素材只读：只显示有内容的备注和链接；两样都没有就整块不出现。
-	if a.Inspector.ReadOnly && !slices.ContainsFunc(selected, func(x model.Asset) bool { return x.Note != "" || x.SourceURL != "" }) {
+	if a.Inspector.ReadOnly && !a.selectionAny("details", func(x model.Asset) bool { return x.Note != "" || x.SourceURL != "" }) {
 		return
 	}
 	inspectorSection(c, "inspector-multi-details", "", func() {

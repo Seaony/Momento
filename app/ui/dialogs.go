@@ -227,9 +227,14 @@ type exportMix struct {
 	live                    bool
 }
 
+// 对话框每帧都要用，按选区缓存，全选十万张时不每帧重数。
 func (a *App) exportMix() exportMix {
+	cache := a.currentSelection()
+	if cache.mix != nil {
+		return *cache.mix
+	}
 	var mix exportMix
-	for _, asset := range a.SelectedAssets() {
+	for _, asset := range cache.assets {
 		if isVideoAsset(asset) {
 			mix.videos++
 			continue
@@ -238,6 +243,7 @@ func (a *App) exportMix() exportMix {
 		mix.rotated += btoi(asset.Rotation != 0)
 		mix.live = mix.live || isLiveAsset(asset)
 	}
+	cache.mix = &mix
 	return mix
 }
 

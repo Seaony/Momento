@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"math"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -108,7 +109,7 @@ func shakeMotion(e ui.Element, run uint64) {
 	e.Translate(x, 0)
 }
 
-// 进度条：mygo 的进度条每次更新直接跳到新值，这里在两次更新之间用 250ms 缓出补上，只重绘不重建界面。
+// 进度条：mygo 的进度条每次更新直接跳到新值，这里在两次更新之间按卡片重排的时长和曲线补上，只重绘不重建界面。
 // 倒退（换了一批任务）直接跳，减少动态效果时也直接跳。
 type progressMotion struct {
 	from, to float32
@@ -118,6 +119,16 @@ type progressMotion struct {
 func smoothProgress(c *ui.Context, value float64) ui.Element {
 	bar := ui.Progress(c, value)
 	if value < 0 {
+		if c.Preferences().ReduceMotion {
+			// 总数未知：mygo 的流动条不管减少动态效果，一直横移。这时改成整条在原地慢慢明暗呼吸，不移动也看得出还在进行。
+			fill := c.Theme().Accent
+			bar.Draw(func(pt *ui.Painter, r ui.Rect) {
+				pt.AnimationFrame()
+				phase := float64(pt.Now().UnixMilli()%1600) / 1600
+				alpha := float32(.45 + .3*math.Cos(phase*2*math.Pi))
+				pt.Fill(r, fill.Alpha(alpha), r.H/2)
+			})
+		}
 		return bar
 	}
 	state := ui.Local(bar, "progress-motion", func() progressMotion { return progressMotion{from: float32(value), to: float32(value)} })
@@ -192,31 +203,33 @@ func popupMotion(e ui.Element) ui.Element {
 
 // 对话框弹簧出现，关闭走 motionExit 缓入，比出现快，按了取消就收走。
 func dialogMotion(backdrop, panel ui.Element) {
-	backdrop.Transition(ui.ElementTransition{Animation: &motionSpring, ExitDuration: motionExit, ExitEase: ui.EaseIn, Colors: true, Enter: &ui.Motion{}, Exit: &ui.Motion{}})
-	panel.Transition(ui.ElementTransition{Animation: &motionSpring, ExitDuration: motionExit, ExitEase: ui.EaseIn, Position: true,
-		Enter: &ui.Motion{Scale: .96, Y: 10}, Exit: &ui.Motion{Scale: .97, Y: 6}})
+	backdrop.Transition(ui.ElementTransition{Animation: &motionSpring, ExitDuration: motionExit, ExitEase: ui.EaseIn, Colors: true, Enter: stillMotion, Exit: stillMotion})
+	panel.Transition(dialogPanelTransition)
 }
+
+var dialogPanelTransition = ui.ElementTransition{Animation: &motionSpring, ExitDuration: motionExit, ExitEase: ui.EaseIn, Position: true,
+	Enter: &ui.Motion{Scale: .96, Y: 10}, Exit: &ui.Motion{Scale: .97, Y: 6}}
 
 // 只淡入淡出，不移动、不缩放。整块换内容时新旧短暂交叠，旧的走得更快，来回快切也不拖残影。
 // 只选 Shadows 是为了让过渡只管进出场：不碰位置大小，也不把按钮自己用 AnimateColor 做的悬停变色再平滑一遍。
-func fadeMotion(e ui.Element) ui.Element {
-	return e.Transition(ui.ElementTransition{Duration: motionEnter, ExitDuration: motionExit, Shadows: true, Enter: &ui.Motion{}, Exit: &ui.Motion{}})
-}
+func fadeMotion(e ui.Element) ui.Element { return e.Transition(fadeTransition) }
 
 // 列表里的一行：新加的展开出来、删掉的收起，其余各行滑到新位置让位。
-func rowMotion(e ui.Element) ui.Element {
-	return e.Transition(ui.ElementTransition{Animation: &motionSpring, Position: true, Enter: &ui.Motion{Collapse: true}, Exit: &ui.Motion{Collapse: true}})
-}
+func rowMotion(e ui.Element) ui.Element { return e.Transition(rowTransition) }
 
 // 在原地展开收起：高度从 0 长出来（内容裁切、同时淡入），收起时反过来，后面的内容跟着滑。
-func revealMotion(e ui.Element) ui.Element {
-	return e.Transition(ui.ElementTransition{Animation: &motionSpring, Height: true, Enter: &ui.Motion{Collapse: true}, Exit: &ui.Motion{Collapse: true}})
-}
+func revealMotion(e ui.Element) ui.Element { return e.Transition(revealTransition) }
 
-func layoutMotion(e ui.Element) ui.Element {
-	return e.Transition(ui.ElementTransition{Animation: &motionSpring, Position: true, Size: true,
-		Enter: &ui.Motion{Scale: .98}, Exit: &ui.Motion{Scale: .98}})
-}
+func layoutMotion(e ui.Element) ui.Element { return e.Transition(layoutTransition) }
+
+// 过渡参数是固定的，做成包级变量共享：每张卡片、每一行每帧都要用，不在每帧给每个元素重新分配一份。
+var (
+	stillMotion, collapsedMotion, shrunkMotion = &ui.Motion{}, &ui.Motion{Collapse: true}, &ui.Motion{Scale: .98}
+	fadeTransition                             = ui.ElementTransition{Duration: motionEnter, ExitDuration: motionExit, Shadows: true, Enter: stillMotion, Exit: stillMotion}
+	rowTransition                              = ui.ElementTransition{Animation: &motionSpring, Position: true, Enter: collapsedMotion, Exit: collapsedMotion}
+	revealTransition                           = ui.ElementTransition{Animation: &motionSpring, Height: true, Enter: collapsedMotion, Exit: collapsedMotion}
+	layoutTransition                           = ui.ElementTransition{Animation: &motionSpring, Position: true, Size: true, Enter: shrunkMotion, Exit: shrunkMotion}
+)
 
 // showPose 只重绘地淡入淡出小东西（勾、行尾按钮、控制条）：shown 为假时全透明。
 func showPose(e ui.Element, shown bool) ui.Element {

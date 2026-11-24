@@ -695,6 +695,14 @@ func (w *previewWindow) view(c *ui.Context, a *App) {
 	if animating || w.picture.Held && !w.pinned {
 		c.AnimationFrame()
 	}
+	// 按住时在「显示圆环」和「固定」两个时刻各补一帧，不让刷新节奏错过阈值。
+	if w.picture.Held && !w.pinned {
+		deadline := w.pressedAt.Add(previewPinThreshold)
+		if now.Sub(w.pressedAt) < previewPeekThreshold {
+			deadline = w.pressedAt.Add(previewPeekThreshold)
+		}
+		c.After(max(0, deadline.Sub(now)))
+	}
 	if w.placeholder == nil && a.Thumbnails != nil {
 		w.placeholder = a.Thumbnails.Get(w.root, w.asset)
 	}
