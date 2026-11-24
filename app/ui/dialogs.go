@@ -26,7 +26,6 @@ type dialogsState struct {
 	EditName       string
 	EditIcon       string
 	EditWasOpen    bool
-	ExportWasOpen  bool
 	Folder         folderDialogState
 	Format         model.ExportFormat
 	Quality        float64
@@ -34,6 +33,11 @@ type dialogsState struct {
 	// 转成 JPEG/PNG 时限制最长边：勾上才生效，像素数是输入框里的文字，导出前再校验。
 	MaxEdgeOn bool
 	MaxEdge   string
+	// 导出设置本次运行里一直记着（第一次打开时才填默认值），ExportDir 是上次导出的文件夹。
+	ExportReady bool
+	ExportDir   string
+	// 文本输入框确认按钮的文字，由 AskWith 设置；为空用「保存」。
+	PromptConfirm string
 }
 
 func (a *App) dialogs(c *ui.Context) {
@@ -47,13 +51,15 @@ func (a *App) dialogs(c *ui.Context) {
 		a.Dialog.IconPickerOpen = false
 	}
 	a.Dialog.EditWasOpen = a.EditLibraryOpen
-	if a.ExportOpen && !a.Dialog.ExportWasOpen {
+	if !a.Dialog.ExportReady {
+		a.Dialog.ExportReady = true
 		a.Dialog.Format = model.ExportOriginal
 		a.Dialog.Quality = 0.9
-		a.Dialog.ExportMotion = false
-		a.Dialog.MaxEdgeOn, a.Dialog.MaxEdge = false, "2048"
+		a.Dialog.MaxEdge = "2048"
 	}
-	a.Dialog.ExportWasOpen = a.ExportOpen
+	if !a.PromptOpen {
+		a.Dialog.PromptConfirm = ""
+	}
 	a.newLibraryDialog(c)
 	a.editLibraryDialog(c)
 	a.folderDialog(c)
@@ -85,10 +91,11 @@ func (a *App) confirmationDialog(c *ui.Context) {
 					body = func() { ui.Text(c, a.ConfirmDetail).FillWidth().TextColor(paletteFor(c.Theme()).TextSecondary) }
 				}
 				dialogLayout(c, "trash", a.ConfirmTitle, body, func() {
-					if dialogButton(c, a.T("cancel"), false).Clicked() {
+					// 默认焦点放在取消上：回车或空格不会直接删东西。
+					if dialogButton(c, a.T("cancel"), false).AutoFocus().Clicked() {
 						a.ConfirmOpen = false
 					}
-					if dialogDangerButton(c, a.ConfirmLabel).AutoFocus().Clicked() {
+					if dialogDangerButton(c, a.ConfirmLabel).Clicked() {
 						a.ConfirmOpen = false
 						confirmed = true
 					}
@@ -214,28 +221,64 @@ func libraryPackageName(name string) string {
 	return name + ".momento"
 }
 
+// exportMix 数所选素材里各种东西各有几个，导出对话框按它决定显示哪些选项。
+type exportMix struct {
+	images, videos, rotated int
+	live                    bool
+}
+
+func (a *App) exportMix() exportMix {
+	var mix exportMix
+	for _, asset := range a.SelectedAssets() {
+		if isVideoAsset(asset) {
+			mix.videos++
+			continue
+		}
+		mix.images++
+		mix.rotated += btoi(asset.Rotation != 0)
+		mix.live = mix.live || isLiveAsset(asset)
+	}
+	return mix
+}
+
+func btoi(on bool) int {
+	if on {
+		return 1
+	}
+	return 0
+}
+
+// 全是视频时导出总是原样，格式、质量、尺寸都用不上。
+func (m exportMix) onlyVideos() bool { return m.videos > 0 && m.images == 0 }
+
 func (a *App) exportDialog(c *ui.Context) {
 	p := paletteFor(c.Theme())
+	mix := a.exportMix()
 	dialogPanel(c.Key("export"), &a.ExportOpen, panelDialog, "export", a.T("export"), func() {
 		ui.Column(c).FillWidth().Gap(space4).Children(func() {
-			ui.Text(c, a.T("export_count", a.Selected.Len())).TextColor(p.TextSecondary)
-			for _, asset := range a.SelectedAssets() {
-				if asset.Rotation != 0 {
-					ui.Text(c, a.T("export_rotation_metadata_hint")).FontSize(fontSecondary).TextColor(p.TextSecondary)
-					break
-				}
+			ui.Text(c, a.T("export_selected_count", a.Selected.Len())).TextColor(p.TextSecondary)
+			if a.Dialog.Format == model.ExportOriginal && mix.rotated > 0 && !mix.onlyVideos() {
+				ui.Text(c, a.T("export_rotation_metadata_hint")).FontSize(fontSecondary).TextColor(p.TextSecondary)
 			}
 		})
+		if mix.onlyVideos() {
+			return
+		}
 		a.exportPresetChips(c)
 		dialogSection(c, a.T("export_format"), func() {
-			ui.RadioGroup(c, func() {
-				animatedRadio(c, &a.Dialog.Format, model.ExportOriginal, a.T("export_original"))
-				animatedRadio(c, &a.Dialog.Format, model.ExportJPEG, a.T("export_jpeg"))
-				animatedRadio(c, &a.Dialog.Format, model.ExportPNG, a.T("export_png"))
-			}).Label(a.T("export_format")).Disabled(a.Dialog.Picking)
+			formats := []model.ExportFormat{model.ExportOriginal, model.ExportJPEG, model.ExportPNG}
+			labels := []string{a.T("export_original"), a.T("export_jpeg"), a.T("export_png")}
+			choiceMenu(c.Key("export-format"), a.T("export_format"), max(0, slices.Index(formats, a.Dialog.Format)), labels, func(i int) {
+				a.Dialog.Format = formats[i]
+			}).AlignSelf(ui.Start).Disabled(a.Dialog.Picking)
+			// 混选了视频、又选了转格式：说一句视频不转，免得以为视频也被转了。
+			if mix.videos > 0 && a.Dialog.Format != model.ExportOriginal {
+				ui.Text(c, a.T("export_video_original")).FontSize(fontSecondary).TextColor(p.TextSecondary)
+			}
 		})
 		if a.Dialog.Format == model.ExportJPEG {
-			fadeMotion(ui.Column(c.Key("jpeg-quality")).FillWidth().Gap(space8)).Children(func() {
+			// 选了 JPEG 才展开质量，对话框跟着长高，不一下跳高。
+			revealMotion(ui.Column(c.Key("jpeg-quality")).FillWidth().Gap(space8)).Children(func() {
 				ui.Row(c).FillWidth().Children(func() {
 					ui.Text(c, a.T("jpeg_quality")).FontSize(fontSecondary).FontWeight(600).TextColor(p.TextSecondary).Grow(1)
 					ui.Text(c, fmt.Sprintf("%.0f%%", a.Dialog.Quality*100)).FontFeatures("tnum").FontSize(fontNumber).TextColor(p.TextSecondary)
@@ -247,19 +290,21 @@ func (a *App) exportDialog(c *ui.Context) {
 			a.exportSizeSection(c)
 		}
 		// 选中的有实况照片才出现：默认只导出图片，勾上后视频和图片同名放在一起。
-		if slices.ContainsFunc(a.SelectedAssets(), isLiveAsset) {
+		if mix.live {
 			settingsCheckbox(c.Key("export-live-motion"), &a.Dialog.ExportMotion, a.T("export_live_motion")).Disabled(a.Dialog.Picking)
 		}
 	}, func() {
 		_, problem := a.exportOptions()
-		if dialogButton(c, a.T("export_save_preset"), a.Dialog.Picking || problem != "").Clicked() {
-			a.Ask("export", a.T("export_preset_name"), "", a.saveExportPreset)
+		if !mix.onlyVideos() {
+			if dialogButton(c, a.T("export_save_preset"), a.Dialog.Picking || problem != "").Clicked() {
+				a.Ask("export", a.T("export_preset_name"), "", a.saveExportPreset)
+			}
 		}
 		ui.Spacer(c)
 		if dialogButton(c, a.T("cancel"), a.Dialog.Picking).Clicked() {
 			a.ExportOpen = false
 		}
-		if dialogPrimaryButton(c, a.T("export"), a.Busy || a.Dialog.Picking || a.Selected.Len() == 0 || problem != "").Clicked() {
+		if dialogPrimaryButton(c, a.T("export"), a.Dialog.Picking || a.Selected.Len() == 0 || problem != "").Clicked() {
 			a.pickExportDestination()
 		}
 	})
@@ -275,16 +320,21 @@ func (a *App) pickExportDestination() {
 		return
 	}
 	a.Dialog.Picking = true
-	title, generation := a.T("export"), a.generation
+	title, generation, dir := a.T("export"), a.generation, a.Dialog.ExportDir
 	name := exportDialogFileName(items[0], options.Format)
 	go func() {
 		var path string
 		var err error
 		if len(items) == 1 {
-			path, err = mygo.Dialog.Save(mygo.SaveDialogOptions{Parent: a.Window, Title: title, DefaultPath: name, CreateDirectories: true})
+			// 保存框从上次导出的文件夹打开；没导出过就用系统默认位置。
+			defaultPath := name
+			if dir != "" {
+				defaultPath = filepath.Join(dir, name)
+			}
+			path, err = mygo.Dialog.Save(mygo.SaveDialogOptions{Parent: a.Window, Title: title, DefaultPath: defaultPath, CreateDirectories: true})
 		} else {
 			var paths []string
-			paths, err = mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: a.Window, Title: title, Directory: true, CreateDirectories: true})
+			paths, err = mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: a.Window, Title: title, DefaultPath: dir, Directory: true, CreateDirectories: true})
 			if len(paths) > 0 {
 				path = paths[0]
 			}
@@ -295,6 +345,10 @@ func (a *App) pickExportDestination() {
 				a.ShowError(err)
 			} else if path != "" && generation == a.generation {
 				a.ExportOpen = false
+				a.Dialog.ExportDir = path
+				if len(items) == 1 {
+					a.Dialog.ExportDir = filepath.Dir(path)
+				}
 				// 用打开对话框时的那批素材：选位置期间自动导入可能改了选择。
 				a.ExportTo(path, options, items)
 			}
@@ -302,22 +356,39 @@ func (a *App) pickExportDestination() {
 	}()
 }
 
+// 保存框里的默认文件名，和批量导出（assets.exportName）一致：用素材现在的名称，名称为空才用原文件名。
 func exportDialogFileName(asset model.Asset, format model.ExportFormat) string {
-	name := strings.TrimSuffix(libraryPackageName(asset.Name), ".momento")
+	name := asset.Name
+	if strings.TrimSpace(name) == "" {
+		name = strings.TrimSuffix(asset.OriginalFileName, filepath.Ext(asset.OriginalFileName))
+	}
+	name = strings.Trim(strings.Map(func(r rune) rune {
+		if r < ' ' || strings.ContainsRune(`/\:*?"<>|`, r) {
+			return '_'
+		}
+		return r
+	}, strings.TrimSpace(name)), ". ")
+	if name == "" {
+		name = "image"
+	}
 	extension := asset.Extension
 	// 视频总是原样导出，保存框里的默认文件名也用视频自己的扩展名。
 	if isVideoAsset(asset) {
 		format = model.ExportOriginal
 	}
-	if format == model.ExportOriginal && asset.OriginalFileName != "" {
-		return asset.OriginalFileName
-	}
-	if format == model.ExportJPEG {
+	switch format {
+	case model.ExportJPEG:
 		extension = "jpg"
-	} else if format == model.ExportPNG {
+	case model.ExportPNG:
 		extension = "png"
 	}
-	return name + "." + extension
+	return name + "." + strings.ToLower(extension)
+}
+
+// AskWith 和 Ask 一样弹出文本输入框，确认按钮的文字由调用方定（比如新建标签用「新建」）。
+func (a *App) AskWith(icon, title, initial, confirm string, submit func(string)) {
+	a.Ask(icon, title, initial, submit)
+	a.Dialog.PromptConfirm = confirm
 }
 
 func (a *App) promptDialog(c *ui.Context) {
@@ -329,10 +400,15 @@ func (a *App) promptDialog(c *ui.Context) {
 			a.PromptOpen = false
 			a.PromptSubmit = nil
 		}
+		confirm := a.Dialog.PromptConfirm
+		if confirm == "" {
+			confirm = a.T("save")
+		}
 		ready := strings.TrimSpace(a.PromptValue) != ""
-		submit := dialogPrimaryButton(c, a.T("save"), !ready)
+		submit := dialogPrimaryButton(c, confirm, !ready)
 		if ready && (submit.Clicked() || input.Submitted()) {
 			a.PromptOpen = false
+			a.Dialog.PromptConfirm = ""
 			callback := a.PromptSubmit
 			a.PromptSubmit = nil
 			if callback != nil {
@@ -362,6 +438,9 @@ func (a *App) errorDialog(c *ui.Context) {
 					a.Notify(a.T("copied"))
 				}
 			})
+		}
+		if dialogButton(c, a.T("open_logs"), false).Clicked() {
+			a.OpenLogDirectory()
 		}
 		if dialogPrimaryButton(c, a.T("close"), false).Clicked() {
 			open = false
@@ -402,15 +481,17 @@ func (a *App) folderDialog(c *ui.Context) {
 		*state = folderDialogState{}
 	}
 	name := strings.TrimSpace(state.Name)
-	ready := !a.Busy && name != ""
+	ready := name != ""
 	icon, title, action := "create-library", a.T("new_folder"), a.T("create")
 	if state.ID != "" {
 		icon, title, action = "pencil-simple", a.T("edit_folder"), a.T("save")
+	} else if state.Parent != "" {
+		title = a.T("new_subfolder")
 	}
 	var input ui.Element
 	dialogPanel(c.Key("folder-dialog"), &state.Open, panelDialog, icon, title, func() {
 		dialogSection(c, a.T("folder_name"), func() {
-			input = a.iconNameField(c.Key("folder-name-field"), &state.Name, &state.PickerOpen, a.Busy, a.T("folder_icon"), a.T("folder_name"),
+			input = a.iconNameField(c.Key("folder-name-field"), &state.Name, &state.PickerOpen, false, a.T("folder_icon"), a.T("folder_name"),
 				func() { ui.Icon(c, folderIconsRegular[folderIconID(state.Icon)]).Size(iconMedium, iconMedium) },
 				func() { a.folderIconGrid(c, &state.Icon, &state.PickerOpen) }).AutoFocus()
 		})

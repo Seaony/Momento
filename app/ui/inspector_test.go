@@ -156,10 +156,11 @@ func TestInspectorInlineEditing(t *testing.T) {
 	if a.Inspector.Note != "Two lines\nSecond line" || a.Inspector.Editing != "note" {
 		t.Fatalf("备注没有保留多行：%q", a.Inspector.Note)
 	}
+	// 备注是多行的：Esc 保存当前输入并退出编辑，不丢内容。
 	tt.Key(0, ui.KeyEscape)
 	tt.Frame()
-	if a.Inspector.Note != "Original" || a.Inspector.Editing != "" {
-		t.Fatalf("Esc 没有放弃备注修改：%q", a.Inspector.Note)
+	if a.Inspector.Note != "Two lines\nSecond line" || a.Inspector.Editing != "" {
+		t.Fatalf("Esc 没有保存备注：%q editing=%q", a.Inspector.Note, a.Inspector.Editing)
 	}
 
 	link, ok := tt.Find(a.T("open_source_url"))
@@ -181,8 +182,8 @@ func TestInspectorInlineEditing(t *testing.T) {
 	if a.Inspector.Editing != "" || a.Inspector.SourceURL != "" {
 		t.Fatalf("清空链接回车没有保存：%q", a.Inspector.SourceURL)
 	}
-	if tt.HasText(a.T("link")) {
-		t.Fatal("没有链接时仍显示链接一行")
+	if !tt.HasText(a.T("add_source_link")) {
+		t.Fatal("没有链接时应显示「添加来源链接」占位")
 	}
 }
 
@@ -320,11 +321,17 @@ func TestInspectorMultipleSelectionAndPickers(t *testing.T) {
 	if !tt.HasText(a.T("create_named", "landx")) || tt.HasText(a.T("no_tags")) {
 		t.Fatalf("搜不到时应只给创建行: %v", tt.Texts())
 	}
-	// 回车：搜不到就创建（测试里没有图库，只看选择器收起、搜索词清空）。
+	// 回车：没有完全同名就按输入的名字新建（测试里没有图库，只看选择器保持打开、搜索词清空）。
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
-	if a.Inspector.TagsOpen || a.Inspector.TagSearch != "" {
-		t.Fatalf("回车没有创建并收起标签选择器：open=%v search=%q", a.Inspector.TagsOpen, a.Inspector.TagSearch)
+	if !a.Inspector.TagsOpen || a.Inspector.TagSearch != "" {
+		t.Fatalf("回车创建后选择器应保持打开、搜索词清空：open=%v search=%q", a.Inspector.TagsOpen, a.Inspector.TagSearch)
+	}
+	// Esc 关掉标签选择器。
+	tt.Key(0, ui.KeyEscape)
+	tt.Frame()
+	if a.Inspector.TagsOpen {
+		t.Fatal("Esc 没有关掉标签选择器")
 	}
 	if err := tt.Click(a.T("add_folders")); err != nil {
 		t.Fatal(err)
@@ -427,10 +434,11 @@ func TestInspectorEXIFCollapses(t *testing.T) {
 	}
 }
 
-// 检查器里创建文件夹先弹出新建对话框选图标，建好后放进所选素材。
-func TestInspectorCreateFolderOpensIconDialog(t *testing.T) {
+// 检查器里创建文件夹直接建好并放进所选素材，不弹对话框；导入等别的写入还在跑时也能点，排进队列。
+func TestInspectorCreateFolderDirectly(t *testing.T) {
 	a := inspectorTestApp(model.Asset{ID: "a"}, model.Asset{ID: "b"})
 	a.Library = &library.Library{}
+	a.Busy = true
 	tt := ui.NewTester(func(c *ui.Context) { a.inspector(c); a.folderDialog(c) }, 900, 800)
 	if err := tt.Click(a.T("add_folders")); err != nil {
 		t.Fatal(err)
@@ -440,9 +448,23 @@ func TestInspectorCreateFolderOpensIconDialog(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Advance(time.Second)
-	state := a.Dialog.Folder
-	if !state.Open || state.Name != "Moodboard" || state.ID != "" || len(state.Assets) != 2 || a.Inspector.FoldersOpen {
-		t.Fatalf("没有弹出带名称和素材的新建文件夹对话框：%+v", state)
+	if a.Dialog.Folder.Open {
+		t.Fatalf("不该弹出新建文件夹对话框：%+v", a.Dialog.Folder)
+	}
+	if len(a.queuedRuns) != 1 || a.queuedRuns[0].label != "new_folder" || !a.Inspector.FoldersOpen || a.Inspector.FolderSearch != "" {
+		t.Fatalf("没有排队新建文件夹或选择器状态不对：queued=%d open=%v search=%q", len(a.queuedRuns), a.Inspector.FoldersOpen, a.Inspector.FolderSearch)
+	}
+}
+
+// 新建文件夹对话框里选图标；有上级时标题是「新建子文件夹」。
+func TestFolderDialogIconAndSubfolderTitle(t *testing.T) {
+	a := inspectorTestApp(model.Asset{ID: "a"})
+	a.Library = &library.Library{}
+	a.ShowNewFolder("parent", "Moodboard", nil)
+	tt := ui.NewTester(func(c *ui.Context) { a.folderDialog(c) }, 900, 800)
+	tt.Frame()
+	if !tt.HasText(a.T("new_subfolder")) {
+		t.Fatalf("新建子文件夹的标题不对：%v", tt.Texts())
 	}
 	if err := tt.Click(a.T("folder_icon")); err != nil {
 		t.Fatal(err)

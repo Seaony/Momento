@@ -35,6 +35,17 @@ func TestSmartEditorChangesFieldsAndPreservesInvalidDraft(t *testing.T) {
 	a := smartTestApp()
 	a.EditSmartFolder("")
 	tt := ui.NewTester(a.smartFolderDialog, 900, 640)
+	// 条件的值是空的时候「保存」是灰的，也只有一条条件时不显示匹配方式。
+	if info, ok := tt.AccessByRole(ui.RoleButton, a.T("save")); !ok || !info.Disabled {
+		t.Fatal("条件为空时保存没有变灰")
+	}
+	if _, ok := tt.Find(a.T("smart_match")); ok {
+		t.Fatal("只有一条条件时不该显示匹配方式")
+	}
+	if err := tt.Click(a.T("smart_rule_value", 1)); err != nil {
+		t.Fatal(err)
+	}
+	tt.Type("design")
 	if err := tt.Click(a.T("save")); err != nil {
 		t.Fatal(err)
 	}
@@ -45,20 +56,16 @@ func TestSmartEditorChangesFieldsAndPreservesInvalidDraft(t *testing.T) {
 		t.Fatal(err)
 	}
 	tt.Type("UI References")
-	if err := tt.Click(a.T("smart_rule_value", 1)); err != nil {
+	if err := tt.Click(a.T("add_smart_rule")); err != nil {
 		t.Fatal(err)
 	}
-	tt.Type("design")
+	tt.Advance(400 * time.Millisecond)
 	if err := tt.Click(a.T("smart_match")); err != nil {
 		t.Fatal(err)
 	}
 	if err := tt.ChooseMenuItem(a.T("smart_any")); err != nil {
 		t.Fatal(err)
 	}
-	if err := tt.Click(a.T("add_smart_rule")); err != nil {
-		t.Fatal(err)
-	}
-	tt.Advance(400 * time.Millisecond)
 	if len(a.GBrowsing.SmartRules) != 2 || a.GBrowsing.SmartMatch != 1 {
 		t.Fatal("添加条件或任一匹配没有生效")
 	}
@@ -99,8 +106,15 @@ func TestSmartEditorCopiesRulesAndKeepsSaveFailureVisible(t *testing.T) {
 		t.Fatal("保存失败后表单被关闭、条件丢失或没有错误")
 	}
 	a.finishSmartFolderSave(a.generation, "smart-a", a.Snapshot, nil)
+	if a.GBrowsing.SmartOpen || a.Query.Scope == "smart" {
+		t.Fatal("编辑已有的智能文件夹保存后不该跳转")
+	}
+	// 新建保存成功后才跳进去看结果。
+	a.EditSmartFolder("")
+	a.Busy, a.GBrowsing.Saving = true, true
+	a.finishSmartFolderSave(a.generation, "smart-a", a.Snapshot, nil)
 	if a.GBrowsing.SmartOpen || a.Query.Scope != "smart" || a.Query.SmartFolderID != "smart-a" || len(a.Visible) != 1 || a.Visible[0].ID != "a" {
-		t.Fatal("成功保存后没有进入对应智能范围")
+		t.Fatal("新建保存成功后没有进入对应智能范围")
 	}
 }
 
@@ -577,5 +591,80 @@ func TestSmartDurationEditsSecondsAndStoresMilliseconds(t *testing.T) {
 	a.EditSmartFolder("smart-a")
 	if got := a.GBrowsing.SmartRules[0].Value; got != "1.5,10" {
 		t.Fatalf("介于重新打开没有换回秒：%s", got)
+	}
+}
+
+// 固定的文件夹、标签行也接收拖进来的素材；固定标签就是给素材加这个标签。
+func TestQuickAccessRowsAcceptDroppedAssets(t *testing.T) {
+	a := smartTestApp()
+	a.Busy = true // 写入进队列，测试里不碰数据库
+	view := func(c *ui.Context) {
+		ui.Row(c).Fill().Children(func() {
+			ui.Column(c).Width(236).Children(func() { a.sidebarQuickAccess(c) })
+			ui.Box(c.Key("source")).Size(60, 60).Label("source").Drag(AssetsDrag{LibraryID: "test", assets: func() []string { return []string{"b"} }})
+		})
+	}
+	tt := ui.NewTester(view, 400, 320)
+	source, _ := tt.Find("source")
+	target, ok := tt.Find("Reference")
+	if !ok {
+		t.Fatal("没有固定的标签行")
+	}
+	tt.Press(source.X+10, source.Y+10)
+	tt.Move(source.X-20, source.Y+10)
+	tt.Move(target.X+20, target.Y+target.H/2)
+	tt.Release(target.X+20, target.Y+target.H/2)
+	if a.Notice != a.T("tagged_assets", 1, "Reference") || len(a.queuedRuns) != 1 || a.queuedRuns[0].label != "tags" {
+		t.Fatalf("拖到固定标签没有加标签：notice=%q queued=%+v", a.Notice, a.queuedRuns)
+	}
+}
+
+func TestSmartExtensionDropdownListsLibraryExtensions(t *testing.T) {
+	a := smartTestApp()
+	a.Snapshot.Assets = []model.Asset{{ID: "p", Extension: "PNG"}, {ID: "j", Extension: ".jpg"}, {ID: "t", Extension: "tiff", Trashed: true}}
+	a.applySnapshot(a.Snapshot)
+	if got := a.smartExtensions(); !slices.Equal(got, []string{"jpg", "png"}) {
+		t.Fatalf("扩展名选项应是图库里实际有的（不含回收站）：%v", got)
+	}
+	a.EditSmartFolder("")
+	a.GBrowsing.SmartRules[0] = model.SmartRule{Field: "extension", Operator: "equals"}
+	tt := ui.NewTester(a.smartFolderDialog, 900, 640)
+	if err := tt.Click(a.T("smart_rule_value", 1)); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.Click("PNG"); err != nil {
+		t.Fatalf("扩展名没有下拉可选：%v", err)
+	}
+	if a.GBrowsing.SmartRules[0].Value != "png" {
+		t.Fatalf("选中的扩展名没有写进条件：%+v", a.GBrowsing.SmartRules[0])
+	}
+}
+
+func TestSmartRulesFilledNeedsEveryValue(t *testing.T) {
+	for _, tt := range []struct {
+		rules []model.SmartRule
+		want  bool
+	}{
+		{[]model.SmartRule{{Field: "name", Operator: "contains", Value: "a"}}, true},
+		{[]model.SmartRule{{Field: "name", Operator: "contains", Value: "  "}}, false},
+		{[]model.SmartRule{{Field: "name", Operator: "contains", Value: "a"}, {Field: "tag", Operator: "equals"}}, false},
+		{[]model.SmartRule{{Field: "width", Operator: "between", Value: "1,"}}, false},
+		{[]model.SmartRule{{Field: "width", Operator: "between", Value: "1,2"}}, true},
+	} {
+		if got := smartRulesFilled(tt.rules); got != tt.want {
+			t.Errorf("%+v：期望 %v，得到 %v", tt.rules, tt.want, got)
+		}
+	}
+}
+
+func TestSmartContextMenuHasNoRename(t *testing.T) {
+	a := smartTestApp()
+	tt := ui.NewTester(a.sidebarSmartRows, 236, 320)
+	if err := tt.RightClick("Landscape Rules"); err != nil {
+		t.Fatal(err)
+	}
+	menu := tt.Menu()
+	if slices.Contains(menu, a.T("rename_smart_folder")) || !slices.Contains(menu, a.T("edit_smart_folder")) {
+		t.Fatalf("智能文件夹右键菜单不对：%v", menu)
 	}
 }

@@ -691,15 +691,9 @@ func (w *previewWindow) view(c *ui.Context, a *App) {
 		a.removePreviewWindow(w)
 		return
 	}
-	if animating {
-		c.After(16 * time.Millisecond)
-	}
-	if w.picture.Held && !w.pinned {
-		deadline := w.pressedAt.Add(previewPinThreshold)
-		if now.Sub(w.pressedAt) < previewPeekThreshold {
-			deadline = w.pressedAt.Add(previewPeekThreshold)
-		}
-		c.After(min(16*time.Millisecond, max(time.Duration(0), deadline.Sub(now))))
+	// 开合、固定和按住时的圆环都按显示器的刷新率出帧（高刷屏上更顺），不锁在 60 帧。
+	if animating || w.picture.Held && !w.pinned {
+		c.AnimationFrame()
 	}
 	if w.placeholder == nil && a.Thumbnails != nil {
 		w.placeholder = a.Thumbnails.Get(w.root, w.asset)

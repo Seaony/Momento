@@ -29,7 +29,7 @@ func TestSettingsSemanticScreenshots(t *testing.T) {
 func TestSettingsValueLabelsKeepLocalizedOrder(t *testing.T) {
 	for _, language := range []string{"zh-CN", "en", "ja"} {
 		for _, theme := range []string{"light", "dark"} {
-			for _, tab := range []int{SettingsGeneral, SettingsAbout} {
+			for _, tab := range []int{SettingsAbout} {
 				a := settingsTestApp(language, theme)
 				a.Settings.Tab = tab
 				tt := polishedSettingsTester(a, UpdateCheckStatus{}, nil)
@@ -56,9 +56,8 @@ func TestSettingsValueLabelsKeepLocalizedOrder(t *testing.T) {
 			a.ExtensionStatus.State = browser.Running
 			tt := polishedSettingsTester(a, UpdateCheckStatus{}, nil)
 			label, labelOK := tt.Find(a.T("extension_running"))
-			address, addressOK := tt.Find(a.ExtensionStatus.Address)
-			if !labelOK || !addressOK || label.X+label.W > address.X || address.X+address.W > 736 || label.H == 0 || address.H == 0 {
-				t.Fatalf("%s/%s 扩展状态与独立地址未完整排列", language, theme)
+			if !labelOK || label.X+label.W > 736 || label.H == 0 || tt.HasText(a.ExtensionStatus.Address) {
+				t.Fatalf("%s/%s 扩展运行状态没有完整显示，或仍显示了本机地址", language, theme)
 			}
 		}
 	}

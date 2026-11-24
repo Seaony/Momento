@@ -100,8 +100,17 @@ func TestVideoDurationText(t *testing.T) {
 // 保存框里视频的默认文件名用视频自己的扩展名，不跟着选的图片格式走。
 func TestExportDialogFileNameForVideo(t *testing.T) {
 	asset := model.Asset{Name: "clip", Extension: "mov", OriginalFileName: "IMG_0001.MOV", Kind: model.KindVideo}
-	if got := exportDialogFileName(asset, model.ExportJPEG); got != "IMG_0001.MOV" {
+	if got := exportDialogFileName(asset, model.ExportJPEG); got != "clip.mov" {
 		t.Fatalf("视频默认文件名：%s", got)
+	}
+	// 和批量导出一致：用现在的名称，名称为空才退回原文件名。
+	renamed := model.Asset{Name: "登录页/极简", Extension: "WEBP", OriginalFileName: "a8f3d91b.webp"}
+	if got := exportDialogFileName(renamed, model.ExportOriginal); got != "登录页_极简.webp" {
+		t.Fatalf("改名后的默认文件名：%s", got)
+	}
+	unnamed := model.Asset{Extension: "png", OriginalFileName: "IMG_4821.PNG"}
+	if got := exportDialogFileName(unnamed, model.ExportJPEG); got != "IMG_4821.jpg" {
+		t.Fatalf("没有名称时的默认文件名：%s", got)
 	}
 }
 

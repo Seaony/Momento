@@ -125,24 +125,35 @@ func (s *Service) deletePermanently(ctx context.Context, ids []string) (err erro
 	return nil
 }
 
-func (s *Service) EmptyTrash(ctx context.Context) error {
+// EmptyTrash 清空确认时回收站里的那几个：其中已经被恢复或已经永久删掉的跳过，不让整批失败；
+// 确认之后才移进回收站的也不删，用户没看到它们就不算确认过。
+func (s *Service) EmptyTrash(ctx context.Context, ids []string) error {
 	s.mutation.Lock()
 	defer s.mutation.Unlock()
+	confirmed := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		confirmed[id] = true
+	}
 	rows, err := s.db.QueryContext(ctx, "SELECT id FROM assets WHERE trashed=1 ORDER BY id")
 	if err != nil {
 		return err
 	}
-	var ids []string
+	var trashed []string
 	for rows.Next() {
 		var id string
 		if err = rows.Scan(&id); err != nil {
 			rows.Close()
 			return err
 		}
-		ids = append(ids, id)
+		if confirmed[id] {
+			trashed = append(trashed, id)
+		}
 	}
 	if err = errors.Join(rows.Err(), rows.Close()); err != nil {
 		return err
 	}
-	return s.deletePermanently(ctx, ids)
+	if skipped := len(ids) - len(trashed); skipped > 0 {
+		slog.Info("清空回收站时跳过已不在回收站的素材", "skipped", skipped)
+	}
+	return s.deletePermanently(ctx, trashed)
 }

@@ -40,11 +40,12 @@ func TestSidebarFlatEntriesAndAddRows(t *testing.T) {
 	a.GBrowsing.SmartOpen = false
 	a.Busy = true
 	tt.Frame()
-	for _, key := range []string{"new_folder", "new_smart_folder"} {
-		info, ok := tt.AccessByRole(ui.RoleButton, a.T(key))
-		if !ok || !info.Disabled {
-			t.Fatalf("忙碌时创建入口仍可操作：%s", key)
-		}
+	// 新建文件夹走写入队列，忙时也能点；智能文件夹的保存不走队列，入口保持禁用。
+	if info, ok := tt.AccessByRole(ui.RoleButton, a.T("new_folder")); !ok || info.Disabled {
+		t.Fatal("忙碌时不该禁用新建文件夹")
+	}
+	if info, ok := tt.AccessByRole(ui.RoleButton, a.T("new_smart_folder")); !ok || !info.Disabled {
+		t.Fatal("忙碌时新建智能文件夹仍可操作")
 	}
 }
 

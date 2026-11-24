@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -105,31 +106,102 @@ func TestTagsNewAndRenameOpenNamePrompt(t *testing.T) {
 }
 
 func TestTagsDeletionRequiresConfirmation(t *testing.T) {
-	a := tagsTestApp(model.Snapshot{Tags: []model.Tag{{ID: "nature", Name: "Landscape"}}})
+	a := tagsTestApp(model.Snapshot{
+		Tags:   []model.Tag{{ID: "nature", Name: "Landscape"}},
+		Assets: []model.Asset{{ID: "a", TagIDs: []string{"nature"}}, {ID: "b", TagIDs: []string{"nature"}}},
+	})
 	tt := tagsTester(a)
 	hoverTagRow(t, tt, "Landscape")
 	if err := tt.Click(a.T("delete_tag") + " Landscape"); err != nil {
 		t.Fatal(err)
 	}
-	if !a.ConfirmOpen || a.ConfirmTitle != a.T("delete_tag") || a.ConfirmDetail != a.T("delete_tag_detail", "Landscape") || a.ConfirmLabel != a.T("delete") || a.ConfirmAction == nil {
-		t.Fatal("删除标签没有要求确认")
+	if !a.ConfirmOpen || a.ConfirmTitle != a.T("delete_tag") || a.ConfirmDetail != a.T("delete_tag_assets_detail", "Landscape", 2) || a.ConfirmLabel != a.T("delete") || a.ConfirmAction == nil {
+		t.Fatalf("删除有素材的标签没有写明数量并要求确认：%q", a.ConfirmDetail)
 	}
 	if a.Busy || len(a.Snapshot.Tags) != 1 {
 		t.Fatal("确认前执行了删除")
 	}
 }
 
-func TestTagsEmptyStateAndBusyActions(t *testing.T) {
+// 没有素材用的标签直接删，不弹确认；写入忙时排队。
+func TestTagsDeleteUnusedTagWithoutConfirmation(t *testing.T) {
+	a := tagsTestApp(model.Snapshot{Tags: []model.Tag{{ID: "nature", Name: "Landscape"}}})
+	a.Busy = true
+	tt := tagsTester(a)
+	hoverTagRow(t, tt, "Landscape")
+	if err := tt.Click(a.T("delete_tag") + " Landscape"); err != nil {
+		t.Fatal(err)
+	}
+	if a.ConfirmOpen || len(a.queuedRuns) != 1 || a.queuedRuns[0].label != "delete_tag" {
+		t.Fatalf("没有素材的标签应直接排队删除：confirm=%v queued=%+v", a.ConfirmOpen, a.queuedRuns)
+	}
+}
+
+// 整行单击就打开标签，行尾的改名按钮不触发打开；右键菜单里有重命名和删除。
+func TestTagsRowClickOpensAndMenuHasRenameDelete(t *testing.T) {
+	a := tagsTestApp(model.Snapshot{Tags: []model.Tag{{ID: "nature", Name: "Landscape"}}, Assets: []model.Asset{{ID: "a", TagIDs: []string{"nature"}}}})
+	tt := tagsTester(a)
+	hoverTagRow(t, tt, "Landscape")
+	if err := tt.Click(a.T("rename_tag") + " Landscape"); err != nil {
+		t.Fatal(err)
+	}
+	if a.Query.Scope == "tag" || a.TagPage == false || !a.PromptOpen {
+		t.Fatalf("点改名按钮不该打开标签：scope=%q tagPage=%v", a.Query.Scope, a.TagPage)
+	}
+	a.PromptOpen = false
+	if err := tt.RightClick("Landscape"); err != nil {
+		t.Fatal(err)
+	}
+	menu := tt.Menu()
+	for _, key := range []string{"rename_tag", "delete_tag"} {
+		if !slices.Contains(menu, a.T(key)) {
+			t.Fatalf("右键菜单缺少 %s：%v", key, menu)
+		}
+	}
+	tt.CloseMenu()
+	if err := tt.Click("Landscape"); err != nil {
+		t.Fatal(err)
+	}
+	if a.Query.Scope != "tag" || a.Browse.TagID != "nature" || a.TagPage {
+		t.Fatalf("单击标签行没有打开它：scope=%q tag=%q", a.Query.Scope, a.Browse.TagID)
+	}
+}
+
+// 搜不到时直接新建；已有同名（规范化后相同）的只提示，不新建；没有任何标签时空状态里有新建按钮。
+func TestTagsCreateFromSearchAndEmptyState(t *testing.T) {
+	a := tagsTestApp(model.Snapshot{Tags: []model.Tag{{ID: "nature", Name: "Landscape"}}})
+	a.Busy = true
+	a.Tags.Search = "Macro"
+	tt := tagsTester(a)
+	if err := tt.Click(a.T("new_tag_named", "Macro")); err != nil {
+		t.Fatal(err)
+	}
+	if len(a.queuedRuns) != 1 || a.queuedRuns[0].label != "create_tag" {
+		t.Fatalf("搜索无结果的新建按钮没有创建：%+v", a.queuedRuns)
+	}
+	a.createTag(" ＬＡＮＤＳＣＡＰＥ ")
+	if len(a.queuedRuns) != 1 || a.Notice != a.T("tag_exists") {
+		t.Fatalf("重名标签不该新建，应提示：queued=%d notice=%q", len(a.queuedRuns), a.Notice)
+	}
+
+	empty := tagsTestApp(model.Snapshot{})
+	tt = tagsTester(empty)
+	buttons := 0
+	for _, info := range tt.AccessAll() {
+		if info.Role == ui.RoleButton && info.Name == empty.T("new_tag") {
+			buttons++
+		}
+	}
+	if buttons != 2 {
+		t.Fatalf("空标签页除了工具栏，中间也要有新建标签按钮：%d 个", buttons)
+	}
+}
+
+func TestTagsEmptyStateExplainsAndOffersNewTag(t *testing.T) {
 	a := tagsTestApp(model.Snapshot{})
 	tt := tagsTester(a)
 	if !tt.HasText(a.T("no_tags")) || !tt.HasText(a.T("no_tags_hint")) {
 		t.Fatalf("空标签页未提供说明：%v", tt.Texts())
-	}
-	a.Busy = true
-	tt.Frame()
-	button, ok := tt.AccessByRole(ui.RoleButton, a.T("new_tag"))
-	if !ok || !button.Disabled {
-		t.Fatal("忙碌时新建按钮仍可操作")
 	}
 }
 
@@ -215,6 +287,7 @@ func hoverTagRow(t *testing.T, tt *ui.Tester, name string) {
 
 func TestTagRowToolsOnlyOnHover(t *testing.T) {
 	a := tagsTestApp(model.Snapshot{Tags: []model.Tag{{ID: "nature", Name: "Landscape"}}})
+	a.Busy = true // 没素材用的标签点删除会直接删；忙时进队列，测试里不碰数据库
 	tt := tagsTester(a)
 	if err := tt.Click(a.T("delete_tag") + " Landscape"); err == nil {
 		t.Fatal("没悬停时删除按钮不应该能点")

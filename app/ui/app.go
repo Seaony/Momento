@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -144,6 +145,7 @@ type App struct {
 	pendingOpen                                               string
 	pendingImports                                            [][2]string
 	queuedRuns                                                []queuedRun
+	noticeAction                                              *noticeAction
 	remoteImporting                                           bool // 正在处理一条深度链接导入
 	remoteBatches                                             map[string]*remoteBatch
 	assetByID                                                 map[string]model.Asset
@@ -171,8 +173,20 @@ type App struct {
 	list                                                      listLayout
 	focusAssetID                                              string // 方向键移动选择后，下一帧把键盘焦点交给这张卡片
 	visibleVersion                                            uint64
-	snapshotVersion                                           uint64
-	selection                                                 selectionCache
+	// contentEpoch 在滚动中途换筛选、搜索或排序（列表回到顶部）时加一：素材区整块淡入新内容，卡片不从旧坐标飞过来。
+	contentEpoch uint64
+	// shownLibrary 是上一帧显示的图库：换了图库那一帧整窗直接换成新的，不让侧栏每一行、每张卡片各自进出。
+	shownLibrary    string
+	snapshotVersion uint64
+	selection       selectionCache
+
+	// MenuStateChanged 在菜单项该不该能点变了时调用，主程序据此灰掉此刻点了没用的菜单项。
+	MenuStateChanged func(MenuState)
+	// TrayFailed：系统没有托盘（比如部分 Linux 桌面）没建出图标，窗口藏起来就找不回了。
+	TrayFailed bool
+	menuState  MenuState
+	// runningPatch 是正在写库、排队时已先画到界面上的那一笔：写库途中整库重读时也要叠回去。
+	runningPatch *assetPatch
 }
 
 func New() *App {
@@ -248,6 +262,12 @@ func (a *App) View(c *ui.Context) {
 		a.Thumbnails.NextFrame()
 		defer a.Thumbnails.EndFrame()
 	}
+	if id := a.libraryID(); id != a.shownLibrary {
+		if a.shownLibrary != "" && id != "" {
+			c.DisableAnimations()
+		}
+		a.shownLibrary = id
+	}
 	a.applyTheme(c)
 	a.SyncMenuFocus(c)
 	a.ContinueInspectorEdits()
@@ -263,7 +283,8 @@ func (a *App) View(c *ui.Context) {
 		if !a.InspectorAvailable() && a.InspectorVisible {
 			a.CollapseInspector()
 		}
-		workspace := ui.Row(c.Key("workspace")).Fill().ObserveInput(a.observeWorkspaceInput).HandleInput(a.activateAssetDoubleClick)
+		// 从欢迎页打开图库时整个工作区淡入，关掉图库时淡出回欢迎页。
+		workspace := fadeMotion(ui.Row(c.Key("workspace")).Fill().ObserveInput(a.observeWorkspaceInput).HandleInput(a.activateAssetDoubleClick))
 		// 分隔条被拖动（或用方向键移动）时，Split 改的宽度和上一帧显示的不同；这时栏宽直接跟手，不走弹簧。
 		dragging := a.chromeLayoutReady && a.SidebarVisible && a.sidebarSplitWidth != a.sidebarShownWidth
 		if dragging {
@@ -307,10 +328,14 @@ func (a *App) View(c *ui.Context) {
 	a.dialogs(c)
 	a.extensionImportPicker(c)
 	a.smartFolderDialog(c)
-	a.passwordSettingsDialog(c)
+	a.passwordSettingsDialog(c, false)
 	if a.Notice != "" {
 		c.Toast(a.Notice)
 		a.Notice = ""
+	}
+	if n := a.noticeAction; n != nil {
+		a.noticeAction = nil
+		c.ToastAction(n.message, n.label, n.action)
 	}
 	a.noticeViewport(c)
 }
@@ -322,6 +347,16 @@ func (a *App) ShowError(err error) {
 	}
 }
 func (a *App) Notify(s string) { a.Notice = s }
+
+// 带一个按钮的提示，比如移到回收站后的「撤销」、自动导入完成后的「查看」；按钮点了提示就关掉。
+type noticeAction struct {
+	message, label string
+	action         func()
+}
+
+func (a *App) NotifyAction(message, label string, action func()) {
+	a.noticeAction = &noticeAction{message: message, label: label, action: action}
+}
 func (a *App) Ask(icon, title, initial string, submit func(string)) {
 	a.PromptIcon = icon
 	a.PromptTitle = title
@@ -356,6 +391,8 @@ type assetPatch struct {
 	apply func(*model.Asset)
 	// failed 在写入失败、或排队时换了图库被作废时，在界面线程上调用（可以为空）。
 	failed func(error)
+	// optimistic 表示排队时已经先把改动画在界面上了，写入失败要整库重读退回真实状态。
+	optimistic bool
 }
 
 type queuedRun struct {
@@ -371,6 +408,11 @@ func (a *App) run(label string, work func(context.Context) error, patch *assetPa
 	}
 	// 导入或别的写入还没结束时，不能把用户的操作悄悄丢掉：排队，空闲后按顺序执行。
 	if a.Busy {
+		// 改素材字段的操作先在界面上改好，按下去马上有回应（导入几分钟时心形不会一直不变红）；写库仍按顺序排队。
+		if patch != nil && patch.apply != nil && len(patch.ids) > 0 {
+			a.patchAssets(patch.ids, patch.apply)
+			patch.optimistic = true
+		}
 		a.queuedRuns = append(a.queuedRuns, queuedRun{generation: a.generation, label: label, work: work, patch: patch})
 		slog.Info("操作排队", "operation", label, "queued", len(a.queuedRuns))
 		return
@@ -378,6 +420,9 @@ func (a *App) run(label string, work func(context.Context) error, patch *assetPa
 	lib := a.Library
 	gen := a.generation
 	a.Busy = true
+	if patch != nil && patch.optimistic {
+		a.runningPatch = patch
+	}
 	go func() {
 		a.workMu.Lock()
 		defer a.workMu.Unlock()
@@ -392,18 +437,24 @@ func (a *App) run(label string, work func(context.Context) error, patch *assetPa
 				return
 			}
 			a.Busy = false
+			a.runningPatch = nil
 			if err != nil {
 				if patch != nil && patch.failed != nil {
 					patch.failed(err)
 				}
 				a.ShowError(err)
+				if patch != nil && patch.optimistic {
+					// 界面上已经提前改了，写库失败就整库重读，不能留着一个没存进去的状态。
+					a.Refresh()
+				}
 				a.drainPending()
 				return
 			}
 			a.manifest = lib.Manifest
 			if patch == nil {
 				a.applySnapshot(snapshot)
-			} else {
+			} else if !patch.optimistic {
+				// 排队时已经先画到界面上的不再贴一次：后面排着的改动也已经叠在上面了，再贴会把较新的状态盖回去（快速收藏再取消时心形变回红色），中间还会清掉选择。
 				a.patchAssets(patch.ids, patch.apply)
 			}
 			if label == "edit_library" {
@@ -581,6 +632,26 @@ func (a *App) applySnapshot(snapshot model.Snapshot) {
 	for _, asset := range snapshot.Assets {
 		a.assetByID[asset.ID] = asset
 	}
+	// 正在写和还在排队的操作已经提前画在界面上了，重读的快照里还没有它们，按顺序再叠一次，免得心形、回收站状态闪回去。
+	pending := make([]*assetPatch, 0, len(a.queuedRuns)+1)
+	if a.runningPatch != nil {
+		pending = append(pending, a.runningPatch)
+	}
+	for _, queued := range a.queuedRuns {
+		if queued.patch != nil && queued.patch.optimistic && queued.generation == a.generation {
+			pending = append(pending, queued.patch)
+		}
+	}
+	for _, patch := range pending {
+		targets := make(map[string]bool, len(patch.ids))
+		for _, id := range patch.ids {
+			targets[id] = true
+		}
+		for _, index := range a.Index.Patch(targets, patch.apply) {
+			asset := a.Snapshot.Assets[index]
+			a.assetByID[asset.ID] = asset
+		}
+	}
 	a.refine(false)
 	a.pruneAutoImportTargets()
 }
@@ -629,6 +700,9 @@ func (a *App) refine(resetScroll bool) {
 	a.Visible = a.browseAssets(a.Query)
 	a.visibleVersion++
 	if resetScroll {
+		if a.scroll.Y > 0 {
+			a.contentEpoch++
+		}
 		a.scroll = ui.ScrollState{}
 	}
 	a.anchor, a.selectedIndex = -1, -1
@@ -739,6 +813,8 @@ func (a *App) OpenLibrary(path string) {
 			a.Assets = assets.New(lib.Root, lib.DB)
 			a.Assets.AppVersion = mygo.App.Version()
 			a.generation++
+			// 确认框是对旧图库说的（清空回收站、删除文件夹等），换了图库就关掉。
+			a.ConfirmOpen, a.ConfirmAction = false, nil
 			a.Browse = browseState{}
 			a.GBrowsing = gBrowsingState{}
 			a.Inspector = inspectorState{}
@@ -808,6 +884,7 @@ func (a *App) CreateLibraryAt(path, name, icon string) {
 			a.Busy = false
 			if err != nil {
 				a.ShowError(err)
+				a.drainPending()
 			} else {
 				a.NewLibraryOpen = false
 				a.OpenLibrary(path)
@@ -843,7 +920,8 @@ func (a *App) DeleteLibrary() {
 		return
 	}
 	lib := a.Library
-	a.Confirm(a.T("delete_library"), a.T("delete_library_detail"), a.T("delete"), func() {
+	// 写明删的是哪个图库、里面有多少素材，同时开着几个图库时不会删错。
+	a.Confirm(a.T("delete_library"), a.T("delete_library_named", a.manifest.DisplayName, len(a.Snapshot.Assets)), a.T("delete_library"), func() {
 		// 确认框开着时换了图库：确认的是旧图库，不能删掉或关掉现在这个。
 		if a.Library != lib || a.Busy {
 			a.Notify(a.T("delete_library_changed"))
@@ -858,6 +936,7 @@ func (a *App) DeleteLibrary() {
 				a.Busy = false
 				if err != nil {
 					a.ShowError(err)
+					a.drainPending()
 					return
 				}
 				if a.Library == lib {
@@ -885,12 +964,20 @@ func (a *App) closeLibrary(reason string) bool {
 		a.Import.WatchCancel()
 	}
 	a.Import.WatchCancel, a.Import.WatchLibrary, a.Import.WatchRules = nil, "", nil
+	for _, queued := range a.Import.queued {
+		if queued.cleanup != nil {
+			queued.cleanup()
+		}
+	}
+	a.Import.queued, a.Import.manualCancel, a.Import.manualCanceled = nil, nil, false
 	a.Library, a.Assets, a.Index = nil, nil, nil
 	a.Snapshot, a.manifest = model.Snapshot{}, model.Manifest{}
 	a.Visible, a.assetByID = nil, nil
 	a.visibleVersion++
 	a.Selected.Clear()
-	a.queuedRuns = nil
+	a.queuedRuns, a.runningPatch = nil, nil
+	// 确认框是对旧图库说的（清空回收站、删除文件夹等），换了图库就关掉，不能确认后作用到新图库上。
+	a.ConfirmOpen, a.ConfirmAction = false, nil
 	a.scroll = ui.ScrollState{}
 	a.anchor, a.selectedIndex = -1, -1
 	a.generation++
@@ -960,16 +1047,46 @@ func (a *App) RequestDelete(ids []string) {
 		return
 	}
 	if a.Query.Scope == "trash" {
-		a.Confirm(a.T("delete_permanently"), a.T("delete_permanently_detail", len(ids)), a.T("delete"), func() {
+		a.Confirm(a.T("delete_permanently"), a.T("delete_permanently_detail", len(ids)), a.T("delete_permanently"), func() {
 			a.Run("delete_permanently", func(ctx context.Context) error { return service.DeletePermanently(ctx, ids) })
 		})
 	} else {
+		ids = slices.Clone(ids)
 		a.RunPatch("trash", ids, func(ctx context.Context) error { return service.Trash(ctx, ids) }, func(asset *model.Asset) { asset.Trashed = true })
+		gen := a.generation
+		a.NotifyAction(a.T("moved_to_trash", len(ids)), a.T("undo"), func() {
+			// 换了图库后这些 ID 不属于当前图库，撤销按钮就不做事。
+			if gen == a.generation {
+				a.restore(ids, false)
+			}
+		})
 	}
 }
-func (a *App) Restore(ids []string) {
+func (a *App) Restore(ids []string) { a.restore(ids, true) }
+func (a *App) restore(ids []string, notify bool) {
 	service := a.Assets
+	if service == nil || len(ids) == 0 {
+		return
+	}
 	a.RunPatch("restore", ids, func(ctx context.Context) error { return service.Restore(ctx, ids) }, func(asset *model.Asset) { asset.Trashed = false })
+	if notify {
+		a.Notify(a.T("restored_assets", len(ids)))
+	}
+}
+
+// 有一张没收藏就全部收藏，全都收藏了才取消；右键菜单的文字和 F 键都按这个判断。
+func (a *App) FavoriteValue(ids []string) bool {
+	for _, id := range ids {
+		if !a.assetByID[id].Favorite {
+			return true
+		}
+	}
+	return false
+}
+func (a *App) ToggleFavorite(ids []string) {
+	if len(ids) > 0 {
+		a.SetFavorite(ids, a.FavoriteValue(ids))
+	}
 }
 func (a *App) ExportSelected() {
 	if a.Selected.Len() > 0 {
@@ -988,7 +1105,15 @@ func (a *App) ExportTo(destination string, options model.ExportOptions, selected
 		if len(written) > 0 {
 			folder = filepath.Dir(written[0])
 		}
-		a.Window.Update(func() { a.Notify(a.T("assets_exported", len(written), filepath.Base(folder))) })
+		a.Window.Update(func() {
+			a.NotifyAction(a.T("assets_exported", len(written), filepath.Base(folder)), a.T("reveal_short"), func() {
+				if len(written) == 1 {
+					mygo.Shell.ShowItemInFolder(written[0])
+				} else {
+					mygo.Shell.ShowItemInFolder(folder)
+				}
+			})
+		})
 		return nil
 	}, nil)
 }
@@ -1111,7 +1236,7 @@ func (a *App) shortcuts(c *ui.Context) {
 		a.PasteImport()
 	}
 	// 单按 F 是收藏，Shift+F 打开检查器里的文件夹选择器，直接搜着加。
-	if a.ActionShortcut(c, "add_to_folder") && a.Selected.Len() > 0 && !a.TagPage {
+	if a.ActionShortcut(c, "add_to_folder") && a.Selected.Len() > 0 && !a.TagPage && a.Query.Scope != "trash" {
 		a.RevealInspector()
 		a.Inspector.TagsOpen, a.Inspector.FoldersOpen = false, true
 	}
@@ -1121,7 +1246,7 @@ func (a *App) shortcuts(c *ui.Context) {
 	if a.ActionShortcut(c, "paste_tags") {
 		a.PasteTags()
 	}
-	if a.ActionShortcut(c, "delete") {
+	if a.ActionShortcut(c, "delete") || a.alternateDeleteKey(c) {
 		a.RequestDelete(a.selectedIDs())
 	}
 	if c.Shortcut(0, ui.KeyEscape) {
@@ -1137,14 +1262,31 @@ func (a *App) shortcuts(c *ui.Context) {
 		a.RevealInspector()
 		a.FollowPreviewSelection()
 	}
-	if c.Shortcut(0, ui.KeyF) && a.hovered != "" {
-		if asset, ok := a.assetByID[a.hovered]; ok {
-			a.SetFavorite([]string{asset.ID}, !asset.Favorite)
-		}
+	if c.Shortcut(0, ui.KeyF) && a.Query.Scope != "trash" && !a.TagPage {
+		a.ToggleFavorite(a.favoriteKeyTargets())
 	}
 	if a.ActionShortcut(c, "preview") && !a.PreviewOpen() {
 		a.activatePreviewShortcut(c)
 	}
+}
+
+// F 收藏：鼠标停在选区外的那张就只收藏它（和空格预览一样悬停优先），否则收藏全部选中的。
+func (a *App) favoriteKeyTargets() []string {
+	if a.hovered != "" && !a.Selected.Has(a.hovered) {
+		return []string{a.hovered}
+	}
+	if a.Selected.Len() > 0 {
+		return a.selectedIDs()
+	}
+	return nil
+}
+
+// 习惯按 Delete 键（Windows、Linux）或 ⌘⌫（Finder）删除的也能删；用户改过删除快捷键就只认改后的。
+func (a *App) alternateDeleteKey(c *ui.Context) bool {
+	if definition, ok := shortcutDefinition("delete"); !ok || a.Shortcut("delete") != definition.Default {
+		return false
+	}
+	return c.Shortcut(0, ui.KeyDelete) || runtime.GOOS == "darwin" && c.Shortcut(ui.Super, ui.KeyBackspace)
 }
 
 func (a *App) SyncMenuFocus(c *ui.Context) {
@@ -1159,12 +1301,66 @@ func (a *App) SyncMenuFocus(c *ui.Context) {
 			a.MenuChanged()
 		}
 	}
+	if state := a.CurrentMenuState(); state != a.menuState {
+		a.menuState = state
+		if a.MenuStateChanged != nil {
+			a.MenuStateChanged(state)
+		}
+	}
 	if available := a.InspectorAvailable(); a.menuInspectorAvailable != available {
 		a.menuInspectorAvailable = available
 		if a.InspectorAvailabilityChanged != nil {
 			a.InspectorAvailabilityChanged(available)
 		}
 	}
+}
+
+// MenuState 是菜单项能不能点所依赖的状态：没图库时导入、视图类没用，没选中时导出、复制没用，列表视图里缩略图大小没用。
+type MenuState struct {
+	Library, Selection, Busy, Grid, Preview bool
+	// TextFocus 时复制、粘贴是给输入框用的系统角色，不能跟着素材状态灰掉。
+	TextFocus bool
+	// Browse：工具栏此刻有筛选、排序、视图按钮（不在标签管理页、也不是空图库）；Sortable：此处排序有作用。
+	// 和工具栏用同一套条件，菜单里不留点了没反应的项。
+	Browse, Sortable bool
+}
+
+func (a *App) CurrentMenuState() MenuState {
+	return MenuState{
+		Library:   a.Library != nil,
+		Selection: a.Selected.Len() > 0 && !a.TagPage,
+		Busy:      a.Busy,
+		Grid:      a.ViewMode != 2 && !a.TagPage,
+		Preview:   a.PreviewOpen(),
+		TextFocus: a.TextInputFocused,
+		Browse:    a.Library != nil && !a.TagPage && !a.toolbarBare(),
+		Sortable:  a.toolbarSortable(),
+	}
+}
+
+// MenuItemEnabled 按状态判断某个菜单项此刻能不能点；不在表里的菜单项一直可点。
+func (s MenuState) MenuItemEnabled(id string) bool {
+	switch id {
+	case "import", "import_folder":
+		return s.Library && !s.Busy
+	case "export", "copy_tags", "paste_tags":
+		return s.Library && s.Selection
+	case "copy":
+		return s.TextFocus || s.Library && s.Selection
+	case "paste":
+		return s.TextFocus || s.Library
+	case "thumbnail_larger", "thumbnail_smaller":
+		return s.Library && s.Browse && s.Grid
+	case "view_masonry", "view_justified", "view_list", "filter":
+		return s.Library && s.Browse
+	case "sort":
+		return s.Library && s.Browse && s.Sortable
+	case "slideshow", "search":
+		return s.Library
+	case "preview_zoom_in", "preview_zoom_out", "preview_fit", "preview_actual":
+		return s.Preview
+	}
+	return true
 }
 
 func fileSize(n int64) string {
@@ -1232,6 +1428,9 @@ func (a *App) drainPending() {
 			continue
 		}
 		a.run(next.label, next.work, next.patch)
+		return
+	}
+	if a.startQueuedPathImport() {
 		return
 	}
 	if len(a.pendingImports) == 0 || a.Library == nil || a.remoteImporting {

@@ -259,3 +259,32 @@ func TestLibraryMenuMarksMissingLibrary(t *testing.T) {
 		t.Fatal("找不到的图库菜单应只有重新定位和从列表中移除")
 	}
 }
+
+// 正在忙时别的图库行灰掉并写原因，当前图库行照常；清缓存先确认。
+func TestLibraryMenuBusyDisablesOtherLibrariesAndCacheClearAsks(t *testing.T) {
+	a := libraryMenuTestApp(t)
+	a.Busy = true
+	tt := openLibraryMenu(t, a)
+	other, ok := tt.AccessByRole(ui.RoleRadio, "Reference")
+	if !ok || !other.Disabled {
+		t.Fatalf("忙时其他图库行应灰掉：%+v", other)
+	}
+	if current, ok := tt.AccessByRole(ui.RoleRadio, "Design Library"); !ok || current.Disabled {
+		t.Fatalf("当前图库行不用灰：%+v", current)
+	}
+	box, _ := tt.Find("Reference")
+	tt.Move(box.X+box.W/2, box.Y+box.H/2)
+	tt.Advance(time.Second)
+	if !tt.HasText(a.T("library_busy_switch")) {
+		t.Fatalf("灰掉的图库行没有写原因：%v", tt.Texts())
+	}
+
+	a.Busy = false
+	a.ClearLibraryCache()
+	if !a.ConfirmOpen || a.ConfirmTitle != a.T("clear_cache_title") || a.ConfirmDetail != a.T("clear_cache_detail") || a.ConfirmLabel != a.T("clear_cache_confirm") {
+		t.Fatalf("清缓存没有先确认：%+v", a.ConfirmTitle)
+	}
+	if a.Busy {
+		t.Fatal("确认前不该开始重建")
+	}
+}

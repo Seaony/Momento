@@ -146,7 +146,15 @@ func libraryExportPath(path string) string {
 	return path
 }
 
+// ClearLibraryCache 先确认：重建缩略图要几分钟，期间不能导入。
 func (a *App) ClearLibraryCache() {
+	if a.Library == nil || a.Busy {
+		return
+	}
+	a.Confirm(a.T("clear_cache_title"), a.T("clear_cache_detail"), a.T("clear_cache_confirm"), a.clearLibraryCache)
+}
+
+func (a *App) clearLibraryCache() {
 	if a.Library == nil || a.Busy {
 		return
 	}

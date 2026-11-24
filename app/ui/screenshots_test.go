@@ -332,7 +332,7 @@ func (fixture screenshotFixture) app(t *testing.T, state, language, appearance s
 	if state == "export" {
 		a.Selected.Add(a.Visible[0].ID)
 		a.ExportOpen = true
-		a.Dialog.ExportWasOpen = true
+		a.Dialog.ExportReady = true
 		a.Dialog.Format, a.Dialog.Quality = model.ExportJPEG, 0.9
 	}
 	if state == "new-library" {
@@ -374,10 +374,10 @@ func prepareScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 	}
 	label := ""
 	if key, ok := strings.CutPrefix(state, "toolbar-hover-"); ok {
-		label = a.T(key)
+		label = toolbarHoverLabel(a, key)
 	}
 	if state == "filter-color-hover" {
-		label = a.T("color_gray")
+		label = colorSwatchLabel(tt, a, "gray")
 	}
 	if state == "masonry-hover" || state == "grid-hover" || state == "list-hover" {
 		label = a.Visible[1].Name
@@ -452,14 +452,16 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 			t.Fatal("回收站必须只显示3张素材")
 		}
 	case "settings":
-		for _, key := range []string{"settings_general", "settings_extension", "settings_about", "launch_at_login", "close_action", "automatic_updates", "check_updates"} {
+		// 版本和手动检查更新只放在「关于」页，通用页只留自动检查的开关。
+		for _, key := range []string{"settings_general", "settings_extension", "settings_about", "launch_at_login", "close_action", "automatic_updates"} {
 			expect(a.T(key))
 		}
 	case "export":
-		for _, key := range []string{"export", "export_format", "export_original", "export_jpeg", "export_png", "jpeg_quality"} {
+		// 格式改成菜单按钮，只显示当前选中的那一项。
+		for _, key := range []string{"export", "export_format", "export_jpeg", "jpeg_quality"} {
 			expect(a.T(key))
 		}
-		expect(a.T("export_count", 1))
+		expect(a.T("export_selected_count", 1))
 		expect("90%")
 	case "new-library":
 		for _, key := range []string{"new_library", "library_name", "location", "change_location", "create_library"} {
@@ -502,11 +504,11 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 		}
 		expect(resolution)
 	case "tag-picker":
-		expect(a.T("search_tags"))
+		expect(a.T("inspector_search_tags"))
 		expect(fmt.Sprintf("%s (%d)", a.T("all_tags"), 4))
 		expect("Landscape 山水 (1/3)")
 	case "folder-picker":
-		expect(a.T("search_folders"))
+		expect(a.T("inspector_search_folders"))
 		expect("Design references (1/3)")
 		expect("UI layouts (2/3)")
 	case "filter", "filter-selected", "filter-color-hover":
@@ -515,14 +517,14 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 		}
 		if state != "filter" {
 			for _, family := range toolbarFamilies {
-				access, ok := tt.Access(a.T("color_" + family.ID))
+				access, ok := tt.Access(colorSwatchLabel(tt, a, family.ID))
 				if !ok || !access.Checked {
 					t.Fatalf("颜色族%s没有显示选中状态", family.ID)
 				}
 			}
 		}
 		if state == "filter-color-hover" {
-			expect(a.T("color_gray"))
+			expect(colorSwatchLabel(tt, a, "gray"))
 		}
 	case "sort":
 		for _, key := range []string{"sort_added", "sort_name", "sort_size"} {
@@ -538,7 +540,7 @@ func checkScreenshotState(t *testing.T, a *App, tt *ui.Tester, state string) {
 		}
 	}
 	if key, ok := strings.CutPrefix(state, "toolbar-hover-"); ok {
-		expect(a.T(key))
+		expect(toolbarHoverLabel(a, key))
 	}
 	if state != "welcome" {
 		if slices.Contains(tt.Texts(), a.T("inspector")) {
@@ -587,4 +589,24 @@ func writeScreenshot(t *testing.T, path string, tt *ui.Tester) {
 	if err := f.Close(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// 色块的名字后面带着当前位置的数量（「灰色 · 3」），按名字前缀找。
+func colorSwatchLabel(tt *ui.Tester, a *App, id string) string {
+	prefix := a.T("color_count", a.T("color_"+id), 0)
+	prefix = strings.TrimSuffix(prefix, "0")
+	for _, text := range tt.Texts() {
+		if strings.HasPrefix(text, prefix) {
+			return text
+		}
+	}
+	return a.T("color_" + id)
+}
+
+// 侧栏开着时悬停的是侧栏里的「收起侧栏」按钮。
+func toolbarHoverLabel(a *App, key string) string {
+	if key == "toggle_sidebar" && a.SidebarVisible {
+		return a.T("collapse_sidebar")
+	}
+	return a.T(key)
 }

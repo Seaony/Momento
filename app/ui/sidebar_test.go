@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -88,9 +90,10 @@ func TestSidebarRejectsOtherLibraryDrag(t *testing.T) {
 	if app.sidebarCanDrop(AssetsDrag{LibraryID: "other", assets: func() []string { return []string{"a"} }}) {
 		t.Fatal("接收了其他图库素材")
 	}
+	// 忙时也接收：写入进队列。
 	app.Busy = true
-	if app.sidebarCanDrop(AssetsDrag{LibraryID: "test", assets: func() []string { return []string{"a"} }}) {
-		t.Fatal("忙碌时仍接收写入")
+	if !app.sidebarCanDrop(AssetsDrag{LibraryID: "test", assets: func() []string { return []string{"a"} }}) {
+		t.Fatal("忙碌时拒绝了拖入")
 	}
 }
 
@@ -161,5 +164,100 @@ func TestRandomSidebarDoesNotRepeatAllCount(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("全部的计数应只出现一次，实际%d次", count)
+	}
+}
+
+// 拖素材进文件夹：说明加了几个；全都已经在里面时说「已在」。
+func TestSidebarDropAssetsNotifiesResult(t *testing.T) {
+	a := sidebarTestApp()
+	a.applySnapshot(a.Snapshot)
+	a.Busy = true // 写入进队列，测试里不碰数据库
+	a.addAssetsToFolder([]string{"a", "b"}, "root", "Design references")
+	if a.Notice != a.T("added_to_folder", 1, "Design references") || len(a.queuedRuns) != 1 {
+		t.Fatalf("加入文件夹的提示或写入不对：%q %d", a.Notice, len(a.queuedRuns))
+	}
+	a.Notice = ""
+	a.addAssetsToFolder([]string{"b"}, "root", "Design references")
+	if a.Notice != a.T("already_in_folder", "Design references") || len(a.queuedRuns) != 1 {
+		t.Fatalf("全都已在文件夹里时应只提示：%q %d", a.Notice, len(a.queuedRuns))
+	}
+}
+
+// 删除文件夹：空的直接删；有内容的确认语写明子文件夹和素材数量。
+func TestSidebarDeleteFolderConfirmWording(t *testing.T) {
+	a := sidebarTestApp()
+	a.Busy = true
+	a.deleteFolder(a.Snapshot.Folders[1])
+	if a.ConfirmOpen || len(a.queuedRuns) != 1 || a.queuedRuns[0].label != "delete_folder" {
+		t.Fatalf("空文件夹应直接删除：confirm=%v queued=%d", a.ConfirmOpen, len(a.queuedRuns))
+	}
+	a.deleteFolder(a.Snapshot.Folders[0])
+	if !a.ConfirmOpen || a.ConfirmDetail != a.T("delete_folder_tree_detail", "Design references", 1, 1) || a.ConfirmLabel != a.T("delete") {
+		t.Fatalf("有子文件夹的确认语不对：%q", a.ConfirmDetail)
+	}
+	a.ConfirmOpen = false
+	a.Snapshot.Folders = a.Snapshot.Folders[:1]
+	a.deleteFolder(a.Snapshot.Folders[0])
+	if a.ConfirmDetail != a.T("delete_folder_assets_detail", "Design references", 1) {
+		t.Fatalf("没有子文件夹的确认语不对：%q", a.ConfirmDetail)
+	}
+}
+
+func TestSidebarEmptyTrashConfirmShowsCount(t *testing.T) {
+	a := sidebarTestApp()
+	a.ConfirmEmptyTrash()
+	if a.ConfirmDetail != a.T("empty_trash_count_detail", 1) || a.ConfirmLabel != a.T("empty_trash") {
+		t.Fatalf("清空回收站确认没写数量或按钮不对：%q %q", a.ConfirmDetail, a.ConfirmLabel)
+	}
+}
+
+// 只有子文件夹的右键菜单有「移到最外层」；回收站为空时右键不弹菜单。
+func TestSidebarFolderMenuAndEmptyTrashMenu(t *testing.T) {
+	a := sidebarTestApp()
+	*a.sidebarOpenFlag("root") = true
+	tt := ui.NewTester(a.sidebar, 236, 800)
+	if err := tt.RightClick("UI details"); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(tt.Menu(), a.T("move_to_root")) {
+		t.Fatalf("子文件夹右键没有移到最外层：%v", tt.Menu())
+	}
+	tt.CloseMenu()
+	if err := tt.RightClick("Design references"); err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(tt.Menu(), a.T("move_to_root")) || !slices.Contains(tt.Menu(), a.T("new_subfolder")) {
+		t.Fatalf("顶层文件夹右键菜单不对：%v", tt.Menu())
+	}
+	tt.CloseMenu()
+	// 回收站里有一个素材（sidebarTestApp 里的 c）时有菜单；清空后不弹。
+	if err := tt.RightClick(a.T("trash")); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(tt.Menu(), a.T("empty_trash")) {
+		t.Fatalf("回收站有素材时右键没有清空：%v", tt.Menu())
+	}
+	tt.CloseMenu()
+	a.Snapshot.Assets[2].Trashed = false
+	a.applySnapshot(a.Snapshot)
+	tt.Frame()
+	if err := tt.RightClick(a.T("trash")); err != nil {
+		t.Fatal(err)
+	}
+	if len(tt.Menu()) != 0 {
+		t.Fatalf("回收站为空时不该弹出菜单：%v", tt.Menu())
+	}
+}
+
+// 标签管理行的数字原来是标签个数，和其它行的素材数混在一起；现在不显示。
+func TestSidebarTagManagementRowHasNoCount(t *testing.T) {
+	a := sidebarTestApp()
+	a.Preferences.SidebarCounts = true
+	for i := range 7 {
+		a.Snapshot.Tags = append(a.Snapshot.Tags, model.Tag{ID: fmt.Sprint("tag", i), Name: fmt.Sprint("T", i)})
+	}
+	tt := ui.NewTester(a.sidebar, 236, 800)
+	if !tt.HasText(a.T("tag_management")) || tt.HasText("7") {
+		t.Fatalf("标签管理行不该显示标签个数：%v", tt.Texts())
 	}
 }

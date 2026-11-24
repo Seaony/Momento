@@ -535,7 +535,8 @@ func TestTrashRestoreAndEmptyTrashPreserveLiveAssets(t *testing.T) {
 	if err := s.Restore(ctx, ids[:1]); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.EmptyTrash(ctx); err != nil {
+	// 已恢复的 ids[0] 也在确认清单里：跳过它，只删还在回收站的。
+	if err := s.EmptyTrash(ctx, ids); err != nil {
 		t.Fatal(err)
 	}
 	snap = snapshot(t, ctx, lib)

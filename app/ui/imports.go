@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"log/slog"
 	"net/url"
 	"os"
@@ -31,6 +32,18 @@ type importState struct {
 	PickerFolder    string
 	PickerTags      map[string]bool
 	PickerReply     chan importChoice
+	// 用户手动发起的那批导入可以中途停止；自动导入由监视器自己管，不给停止按钮。
+	manualCancel   context.CancelFunc
+	manualCanceled bool
+	// 导入进行中又拖进来、粘贴进来的文件：排在后面，这批做完接着导，不能丢掉。
+	queued []queuedPathImport
+}
+
+type queuedPathImport struct {
+	generation      uint64
+	paths           []string
+	folderID, event string
+	cleanup         func()
 }
 type importChoice struct {
 	FolderID string
@@ -67,10 +80,7 @@ func (a *App) PasteImport() {
 		a.ShowError(i18n.NewError("library_required"))
 		return
 	}
-	if a.Busy {
-		a.Notify(a.T("busy"))
-		return
-	}
+	// 忙时文件和截图交给 startPathImport 排队，和拖进来的一样不丢；链接的下载队列不分图库，忙时先不收。
 	files, err := mygo.Clipboard.ReadFiles()
 	if err != nil && !errors.Is(err, transfer.ErrFormat) {
 		a.ShowError(err)
@@ -85,6 +95,10 @@ func (a *App) PasteImport() {
 	if len(data) == 0 {
 		// 复制的是图片链接（一行一个）：按链接下载导入，和浏览器扩展、momento:// 链接走同一个队列。
 		if urls := clipboardImageURLs(mygo.Clipboard.ReadText()); len(urls) > 0 {
+			if a.Busy {
+				a.Notify(a.T("busy"))
+				return
+			}
 			for _, url := range urls {
 				a.QueueImport(url, "")
 			}
@@ -93,29 +107,34 @@ func (a *App) PasteImport() {
 		a.Notify(a.T("clipboard_no_image"))
 		return
 	}
-	folder := a.Query.FolderID
-	a.Busy = true
+	folder, generation := a.Query.FolderID, a.generation
 	go func() {
 		dir, err := os.MkdirTemp("", "momento-paste-")
 		if err == nil {
 			err = os.WriteFile(filepath.Join(dir, "Clipboard.png"), data, 0600)
 		}
 		a.Window.Update(func() {
-			a.Busy = false
-			if err != nil {
-				if dir != "" {
-					if cleanupErr := os.RemoveAll(dir); cleanupErr != nil {
-						slog.Error("清理剪贴板临时图片失败", "error", cleanupErr)
-					}
+			cleanup := func() {
+				if dir == "" {
+					return
 				}
-				a.ShowError(err)
-				return
-			}
-			a.startPathImport([]string{filepath.Join(dir, "Clipboard.png")}, folder, "", func() {
 				if err := os.RemoveAll(dir); err != nil {
 					slog.Error("清理剪贴板临时图片失败", "error", err)
 				}
-			})
+			}
+			if err != nil {
+				cleanup()
+				a.ShowError(err)
+				return
+			}
+			// 暂存截图的这一下换了图库：截图是粘贴给原来那个图库的，不能导进新图库。
+			if generation != a.generation {
+				slog.Warn("粘贴的截图暂存期间换了图库，没有导入")
+				cleanup()
+				a.Notify(a.T("error_import_library_changed"))
+				return
+			}
+			a.startPathImport([]string{filepath.Join(dir, "Clipboard.png")}, folder, "", cleanup)
 		})
 	}()
 }
@@ -132,23 +151,63 @@ func imageClipboardPaths(paths []string) []string {
 }
 
 func (a *App) startPathImport(paths []string, folderID, event string, cleanup func()) {
-	if a.Library == nil || a.Busy {
+	if a.Library == nil {
 		if cleanup != nil {
 			cleanup()
 		}
-		a.Notify(a.T("busy"))
+		a.ShowError(i18n.NewError("library_required"))
+		return
+	}
+	if a.Busy {
+		a.Import.queued = append(a.Import.queued, queuedPathImport{generation: a.generation, paths: slices.Clone(paths), folderID: folderID, event: event, cleanup: cleanup})
+		slog.Info("导入排队", "paths", len(paths), "queued", len(a.Import.queued))
+		a.Notify(a.T("import_queued"))
 		return
 	}
 	service, lib, gen := a.Assets, a.Library, a.generation
 	request := model.ImportRequest{Paths: slices.Clone(paths), FolderID: folderID, ImportKeywords: a.Preferences.ImportKeywords}
+	ctx, cancel := context.WithCancel(a.ctx)
+	a.Import.manualCancel, a.Import.manualCanceled = cancel, false
 	a.Busy = true
 	a.Progress = &model.ImportProgress{Stage: "scanning"}
 	go func() {
+		defer cancel()
 		if cleanup != nil {
 			defer cleanup()
 		}
-		_, _ = a.importFiles(a.ctx, service, lib, gen, request, event)
+		_, _ = a.importFiles(ctx, service, lib, gen, request, event)
 	}()
+}
+
+// 接着导入排在后面的那批；换了图库的作废（路径还在原处，用户可以重新拖）。
+func (a *App) startQueuedPathImport() bool {
+	for len(a.Import.queued) > 0 {
+		next := a.Import.queued[0]
+		a.Import.queued = a.Import.queued[1:]
+		if next.generation != a.generation || a.Library == nil {
+			slog.Warn("图库已切换，丢弃排队的导入", "paths", len(next.paths))
+			if next.cleanup != nil {
+				next.cleanup()
+			}
+			continue
+		}
+		a.startPathImport(next.paths, next.folderID, next.event, next.cleanup)
+		return true
+	}
+	return false
+}
+
+// 停止手动导入：整批一起提交，停下后这批都不会进图库，原文件不动。
+func (a *App) CancelImport() {
+	if a.Import.manualCancel != nil && !a.Import.manualCanceled {
+		slog.Info("用户停止导入")
+		a.Import.manualCanceled = true
+		a.Import.manualCancel()
+	}
+}
+
+func (a *App) CanCancelImport() bool {
+	return a.Import.manualCancel != nil && !a.Import.manualCanceled
 }
 func (a *App) importFiles(ctx context.Context, service *assets.Service, lib *library.Library, gen uint64, request model.ImportRequest, event string) (model.ImportResult, error) {
 	a.workMu.Lock()
@@ -171,7 +230,11 @@ func (a *App) importFiles(ctx context.Context, service *assets.Service, lib *lib
 		}
 		a.Busy = false
 		a.Progress = nil
-		if refreshErr != nil {
+		canceled := a.Import.manualCanceled && errors.Is(importErr, context.Canceled)
+		a.Import.manualCancel, a.Import.manualCanceled = nil, false
+		if canceled {
+			a.Notify(a.T("import_stopped"))
+		} else if refreshErr != nil {
 			a.ShowError(refreshErr)
 		} else {
 			a.applySnapshot(snapshot)
@@ -222,8 +285,14 @@ func (a *App) ConfigureAutoImport() {
 							a.Settings.AutoImportErrors = map[string]string{}
 						}
 						a.Settings.AutoImportErrors[event.RulePath] = a.Texts.Error(event.Err)
+						if a.Settings.AutoImportMissing == nil {
+							a.Settings.AutoImportMissing = map[string]bool{}
+						}
+						// 只有规则目录本身不在了才算「文件夹不存在」；目录里某个文件被移走只显示原因。
+						a.Settings.AutoImportMissing[event.RulePath] = event.Path == event.RulePath && errors.Is(event.Err, fs.ErrNotExist)
 					} else {
 						delete(a.Settings.AutoImportErrors, event.RulePath)
+						delete(a.Settings.AutoImportMissing, event.RulePath)
 					}
 				}
 				a.InvalidateWindows()

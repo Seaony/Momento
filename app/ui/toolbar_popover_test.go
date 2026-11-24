@@ -15,6 +15,13 @@ func TestToolbarPopoversFitAndSortCloses(t *testing.T) {
 			a := sidebarTestApp()
 			a.Texts = i18n.Catalog{Language: language}
 			a.Toolbar.FilterOpen = true
+			// 标签、文件类型只列当前位置里有素材的；有筛选条件时弹层标题栏才有「清除筛选」。
+			a.applySnapshot(model.Snapshot{
+				Assets: []model.Asset{{ID: "a", Name: "Landscape", Extension: "png", TagIDs: []string{"t1"}, Colors: []model.Color{{Family: "red"}}}},
+				Tags:   []model.Tag{{ID: "t1", Name: "Landscape"}},
+			})
+			a.Query.ColorFamilies = []string{"red"}
+			a.Refine()
 			type span struct {
 				key    string
 				size   float32
@@ -36,7 +43,14 @@ func TestToolbarPopoversFitAndSortCloses(t *testing.T) {
 			tt.Frame()
 			// Tester 只能找到整行按钮，量不到文字本身，所以按版面算出文字能用的宽度来比。
 			// 标题和「清除筛选」在同一行：弹层宽减去左右留白和清除按钮，剩下的要放得下标题。
-			clear, ok := tt.Find(a.T("clear_filters"))
+			// 工具栏的筛选按钮上也有一个同名的小 ×，这里要的是弹层里那个带文字的。
+			var clear ui.Rect
+			ok := false
+			for _, item := range tt.AccessAll() {
+				if item.Name == a.T("clear_filters") && item.Bounds.W > clear.W {
+					clear, ok = item.Bounds, true
+				}
+			}
 			if !ok || clear.W-2*popClearPad+1 < widths["clear_filters"] {
 				t.Fatalf("清除筛选截断：%+v 需要 %v", clear, widths["clear_filters"])
 			}
@@ -84,7 +98,10 @@ func TestToolbarPopoversFitAndSortCloses(t *testing.T) {
 // 标签不多时没有搜索框，之前留下的搜索词不能把标签藏起来。
 func TestFilterIgnoresHiddenTagSearch(t *testing.T) {
 	a := sidebarTestApp()
-	a.Snapshot.Tags = []model.Tag{{ID: "t1", Name: "Landscape"}, {ID: "t2", Name: "Portrait"}}
+	a.applySnapshot(model.Snapshot{
+		Assets: []model.Asset{{ID: "a", Name: "Landscape", TagIDs: []string{"t1"}}, {ID: "b", Name: "Portrait", TagIDs: []string{"t2"}}},
+		Tags:   []model.Tag{{ID: "t1", Name: "Landscape"}, {ID: "t2", Name: "Portrait"}},
+	})
 	a.Toolbar.TagSearch = "nothing matches"
 	a.Toolbar.FilterOpen = true
 	tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.toolbar(c) }, 1100, 700)

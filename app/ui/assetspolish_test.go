@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -167,11 +168,11 @@ func TestAssetThirdRoundLocalesFit(t *testing.T) {
 				case "search":
 					a.Query.Search = "mountain landscape"
 					a.Refine()
-					title, hint = a.T("search_empty", a.Query.Search), a.T("search_empty_hint")
+					title, hint = a.T("search_empty", a.Query.Search), a.T("search_empty_keyword_hint")
 				case "scope":
 					a.Query.Scope = "favorites"
 					a.Refine()
-					title, hint = a.T("scope_empty"), a.T("scope_empty_hint")
+					title, hint = a.T("favorites_empty_title"), a.T("favorites_empty_hint")
 				case "trash":
 					a.Query.Scope = "trash"
 					a.Refine()
@@ -193,14 +194,17 @@ func TestAssetThirdRoundLocalesFit(t *testing.T) {
 				}
 				var previousBottom float32
 				for _, text := range []string{title, hint} {
+					if text == "" {
+						continue
+					}
 					box, ok := tt.Find(text)
 					if !ok || box.X < 24 || box.X+box.W > 536 || box.Y < previousBottom || box.Y+box.H > 600 {
 						t.Fatalf("空态文字发生越界或重叠：%q %+v", text, box)
 					}
 					previousBottom = box.Y + box.H
 				}
-				if state == "empty" && !tt.HasText(a.T("import")) {
-					t.Fatal("空图库缺少导入入口")
+				if state == "empty" && (!tt.HasText(a.T("import_images_button")) || !tt.HasText(a.T("import_folder_button"))) {
+					t.Fatal("空图库缺少导入图片、导入文件夹入口")
 				}
 			})
 		}
@@ -256,7 +260,7 @@ func TestAssetThirdRoundScreenshots(t *testing.T) {
 
 func TestAssetEmptyRecoveryActions(t *testing.T) {
 	for _, language := range []string{"zh-CN", "en", "ja"} {
-		for _, state := range []string{"search", "filters", "scope", "trash", "empty"} {
+		for _, state := range []string{"search", "both", "filters", "scope", "trash", "empty"} {
 			t.Run(language+"/"+state, func(t *testing.T) {
 				a := assetViewFixture()
 				a.Texts.Language, a.Preferences.Language = language, language
@@ -268,8 +272,11 @@ func TestAssetEmptyRecoveryActions(t *testing.T) {
 				switch state {
 				case "search":
 					a.Query.Search = "nothing matched"
-					a.Query.Extensions = []string{"png"}
 					action = "clear_search"
+				case "both":
+					a.Query.Search = "nothing matched"
+					a.Query.Extensions = []string{"png"}
+					action = "clear_search_and_filters"
 				case "filters":
 					a.Query.ColorFamilies, a.Query.TagIDs, a.Query.Extensions = []string{"red"}, []string{"missing"}, []string{"png"}
 					action = "clear_filters"
@@ -292,8 +299,13 @@ func TestAssetEmptyRecoveryActions(t *testing.T) {
 				}, 560, 600)
 				tt.SetLocale(a.Texts.Locale())
 				if action == "" {
-					if tt.HasText(a.T("clear_search")) || tt.HasText(a.T("clear_filters")) || tt.HasText(a.T("import")) != (state == "empty") {
-						t.Fatal("普通范围、回收站或空库出现错误恢复动作")
+					if tt.HasText(a.T("clear_search")) || tt.HasText(a.T("clear_filters")) || tt.HasText(a.T("clear_search_and_filters")) {
+						t.Fatal("普通范围、回收站或空库出现清除搜索、筛选的按钮")
+					}
+					// 空文件夹和空图库给导入入口，回收站和别的空位置不给。
+					want := map[string]string{"scope": "import", "empty": "import_images_button"}[state]
+					if want != "" && !tt.HasText(a.T(want)) || want == "" && (tt.HasText(a.T("import_images_button")) || tt.HasText(a.T("import_folder_button"))) {
+						t.Fatalf("%s 的导入入口不对", state)
 					}
 					return
 				}
@@ -302,12 +314,18 @@ func TestAssetEmptyRecoveryActions(t *testing.T) {
 				if !ok || box.W+1 < measured || box.X < space24 || box.X+box.W > 560-space24 || box.Y+box.H > 600 {
 					t.Fatalf("恢复按钮文字截断或越界：%s %+v，文字宽%v", label, box, measured)
 				}
-				other := "clear_search"
-				if action == other {
-					other = "clear_filters"
+				for _, other := range []string{"clear_search", "clear_filters", "clear_search_and_filters"} {
+					// 「清除搜索和筛选」里本来就含有「清除搜索」「清除筛选」的字样，这几个不算多余。
+					if other != action && !strings.Contains(label, a.T(other)) && tt.HasText(a.T(other)) {
+						t.Fatalf("空态出现多余的恢复动作 %s", other)
+					}
 				}
-				if tt.HasText(a.T(other)) || tt.HasText(a.T("import")) {
-					t.Fatal("空态应只有一个恢复动作")
+				if tt.HasText(a.T("import_images_button")) {
+					t.Fatal("搜索、筛选无结果时不该有导入入口")
+				}
+				// 搜索无结果且不在「全部」时，多一个去全部里搜的次要按钮；筛选、搜索加筛选没有。
+				if tt.HasText(a.T("search_in_all")) != (state == "search") {
+					t.Fatalf("%s：「在全部中搜索」的显示不对", state)
 				}
 				if err := tt.Click(label); err != nil {
 					t.Fatal(err)
@@ -316,8 +334,8 @@ func TestAssetEmptyRecoveryActions(t *testing.T) {
 					t.Fatal("恢复动作改变了当前范围")
 				}
 				if state == "search" {
-					if a.Query.Search != "" || len(a.Query.Extensions) != 1 || !tt.HasText(a.T("clear_filters")) {
-						t.Fatal("清空搜索没有保留原筛选或重新筛选")
+					if a.Query.Search != "" || len(a.Visible) != 1 {
+						t.Fatal("清空搜索没有恢复当前范围的素材")
 					}
 				} else if len(a.Query.ColorFamilies)+len(a.Query.TagIDs)+len(a.Query.Extensions) != 0 || len(a.Visible) != 1 || !tt.HasText(snapshot.Assets[0].Name) {
 					t.Fatal("清除筛选没有清空三类条件并恢复当前范围的素材")

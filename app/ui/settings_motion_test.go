@@ -157,7 +157,7 @@ func TestDialogsSecondRoundScreenshots(t *testing.T) {
 					view = a.lockScreen
 				case "password":
 					a.Lock.DialogOpen, a.Lock.Mode = true, "enable"
-					view = a.passwordSettingsDialog
+					view = func(c *ui.Context) { a.passwordSettingsDialog(c, false) }
 				case "onboarding-extension":
 					a.Preferences.Onboarded, a.Welcome.Step = false, 1
 					view = a.welcome

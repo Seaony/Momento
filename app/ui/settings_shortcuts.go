@@ -10,6 +10,14 @@ import (
 	"github.com/egoist/mygo/ui"
 )
 
+// shortcutClaim 记着没录成的那次按键：Other 是占着这个按键的另一项，为空表示不是冲突。
+type shortcutClaim struct{ Accelerator, Other string }
+
+type shortcutGroupNote struct {
+	Text  string
+	Error bool
+}
+
 type ShortcutDefinition struct {
 	Action, Key, Group, Default string
 	Global                      bool
@@ -38,8 +46,8 @@ var ShortcutDefinitions = []ShortcutDefinition{
 	{"select_all", "select_all", "edit", "CmdOrCtrl+A", false},
 	{"delete", "delete", "edit", "Backspace", false},
 	{"view_masonry", "view_masonry", "view", "CmdOrCtrl+1", false},
-	{"view_list", "view_list", "view", "CmdOrCtrl+2", false},
-	{"view_justified", "view_justified", "view", "CmdOrCtrl+3", false},
+	{"view_justified", "view_justified", "view", "CmdOrCtrl+2", false},
+	{"view_list", "view_list", "view", "CmdOrCtrl+3", false},
 	{"slideshow", "slideshow", "view", "", false},
 	{"search", "search", "view", "CmdOrCtrl+K", false},
 	{"filter", "filter", "view", "CmdOrCtrl+Alt+F", false},
@@ -101,15 +109,31 @@ func (a *App) SetShortcut(action, accelerator string) bool {
 		a.Settings.ShortcutErrors = make(map[string]string)
 	}
 	delete(a.Settings.ShortcutErrors, action)
+	delete(a.Settings.ShortcutPending, action)
+	a.Settings.ShortcutGroupNotes = nil
+	reject := func(message string, claim shortcutClaim) bool {
+		a.Settings.ShortcutErrors[action] = message
+		if a.Settings.ShortcutPending == nil {
+			a.Settings.ShortcutPending = make(map[string]shortcutClaim)
+		}
+		a.Settings.ShortcutPending[action] = claim
+		return false
+	}
 	if accelerator != "" {
 		mods, key, valid := parseShortcut(accelerator)
 		if !valid {
-			a.Settings.ShortcutErrors[action] = a.T("shortcut_invalid")
-			return false
+			return reject(a.T("shortcut_invalid"), shortcutClaim{})
+		}
+		// 注册到系统的全局快捷键没有修饰键，会截走整个系统里的这个按键。
+		if definition.Global && mods&(ui.Cmd|ui.Super|ui.Ctrl|ui.Alt) == 0 {
+			text := a.T("shortcut_global_modifier")
+			if runtime.GOOS != "darwin" {
+				text = a.T("shortcut_global_modifier_other")
+			}
+			return reject(text, shortcutClaim{})
 		}
 		if other, conflict := conflictingShortcut(definition, mods, key, a.Preferences.Shortcuts); conflict {
-			a.Settings.ShortcutErrors[action] = a.T("shortcut_conflict", a.T(other.Key))
-			return false
+			return reject(a.T("shortcut_conflict_in_use", displayShortcut(accelerator), a.T(other.Key)), shortcutClaim{Accelerator: accelerator, Other: other.Action})
 		}
 	}
 	if a.Preferences.Shortcuts == nil {
@@ -183,6 +207,16 @@ func (a *App) MenuAccelerator(action string) string {
 	return accelerator
 }
 
+// 这一组里有没有改过的快捷键。
+func (a *App) groupHasCustomShortcut(group string) bool {
+	for _, definition := range ShortcutDefinitions {
+		if _, custom := a.Preferences.Shortcuts[definition.Action]; custom && definition.Group == group {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *App) ResetShortcuts(group string) {
 	candidate := maps.Clone(a.Preferences.Shortcuts)
 	for _, definition := range ShortcutDefinitions {
@@ -190,25 +224,23 @@ func (a *App) ResetShortcuts(group string) {
 			delete(candidate, definition.Action)
 		}
 	}
-	conflicts := make(map[string]string)
 	for _, definition := range ShortcutDefinitions {
+		if definition.Group != group {
+			continue
+		}
 		mods, key, valid := parseShortcut(shortcutValue(candidate, definition.Action))
 		if !valid {
 			continue
 		}
 		if other, conflict := conflictingShortcut(definition, mods, key, candidate); conflict {
-			conflicts[definition.Action] = a.T("shortcut_conflict", a.T(other.Key))
+			// 恢复默认会和别处冲突：整组都不恢复，在组标题旁说清楚。
+			if a.Settings.ShortcutGroupNotes == nil {
+				a.Settings.ShortcutGroupNotes = make(map[string]shortcutGroupNote)
+			}
+			a.Settings.ShortcutGroupNotes[group] = shortcutGroupNote{Text: a.T("shortcut_restore_conflict", a.T(definition.Key), a.T(other.Key)), Error: true}
+			a.InvalidateWindows()
+			return
 		}
-	}
-	if len(conflicts) > 0 {
-		if a.Settings.ShortcutErrors == nil {
-			a.Settings.ShortcutErrors = make(map[string]string)
-		}
-		for action, message := range conflicts {
-			a.Settings.ShortcutErrors[action] = message
-		}
-		a.InvalidateWindows()
-		return
 	}
 	a.Preferences.Shortcuts = candidate
 	for _, definition := range ShortcutDefinitions {
@@ -217,8 +249,10 @@ func (a *App) ResetShortcuts(group string) {
 				a.Settings.RecordingShortcut = ""
 			}
 			delete(a.Settings.ShortcutErrors, definition.Action)
+			delete(a.Settings.ShortcutPending, definition.Action)
 		}
 	}
+	a.Settings.ShortcutGroupNotes = map[string]shortcutGroupNote{group: {Text: a.T("shortcut_restored")}}
 	a.SavePreferences()
 }
 
@@ -307,6 +341,7 @@ func (a *App) shortcutsSettings(c *ui.Context) {
 	p := paletteFor(c.Theme())
 	field, _ := searchField(c.Key("shortcut-search"), &a.Settings.ShortcutSearch, a.T("shortcut_search"), a.T("clear_search"))
 	field.FillWidth()
+	matched := false
 	for _, group := range []string{"global", "file", "edit", "view", "preview"} {
 		definitions := []ShortcutDefinition{}
 		for _, definition := range ShortcutDefinitions {
@@ -317,10 +352,21 @@ func (a *App) shortcutsSettings(c *ui.Context) {
 		if len(definitions) == 0 {
 			continue
 		}
+		matched = true
 		ui.Column(c.Key(group)).FillWidth().Gap(space8).Children(func() {
-			// 标题和其他设置分组一样；「恢复默认」是和「清除筛选」同款的小号文字按钮，不把标题行撑高。
+			// 标题和其他设置分组一样；「恢复默认」是和「清除筛选」同款的小号文字按钮，只在这一组有改动时出现。
 			ui.Row(c).FillWidth().Padding(0, 0, 0, space4).Gap(space8).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, a.T("shortcut_group_"+group)).FontSize(fontGroup).FontWeight(600).LetterSpacing(.6).TextColor(p.TextSecondary).Grow(1).MinWidth(0)
+				if note, ok := a.Settings.ShortcutGroupNotes[group]; ok {
+					color := p.Success
+					if note.Error {
+						color = p.Danger
+					}
+					fadeMotion(ui.Text(c.Key("group-note"), note.Text).FontSize(fontSecondary).TextColor(color).SingleLine().ContentTransition(replaceMotion)).Role(ui.RoleStatus)
+				}
+				if !a.groupHasCustomShortcut(group) {
+					return
+				}
 				reset := ui.ButtonBase(c.Key("reset")).Height(20).Padding(0, popClearPad).Radius(radiusSmall).Cursor(ui.CursorPointer).Label(a.T("restore_defaults"))
 				background, text := ui.Transparent, p.TextTertiary
 				if reset.Pressed() {
@@ -344,17 +390,21 @@ func (a *App) shortcutsSettings(c *ui.Context) {
 			})
 		})
 	}
+	if !matched {
+		ui.Text(c.Key("shortcut-no-match"), a.T("shortcut_no_match")).FontSize(fontSecondary).TextColor(p.TextTertiary).FillWidth().TextAlign(ui.Center).Role(ui.RoleStatus)
+	}
 }
 
 func (a *App) shortcutRow(c *ui.Context, definition ShortcutDefinition) {
 	p := paletteFor(c.Theme())
+	recording := a.Settings.RecordingShortcut == definition.Action
+	var record ui.Element
 	settingsRow(c, func() {
 		ui.Text(c, a.T(definition.Key)).Grow(1).MinWidth(0)
 		label := displayShortcut(a.Shortcut(definition.Action))
 		if label == "" {
 			label = a.T("shortcut_record")
 		}
-		recording := a.Settings.RecordingShortcut == definition.Action
 		if recording {
 			label = a.T("shortcut_recording")
 		}
@@ -362,13 +412,14 @@ func (a *App) shortcutRow(c *ui.Context, definition ShortcutDefinition) {
 			Label(a.T("shortcut_binding", a.T(definition.Key))).Children(func() {
 			ui.Text(c, label).FontSize(fontBody).SingleLine()
 		})
+		record = button
 		if recording {
 			button.Border(1, p.Accent).Focus().HandleInput(func(event ui.InputEvent) bool {
 				if event.Kind != ui.InputKeyDown {
 					return event.Kind == ui.InputText || event.Kind == ui.InputKeyUp
 				}
 				if event.Key == ui.KeyEscape {
-					a.endShortcutRecording()
+					a.cancelShortcutRecording()
 					return true
 				}
 				if event.Key == ui.KeyBackspace && event.Mods == 0 {
@@ -387,15 +438,55 @@ func (a *App) shortcutRow(c *ui.Context, definition ShortcutDefinition) {
 			})
 		}
 		if button.Clicked() {
+			a.clearShortcutPending()
 			a.Settings.RecordingShortcut = definition.Action
 			if a.MenuChanged != nil {
 				a.MenuChanged()
 			}
 		}
 	})
+	claimPressed := false
 	if message := a.Settings.ShortcutErrors[definition.Action]; message != "" {
-		settingsError(c, message)
+		claim := a.Settings.ShortcutPending[definition.Action]
+		revealMotion(ui.Row(c.Key("settings-error"))).FillWidth().Padding(space4, space16, space12, space16).Gap(space12).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, message).FontSize(fontSecondary).TextColor(p.Danger).Grow(1).MinWidth(0).Role(ui.RoleAlert)
+			if claim.Other == "" {
+				return
+			}
+			// 点这个按钮不算「点了别处」，也不能让录制按钮丢焦点。
+			use := settingsButton(c.Key("use-anyway"), a.T("shortcut_use_anyway")).Height(controlSmall).KeepFocus()
+			claimPressed = use.Pressed()
+			if use.Clicked() {
+				claimPressed = true
+				a.claimShortcut(definition.Action)
+			}
+		})
 	}
+	// 按钮失焦、点了别处、设置窗口失焦，都算取消录制，免得菜单和快捷键一直被摘着。
+	if recording && a.Settings.RecordingShortcut == definition.Action && (record.PressedOutside() && !claimPressed || record.FocusLeft() || !c.WindowActive()) {
+		a.cancelShortcutRecording()
+		a.InvalidateWindows()
+	}
+}
+
+// 把按下的组合键从占着它的那一项上抢过来：对方清空，当前项设上。
+func (a *App) claimShortcut(action string) {
+	claim, ok := a.Settings.ShortcutPending[action]
+	if !ok || claim.Other == "" {
+		return
+	}
+	a.SetShortcut(claim.Other, "")
+	if a.SetShortcut(action, claim.Accelerator) {
+		a.endShortcutRecording()
+	}
+}
+
+// 没录成的提示（冲突、不合规）随下一次录制、取消、换页一起清掉。
+func (a *App) clearShortcutPending() {
+	for action := range a.Settings.ShortcutPending {
+		delete(a.Settings.ShortcutErrors, action)
+	}
+	a.Settings.ShortcutPending = nil
 }
 
 func (a *App) endShortcutRecording() {
@@ -403,6 +494,17 @@ func (a *App) endShortcutRecording() {
 	if a.MenuChanged != nil {
 		a.MenuChanged()
 	}
+}
+
+// 取消录制：这一行没录成的提示一并清掉。
+func (a *App) cancelShortcutRecording() {
+	if action := a.Settings.RecordingShortcut; action != "" {
+		if _, pending := a.Settings.ShortcutPending[action]; pending {
+			delete(a.Settings.ShortcutErrors, action)
+			delete(a.Settings.ShortcutPending, action)
+		}
+	}
+	a.endShortcutRecording()
 }
 
 func (a *App) SetShortcutRegistrationError(action string, err error) {
@@ -419,6 +521,6 @@ func (a *App) SetShortcutRegistrationError(action string, err error) {
 
 func (a *App) CancelShortcutRecording() {
 	if a.Settings.RecordingShortcut != "" {
-		a.endShortcutRecording()
+		a.cancelShortcutRecording()
 	}
 }

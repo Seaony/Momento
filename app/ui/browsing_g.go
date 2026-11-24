@@ -15,6 +15,9 @@ type gBrowsingState struct {
 	SmartName     string
 	SmartMatch    int
 	SmartRules    []model.SmartRule
+	// smartRuleKeys 和 SmartRules 一一对应，是每条规则的身份：删掉中间一条时收起的是它自己，不是最后一行。
+	smartRuleKeys []uint64
+	smartRuleNext uint64
 	SmartError    string
 	Saving        bool
 	RulesScroll   ui.ScrollState

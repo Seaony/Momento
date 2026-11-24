@@ -11,6 +11,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -87,29 +88,144 @@ func TestAssetReorderUsesStableIdentityAndIntermediatePosition(t *testing.T) {
 	}
 }
 
-func TestAssetViewSwitchCrossfadesWithoutCardMorphing(t *testing.T) {
-	a := assetsMotionFixture(t)
-	tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.assetArea(c) }, 700, 600)
-	tt.Advance(time.Second)
-	a.ViewMode = 2
-	tt.Frame()
-	start := assetMotionBounds(t, tt, "Photo 1")
-	tt.Advance(87 * time.Millisecond)
-	middle := assetMotionBounds(t, tt, "Photo 1")
-	tt.Advance(163 * time.Millisecond)
-	after := assetMotionBounds(t, tt, "Photo 1")
-	endPixels := append([]byte(nil), tt.Image().Pix...)
-	tt.Advance(time.Second)
-	if !bytes.Equal(endPixels, tt.Image().Pix) {
-		t.Fatal("100%帧仍有旧布局残影或未完成的变形")
+// 切换视图和调列数一样：卡片从网格里的位置和大小变成列表里的一行，中间帧在两者之间，之后完全落定。
+func TestAssetViewSwitchMorphsCards(t *testing.T) {
+	for _, from := range viewModes {
+		if from == 2 {
+			continue
+		}
+		t.Run(fmt.Sprint(from), func(t *testing.T) {
+			a := assetsMotionFixture(t)
+			a.ViewMode = from
+			tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.assetArea(c) }, 700, 600)
+			tt.Advance(time.Second)
+			before := assetMotionBounds(t, tt, "Photo 1")
+			a.ViewMode = 2
+			tt.Frame()
+			start := assetMotionBounds(t, tt, "Photo 1")
+			tt.Advance(87 * time.Millisecond)
+			middle := assetMotionBounds(t, tt, "Photo 1")
+			tt.Advance(time.Second)
+			after := assetMotionBounds(t, tt, "Photo 1")
+			endPixels := append([]byte(nil), tt.Image().Pix...)
+			tt.Advance(time.Second)
+			if !bytes.Equal(endPixels, tt.Image().Pix) {
+				t.Fatal("变形落定后仍有旧布局残影或未完成的动画")
+			}
+			if rectDistance(before, start) > 1 {
+				t.Fatalf("卡片没有从网格里的位置出发：%+v -> %+v", before, start)
+			}
+			if rectDistance(middle, before) < 1 || rectDistance(middle, after) < 1 || rectDistance(middle, before)+rectDistance(middle, after) > rectDistance(before, after)+1 {
+				t.Fatalf("中间帧不在网格和列表之间：%+v -> %+v -> %+v", before, middle, after)
+			}
+			if math.Abs(float64(after.H-listRowHeight(a.Visible[1]))) > .01 {
+				t.Fatalf("列表终点行高异常：%+v", after)
+			}
+			// 再切回来，列表行变回卡片。
+			a.ViewMode = from
+			tt.Frame()
+			back := assetMotionBounds(t, tt, "Photo 1")
+			tt.Advance(87 * time.Millisecond)
+			if middle := assetMotionBounds(t, tt, "Photo 1"); rectDistance(back, after) > 1 || rectDistance(middle, after) < 1 || rectDistance(middle, before) < 1 {
+				t.Fatalf("切回网格没有从列表行变回去：%+v -> %+v -> %+v", after, middle, before)
+			}
+		})
 	}
-	for _, frame := range []ui.Rect{start, middle} {
-		if math.Abs(float64(frame.W/frame.H-after.W/after.H)) > .02 || frame.W/after.W < .975 || frame.W/after.W > 1.005 {
-			t.Fatalf("切换视图时卡片在逐张变形：%+v -> %+v -> %+v", start, middle, after)
+}
+
+// manyAssetsMotionFixture：count 张、宽高按 size 给的素材，缩略图都已在缓存里。
+func manyAssetsMotionFixture(t *testing.T, count int, size func(int) (int, int)) *App {
+	t.Helper()
+	a := assetsMotionFixture(t)
+	var snapshot model.Snapshot
+	for i := 0; i < count; i++ {
+		w, h := size(i)
+		snapshot.Assets = append(snapshot.Assets, model.Asset{ID: fmt.Sprint(i), Name: fmt.Sprintf("Photo %d", i), Width: w, Height: h, Extension: "jpg", CreatedAt: time.Now()})
+	}
+	a.applySnapshot(snapshot)
+	bitmap := ui.NewBitmap(image.NewRGBA(image.Rect(0, 0, 120, 80)))
+	for _, asset := range a.Visible {
+		key := thumbnailKey{root: a.Library.Root, id: asset.ID}
+		if _, ok := a.Thumbnails.entries[key]; !ok {
+			a.Thumbnails.entries[key] = a.Thumbnails.order.PushFront(thumbnailEntry{key: key, bitmap: bitmap, bytes: 1})
 		}
 	}
-	if math.Abs(float64(after.H-listRowHeight(a.Visible[1]))) > .01 {
-		t.Fatalf("列表终点行高异常：%+v", after)
+	return a
+}
+
+// selectOnScreen 选中屏幕上纵向落在 [from, to) 的第一张，并补一帧让排版记下锚点。
+func selectOnScreen(t *testing.T, tt *ui.Tester, a *App, from, to float32) string {
+	t.Helper()
+	for _, asset := range a.Visible {
+		if box, ok := tt.Find(asset.Name); ok && box.H > 0 && box.Y >= from && box.Y < to {
+			a.Selected.Add(asset.ID)
+			tt.Frame()
+			tt.Advance(time.Second)
+			return asset.Name
+		}
+	}
+	t.Fatal("屏幕上没有找到卡片")
+	return ""
+}
+
+// 滚到中间再切视图：选中的那张在屏幕上的高度全程不变，其他卡片围着它变形，不是换成另一批图。
+func TestAssetViewSwitchKeepsAnchorInPlace(t *testing.T) {
+	a := manyAssetsMotionFixture(t, 60, func(i int) (int, int) { return 600, 400 + i%3*150 })
+	tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.assetArea(c) }, 700, 600)
+	tt.Advance(time.Second)
+	tt.Scroll(350, 300, 0, 900)
+	tt.Advance(time.Second)
+	name := selectOnScreen(t, tt, a, 200, 400)
+	before := assetMotionBounds(t, tt, name)
+	start := a.scroll.Y
+	a.ViewMode = 2
+	tt.Frame()
+	for _, step := range []time.Duration{0, 87 * time.Millisecond, 88 * time.Millisecond, time.Second} {
+		tt.Advance(step)
+		if box := assetMotionBounds(t, tt, name); math.Abs(float64(box.Y-before.Y)) > 2 {
+			t.Fatalf("锚点卡片在切换途中离开了原来的高度：%+v -> %+v", before, box)
+		}
+	}
+	if a.scroll.Y == start {
+		t.Fatal("切到列表后滚动位置没有跟着锚点调整")
+	}
+}
+
+// 瀑布流滚到底再切到更长的列表：目标超出切换前的滚动上限，也要滚到位，选中的那张留在屏幕上。
+func TestAssetViewSwitchAnchorBeyondOldScrollLimit(t *testing.T) {
+	a := manyAssetsMotionFixture(t, 150, func(int) (int, int) { return 600, 150 })
+	tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.assetArea(c) }, 700, 600)
+	tt.Advance(time.Second)
+	tt.Scroll(350, 300, 0, 1e6)
+	tt.Advance(time.Second)
+	name := selectOnScreen(t, tt, a, 250, 400)
+	before := assetMotionBounds(t, tt, name)
+	a.ViewMode = 2
+	tt.Frame()
+	tt.Advance(time.Second)
+	if box := assetMotionBounds(t, tt, name); box.H == 0 || math.Abs(float64(box.Y-before.Y)) > 2 {
+		t.Fatalf("切到更长的列表后锚点不在原来的高度：%+v -> %+v（滚动 %.0f / %.0f）", before, box, a.scroll.Y, a.scroll.MaxY)
+	}
+}
+
+// 大图库滚到深处切视图：变形那一帧只排当前视口、终点视口和原来屏幕上的几张，不把两处之间的几千张都建出来。
+func TestAssetViewSwitchDeepScrollBuildsFewCards(t *testing.T) {
+	a := manyAssetsMotionFixture(t, 3000, func(int) (int, int) { return 600, 150 })
+	tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.assetArea(c) }, 700, 600)
+	tt.Advance(time.Second)
+	tt.Scroll(350, 300, 0, 60000)
+	tt.Advance(time.Second)
+	selectOnScreen(t, tt, a, 200, 400)
+	a.ViewMode = 2
+	tt.Frame()
+	built := 0
+	for _, text := range tt.Texts() {
+		if strings.HasPrefix(text, "Photo ") {
+			built++
+		}
+	}
+	if built == 0 || built > 300 {
+		t.Fatalf("变形那一帧建了 %d 张卡片", built)
 	}
 }
 
@@ -241,7 +357,7 @@ func TestAssetHoverCapsuleAndSelectionRingFade(t *testing.T) {
 	dims := assetMotionBounds(t, tt, "600 × 400")
 	x, y = int(dims.X+4), int(dims.Y+dims.H/2)
 	capsuleStart := tt.Image().RGBAAt(x, y)
-	tt.Advance(87 * time.Millisecond)
+	tt.Advance(motionLayout * 35 / 100)
 	capsuleMiddle := tt.Image().RGBAAt(x, y)
 	tt.Advance(time.Second)
 	capsuleEnd := tt.Image().RGBAAt(x, y)
@@ -380,10 +496,13 @@ func TestAssetMotionContactSheets(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixture := newScreenshotFixture(t)
-	for _, state := range []string{"reorder", "resize", "selection", "view", "filter"} {
+	for _, state := range []string{"reorder", "resize", "selection", "view", "view-back", "filter"} {
 		t.Run(state, func(t *testing.T) {
 			a := fixture.app(t, "small", "zh-CN", "light")
 			a.SidebarVisible, a.InspectorVisible = false, false
+			if state == "view-back" {
+				a.ViewMode = 2
+			}
 			tt := ui.NewTester(func(c *ui.Context) { a.applyTheme(c); a.assetArea(c) }, 920, 640)
 			tt.Advance(time.Second)
 			switch state {
@@ -397,6 +516,8 @@ func TestAssetMotionContactSheets(t *testing.T) {
 				a.selectAsset(a.Visible[1].ID, 1, 0)
 			case "view":
 				a.ViewMode = 2
+			case "view-back":
+				a.ViewMode = 0
 			case "filter":
 				a.Query.Search = a.Visible[0].Name
 				a.Refine()
@@ -404,7 +525,7 @@ func TestAssetMotionContactSheets(t *testing.T) {
 			tt.Frame()
 			sheet := image.NewRGBA(image.Rect(0, 0, 1840, 1328))
 			elapsed := time.Duration(0)
-			for i, at := range []time.Duration{0, 87 * time.Millisecond, 175 * time.Millisecond, 250 * time.Millisecond} {
+			for i, at := range []time.Duration{0, motionLayout * 35 / 100, motionLayout * 70 / 100, motionLayout} {
 				if at > elapsed {
 					tt.Advance(at - elapsed)
 				}

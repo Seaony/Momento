@@ -11,7 +11,7 @@ func choiceMenu(c *ui.Context, label string, selected int, labels []string, choo
 	// 读屏软件不读按钮里的文字，当前选项要单独作为值报出来。
 	trigger := settingsMenuButton(c, label).Value(labels[selected])
 	trigger.Children(func() {
-		ui.Text(c, labels[selected]).FontSize(fontBody).SingleLine()
+		ui.Text(c, labels[selected]).FontSize(fontBody).SingleLine().ContentTransition(replaceMotion)
 		symbol := appSymbol(c, "chevrons-up-down").Size(iconSmall, iconSmall).Shrink(0)
 		symbol.TextColor(symbol.AnimateColor("symbol-color", symbolColor(c.Theme(), trigger.Hovered()), motionColor))
 	}).Menu(func(m *ui.Menu) {
@@ -39,10 +39,7 @@ func settingsCheckbox(c *ui.Context, checked *bool, label string) ui.Element {
 		box.Border(1, box.AnimateColor("border", border, motionColor))
 		animateColors(box, background, theme.AccentText)
 		box.Children(func() {
-			mark := appSymbol(c, "check").Size(iconSmall, iconSmall)
-			fade := motionColor
-			fade.NonMotion = true
-			mark.Opacity(mark.AnimateTo("checked", motionTarget(*checked), fade))
+			showPose(appSymbol(c, "check").Size(iconSmall, iconSmall), *checked)
 		})
 		ui.Text(c, label).FontSize(fontBody)
 	})
@@ -65,10 +62,7 @@ func animatedRadio[T comparable](c *ui.Context, selected *T, value T, label stri
 		face.Border(1, face.AnimateColor("border", border, motionColor))
 		animateColors(face, background, theme.Text)
 		face.Children(func() {
-			dot := ui.Box(c).Size(6, 6).Radius(3).Background(theme.AccentText)
-			fade := motionColor
-			fade.NonMotion = true
-			dot.Opacity(dot.AnimateTo("checked", motionTarget(on), fade))
+			showPose(ui.Box(c).Size(6, 6).Radius(3).Background(theme.AccentText), on)
 		})
 		ui.Text(c, label).FontSize(fontBody)
 	})
@@ -131,7 +125,7 @@ func searchFieldFocus(c *ui.Context, query *string, label, clearLabel string, au
 				*query, changed = "", true
 			}
 			// 点清除会把焦点带到按钮上，清完还给输入框，方便接着输入。
-			if toolbarIconButton(c.Key("clear"), clearLabel, "close").Size(space20, space24).Clicked() {
+			if fadeMotion(toolbarIconButton(c.Key("clear"), clearLabel, "close").Size(space20, space24)).Clicked() {
 				*query, changed = "", true
 				input.Focus()
 			}

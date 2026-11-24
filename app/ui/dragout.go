@@ -269,27 +269,9 @@ func prepareFileDrag(root string, items []model.Asset, stage func(string, string
 	return session, nil
 }
 
+// 拖出的文件名和批量导出、保存框一致：素材现在的名称加原扩展名，名称为空才用原文件名。
 func dragFileName(asset model.Asset) string {
-	name := asset.OriginalFileName
-	if strings.TrimSpace(name) == "" {
-		name = strings.TrimSpace(asset.Name)
-		if name == "" {
-			name = "image"
-		}
-		if ext := strings.TrimPrefix(asset.Extension, "."); ext != "" {
-			name += "." + ext
-		}
-	}
-	name = strings.Map(func(r rune) rune {
-		if r == '/' || r == '\\' || r == 0 {
-			return '_'
-		}
-		return r
-	}, name)
-	if name == "." || name == ".." {
-		name = "image"
-	}
-	return name
+	return exportDialogFileName(asset, model.ExportOriginal)
 }
 
 func copyDragFile(source, destination string) (err error) {

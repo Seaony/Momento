@@ -145,7 +145,8 @@ func (a *App) similarDialog(c *ui.Context) {
 // 一组：缩略图排成一行（多了换行），保留的那张描品牌色边并标「保留」，点别的换成保留它；右边是合并这一组，点了返回 true。
 func (a *App) similarGroupRow(c *ui.Context, group similarResolved) (merge bool) {
 	p := paletteFor(c.Theme())
-	ui.Row(c).FillWidth().Padding(space12).Gap(space12).AlignItems(ui.Center).Radius(radiusControl).Background(p.Subtle).Border(1, p.BorderSubtle).Children(func() {
+	// 合并掉的一组收起，下面的组滑上来。
+	rowMotion(ui.Row(c)).FillWidth().Padding(space12).Gap(space12).AlignItems(ui.Center).Radius(radiusControl).Background(p.Subtle).Border(1, p.BorderSubtle).Children(func() {
 		ui.Row(c.Key("tiles")).Grow(1).Basis(0).MinWidth(0).Wrap().Gap(space8).Children(func() {
 			for i, asset := range group.assets {
 				if a.similarTile(c.Key(asset.ID), asset, i == group.keep).Clicked() {
@@ -170,13 +171,15 @@ func (a *App) similarTile(c *ui.Context, asset model.Asset, keep bool) ui.Elemen
 		} else if button.Hovered() {
 			border = p.Border
 		}
-		ui.Box(c.Key("thumb")).Size(similarTile, similarTile).Radius(radiusCard).Background(p.Raised).Border(width, border).Clip().Children(func() {
+		// 换保留的那张时边框颜色渐变过去，「保留」角标在新的那张淡入、旧的淡出。
+		thumb := ui.Box(c.Key("thumb")).Size(similarTile, similarTile).Radius(radiusCard).Background(p.Raised).Clip()
+		thumb.Border(width, thumb.AnimateColor("keep-border", border, motionColor)).Children(func() {
 			if bitmap := a.Bitmap(asset); bitmap != nil {
 				ui.Image(c, bitmap).Fill().Fit(ui.Cover)
 			}
 			if keep {
-				ui.Text(c, a.T("similar_keep")).Absolute().Left(space4).Top(space4).Padding(1, space4).Radius(radiusSmall).
-					Background(p.Accent).TextColor(p.OnAccent).FontSize(fontCaption).FontWeight(600)
+				fadeMotion(ui.Text(c.Key("keep"), a.T("similar_keep")).Absolute().Left(space4).Top(space4).Padding(1, space4).Radius(radiusSmall).
+					Background(p.Accent).TextColor(p.OnAccent).FontSize(fontCaption).FontWeight(600))
 			}
 		})
 		ui.Text(c, fmt.Sprintf("%d×%d", asset.Width, asset.Height)).FontFeatures("tnum").FontSize(fontSecondary).TextColor(p.TextSecondary).SingleLine()
@@ -218,8 +221,20 @@ func (a *App) mergeSimilar(groups []similarResolved) {
 		}
 	}
 	a.Similar.Groups = remaining
-	lib := a.Library
-	a.RunPatch("merge_similar", ids, func(ctx context.Context) error { return lib.MergeAssets(ctx, merges...) }, func(asset *model.Asset) {
+	lib, gen := a.Library, a.generation
+	// 每组留一张，其余都进回收站；写成功后再提示结果。
+	trashed := len(ids) - len(groups)
+	a.RunPatch("merge_similar", ids, func(ctx context.Context) error {
+		if err := lib.MergeAssets(ctx, merges...); err != nil {
+			return err
+		}
+		a.Window.Update(func() {
+			if a.generation == gen {
+				a.Notify(a.T("similar_merged", len(groups), trashed))
+			}
+		})
+		return nil
+	}, func(asset *model.Asset) {
 		if m, ok := merged[asset.ID]; ok {
 			asset.Note, asset.SourceURL, asset.Favorite = m.Note, m.SourceURL, m.Favorite
 			asset.TagIDs, asset.FolderIDs = m.TagIDs, m.FolderIDs

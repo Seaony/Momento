@@ -75,8 +75,8 @@ func (a *App) welcomeContent(c *ui.Context, onboarding bool) {
 	})
 }
 
-// welcomeRecentRow 是欢迎页里的一条最近图库。找不到的图库（外接盘没插、被移走）标出来，
-// 行尾放和图库菜单同一个「…」菜单（重新定位、从列表中移除），和打开按钮并排，不嵌在按钮里。
+// welcomeRecentRow 是欢迎页里的一条最近图库：图库自己的图标和名称。找不到的图库（外接盘没插、被移走）标出来。
+// 悬停时行尾出现和图库菜单同一个「…」菜单（在文件管理器中显示或重新定位、从列表中移除），和打开按钮并排，不嵌在按钮里。
 func (a *App) welcomeRecentRow(c *ui.Context, recent library.Recent) {
 	p := paletteFor(c.Theme())
 	missing := a.RecentMissing[recent.Path]
@@ -88,24 +88,23 @@ func (a *App) welcomeRecentRow(c *ui.Context, recent library.Recent) {
 		open = ui.ButtonBase(c.Key("open")).Grow(1).MinWidth(0).FillHeight().Padding(space8, space12).Gap(space8).AlignItems(ui.Center).
 			Label(recent.DisplayName).Tooltip(libraryDisplayPath(recent.Path)).Cursor(ui.CursorPointer)
 		open.Children(func() {
-			appIcon(c, "library").Size(iconSize, iconSize)
+			libraryIcon(c, recent.Icon, libraryLogoSize)
 			ui.Text(c, recent.DisplayName).Grow(1).MinWidth(0).SingleLine()
 			if missing {
 				ui.Text(c, a.T("library_not_found")).FontSize(fontSecondary).TextColor(p.TextSecondary).SingleLine().Shrink(0)
 			}
 		})
-		if missing {
-			if a.Sidebar.LibraryMore == nil {
-				a.Sidebar.LibraryMore = make(map[string]*bool)
-			}
-			state := a.Sidebar.LibraryMore[recent.Path]
-			if state == nil {
-				state = new(bool)
-				a.Sidebar.LibraryMore[recent.Path] = state
-			}
-			moreOpen = *state
-			a.libraryMoreMenu(c, recent, false, true, state)
+		if a.Sidebar.LibraryMore == nil {
+			a.Sidebar.LibraryMore = make(map[string]*bool)
 		}
+		state := a.Sidebar.LibraryMore[recent.Path]
+		if state == nil {
+			state = new(bool)
+			a.Sidebar.LibraryMore[recent.Path] = state
+		}
+		moreOpen = *state
+		shown := row.Hovered() || moreOpen
+		showPose(a.libraryMoreMenu(c, recent, false, missing, state), shown).IgnoreInput(!shown)
 	})
 	background, text := p.Raised, p.TextSecondary
 	if open.Pressed() {
@@ -149,17 +148,19 @@ func (a *App) onboarding(c *ui.Context) {
 			})
 		})
 		elevated(ui.Row(c).FillWidth().AlignItems(ui.Center).Padding(space12, space16).Gap(space12).Radius(radiusPanel).Background(c.Theme().Background), c.Theme()).Children(func() {
-			if step < 2 && dialogButton(c, a.T("onboarding_skip"), false).Clicked() {
+			// 到最后一步「跳过」「下一步」淡出；步数跟着前进后退滚动。
+			if step < 2 && fadeMotion(dialogButton(c.Key("onboarding-skip"), a.T("onboarding_skip"), false)).Clicked() {
 				a.finishOnboarding()
 			}
 			ui.Box(c).Grow(1)
-			ui.Text(c, a.T("onboarding_progress", step+1, 3)).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary)
+			countMotion(ui.Text(c.Key("onboarding-progress"), a.T("onboarding_progress", step+1, 3)).FontSize(fontSecondary).FontFeatures("tnum").TextColor(paletteFor(c.Theme()).TextSecondary), step)
 			ui.Box(c).Grow(1)
-			if dialogButton(c, a.T("onboarding_previous"), step == 0).Clicked() {
+			// 第一步没有上一步，不放灰掉的按钮。
+			if step > 0 && fadeMotion(dialogButton(c.Key("onboarding-previous"), a.T("onboarding_previous"), false)).Clicked() {
 				a.Welcome.Direction = -1
 				a.Welcome.Step--
 			}
-			if step < 2 && dialogPrimaryButton(c, a.T("onboarding_next"), false).Clicked() {
+			if step < 2 && fadeMotion(dialogPrimaryButton(c.Key("onboarding-next"), a.T("onboarding_next"), false)).Clicked() {
 				a.Welcome.Direction = 1
 				a.Welcome.Step++
 			}

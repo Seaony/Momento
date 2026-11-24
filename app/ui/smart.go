@@ -46,6 +46,8 @@ func (a *App) sidebarSmartRows(c *ui.Context) {
 	for _, folder := range a.Snapshot.SmartFolders {
 		count := a.smartFolderCount(folder.ID)
 		row := a.smartSidebarRow(c.Key(folder.ID), folder.Name, count, !a.TagPage && a.Query.Scope == "smart" && a.Query.SmartFolderID == folder.ID)
+		// 和文件夹行一样：新建的展开出来，删掉的收起。
+		rowMotion(row)
 		if row.Clicked() {
 			a.BrowseSmartFolder(folder.ID)
 		}
@@ -53,16 +55,10 @@ func (a *App) sidebarSmartRows(c *ui.Context) {
 			if menuItem(m, a.T("edit_smart_folder"), "funnel-simple").Disabled(a.Busy).Chosen() {
 				a.EditSmartFolder(folder.ID)
 			}
-			if menuItem(m, a.T("rename_smart_folder"), "text-field-focus").Disabled(a.Busy).Chosen() {
-				lib := a.Library
-				a.Ask("pencil-simple", a.T("rename_smart_folder"), folder.Name, func(name string) {
-					a.Run("rename_smart_folder", func(ctx context.Context) error { return lib.RenameSmartFolder(ctx, folder.ID, name) })
-				})
-			}
 			m.Separator()
 			a.QuickAccessMenu(m, "smart", folder.ID)
 			m.Separator()
-			if menuItem(m, a.T("delete_smart_folder"), "trash").Disabled(a.Busy).Chosen() {
+			if menuItem(m, a.T("delete_smart_folder"), "trash").Chosen() {
 				a.Confirm(a.T("delete_smart_folder"), a.T("delete_smart_folder_detail", folder.Name), a.T("delete"), func() {
 					if a.Query.Scope == "smart" && a.Query.SmartFolderID == folder.ID {
 						a.SetScope("all", "")
@@ -88,6 +84,7 @@ func (a *App) EditSmartFolder(id string) {
 	state.SmartName = ""
 	state.SmartMatch = 0
 	state.SmartRules = []model.SmartRule{{Field: "name", Operator: "contains"}}
+	state.smartRuleKeys = nil
 	if id != "" {
 		found := false
 		for _, folder := range a.Snapshot.SmartFolders {
@@ -129,15 +126,28 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 	if state.SmartID != "" {
 		title = a.T("smart_folder_edit_title")
 	}
+	// 有条件的值还是空的就不能保存。
+	ready := smartRulesFilled(state.SmartRules)
 	dialogPanel(c.Key("smart-folder-editor"), &state.SmartOpen, 648, "smart-folder", title, func() {
-		fieldStyle(c, ui.TextInput(c.Key("smart-name"), &state.SmartName).FillWidth().Label(a.T("smart_folder_name")).Placeholder(a.T("smart_folder_name")).PlaceholderColor(placeholderColor(c)).AutoFocus().Disabled(state.Saving))
-		choiceMenu(c.Key("smart-match"), a.T("smart_match"), state.SmartMatch, []string{a.T("smart_all"), a.T("smart_any")}, func(i int) { state.SmartMatch = i }).AlignSelf(ui.Start).Disabled(state.Saving)
+		name := fieldStyle(c, ui.TextInput(c.Key("smart-name"), &state.SmartName).FillWidth().Label(a.T("smart_folder_name")).Placeholder(a.T("smart_folder_name")).PlaceholderColor(placeholderColor(c)).AutoFocus().Disabled(state.Saving))
+		if name.Submitted() && ready {
+			a.saveSmartFolder()
+		}
+		// 只有一条条件时，「全部满足/任一满足」没有区别，不显示。
+		if len(state.SmartRules) > 1 {
+			choiceMenu(c.Key("smart-match"), a.T("smart_match"), state.SmartMatch, []string{a.T("smart_all"), a.T("smart_any")}, func(i int) { state.SmartMatch = i }).AlignSelf(ui.Start).Disabled(state.Saving)
+		}
 		_, height := c.Size()
 		ui.Scroll(c.Key("smart-rules")).Scrollbars(false).TrackScroll(&state.RulesScroll).MaxHeight(max(120, min(280, height-312))).FillWidth().Gap(space8).Children(func() {
 			remove := -1
+			for len(state.smartRuleKeys) < len(state.SmartRules) {
+				state.smartRuleNext++
+				state.smartRuleKeys = append(state.smartRuleKeys, state.smartRuleNext)
+			}
+			state.smartRuleKeys = state.smartRuleKeys[:len(state.SmartRules)]
 			for i := range state.SmartRules {
 				rule := &state.SmartRules[i]
-				ui.Row(c.Key(i)).FillWidth().Gap(space8).Padding(space8).Radius(radiusControl).Background(paletteFor(c.Theme()).Subtle).AlignItems(ui.Center).Transition(ui.ElementTransition{Animation: &motionSpring, Height: true, Enter: &ui.Motion{Collapse: true}, Exit: &ui.Motion{Collapse: true}}).Children(func() {
+				ui.Row(c.Key(state.smartRuleKeys[i])).FillWidth().Gap(space8).Padding(space8).Radius(radiusControl).Background(paletteFor(c.Theme()).Subtle).AlignItems(ui.Center).Transition(ui.ElementTransition{Animation: &motionSpring, Height: true, Enter: &ui.Motion{Collapse: true}, Exit: &ui.Motion{Collapse: true}}).Children(func() {
 					previous := rule.Field
 					smartSelect(c.Key("field"), &rule.Field, smartFields, func(key string) string { return a.T("smart_field_" + key) }).Width(144).Label(a.T("smart_rule_field", i+1)).Disabled(state.Saving)
 					if previous != rule.Field {
@@ -159,13 +169,14 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 			}
 			if remove >= 0 {
 				state.SmartRules = slices.Delete(state.SmartRules, remove, remove+1)
+				state.smartRuleKeys = slices.Delete(state.smartRuleKeys, remove, remove+1)
 			}
 		})
 		if settingsButton(c.Key("add-rule"), a.T("add_smart_rule")).Height(controlHeight).Disabled(state.Saving).Clicked() {
 			state.SmartRules = append(state.SmartRules, model.SmartRule{Field: "name", Operator: "contains"})
 		}
 		if state.SmartError != "" {
-			ui.Text(c, state.SmartError).TextColor(paletteFor(c.Theme()).Danger).Role(ui.RoleStatus)
+			revealMotion(ui.Text(c.Key("smart-error"), state.SmartError).TextColor(paletteFor(c.Theme()).Danger).ContentTransition(replaceMotion)).Role(ui.RoleStatus)
 		}
 	}, func() {
 		if dialogButton(c, a.T("cancel"), state.Saving).Clicked() {
@@ -175,7 +186,7 @@ func (a *App) smartFolderDialog(c *ui.Context) {
 		if state.Saving {
 			label = a.T("smart_saving")
 		}
-		if dialogPrimaryButton(c, label, state.Saving || a.Busy).Clicked() {
+		if dialogPrimaryButton(c, label, state.Saving || a.Busy || !ready).Clicked() {
 			a.saveSmartFolder()
 		}
 	})
@@ -277,6 +288,19 @@ func (a *App) smartRuleValue(c *ui.Context, rule *model.SmartRule, index int) {
 		smartSelect(c, &rule.Value, ids, func(id string) string { return names[id] }).Grow(1).MinWidth(0).Label(label).Disabled(a.GBrowsing.Saving || len(ids) == 0)
 		return
 	}
+	if rule.Field == "extension" {
+		extensions := a.smartExtensions()
+		// 已存的条件用到的扩展名后来没有素材了，也要留在选项里，不然会显示成空。
+		if rule.Value != "" && !slices.Contains(extensions, rule.Value) {
+			extensions = append(slices.Clone(extensions), rule.Value)
+		}
+		if len(extensions) == 0 {
+			ui.Text(c, a.T("no_file_types")).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary).Grow(1).MinWidth(0)
+			return
+		}
+		smartSelect(c, &rule.Value, extensions, strings.ToUpper).Grow(1).MinWidth(0).Label(label).Disabled(a.GBrowsing.Saving)
+		return
+	}
 	if rule.Field == "color" {
 		ids := make([]string, 0, len(toolbarFamilies))
 		for _, family := range toolbarFamilies {
@@ -319,6 +343,50 @@ func (a *App) smartRuleValue(c *ui.Context, rule *model.SmartRule, index int) {
 	if unit != "" {
 		ui.Text(c, unit).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary).Shrink(0)
 	}
+}
+
+// smartRulesFilled 报告每条条件的值都填了（「介于」要填两头）。
+func smartRulesFilled(rules []model.SmartRule) bool {
+	for _, rule := range rules {
+		parts := []string{rule.Value}
+		if rule.Operator == "between" {
+			parts = strings.Split(rule.Value, ",")
+		}
+		for _, part := range parts {
+			if strings.TrimSpace(part) == "" {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// smartExtensionCache 是图库里实际有的扩展名（不含回收站），按快照版本缓存，不每帧遍历全部素材。
+type smartExtensionCache struct {
+	version, generation uint64
+	list                []string
+	ready               bool
+}
+
+func (a *App) smartExtensions() []string {
+	cache := &a.Sidebar.smartExt
+	if cache.ready && cache.version == a.snapshotVersion && cache.generation == a.generation {
+		return cache.list
+	}
+	seen := map[string]bool{}
+	for i := range a.Snapshot.Assets {
+		asset := &a.Snapshot.Assets[i]
+		if ext := strings.TrimPrefix(strings.ToLower(asset.Extension), "."); ext != "" && !asset.Trashed {
+			seen[ext] = true
+		}
+	}
+	list := make([]string, 0, len(seen))
+	for ext := range seen {
+		list = append(list, ext)
+	}
+	slices.Sort(list)
+	*cache = smartExtensionCache{version: a.snapshotVersion, generation: a.generation, list: list, ready: true}
+	return list
 }
 
 // smartEditValue 把存的字节（毫秒）换成编辑用的 MB（秒）；「介于」的「小,大」两端分别换。
@@ -419,13 +487,16 @@ func (a *App) finishSmartFolderSave(generation uint64, id string, snapshot model
 		}
 		slog.Error("保存智能文件夹失败", "error", err)
 		a.GBrowsing.SmartError = a.Texts.Error(err)
+		a.drainPending()
 		return
 	}
+	// 编辑的 SmartID 保存前就有，新建的没有。
+	created := a.GBrowsing.SmartID == ""
 	a.applySnapshot(snapshot)
 	a.GBrowsing.SmartOpen = false
 	a.GBrowsing.SmartError = ""
-	// 保存期间开关被关掉时，不再跳进已隐藏的智能文件夹。
-	if a.Preferences.SmartFolders {
+	// 只有新建后跳进去看结果；编辑后留在原来的位置。保存期间开关被关掉时，也不跳进已隐藏的智能文件夹。
+	if created && a.Preferences.SmartFolders {
 		a.BrowseSmartFolder(id)
 	}
 	a.drainPending()

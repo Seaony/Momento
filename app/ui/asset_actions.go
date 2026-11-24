@@ -12,6 +12,7 @@ import (
 	"github.com/Seaony/Momento/app/internal/assets"
 	"github.com/Seaony/Momento/app/internal/model"
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/transfer"
 )
 
 func (a *App) assetPath(asset model.Asset) string {
@@ -40,7 +41,18 @@ func (a *App) CopyAssetPaths(items []model.Asset) {
 	for i, asset := range items {
 		paths[i] = a.assetPath(asset)
 	}
-	mygo.Clipboard.WriteText(strings.Join(paths, "\n"))
+	// 别的应用占着剪贴板时会写失败，失败要说出来，不能照样提示已复制。
+	if err := mygo.Clipboard.Write(transfer.TextData(strings.Join(paths, "\n"))); err != nil {
+		slog.Error("复制文件路径失败", "error", err)
+		a.ShowError(err)
+		return
+	}
+	// 和复制色值、复制标签一样给一句完成提示，不然看不出有没有复制上。
+	if len(paths) == 1 {
+		a.Notify(a.T("copied_path"))
+	} else {
+		a.Notify(a.T("copied_paths", len(paths)))
+	}
 }
 
 // CopyAssetImage 把图片本身（不是文件引用）放进剪贴板，聊天和设计工具里能直接粘贴。
@@ -62,6 +74,7 @@ func (a *App) CopyAssetImage(asset model.Asset) {
 				return
 			}
 			a.MarkAssetsUsed([]string{asset.ID})
+			a.Notify(a.T("copied_image"))
 		})
 	}()
 }
@@ -107,7 +120,12 @@ func (a *App) CopyTags() {
 
 // PasteTags 把复制的标签加到选中的素材上（只加不减），复制后被删掉的标签跳过。
 func (a *App) PasteTags() {
-	if a.Library == nil || a.IsLocked() || a.TagPage || len(a.tagClipboard) == 0 {
+	// 回收站里的素材只读（检查器和右键菜单都不给改），快捷键也一样不改。
+	if a.Library == nil || a.IsLocked() || a.TagPage || a.Query.Scope == "trash" {
+		return
+	}
+	if len(a.tagClipboard) == 0 {
+		a.Notify(a.T("no_tags_copied_yet"))
 		return
 	}
 	ids := a.selectedIDs()
@@ -123,4 +141,25 @@ func (a *App) PasteTags() {
 	}
 	a.SetTags(ids, tags, true)
 	a.Notify(a.T("tags_pasted", len(ids)))
+}
+
+// OpenFolderPicker 展开检查器里的文件夹选择器，和 Shift+F 打开的是同一个。
+func (a *App) OpenFolderPicker() {
+	if a.Selected.Len() == 0 || a.TagPage {
+		return
+	}
+	a.RevealInspector()
+	a.Inspector.TagsOpen, a.Inspector.FoldersOpen = false, true
+}
+
+// SelectAllVisible 选中当前列表里的全部素材，和 ⌘A 一样。
+func (a *App) SelectAllVisible() {
+	if a.TagPage {
+		return
+	}
+	for _, v := range a.Visible {
+		a.Selected.Add(v.ID)
+	}
+	a.RevealInspector()
+	a.FollowPreviewSelection()
 }

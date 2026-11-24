@@ -135,9 +135,10 @@ func (a *App) revealAssetRect(y, h, inset, height float32) {
 	// 素材上面有子文件夹卡片时，画布坐标整体往下挪。
 	y += a.assetLead
 	// 画布坐标里，页头下沿是 scroll.Y - 16，视口下沿是 scroll.Y - inset - 16 + height。
+	// 用弹簧滚过去，看得出选中项往哪走了；连按时从当前速度接着滚，不一格一格硬跳。
 	if y < a.scroll.Y {
-		a.scroll.Y = max(0, y)
+		a.scroll.ScrollTo(a.scroll.X, max(0, y), motionSpring)
 	} else if bottom := y + h + inset + 2*space16; bottom > a.scroll.Y+height {
-		a.scroll.Y = bottom - height
+		a.scroll.ScrollTo(a.scroll.X, bottom-height, motionSpring)
 	}
 }

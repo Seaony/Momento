@@ -128,12 +128,20 @@ func (a *App) libraryRecentRow(c *ui.Context, recent library.Recent) {
 	}
 	// 外层只管悬停底色；主体按钮负责切换，「…」是并列的菜单按钮，不嵌在按钮里。
 	row := ui.Row(c.Key("library-row")).FillWidth().Height(libraryRowHeight).Padding(0, space8, 0, space4).Gap(space4).Radius(radiusControl).AlignItems(ui.Center)
+	// 灰掉的按钮不显示悬停提示，忙的时候把原因挂在整行上。
+	if a.Busy && !current {
+		row.Tooltip(a.T("library_busy_switch"))
+	}
 	var open ui.Element
 	active := current || row.Hovered()
 	row.Children(func() {
 		// 菜单里只写名称，路径放在悬停提示里，同名图库也能分清。
 		open = ui.ButtonBase(c.Key("library-open")).Grow(1).MinWidth(0).FillHeight().Padding(0).Gap(space8).Cursor(ui.CursorPointer).Label(recent.DisplayName).
 			Tooltip(libraryDisplayPath(recent.Path)).Role(ui.RoleRadio).AccessSelected(current).Justify(ui.Start)
+		// 正在忙时不能切换：别的图库行灰掉，和下面的操作行一致。
+		if a.Busy && !current {
+			open.Disabled(true)
+		}
 		open.Children(func() {
 			// List 只支持整行拖动排序；手柄负责提示可以拖。照旧版画 2 × 3 的小圆点，当前或悬停的行变成正文色。
 			ink := p.TextSecondary
@@ -187,7 +195,7 @@ func (a *App) libraryRecentRow(c *ui.Context, recent library.Recent) {
 }
 
 // libraryMoreMenu 是每个图库行尾的「…」菜单；当前图库能改名、清缓存和删除，其他图库只能显示（找不到的改成重新定位）或移出列表。
-func (a *App) libraryMoreMenu(c *ui.Context, recent library.Recent, current, missing bool, open *bool) {
+func (a *App) libraryMoreMenu(c *ui.Context, recent library.Recent, current, missing bool, open *bool) ui.Element {
 	p := paletteFor(c.Theme())
 	menu := ui.MenuBase(c.Key("more"), open)
 	more := menu.Trigger.Size(controlSmall, controlSmall).Shrink(0).Padding(0).Radius(radiusControl).Cursor(ui.CursorPointer).Label(a.T("library_more")).Tooltip(a.T("library_more")).Justify(ui.Center).AlignItems(ui.Center)
@@ -225,6 +233,7 @@ func (a *App) libraryMoreMenu(c *ui.Context, recent library.Recent, current, mis
 		ui.Divider(c).Margin(space4, 0)
 		choose(libraryMenuItem(c, menu, a.T("remove_recent_library"), "remove", false).Clicked(), func() { a.RemoveRecent(path) })
 	})
+	return more
 }
 
 func libraryMenuItem(c *ui.Context, menu ui.MenuParts, label, icon string, danger bool) ui.Element {

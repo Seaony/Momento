@@ -5,6 +5,7 @@ import (
 	"image"
 	"log/slog"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/Seaony/Momento/app/internal/assets"
@@ -58,6 +59,16 @@ func (a *App) StartSlideshow(startID string) {
 	}
 	show := &slideshow{root: a.Library.Root, items: items, shownAt: time.Now(), movedAt: time.Now(),
 		bitmaps: map[string]*ui.Bitmap{}, failed: map[string]bool{}}
+	// 起点是视频（不放映）：从它之后的第一张图开始，后面没有图就从头。
+	if i := slices.IndexFunc(a.Visible, func(asset model.Asset) bool { return asset.ID == startID }); i >= 0 && isVideoAsset(a.Visible[i]) {
+		startID = ""
+		for _, asset := range a.Visible[i+1:] {
+			if !isVideoAsset(asset) {
+				startID = asset.ID
+				break
+			}
+		}
+	}
 	for i, asset := range items {
 		if asset.ID == startID {
 			show.index = i

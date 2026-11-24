@@ -26,7 +26,7 @@ func dragAsset(t *testing.T, root, relative, original, name string) model.Asset 
 	return model.Asset{RelativePath: filepath.ToSlash(relative), OriginalFileName: original, Name: name, Extension: "png"}
 }
 
-func TestPrepareFileDragPreservesNamesAndOriginals(t *testing.T) {
+func TestPrepareFileDragUsesCurrentNamesAndKeepsOriginals(t *testing.T) {
 	root := t.TempDir()
 	items := []model.Asset{
 		dragAsset(t, root, "assets/aa/one.png", "原图.png", "修改过的标题"),
@@ -44,7 +44,7 @@ func TestPrepareFileDragPreservesNamesAndOriginals(t *testing.T) {
 	if filepath.Dir(session.directory) != filepath.Join(canonical, ".drag-out") {
 		t.Fatalf("临时目录在图库之外：%s", session.directory)
 	}
-	want := []string{"原图.png", "原图 2.png", "没有原始文件名.png"}
+	want := []string{"修改过的标题.png", "另一个标题.png", "没有原始文件名.png"}
 	for i, path := range session.paths {
 		if filepath.Base(path) != want[i] {
 			t.Fatalf("文件名 %q，想要 %q", filepath.Base(path), want[i])
@@ -334,10 +334,10 @@ func TestPrepareFileDragNumbersDuplicates(t *testing.T) {
 	root := t.TempDir()
 	var items []model.Asset
 	for i := 0; i < 4; i++ {
-		items = append(items, dragAsset(t, root, fmt.Sprintf("assets/%d.png", i), "同名.png", "x"))
+		items = append(items, dragAsset(t, root, fmt.Sprintf("assets/%d.png", i), "同名.png", "同名"))
 	}
 	// 原本就有一张叫「同名 2.png」，编号要跳过它。
-	items = append(items[:1], append([]model.Asset{dragAsset(t, root, "assets/n.png", "同名 2.png", "x")}, items[1:]...)...)
+	items = append(items[:1], append([]model.Asset{dragAsset(t, root, "assets/n.png", "别的.png", "同名 2")}, items[1:]...)...)
 	session, err := prepareFileDrag(root, items, cloneOrCopyDragFile)
 	if err != nil {
 		t.Fatal(err)

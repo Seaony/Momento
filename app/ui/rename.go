@@ -222,11 +222,13 @@ func (a *App) renderRenameDialog(c *ui.Context, post func(func())) {
 	}
 	assets := state.source.assets[:min(total, renamePreviewRows)]
 	p := paletteFor(c.Theme())
+	// 任何一个输入框里按回车都等于点「重命名」。
+	submitted := false
 	dialogPanel(c.Key("rename"), &state.Open, panelWide, "edit", a.T("rename_title", total), func() {
 		choiceMenu(c.Key("rename-mode"), a.T("rename_mode"), state.Mode, []string{a.T("rename_format"), a.T("rename_replace")}, func(i int) { state.Mode = i }).AlignSelf(ui.Start)
 		if state.Mode == 0 {
 			dialogSection(c, a.T("rename_template"), func() {
-				fieldStyle(c, ui.TextInput(c.Key("rename-template"), &state.Template).Label(a.T("rename_template")).AutoFocus().FillWidth())
+				submitted = fieldStyle(c, ui.TextInput(c.Key("rename-template"), &state.Template).Label(a.T("rename_template")).AutoFocus().FillWidth()).Submitted() || submitted
 				ui.Row(c.Key("rename-tokens")).FillWidth().Wrap().Gap(space8).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, a.T("rename_insert")).FontSize(fontSecondary).TextColor(p.TextSecondary)
 					for _, token := range [][2]string{{catalog.TokenName, "rename_token_name"}, {catalog.TokenNumber, "rename_token_number"}, {catalog.TokenDate, "rename_token_date"}, {catalog.TokenTags, "rename_token_tags"}} {
@@ -238,15 +240,15 @@ func (a *App) renderRenameDialog(c *ui.Context, post func(func())) {
 			})
 			if strings.Contains(state.Template, catalog.TokenNumber) {
 				dialogSection(c, a.T("rename_start"), func() {
-					fieldStyle(c, ui.TextInput(c.Key("rename-start"), &state.Start).Label(a.T("rename_start")).FontFeatures("tnum").Width(120))
+					submitted = fieldStyle(c, ui.TextInput(c.Key("rename-start"), &state.Start).Label(a.T("rename_start")).FontFeatures("tnum").Width(120)).Submitted() || submitted
 				})
 			}
 		} else {
 			dialogSection(c, a.T("rename_find"), func() {
-				fieldStyle(c, ui.TextInput(c.Key("rename-find"), &state.Find).Label(a.T("rename_find")).AutoFocus().FillWidth())
+				submitted = fieldStyle(c, ui.TextInput(c.Key("rename-find"), &state.Find).Label(a.T("rename_find")).AutoFocus().FillWidth()).Submitted() || submitted
 			})
 			dialogSection(c, a.T("rename_with"), func() {
-				fieldStyle(c, ui.TextInput(c.Key("rename-with"), &state.With).Label(a.T("rename_with")).FillWidth())
+				submitted = fieldStyle(c, ui.TextInput(c.Key("rename-with"), &state.With).Label(a.T("rename_with")).FillWidth()).Submitted() || submitted
 			})
 			settingsCheckbox(c.Key("rename-regex"), &state.Regex, a.T("rename_regex"))
 		}
@@ -282,13 +284,19 @@ func (a *App) renderRenameDialog(c *ui.Context, post func(func())) {
 			state.Open = false
 		}
 		plan := state.plan
-		ready := state.Open && plan != nil && len(plan.ids) > 0 && !a.Busy
+		ready := state.Open && plan != nil && len(plan.ids) > 0
 		apply := dialogPrimaryButton(c, a.T("rename_apply"), !ready)
-		if ready && apply.Clicked() {
+		if ready && (apply.Clicked() || submitted) {
 			state.Open = false
 			lib := a.Library
 			updates := plan.updates
-			a.RunPatch("rename", plan.ids, func(ctx context.Context) error { return lib.RenameAssets(ctx, updates) }, func(asset *model.Asset) { asset.Name = updates[asset.ID] })
+			a.RunPatch("rename", plan.ids, func(ctx context.Context) error {
+				if err := lib.RenameAssets(ctx, updates); err != nil {
+					return err
+				}
+				a.Window.Update(func() { a.Notify(a.T("assets_renamed", len(updates))) })
+				return nil
+			}, func(asset *model.Asset) { asset.Name = updates[asset.ID] })
 		}
 	})
 	if !state.Open {

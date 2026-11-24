@@ -72,6 +72,7 @@ func (d *desktopIntegration) refresh() {
 			d.tray.SetMenu(menu)
 		}
 	}
+	a.TrayFailed = d.trayFailed
 	d.refreshDock()
 	d.refreshShortcuts()
 }

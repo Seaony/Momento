@@ -1,13 +1,16 @@
 package ui
 
 import (
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
+	"time"
 
+	"github.com/Seaony/Momento/app/internal/assets"
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
@@ -16,7 +19,33 @@ var settingsPlatform = func() string { return runtime.GOOS }
 
 func settingsError(c *ui.Context, text string) {
 	p := paletteFor(c.Theme())
-	fadeMotion(ui.Text(c, text).FontSize(fontSecondary).TextColor(p.Danger).Padding(space4, space16, space12, space16)).Role(ui.RoleAlert)
+	revealMotion(ui.Text(c.Key("settings-error"), text).FontSize(fontSecondary).TextColor(p.Danger).Padding(space4, space16, space12, space16)).Role(ui.RoleAlert)
+}
+
+// 错误原因显示在第一行，系统给的原始错误放在第二行小字里，不遮原因。
+func settingsErrorDetail(c *ui.Context, text, detail string) {
+	p := paletteFor(c.Theme())
+	revealMotion(ui.Column(c.Key("settings-error"))).FillWidth().Padding(space4, space16, space12, space16).Gap(space4).Role(ui.RoleAlert).Children(func() {
+		ui.Text(c, text).FontSize(fontSecondary).TextColor(p.Danger)
+		ui.Text(c, detail).FontSize(fontSecondary).TextColor(p.TextSecondary).Selectable()
+	})
+}
+
+// 带一行说明的开关，可以禁用；说明为空时和普通开关一样。
+func (a *App) switchSettingNote(c *ui.Context, key, note string, value *bool, disabled bool) {
+	if note == "" {
+		a.switchSetting(c, key, value, disabled)
+		return
+	}
+	ui.Row(c.Key(key+"-note")).FillWidth().Padding(space12, space16).Gap(space12).AlignItems(ui.Center).Children(func() {
+		ui.Column(c).Grow(1).MinWidth(0).Gap(space4).Children(func() {
+			ui.Text(c, a.T(key))
+			ui.Text(c, note).FontSize(fontSecondary).TextColor(paletteFor(c.Theme()).TextSecondary)
+		})
+		if ui.Switch(c.Key(key), value).Label(a.T(key)).Disabled(disabled).Changed() {
+			a.SavePreferences()
+		}
+	})
 }
 
 func (a *App) switchSetting(c *ui.Context, key string, value *bool, disabled bool) {
@@ -73,7 +102,8 @@ func (a *App) boolSetting(c *ui.Context, key string, value *bool, firstValue boo
 func (a *App) appearanceSettings(c *ui.Context) {
 	settingsSection(c, a.T("theme_title"), "", func() {
 		ui.Column(c).FillWidth().Padding(space16).Children(func() { a.ThemeSwatches(c) })
-		settingsSeparator(c)
+	})
+	settingsSection(c, "", "", func() {
 		settingsRow(c, func() {
 			ui.Text(c, a.T("ui_zoom")).Grow(1)
 			label := "100%"
@@ -100,8 +130,6 @@ func (a *App) appearanceSettings(c *ui.Context) {
 		})
 		settingsSeparator(c)
 		settingsRow(c, func() { ui.Text(c, a.T("language")).Grow(1); a.languageMenu(c.Key("language")) })
-		settingsSeparator(c)
-		a.switchSetting(c, "sidebar_counts", &a.Preferences.SidebarCounts, false)
 	})
 }
 
@@ -113,19 +141,19 @@ func (a *App) sidebarSettings(c *ui.Context) {
 		if a.switchSettingHint(c, "smart_folders_enabled", "smart_folders_enabled_hint", &enabled) {
 			a.SetSmartFoldersEnabled(enabled)
 		}
+		settingsSeparator(c)
+		a.switchSetting(c, "sidebar_counts", &a.Preferences.SidebarCounts, false)
 	})
 	settingsSection(c, a.T("sidebar_show"), "", func() {
-		items := []struct {
-			key, label string
-			fixed      bool
-		}{{"all", "all", true}, {"tags", "tag_management", true}, {"trash", "trash", true}, {"favorites", "favorites", false}, {"recent", "recently_used", false}, {"unfiled", "uncategorized", false}, {"untagged", "untagged", false}, {"random", "random_browse", false}}
+		// 「全部」「标签管理」「回收站」永远显示，不列出来。
+		items := []struct{ key, label string }{{"favorites", "favorites"}, {"recent", "recently_used"}, {"unfiled", "uncategorized"}, {"untagged", "untagged"}, {"random", "random_browse"}}
 		ui.Column(c).FillWidth().Padding(space16).Gap(space12).Children(func() {
 			for start := 0; start < len(items); start += 3 {
 				ui.Row(c).FillWidth().Gap(space8).Children(func() {
 					for i := start; i < min(start+3, len(items)); i++ {
 						item := items[i]
 						shown := !slices.Contains(a.Preferences.SidebarHidden, item.key)
-						if settingsCheckbox(c.Key(item.key), &shown, a.T(item.label)).Grow(1).MinWidth(0).Disabled(item.fixed).Changed() {
+						if settingsCheckbox(c.Key(item.key), &shown, a.T(item.label)).Grow(1).MinWidth(0).Changed() {
 							a.setSidebarShown(item.key, shown)
 						}
 					}
@@ -188,9 +216,9 @@ func (a *App) importSettings(c *ui.Context) {
 	settingsSection(c, "", "", func() {
 		a.switchSetting(c, "select_imported", &a.Preferences.SelectImported, false)
 		settingsSeparator(c)
-		a.switchSetting(c, "import_keywords", &a.Preferences.ImportKeywords, false)
-		settingsSeparator(c)
-		a.switchSetting(c, "extension_picker", &a.Preferences.ExtensionPicker, false)
+		if a.switchSettingHint(c, "import_keywords", "import_keywords_hint", &a.Preferences.ImportKeywords) {
+			a.SavePreferences()
+		}
 	})
 	footer := a.T("auto_import_hint")
 	if settingsPlatform() == "windows" {
@@ -205,7 +233,7 @@ func (a *App) importSettings(c *ui.Context) {
 		libraryID := a.Library.Manifest.LibraryID
 		rules := a.Preferences.AutoImport[libraryID]
 		if len(rules) == 0 {
-			ui.Column(c.Key("auto-import-empty")).FillWidth().Padding(space16, 0).Gap(space8).AlignItems(ui.Center).Children(func() {
+			fadeMotion(ui.Column(c.Key("auto-import-empty"))).FillWidth().Padding(space16, 0).Gap(space8).AlignItems(ui.Center).Children(func() {
 				emptyArt(c.Key("art"), "no-watched", emptyArtSmall)
 				ui.Text(c, a.T("auto_import_empty")).FontSize(fontSecondary).TextColor(p.TextTertiary)
 			})
@@ -214,51 +242,59 @@ func (a *App) importSettings(c *ui.Context) {
 			if i > 0 {
 				settingsSeparator(c)
 			}
-			ui.Column(c.Key(rule.Path)).FillWidth().Children(func() {
+			// 加进来的监视文件夹在列表里展开出来，移除时收起。
+			revealMotion(ui.Column(c.Key(rule.Path))).FillWidth().Children(func() {
 				settingsRow(c, func() {
 					appIcon(c, "folder").Size(iconSize, iconSize).Shrink(0)
 					ui.Text(c, rule.Path).SingleLine().Grow(1).MinWidth(0).Tooltip(rule.Path)
-				})
-				settingsRow(c, func() {
-					ui.Text(c, a.T("auto_import_target")).Grow(1).MinWidth(0)
-					folderName := a.T("auto_import_library_root")
-					for _, f := range a.Snapshot.Folders {
-						if f.ID == rule.FolderID {
-							folderName = f.Name
-						}
-					}
-					target := settingsMenuButton(c, a.T("auto_import_target")).Width(160)
-					target.Children(func() {
-						ui.Text(c, folderName).SingleLine().Grow(1).MinWidth(0)
-						symbol := appSymbol(c, "chevrons-up-down").Size(iconSmall, iconSmall).Shrink(0)
-						symbol.TextColor(symbol.AnimateColor("symbol-color", symbolColor(c.Theme(), target.Hovered()), motionColor))
-					}).Menu(func(m *ui.Menu) {
-						if m.Item(a.T("auto_import_library_root")).Radio(rule.FolderID == "").Chosen() {
-							rules[i].FolderID = ""
-							a.Preferences.AutoImport[libraryID] = rules
-							a.SavePreferences()
-						}
-						for _, folder := range a.Snapshot.Folders {
-							if m.Item(folder.Name).Radio(rule.FolderID == folder.ID).Chosen() {
-								rules[i].FolderID = folder.ID
-								a.Preferences.AutoImport[libraryID] = rules
-								a.SavePreferences()
-							}
-						}
-					})
 					enabled := rule.Enabled
 					if ui.Switch(c.Key("enabled"), &enabled).Label(a.T("auto_import_enabled", rule.Path)).Changed() {
 						rules[i].Enabled = enabled
 						a.Preferences.AutoImport[libraryID] = rules
 						a.SavePreferences()
 					}
+				})
+				settingsRow(c, func() {
+					ui.Text(c, a.T("auto_import_target")).Grow(1).MinWidth(0)
+					// 菜单里和浏览器扩展选择器一样显示完整层级，同名子文件夹分得清。
+					choices := a.importFolderChoices()
+					folderName := choices[0].Label
+					for _, choice := range choices {
+						if choice.ID == rule.FolderID {
+							folderName = choice.Label
+						}
+					}
+					target := settingsMenuButton(c, a.T("auto_import_target")).Width(200)
+					target.Children(func() {
+						ui.Text(c, folderName).SingleLine().Grow(1).MinWidth(0)
+						symbol := appSymbol(c, "chevrons-up-down").Size(iconSmall, iconSmall).Shrink(0)
+						symbol.TextColor(symbol.AnimateColor("symbol-color", symbolColor(c.Theme(), target.Hovered()), motionColor))
+					}).Menu(func(m *ui.Menu) {
+						for _, choice := range choices {
+							if m.Item(choice.Label).Radio(rule.FolderID == choice.ID).Chosen() {
+								rules[i].FolderID = choice.ID
+								a.Preferences.AutoImport[libraryID] = rules
+								a.SavePreferences()
+							}
+						}
+					})
 					if settingsButton(c.Key("remove"), a.T("remove")).Height(controlSmall).Clicked() {
 						a.Preferences.AutoImport[libraryID] = slices.Delete(slices.Clone(rules), i, i+1)
 						a.SavePreferences()
 					}
 				})
 				if message := a.Settings.AutoImportErrors[rule.Path]; message != "" {
-					settingsError(c, message)
+					if a.Settings.AutoImportMissing[rule.Path] {
+						ui.Row(c.Key("settings-error")).FillWidth().Padding(space4, space16, space12, space16).Gap(space12).AlignItems(ui.Center).Children(func() {
+							ui.Text(c, a.T("auto_import_missing")).FontSize(fontSecondary).TextColor(p.Danger).Grow(1).MinWidth(0).Role(ui.RoleAlert)
+							if settingsButton(c.Key("choose-again"), a.T("auto_import_choose_again")).Height(controlSmall).Clicked() {
+								a.Settings.AutoImportAddError = ""
+								a.chooseAutoImportFolder(rule.Path)
+							}
+						})
+					} else {
+						settingsError(c, message)
+					}
 				}
 			})
 		}
@@ -266,7 +302,7 @@ func (a *App) importSettings(c *ui.Context) {
 		settingsRow(c, func() {
 			if settingsButton(c, a.T("add_watch_folder")).Height(controlSmall).Clicked() {
 				a.Settings.AutoImportAddError = ""
-				a.chooseAutoImportFolder()
+				a.chooseAutoImportFolder("")
 			}
 		})
 		if a.Settings.AutoImportAddError != "" {
@@ -275,18 +311,23 @@ func (a *App) importSettings(c *ui.Context) {
 	})
 }
 
-func (a *App) chooseAutoImportFolder() {
+// 选好文件夹后先数一下里面现有的图片，弹确认；确认前不加规则。replace 不为空时是给这条规则重新选文件夹。
+func (a *App) chooseAutoImportFolder(replace string) {
 	if a.Library == nil || a.Window == nil {
 		return
 	}
 	libraryID := a.Library.Manifest.LibraryID
 	go func() {
+		count := 0
 		paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{Parent: a.SettingsWindow, Title: a.T("add_watch_folder"), Directory: true})
 		if err == nil && len(paths) > 0 {
 			var info os.FileInfo
 			info, err = os.Stat(paths[0])
 			if err == nil && !info.IsDir() {
 				err = &os.PathError{Op: "open", Path: paths[0], Err: os.ErrInvalid}
+			}
+			if err == nil {
+				count, err = countAutoImportFiles(paths[0])
 			}
 		}
 		a.Window.Update(func() {
@@ -300,25 +341,110 @@ func (a *App) chooseAutoImportFolder() {
 				return
 			}
 			path := filepath.Clean(paths[0])
-			rules := a.Preferences.AutoImport[libraryID]
-			for _, rule := range rules {
+			for _, rule := range a.Preferences.AutoImport[libraryID] {
 				if rule.Path == path {
 					return
 				}
 			}
-			if a.Preferences.AutoImport == nil {
-				a.Preferences.AutoImport = make(map[string][]AutoImportRule)
-			}
-			a.Preferences.AutoImport[libraryID] = append(rules, AutoImportRule{Path: path, Enabled: true, Library: a.Library.Root})
-			slog.Info("添加自动导入文件夹", "path", path, "library", libraryID)
-			a.SavePreferences()
+			a.Settings.AutoImportConfirm = &autoImportConfirm{Path: path, Replace: replace, Count: count, LibraryID: libraryID}
+			a.InvalidateWindows()
 		})
 	}()
 }
 
+type autoImportConfirm struct {
+	Path, Replace, LibraryID string
+	Count                    int
+}
+
+// 数文件夹里现在有多少个能导入的文件，规则和自动导入扫描一致：递归、跳过隐藏项和 .momento 图库包、不跟随链接。
+func countAutoImportFiles(root string) (int, error) {
+	count := 0
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path == root {
+			return nil
+		}
+		if strings.HasPrefix(entry.Name(), ".") || entry.IsDir() && strings.EqualFold(filepath.Ext(path), ".momento") {
+			if entry.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if entry.Type().IsRegular() && assets.Supported(path) {
+			count++
+		}
+		return nil
+	})
+	return count, err
+}
+
+func (a *App) autoImportConfirmDialog(c *ui.Context) {
+	state := a.Settings.AutoImportConfirm
+	if state == nil {
+		return
+	}
+	open, confirmed := true, false
+	suffix := ""
+	if settingsPlatform() == "windows" {
+		suffix = "_windows"
+	}
+	name := filepath.Base(state.Path)
+	text, action := a.T("auto_import_confirm"+suffix, name, state.Count), a.T("auto_import_confirm_add")
+	if state.Count == 0 {
+		text, action = a.T("auto_import_confirm_empty"+suffix, name), a.T("auto_import_confirm_add_empty")
+	}
+	dialogPanel(c.Key("auto-import-confirm"), &open, panelDialog, "folder", a.T("auto_import_confirm_title"), func() {
+		ui.Text(c, text).FillWidth().TextColor(paletteFor(c.Theme()).TextSecondary)
+	}, func() {
+		// 添加后会把原文件移到废纸篓，默认焦点放在取消上，和其他会移走文件的确认一样，回车不会直接批准。
+		if dialogButton(c, a.T("cancel"), false).AutoFocus().Clicked() {
+			open = false
+		}
+		if dialogPrimaryButton(c, action, false).Clicked() {
+			confirmed, open = true, false
+		}
+	})
+	if confirmed {
+		a.commitAutoImportFolder(state)
+	}
+	if !open {
+		a.Settings.AutoImportConfirm = nil
+	}
+}
+
+func (a *App) commitAutoImportFolder(state *autoImportConfirm) {
+	if a.Library == nil || a.Library.Manifest.LibraryID != state.LibraryID {
+		return
+	}
+	rules := a.Preferences.AutoImport[state.LibraryID]
+	if i := slices.IndexFunc(rules, func(rule AutoImportRule) bool { return state.Replace != "" && rule.Path == state.Replace }); i >= 0 {
+		// 只换路径，目标文件夹和开关保持原样。
+		rules = slices.Clone(rules)
+		rules[i].Path = state.Path
+		delete(a.Settings.AutoImportErrors, state.Replace)
+		delete(a.Settings.AutoImportMissing, state.Replace)
+		a.Preferences.AutoImport[state.LibraryID] = rules
+		slog.Info("重新选择自动导入文件夹", "from", state.Replace, "path", state.Path, "library", state.LibraryID)
+		a.SavePreferences()
+		return
+	}
+	if a.Preferences.AutoImport == nil {
+		a.Preferences.AutoImport = make(map[string][]AutoImportRule)
+	}
+	a.Preferences.AutoImport[state.LibraryID] = append(rules, AutoImportRule{Path: state.Path, Enabled: true, Library: a.Library.Root})
+	slog.Info("添加自动导入文件夹", "path", state.Path, "library", state.LibraryID, "existing", state.Count)
+	a.SavePreferences()
+}
+
 func (a *App) notificationsSettings(c *ui.Context) {
 	settingsSection(c, "", "", func() {
-		a.switchSetting(c, "notifications_enabled", &a.Preferences.Notify, false)
+		a.switchSettingNote(c, "notifications_enabled", a.T("notifications_foreground_hint"), &a.Preferences.Notify, false)
+		if a.Settings.NotificationDenied {
+			settingsError(c, a.T("notifications_denied"))
+		}
 		settingsSeparator(c)
 		ui.Column(c).FillWidth().Padding(space12, space16).Gap(space12).Children(func() {
 			for _, event := range []struct{ key, label string }{{"extension", "notify_extension"}, {"auto-import", "notify_auto_import"}, {"duplicate", "notify_duplicate"}} {
@@ -334,16 +460,23 @@ func (a *App) notificationsSettings(c *ui.Context) {
 		})
 		settingsSeparator(c)
 		a.switchSetting(c, "notify_sound", &a.Preferences.NotifySound, !a.Preferences.Notify)
-		if a.Settings.NotificationDenied {
-			settingsError(c, a.T("notifications_denied"))
-		}
 	})
 }
 
 func (a *App) passwordSettings(c *ui.Context) {
+	p := paletteFor(c.Theme())
 	settingsSection(c, "", a.T("password_lock_hint"), func() {
 		settingsRow(c, func() {
 			ui.Text(c, a.T("password_lock_enabled")).Grow(1)
+			// 操作结果显示几秒就收起，页面重新进入时也清掉。
+			if a.Settings.PasswordNotice != "" {
+				if remaining := passwordNoticeDuration - time.Since(a.Settings.PasswordNoticeAt); remaining > 0 {
+					fadeMotion(ui.Text(c.Key("password-notice"), a.Settings.PasswordNotice).FontSize(fontSecondary).TextColor(p.Success)).Role(ui.RoleStatus)
+					c.After(remaining)
+				} else {
+					a.Settings.PasswordNotice = ""
+				}
+			}
 			enabled := a.Preferences.PasswordHash != ""
 			if ui.Switch(c, &enabled).Label(a.T("password_lock_enabled")).Changed() {
 				mode := "disable"
@@ -353,16 +486,30 @@ func (a *App) passwordSettings(c *ui.Context) {
 				a.ShowPasswordSettings(mode)
 			}
 		})
+		// 打开密码锁后「修改密码」一行展开出来，关掉时收起。
 		if a.Preferences.PasswordHash != "" {
-			settingsSeparator(c)
-			settingsRow(c, func() {
-				if settingsButton(c, a.T("change_password")).Height(controlSmall).Clicked() {
-					a.ShowPasswordSettings("change")
-				}
+			revealMotion(ui.Column(c.Key("change-password"))).FillWidth().Children(func() {
+				settingsSeparator(c)
+				settingsRow(c, func() {
+					if settingsButton(c, a.T("change_password")).Height(controlSmall).Clicked() {
+						a.ShowPasswordSettings("change")
+					}
+				})
+				settingsSeparator(c)
+				settingsRow(c, func() {
+					if settingsButton(c.Key("lock-now"), a.T("lock_now")).Height(controlSmall).Clicked() {
+						a.LockNow()
+					}
+					if shortcut := displayShortcut(a.Shortcut("lock")); shortcut != "" {
+						ui.Text(c, shortcut).FontSize(fontSecondary).TextColor(p.TextTertiary).SingleLine()
+					}
+				})
 			})
 		}
 	})
 }
+
+const passwordNoticeDuration = 4 * time.Second
 
 func shortcutSearchMatches(query, name, accelerator string) bool {
 	query = strings.ToLower(strings.TrimSpace(query))

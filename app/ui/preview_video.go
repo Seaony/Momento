@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"errors"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -31,6 +33,7 @@ type previewVideo struct {
 	player    *ui.VideoPlayer
 	id        string // 播放器（或打开失败）对应的素材
 	failed    error  // 打不开或播放出错，显示封面和「用默认应用打开」
+	missing   bool   // 失败时原文件已经不在了，说「找不到原文件」
 	closed    bool   // 窗口在播关闭动画：播放器已关、声音已停，只留最后一帧
 	muted     bool   // 这个窗口里点过静音，翻到下一个视频也保持
 	pointer   ui.Point
@@ -64,20 +67,28 @@ func (w *previewWindow) syncVideo(a *App, now time.Time) {
 				slog.Error("预览视频播放出错", "asset", w.asset.ID, "error", err)
 				player.Close()
 				v.player, v.failed = nil, err
+				v.missing = fileMissing(filepath.Join(w.root, filepath.FromSlash(w.asset.RelativePath)))
 			}
 		}
 		return
 	}
 	w.closeVideo()
 	v.id, v.movedAt = w.asset.ID, now
-	player, err := openPreviewVideo(filepath.Join(w.root, filepath.FromSlash(w.asset.RelativePath)))
+	path := filepath.Join(w.root, filepath.FromSlash(w.asset.RelativePath))
+	player, err := openPreviewVideo(path)
 	if err != nil {
 		slog.Error("预览视频打不开", "asset", w.asset.ID, "error", err)
-		v.failed = err
+		v.failed, v.missing = err, fileMissing(path)
 		return
 	}
 	// 和系统快速查看一样带声音播一遍，不循环，播完停在最后一帧。
 	v.player = player.SetLoop(false).SetMuted(v.muted)
+}
+
+// fileMissing 判断文件是不是已经不在了（被删或被移走）；其他读不了的情况不算。
+func fileMissing(path string) bool {
+	_, err := os.Stat(path)
+	return errors.Is(err, os.ErrNotExist)
 }
 
 // closeVideo 关掉播放器并清空状态（保留窗口里的静音选择）。换素材、窗口销毁时调。
@@ -228,8 +239,13 @@ func (w *previewWindow) videoUnplayable(c *ui.Context, a *App, rect ui.Rect) {
 		card := ui.Column(c.Key("preview-video-unplayable-card")).MaxWidth(max(0, rect.W-2*space16)).Padding(space16).Gap(space12).
 			AlignItems(ui.Center).Radius(radiusPanel).Background(pal.Sidebar.Alpha(.92))
 		elevated(card, c.Theme()).Children(func() {
-			ui.Text(c, a.T("video_unplayable")).FontSize(fontBody).FontWeight(500).TextColor(pal.Text).TextAlign(ui.Center).MaxWidthPercent(100)
-			if dialogButton(c.Key("preview-video-open-external"), a.T("open_with_default_app"), false).Clicked() {
+			message := a.T("video_unplayable")
+			if w.video.missing {
+				message = a.T("video_missing")
+			}
+			ui.Text(c, message).FontSize(fontBody).FontWeight(500).TextColor(pal.Text).TextAlign(ui.Center).MaxWidthPercent(100)
+			// 原文件不在了，默认应用也打不开，不放这个按钮。
+			if !w.video.missing && dialogButton(c.Key("preview-video-open-external"), a.T("open_with_default_app"), false).Clicked() {
 				path := filepath.Join(w.root, filepath.FromSlash(w.asset.RelativePath))
 				if err := openPreviewVideoExternally(path); err != nil {
 					slog.Error("用默认应用打开视频失败", "asset", w.asset.ID, "error", err)
@@ -265,21 +281,14 @@ func (w *previewWindow) videoControls(c *ui.Context, a *App, player *ui.VideoPla
 	if visible && player.Playing() && idle < previewVideoHideAfter {
 		c.After(previewVideoHideAfter - idle)
 	}
-	target := float32(0)
-	if visible {
-		target = 1
-	}
-	fade := ui.Animation{Duration: 200 * time.Millisecond}
-	if c.Preferences().ReduceMotion {
-		fade = ui.Animation{Duration: time.Millisecond, NonMotion: true}
-	}
-	bar.Opacity(bar.AnimateTo("preview-video-controls-opacity", target, fade))
+	// 只重绘地淡入淡出（减少动态效果时照样淡）；藏起来时点不到，免得点画面暂停时误点到看不见的进度条。
+	bar.AnimatePose(ui.Pose{Fade: 1 - motionTarget(visible)}, ui.Animation{Duration: motionEnter}).IgnoreInput(!visible)
 	bar.Children(func() {
 		icon, label := "pause", a.T("video_pause")
 		if !player.Playing() {
 			icon, label = "play", a.T("video_play")
 		}
-		if previewVideoButton(c.Key("preview-video-play"), label, icon, true).Clicked() {
+		if previewVideoButton(c.Key("preview-video-play"), label, "K", icon, true).Clicked() {
 			v.toggle()
 			v.movedAt = now
 		}
@@ -290,7 +299,7 @@ func (w *previewWindow) videoControls(c *ui.Context, a *App, player *ui.VideoPla
 		if player.Muted() {
 			icon, label = "volume-cross", a.T("video_unmute")
 		}
-		if previewVideoButton(c.Key("preview-video-mute"), label, icon, false).Clicked() {
+		if previewVideoButton(c.Key("preview-video-mute"), label, "M", icon, false).Clicked() {
 			v.toggleMute()
 			v.movedAt = now
 		}
@@ -344,9 +353,10 @@ func (w *previewWindow) videoScrubber(c *ui.Context, a *App, player *ui.VideoPla
 }
 
 // 控制条上的图标按钮：和检查器图标按钮同一套悬停、按下底色，图标 16。
-func previewVideoButton(c *ui.Context, label, icon string, filled bool) ui.Element {
+// 悬停提示带上快捷键（「暂停  K」），键位和 videoKey 里处理的一致。
+func previewVideoButton(c *ui.Context, label, shortcut, icon string, filled bool) ui.Element {
 	p := paletteFor(c.Theme())
-	button := ui.ButtonBase(c).Label(label).Tooltip(label).Size(controlSmall, controlSmall).Padding(0).Radius(radiusControl).
+	button := ui.ButtonBase(c).Label(label).Tooltip(label+"  "+shortcut).Size(controlSmall, controlSmall).Padding(0).Radius(radiusControl).
 		Shrink(0).Justify(ui.Center).AlignItems(ui.Center).Cursor(ui.CursorPointer)
 	background := ui.Transparent
 	if button.Pressed() {
@@ -355,7 +365,8 @@ func previewVideoButton(c *ui.Context, label, icon string, filled bool) ui.Eleme
 		background = p.Hover
 	}
 	animateColors(button, background, p.Text)
-	button.Children(func() { appIconSelected(c, icon, filled).Size(iconMedium, iconMedium) })
+	// 播放和暂停、静音和取消静音换图标时缩放替换，看得出状态变了。
+	button.Children(func() { appIconSelected(c, icon, filled).Size(iconMedium, iconMedium).ContentTransition(replaceMotion) })
 	return button
 }
 

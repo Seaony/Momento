@@ -167,7 +167,16 @@ func (l *Library) RenameTag(ctx context.Context, id, name string) error {
 	if err != nil {
 		return err
 	}
-	return changed(l.DB.ExecContext(ctx, "UPDATE tags SET name=?,normalized_name=? WHERE id=?", name, NormalizeTag(name), id))
+	normalized := NormalizeTag(name)
+	// 改成已有的名字（规范化后相同，如大小写不同）会撞唯一约束，先查出来给本地化提示。
+	var existing string
+	switch err := l.DB.QueryRowContext(ctx, "SELECT name FROM tags WHERE normalized_name=? AND id<>?", normalized, id).Scan(&existing); {
+	case err == nil:
+		return i18n.NewError("tag_name_exists", existing)
+	case !errors.Is(err, sql.ErrNoRows):
+		return err
+	}
+	return changed(l.DB.ExecContext(ctx, "UPDATE tags SET name=?,normalized_name=? WHERE id=?", name, normalized, id))
 }
 
 func (l *Library) DeleteTag(ctx context.Context, id string) error {

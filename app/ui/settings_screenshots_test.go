@@ -62,13 +62,14 @@ func finalSettingsScreenshotState(language, appearance, state string) (*App, Upd
 		a.Settings.NotificationDenied = true
 	case "shortcut-conflict":
 		a.Settings.Tab = SettingsShortcuts
-		a.Settings.ShortcutErrors = map[string]string{"show_app": a.T("shortcut_conflict", a.T("new_library"))}
+		a.Settings.ShortcutErrors = map[string]string{"show_app": a.T("shortcut_conflict_in_use", displayShortcut("CmdOrCtrl+N"), a.T("new_library"))}
+		a.Settings.ShortcutPending = map[string]shortcutClaim{"show_app": {Accelerator: "CmdOrCtrl+N", Other: "new_library"}}
 	case "auto-import-missing":
 		a.Settings.Tab = SettingsImport
 	case "password-cooldown":
 		a.Settings.Tab = SettingsPassword
 		a.Preferences.PasswordHash = "screenshot-only"
-		a.Lock.DialogOpen = true
+		a.Lock.DialogOpen, a.Lock.DialogInSettings = true, true
 		a.Lock.Mode = "disable"
 		a.Lock.ErrorKey = "password_cooldown"
 		a.Lock.CooldownUntil = time.Now().Add(30 * time.Second)
@@ -123,7 +124,7 @@ func checkFinalSettingsScreenshot(t *testing.T, a *App, tt *ui.Tester, status Up
 			t.Fatal("拒绝通知状态缺失")
 		}
 	case SettingsExtension:
-		if a.ExtensionStatus.State == browser.PortOccupied && !tt.HasText(a.T("extension_port_in_use")) {
+		if a.ExtensionStatus.State == browser.PortOccupied && !tt.HasText(a.T("extension_port_in_use_retry")) {
 			t.Fatal("扩展占用错误缺失")
 		}
 	}

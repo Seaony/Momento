@@ -80,13 +80,15 @@ func useFakeVideos(t *testing.T, newDecoder func() *fakeVideo) (opened *[]string
 }
 
 // 一个视频夹在两张图片中间，预览从视频开始。
-func videoPreviewApp() *App {
+func videoPreviewApp() *App { return videoPreviewAppAt("library.momento") }
+
+func videoPreviewAppAt(root string) *App {
 	items := []model.Asset{
 		{ID: "before", Name: "前一张", RelativePath: "assets/before.png", Extension: "png", Width: 240, Height: 160, Kind: model.KindImage},
 		{ID: "clip", Name: "海边", RelativePath: "assets/clip.mp4", Extension: "mp4", Width: 320, Height: 180, Kind: model.KindVideo, DurationMS: 30000, Size: 4 << 20},
 		{ID: "after", Name: "后一张", RelativePath: "assets/after.png", Extension: "png", Width: 240, Height: 160, Kind: model.KindImage},
 	}
-	a := &App{Library: &library.Library{Root: "library.momento"}, Visible: items, Preferences: DefaultPreferences()}
+	a := &App{Library: &library.Library{Root: root}, Visible: items, Preferences: DefaultPreferences()}
 	a.ShowPreview("clip", false)
 	return a
 }
@@ -302,14 +304,16 @@ func TestPreviewVideoControlsAndReplay(t *testing.T) {
 func TestPreviewVideoUnplayable(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
+		missing    bool // 原文件已经不在
 		newDecoder func() *fakeVideo
 	}{
-		{"打不开", func() *fakeVideo { return nil }},
-		{"播放中出错", func() *fakeVideo {
+		{"打不开", false, func() *fakeVideo { return nil }},
+		{"播放中出错", false, func() *fakeVideo {
 			d := newFakeVideo(solidFrame(32, 18, color.RGBA{200, 80, 40, 255}), 90, time.Second/30)
 			d.failAt = 3
 			return d
 		}},
+		{"原文件不在", true, func() *fakeVideo { return nil }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			useFakeVideos(t, tc.newDecoder)
@@ -317,12 +321,32 @@ func TestPreviewVideoUnplayable(t *testing.T) {
 			previous := openPreviewVideoExternally
 			openPreviewVideoExternally = func(path string) error { external = append(external, path); return nil }
 			t.Cleanup(func() { openPreviewVideoExternally = previous })
-			a := videoPreviewApp()
+			root := t.TempDir()
+			if !tc.missing {
+				if err := os.MkdirAll(filepath.Join(root, "assets"), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(root, "assets", "clip.mp4"), []byte("video"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			a := videoPreviewAppAt(root)
 			w := a.Preview.active
 			tt := ui.NewTester(previewTestView(a), 900, 640)
 			tt.Advance(500 * time.Millisecond)
-			if w.video.failed == nil || !tt.HasText(a.T("video_unplayable")) {
+			message := a.T("video_unplayable")
+			if tc.missing {
+				message = a.T("video_missing")
+			}
+			if w.video.failed == nil || !tt.HasText(message) {
 				t.Fatal("播放不了时没有提示")
+			}
+			if tc.missing {
+				// 原文件不在，用默认应用打开也打不开，不放这个按钮。
+				if tt.HasText(a.T("open_with_default_app")) {
+					t.Fatal("原文件不在时不该有「用默认应用打开」")
+				}
+				return
 			}
 			if _, ok := tt.Access(a.T("video_pause")); ok {
 				t.Fatal("播放不了时还显示控制条")
@@ -330,7 +354,7 @@ func TestPreviewVideoUnplayable(t *testing.T) {
 			if err := tt.Click(a.T("open_with_default_app")); err != nil {
 				t.Fatal(err)
 			}
-			want := filepath.Join("library.momento", "assets", "clip.mp4")
+			want := filepath.Join(root, "assets", "clip.mp4")
 			if len(external) != 1 || external[0] != want {
 				t.Fatalf("没有用默认应用打开原文件：%v", external)
 			}

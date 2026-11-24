@@ -74,11 +74,14 @@ func main() {
 			if app.PasswordOperationPending() && !e.SessionEnding {
 				e.PreventDefault()
 				app.Notify(app.T("busy"))
+				// 从托盘退出时主窗口可能藏着，叫出来，不然拦下的原因没人看得到。
+				app.ShowMainWindow()
 				app.InvalidateWindows()
 				return
 			}
 			if !e.SessionEnding && !app.PrepareInspectorQuit() {
 				e.PreventDefault()
+				app.ShowMainWindow()
 				app.InvalidateWindows()
 				return
 			}
@@ -175,6 +178,7 @@ func installMenu(a *appui.App) {
 	makeMenu := func() *mygo.Menu {
 		menu := mygo.NewMenu(menuItems(a, runtime.GOOS))
 		menus = append(menus, menu)
+		applyMenuState(menu, a.CurrentMenuState())
 		for _, definition := range appui.ShortcutDefinitions {
 			if item := menu.ItemByID(definition.Action); item != nil {
 				item.SetAccelerator(a.MenuAccelerator(definition.Action))
@@ -193,11 +197,27 @@ func installMenu(a *appui.App) {
 	if a.SettingsWindow != nil {
 		a.SettingsWindow.SetTitle(a.T("settings"))
 	}
+	// 此刻点了没用的菜单项灰掉（没图库时的导入、没选中时的导出、列表视图里的缩略图大小等）。
+	a.MenuStateChanged = func(state appui.MenuState) {
+		for _, menu := range menus {
+			applyMenuState(menu, state)
+		}
+	}
 	a.InspectorAvailabilityChanged = func(available bool) {
 		for _, menu := range menus {
 			if item := menu.ItemByID("inspector"); item != nil {
 				item.SetEnabled(available)
 			}
+		}
+	}
+}
+
+var stateMenuItems = []string{"import", "import_folder", "export", "copy", "paste", "thumbnail_larger", "thumbnail_smaller", "view_masonry", "view_justified", "view_list", "slideshow", "search", "filter", "sort", "preview_zoom_in", "preview_zoom_out", "preview_fit", "preview_actual"}
+
+func applyMenuState(menu *mygo.Menu, state appui.MenuState) {
+	for _, id := range stateMenuItems {
+		if item := menu.ItemByID(id); item != nil {
+			item.SetEnabled(state.MenuItemEnabled(id))
 		}
 	}
 }
@@ -242,11 +262,15 @@ func menuItems(a *appui.App, platform string) []*mygo.MenuItem {
 	}
 	appMenu := &mygo.MenuItem{Role: mygo.RoleAppMenu}
 	if platform == "darwin" {
-		appMenu.Submenu = []*mygo.MenuItem{{Role: mygo.RoleAbout}, mygo.Separator(), settings, item("check_updates", "", func() { a.Settings.Tab = appui.SettingsGeneral; a.ShowSettings(); appui.CheckForUpdates() }), lock, mygo.Separator(), {Role: mygo.RoleServices}, mygo.Separator(), {Role: mygo.RoleHide}, {Role: mygo.RoleHideOthers}, {Role: mygo.RoleUnhide}, mygo.Separator(), role("quit", "quit_momento", mygo.RoleQuit)}
+		appMenu.Submenu = []*mygo.MenuItem{{Role: mygo.RoleAbout}, mygo.Separator(), settings, item("check_updates", "", func() { a.Settings.Tab = appui.SettingsAbout; a.ShowSettings(); appui.CheckForUpdates() }), lock, mygo.Separator(), {Role: mygo.RoleServices}, mygo.Separator(), {Role: mygo.RoleHide}, {Role: mygo.RoleHideOthers}, {Role: mygo.RoleUnhide}, mygo.Separator(), role("quit", "quit_momento", mygo.RoleQuit)}
 	} else {
-		fileItems = append(fileItems, mygo.Separator(), settings, lock)
+		// Windows、Linux 没有应用菜单：退出和检查更新放在文件菜单里，不然点 × 藏到后台后只能从托盘退出。
+		fileItems = append(fileItems, mygo.Separator(), settings, item("check_updates", "", func() { a.Settings.Tab = appui.SettingsAbout; a.ShowSettings(); appui.CheckForUpdates() }), lock)
 	}
 	fileItems = append(fileItems, mygo.Separator(), role("close_window", "shortcut_close_window", mygo.RoleClose))
+	if platform != "darwin" {
+		fileItems = append(fileItems, role("quit", "quit_momento", mygo.RoleQuit))
+	}
 	paste := item("paste_import", "CmdOrCtrl+V", a.PasteImport)
 	if a.TextInputFocused {
 		paste = role("paste", "shortcut_paste", mygo.RolePaste)
@@ -261,7 +285,7 @@ func menuItems(a *appui.App, platform string) []*mygo.MenuItem {
 	inspector := item("inspector", "CmdOrCtrl+Alt+I", a.ToggleInspector)
 	inspector.Disabled = !a.InspectorAvailable()
 	return []*mygo.MenuItem{appMenu, {Label: a.T("menu_file"), Submenu: fileItems}, {Label: a.T("menu_edit"), Submenu: edit}, {Label: a.T("menu_view"), Submenu: []*mygo.MenuItem{
-		item("view_masonry", "CmdOrCtrl+1", func() { a.ViewMode = 0 }), item("view_justified", "CmdOrCtrl+3", func() { a.ViewMode = 1 }), item("view_list", "CmdOrCtrl+2", func() { a.ViewMode = 2 }), mygo.Separator(),
+		item("view_masonry", "CmdOrCtrl+1", func() { a.ViewMode = 0 }), item("view_justified", "CmdOrCtrl+2", func() { a.ViewMode = 1 }), item("view_list", "CmdOrCtrl+3", func() { a.ViewMode = 2 }), mygo.Separator(),
 		item("slideshow", "", a.StartSlideshowFromSelection), mygo.Separator(),
 		item("thumbnail_larger", "CmdOrCtrl+=", func() { a.StepThumbnailSize(1) }), item("thumbnail_smaller", "CmdOrCtrl+-", func() { a.StepThumbnailSize(-1) }), mygo.Separator(),
 		item("search", "CmdOrCtrl+K", a.FocusSearch), item("filter", "CmdOrCtrl+Alt+F", a.ToggleFilter), item("sort", "CmdOrCtrl+Alt+S", a.ToggleSort), inspector, item("sidebar", "", func() { a.SidebarVisible = !a.SidebarVisible }), mygo.Separator(), role("fullscreen", "shortcut_fullscreen", mygo.RoleToggleFullScreen),

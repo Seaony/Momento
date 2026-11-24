@@ -57,6 +57,11 @@ func (a *App) applyBrowseSelection(location browseLocation, selectedIDs []string
 	a.Refine()
 }
 
+// browseKey 是当前浏览位置的身份，位置一换素材区就整块换掉。
+func (a *App) browseKey() string {
+	return a.Query.Scope + "\x00" + a.Query.FolderID + "\x00" + a.Browse.TagID + "\x00" + a.Query.SmartFolderID
+}
+
 func (a *App) BrowseTag(id string) {
 	a.applyBrowseLocation(browseLocation{Scope: "tag", TagID: id})
 }

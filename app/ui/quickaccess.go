@@ -31,7 +31,7 @@ func (a *App) sidebarQuickAccess(c *ui.Context) {
 	a.GBrowsing.QuickList.Key = func(i int) any { return entries[i].ID }
 	a.GBrowsing.QuickList.Label = func(i int) string { name, _, _, _ := a.quickAccessTarget(entries[i]); return name }
 	a.GBrowsing.QuickList.Reorder = func(rows []int, to int) {
-		if a.Busy || len(rows) != 1 || rows[0] < 0 || rows[0] >= len(entries) {
+		if len(rows) != 1 || rows[0] < 0 || rows[0] >= len(entries) {
 			return
 		}
 		from := rows[0]
@@ -50,20 +50,30 @@ func (a *App) sidebarQuickAccess(c *ui.Context) {
 		if entry.Kind == "smart" {
 			row = a.smartSidebarRow(c.Key(entry.ID), name, count, selected)
 		} else {
-			row = a.sidebarRow(c.Key(entry.ID), name, icon, count, selected)
+			row = a.sidebarRowDrop(c.Key(entry.ID), name, icon, count, selected, a.sidebarDropsAssets)
+			// 固定的文件夹、标签和侧栏里的一样能接收拖进来的素材。
+			if drag, ok := ui.Drop[AssetsDrag](row); ok && a.sidebarCanDrop(drag) && drag.HasAssets() {
+				if ids := drag.IDs(); len(ids) > 0 {
+					if entry.Kind == "folder" {
+						a.addAssetsToFolder(ids, entry.TargetID, name)
+					} else {
+						a.addAssetsToTag(ids, entry.TargetID, name)
+					}
+				}
+			}
 		}
 		if row.Clicked() {
 			a.openQuickAccess(entry)
 		}
 		row.ContextMenu(func(m *ui.Menu) {
-			if menuItem(m, a.T("quick_move_up"), "arrow-up").Disabled(a.Busy || i == 0).Chosen() {
+			if menuItem(m, a.T("quick_move_up"), "arrow-up").Disabled(i == 0).Chosen() {
 				a.moveVisibleQuickAccess(entries, i, i-1)
 			}
-			if menuItem(m, a.T("quick_move_down"), "arrow-down").Disabled(a.Busy || i == len(entries)-1).Chosen() {
+			if menuItem(m, a.T("quick_move_down"), "arrow-down").Disabled(i == len(entries)-1).Chosen() {
 				a.moveVisibleQuickAccess(entries, i, i+1)
 			}
 			m.Separator()
-			if menuItem(m, a.T("quick_unpin"), "pin").Disabled(a.Busy).Chosen() {
+			if menuItem(m, a.T("quick_unpin"), "pin").Chosen() {
 				a.unpinQuickAccess(entry.ID)
 			}
 		})
@@ -71,7 +81,7 @@ func (a *App) sidebarQuickAccess(c *ui.Context) {
 }
 
 func (a *App) PinQuickAccess(kind, id string) {
-	if a.Library == nil || a.Busy {
+	if a.Library == nil {
 		return
 	}
 	lib := a.Library
@@ -81,10 +91,10 @@ func (a *App) PinQuickAccess(kind, id string) {
 func (a *App) QuickAccessMenu(m *ui.Menu, kind, id string) {
 	entry, exists := a.pinnedQuickAccess(kind, id)
 	if exists {
-		if menuItem(m, a.T("quick_unpin"), "pin").Disabled(a.Busy).Chosen() {
+		if menuItem(m, a.T("quick_unpin"), "pin").Chosen() {
 			a.unpinQuickAccess(entry.ID)
 		}
-	} else if menuItem(m, a.T("quick_pin"), "pin").Disabled(a.Busy || a.Library == nil).Chosen() {
+	} else if menuItem(m, a.T("quick_pin"), "pin").Disabled(a.Library == nil).Chosen() {
 		a.PinQuickAccess(kind, id)
 	}
 }
@@ -98,7 +108,7 @@ func (a *App) pinnedQuickAccess(kind, id string) (model.QuickAccess, bool) {
 	return model.QuickAccess{}, false
 }
 func (a *App) unpinQuickAccess(id string) {
-	if a.Library == nil || a.Busy {
+	if a.Library == nil {
 		return
 	}
 	lib := a.Library
@@ -130,7 +140,7 @@ func quickAccessMoveIndex(all, visible []model.QuickAccess, from, to int) int {
 }
 
 func (a *App) moveQuickAccess(id string, index int) {
-	if a.Library == nil || a.Busy {
+	if a.Library == nil {
 		return
 	}
 	lib := a.Library

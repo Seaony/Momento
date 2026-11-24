@@ -191,8 +191,23 @@ func (a *App) applyTheme(c *ui.Context) {
 	}
 	theme := momentoTheme(a.Preferences.Theme, c.Theme().Dark)
 	theme.Font = uiFont(a.Texts.Locale())
+	// 换浅深色或界面缩放的那一帧整窗直接换好：不让带颜色过渡的按钮慢半拍、其余瞬间变，也不让卡片按新缩放滑来滑去。
+	root := c.Root()
+	now := [2]float32{themeValueFor(theme.Dark), preferenceZoom(a.Preferences.UIZoom)}
+	shown := ui.Local(root, "shown-appearance", func() [2]float32 { return now })
+	if now != *shown {
+		c.DisableAnimations()
+		*shown = now
+	}
 	c.SetTheme(theme)
-	c.Root().Background(theme.Background)
+	root.Background(theme.Background)
+}
+
+func themeValueFor(dark bool) float32 {
+	if dark {
+		return 1
+	}
+	return 0
 }
 
 func themeSource(key string) mygo.ThemeSource {
@@ -268,7 +283,7 @@ func themeNameKey(key string) string {
 	}
 }
 
-// 设置和引导共用色块，名称也用于读屏标签和悬停提示。
+// 设置和引导共用色块，名称也用于读屏标签。
 func (a *App) ThemeSwatches(c *ui.Context) {
 	a.themeSwatches(c, false)
 }
@@ -287,7 +302,7 @@ func (a *App) themeSwatches(c *ui.Context, centered bool) {
 		for _, key := range themeKeys {
 			selected := a.Preferences.Theme == key || (a.Preferences.Theme == "" && key == "system")
 			name := a.T(themeNameKey(key))
-			button := ui.ButtonBase(c.Key(key)).Width(92).Padding(space4).Column().Gap(space8).AlignItems(ui.Center).Radius(radiusControl).Cursor(ui.CursorPointer).Label(name).Tooltip(name).AccessSelected(selected)
+			button := ui.ButtonBase(c.Key(key)).Width(92).Padding(space4).Column().Gap(space8).AlignItems(ui.Center).Radius(radiusControl).Cursor(ui.CursorPointer).Label(name).AccessSelected(selected)
 			hovered := button.Hovered()
 			text := theme.TextMuted
 			outline := ui.Transparent

@@ -22,11 +22,17 @@ type ExportPreset struct {
 // exportOptions 是对话框里现在的设置；problem 不为空时不能导出，也不能存成预设。
 func (a *App) exportOptions() (options model.ExportOptions, problem string) {
 	d := &a.Dialog
-	options = model.ExportOptions{Format: d.Format, Motion: d.ExportMotion}
-	if d.Format == model.ExportJPEG {
+	mix := a.exportMix()
+	format := d.Format
+	// 全是视频时对话框不显示格式，导出也总是原样，记着的上次设置不能再影响它。
+	if mix.onlyVideos() {
+		format = model.ExportOriginal
+	}
+	options = model.ExportOptions{Format: format, Motion: d.ExportMotion && mix.live}
+	if format == model.ExportJPEG {
 		options.Quality = d.Quality
 	}
-	if d.Format != model.ExportOriginal && d.MaxEdgeOn {
+	if format != model.ExportOriginal && d.MaxEdgeOn {
 		edge, err := strconv.Atoi(strings.TrimSpace(d.MaxEdge))
 		if err != nil || edge <= 0 || edge > maxExportEdge {
 			return options, a.T("export_max_edge_invalid", maxExportEdge)

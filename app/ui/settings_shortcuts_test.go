@@ -8,7 +8,7 @@ func TestPreviewShortcutConflictsWithMainActions(t *testing.T) {
 	if a.SetShortcut("preview", "CmdOrCtrl+E") {
 		t.Fatal("空格预览改成 ⌘E 没有报和导出冲突")
 	}
-	if a.Settings.ShortcutErrors["preview"] != a.T("shortcut_conflict", a.T("export")) {
+	if a.Settings.ShortcutErrors["preview"] != a.T("shortcut_conflict_in_use", displayShortcut("CmdOrCtrl+E"), a.T("export")) {
 		t.Fatalf("冲突提示不对：%q", a.Settings.ShortcutErrors["preview"])
 	}
 	if !a.SetShortcut("view_list", "CmdOrCtrl+0") {

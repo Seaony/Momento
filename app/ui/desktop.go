@@ -51,11 +51,15 @@ func (a *App) ResetSettingsSession() {
 	if a.Lock.DialogOpen && !a.PasswordOperationPending() {
 		a.closePasswordDialog()
 	}
+	// 关掉设置窗口就放下没确认的自动导入弹窗，下次打开不会冒出上次的。
+	a.Settings.AutoImportConfirm = nil
 }
 
 // 每次打开设置窗口都重新读系统里「登录时启动」的真实状态，用户可能在系统设置里改过。
 func (a *App) RefreshLaunchAtLogin() {
 	a.Settings.LoginEnabled = launchAtLogin()
+	// 上次失败的原因只对上次那次操作有意义，重新读回真实状态后清掉。
+	a.Settings.LoginError = ""
 }
 
 func (a *App) importFeedback(event string, result model.ImportResult) {
@@ -74,25 +78,46 @@ func (a *App) importDestination() importDestination {
 }
 
 func (a *App) importFeedbackFor(event string, result model.ImportResult, destination importDestination, showLibraryName bool) {
-	if a.Preferences.SelectImported && (result.Imported > 0 || result.Restored > 0) && len(result.AssetIDs) > 0 && !a.IsLocked() && a.importDestination().root == destination.root {
-		a.selectImportResult(result.AssetIDs)
+	here := !a.IsLocked() && a.importDestination().root == destination.root
+	ids := slices.Clone(result.AssetIDs)
+	// 只有用户自己发起的导入（拖入、粘贴、菜单）才选中新素材；自动导入和浏览器扩展在后台进来，不能打断手上的事，提示里给「查看」再跳过去。
+	manual := event == ""
+	if manual && a.Preferences.SelectImported && (result.Imported > 0 || result.Restored > 0) && len(ids) > 0 && here {
+		a.selectImportResult(ids)
 	}
 	message := a.T("import_complete", result.Imported, result.Skipped)
+	if result.Skipped == 0 {
+		message = a.T("import_complete_new", result.Imported)
+	}
 	if len(result.Errors) > 0 {
 		message = a.T("import_complete_failed", result.Imported, result.Skipped, len(result.Errors))
-		a.showImportFailures(result.Errors)
 	}
 	if showLibraryName && destination.name != "" {
 		message = a.T("import_complete_library", destination.name, message)
 	}
-	a.Notify(message)
+	switch {
+	case len(result.Errors) > 0:
+		// 部分失败不弹模态框，失败清单点「查看」再看。
+		errs := slices.Clone(result.Errors)
+		for _, err := range errs {
+			slog.Error("导入时跳过文件", "error", err)
+		}
+		a.NotifyAction(message, a.T("view"), func() { a.showImportFailures(errs) })
+	case !manual && len(ids) > 0 && here:
+		a.NotifyAction(message, a.T("view"), func() {
+			if a.Library != nil && a.Library.Root == destination.root && !a.IsLocked() {
+				a.selectImportResult(ids)
+			}
+		})
+	default:
+		a.Notify(message)
+	}
 	if !a.Preferences.Notify || a.Window == nil || a.Window.IsFocused() || a.SettingsWindow != nil && a.SettingsWindow.IsFocused() {
 		return
 	}
 	if !slices.Contains(a.Preferences.NotifyEvents, event) && !(result.Skipped > 0 && slices.Contains(a.Preferences.NotifyEvents, "duplicate")) {
 		return
 	}
-	ids := slices.Clone(result.AssetIDs)
 	note := mygo.NewNotification(mygo.NotificationOptions{Title: "Momento", Body: message, Silent: !a.Preferences.NotifySound, Group: destination.id})
 	note.OnClick(func() {
 		a.ShowMainWindow()
@@ -128,7 +153,6 @@ func (a *App) showImportFailures(errs []error) {
 	const shown = 20
 	lines := []string{a.T("import_failed_files", len(errs))}
 	for i, err := range errs {
-		slog.Error("导入时跳过文件", "error", err)
 		if i < shown {
 			lines = append(lines, a.Texts.Error(err))
 		}
@@ -143,15 +167,25 @@ func (a *App) selectImportResult(ids []string) {
 	if len(ids) == 0 {
 		return
 	}
-	if (a.Query.Scope == "all" || a.Query.Scope == "") && !a.TagPage && a.Query.Search == "" {
+	// 新素材落在当前位置里（在文件夹里导入就进这个文件夹）就留在原地选中；一张都不在才回到「全部」。
+	matches := false
+	if !a.TagPage {
+		for _, id := range ids {
+			if a.Index.Matches(a.browseQuery(a.Query), id) {
+				matches = true
+				break
+			}
+		}
+	}
+	if matches {
 		a.Selected.Clear()
-		compare := catalog.AssetOrder(a.Query)
+		compare := catalog.AssetOrder(a.browseQuery(a.Query))
 		missing := false
 		for _, id := range ids {
 			if asset, exists := a.assetByID[id]; exists {
 				if _, visible := slices.BinarySearchFunc(a.Visible, &asset, compare); visible {
 					a.Selected.Add(id)
-				} else if a.Index.Matches(a.Query, id) {
+				} else if a.Index.Matches(a.browseQuery(a.Query), id) {
 					missing = true
 					a.Selected.Add(id)
 				}
@@ -179,11 +213,16 @@ func (a *App) closeMainWindow(e *mygo.CloseEvent) {
 	}
 	e.PreventDefault()
 	a.FlushInspectorEdits()
-	if a.Preferences.CloseAction == "background" {
+	if a.Preferences.CloseAction == "background" && a.canFindHiddenWindow() {
 		a.HideMainWindow()
 		return
 	}
 	mygo.App.Quit()
+}
+
+// 关窗后还能找回窗口吗：macOS 一直有 Dock 图标；Windows、Linux 要靠托盘图标，没开或没建出来就只能直接退出。
+func (a *App) canFindHiddenWindow() bool {
+	return runtime.GOOS == "darwin" || a.Preferences.TrayIcon && !a.TrayFailed
 }
 
 func (a *App) PrepareInspectorQuit() bool {

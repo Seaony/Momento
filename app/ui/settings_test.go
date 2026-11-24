@@ -93,7 +93,7 @@ func TestSettingsChangesPreferencesImmediately(t *testing.T) {
 	if a.Preferences.PreviewChecker {
 		t.Fatal("纯色背景选择未生效")
 	}
-	a.Settings.Tab = SettingsAppearance
+	a.Settings.Tab = SettingsSidebar
 	tt.Frame()
 	toggle, ok := tt.AccessByRole(ui.RoleSwitch, a.T("sidebar_counts"))
 	if !ok {
@@ -134,9 +134,8 @@ func TestSettingsSidebarFixedEntries(t *testing.T) {
 	a.Settings.Tab = SettingsSidebar
 	tt := ui.NewTester(func(c *ui.Context) { a.settingsView(c, UpdateCheckStatus{}) }, 760, 560)
 	for _, key := range []string{"all", "tag_management", "trash"} {
-		item, ok := tt.AccessByRole(ui.RoleCheckBox, a.T(key))
-		if !ok || !item.Disabled || !item.Checked {
-			t.Fatalf("固定项未勾选或可修改:%s", key)
+		if _, ok := tt.AccessByRole(ui.RoleCheckBox, a.T(key)); ok {
+			t.Fatalf("永远显示的固定项不该列出来:%s", key)
 		}
 	}
 	if err := tt.Click(a.T("favorites")); err != nil {
@@ -248,15 +247,18 @@ func TestSettingsFeedbackAndAboutActions(t *testing.T) {
 		a := settingsTestApp(language, "dark")
 		a.Settings.LoginError = "permission denied"
 		tt := ui.NewTester(func(c *ui.Context) { a.settingsView(c, UpdateCheckStatus{}) }, 760, 560)
-		if !tt.HasText(a.T("error_launch_at_login", a.Settings.LoginError)) {
-			t.Fatal("开机启动错误不可见")
+		if !tt.HasText(a.T("launch_at_login_failed")) || !tt.HasText(a.Settings.LoginError) {
+			t.Fatal("开机启动错误的说明或原始错误不可见")
 		}
 		a.Settings.Tab = SettingsExtension
 		a.ExtensionStatus.State = browser.PortOccupied
 		a.ExtensionStatus.Err = errors.New("bind: address already in use")
 		tt.Frame()
-		if !tt.HasText(a.T("extension_port_in_use")) || !tt.HasText(a.T("error_extension_listen", a.Texts.Error(a.ExtensionStatus.Err))) {
-			t.Fatal("扩展端口错误不可见")
+		if !tt.HasText(a.T("extension_port_in_use_retry")) || tt.HasText(a.T("error_extension_listen", a.Texts.Error(a.ExtensionStatus.Err))) {
+			t.Fatal("端口被占用时应只显示一句带下一步的说明，原始错误放进复制详细信息")
+		}
+		if _, ok := tt.AccessByRole(ui.RoleButton, a.T("extension_retry")); !ok {
+			t.Fatal("端口被占用时没有重试按钮")
 		}
 		a.Settings.Tab = SettingsNotifications
 		a.Settings.NotificationDenied = true
@@ -464,8 +466,8 @@ func TestSettingsShortcutResetRejectsCrossGroupConflictsAtomically(t *testing.T)
 	if a.Shortcut("search") != "Alt+G" || a.Shortcut("filter") != "Alt+H" || a.Shortcut("import") != "CmdOrCtrl+K" {
 		t.Fatal("冲突改坏了原来的快捷键")
 	}
-	if a.Settings.ShortcutErrors["search"] != a.T("shortcut_conflict", a.T("import")) {
-		t.Fatal("恢复默认未明确指出与导入冲突")
+	if note := a.Settings.ShortcutGroupNotes["view"]; !note.Error || note.Text != a.T("shortcut_restore_conflict", a.T("search"), a.T("import")) {
+		t.Fatalf("恢复默认未明确指出与导入冲突：%+v", note)
 	}
 	if a.Settings.RecordingShortcut != "search" {
 		t.Fatal("失败的恢复不应清除录制状态")
@@ -506,7 +508,7 @@ func TestSettingsShortcutResetConflictScreenshots(t *testing.T) {
 			tt.SetTitleBar(ui.TitleBar{Height: 44, Left: 80, Bottom: 30})
 			tt.SetWindowActive(true)
 			tt.Frame()
-			if !tt.HasText(a.T("shortcut_conflict", a.T("import"))) || a.Shortcut("search") != "Alt+G" {
+			if !tt.HasText(a.T("shortcut_restore_conflict", a.T("search"), a.T("import"))) || a.Shortcut("search") != "Alt+G" {
 				t.Fatal("恢复失败的错误或原快捷键不可见")
 			}
 			writeScreenshot(t, filepath.Join(dir, fmt.Sprintf("settings-shortcut-reset-%s-%s.png", language, theme)), tt)

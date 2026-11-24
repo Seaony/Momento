@@ -107,6 +107,8 @@ func (a *App) subfolderCardView(c *ui.Context, card subfolderCard) ui.Element {
 	p := paletteFor(c.Theme())
 	button := ui.ButtonBase(c).Label(card.Folder.Name).Size(subfolderCardWidth, subfolderCardHeight).Padding(space8).Gap(space8).AlignItems(ui.Center).
 		Radius(radiusCard).Border(1, p.BorderSubtle).Cursor(ui.CursorPointer)
+	// 和侧栏的文件夹行同一个右键菜单。
+	button.ContextMenu(func(m *ui.Menu) { a.folderMenu(m, card.Folder) })
 	background := p.Subtle
 	if button.Hovered() {
 		background = p.Hover

@@ -96,7 +96,7 @@ func TestEagleFeatureScreenshots(t *testing.T) {
 					{Name: "原图 PNG", ExportOptions: model.ExportOptions{Format: model.ExportPNG}},
 				}
 				// 跳过打开时的重置，直接摆成点了第一个预设的样子。
-				a.ExportOpen, a.Dialog.ExportWasOpen = true, true
+				a.ExportOpen, a.Dialog.ExportReady = true, true
 				a.applyExportPreset(a.Preferences.ExportPresets[0])
 				if state == "export-invalid" {
 					a.Dialog.MaxEdge = "0"

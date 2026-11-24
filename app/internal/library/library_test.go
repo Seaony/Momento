@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Seaony/Momento/app/internal/i18n"
 	"github.com/Seaony/Momento/app/internal/model"
 )
 
@@ -404,8 +405,14 @@ func TestTagDedupeRenameDeleteAndBatchEdit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := l.RenameTag(t.Context(), other.ID, "UI Design"); err == nil {
-		t.Fatal("重名覆盖了已有标签")
+	err = l.RenameTag(t.Context(), other.ID, "ui  DESIGN")
+	var localized *i18n.LocalizedError
+	if !errors.As(err, &localized) || localized.Key != "tag_name_exists" || len(localized.Args) != 1 || localized.Args[0] != first.Name {
+		t.Fatalf("重名没有返回带已有名字的本地化错误：%v", err)
+	}
+	// 只改自己的大小写不算重名。
+	if err := l.RenameTag(t.Context(), other.ID, "OTHER"); err != nil {
+		t.Fatal(err)
 	}
 	if err := l.RenameTag(t.Context(), first.ID, "界面"); err != nil {
 		t.Fatal(err)

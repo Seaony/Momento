@@ -44,7 +44,7 @@ func TestLocalizedErrorPreservesNestedAndJoinedErrors(t *testing.T) {
 		WrapError(native, "error_database_invalid"),
 	), "operation_failed")
 	text := (Catalog{Language: "zh-CN"}).Error(err)
-	for _, want := range []string{"操作失败", "名称不能为空", "图库数据库无效", native.Error()} {
+	for _, want := range []string{"操作失败", "名称不能为空", "图库的索引文件损坏了", native.Error()} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("missing %q in %q", want, text)
 		}

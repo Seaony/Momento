@@ -6,8 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/Seaony/Momento/app/internal/i18n"
+	"github.com/Seaony/Momento/app/internal/library"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -62,5 +64,38 @@ func TestWelcomeScreenshots(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// 引导第一步没有「上一步」；最近图库每一行悬停都有「…」菜单，不只是找不到的。
+func TestOnboardingFirstStepHasNoBackAndRecentRowsHaveMenu(t *testing.T) {
+	a := &App{Texts: i18n.Catalog{Language: "en"}, Preferences: Preferences{}}
+	tt := ui.NewTester(a.welcome, 1100, 640)
+	if tt.HasText(a.T("onboarding_previous")) {
+		t.Fatal("第一步不该显示上一步")
+	}
+	a.Welcome.Step = 1
+	tt.Frame()
+	tt.Advance(time.Second)
+	if !tt.HasText(a.T("onboarding_previous")) {
+		t.Fatal("第二步应该有上一步")
+	}
+
+	dir := t.TempDir()
+	b := &App{Texts: i18n.Catalog{Language: "en"}, Preferences: Preferences{Onboarded: true},
+		Recent: []library.Recent{{Path: filepath.Join(dir, "Reference.momento"), DisplayName: "Reference"}}, Welcome: welcomeState{RecentChecked: true}}
+	wt := ui.NewTester(b.welcome, 1100, 640)
+	box, ok := wt.Find("Reference")
+	if !ok {
+		t.Fatal("欢迎页没有最近图库")
+	}
+	wt.Move(box.X+box.W/2, box.Y+box.H/2)
+	wt.Advance(time.Second)
+	if err := wt.Click(b.T("library_more")); err != nil {
+		t.Fatal(err)
+	}
+	wt.Advance(time.Second)
+	if !wt.HasText(b.T("remove_recent_library")) || !wt.HasText(b.T("reveal_library")) {
+		t.Fatalf("没有找不到标记的图库也应有显示和移除：%v", wt.Texts())
 	}
 }

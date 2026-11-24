@@ -85,25 +85,21 @@ func TestConfirmationKeepsDefaultActionAndIgnoresOutsideClick(t *testing.T) {
 	if alert, ok := tt.AccessByRole(ui.RoleAlertDialog, "Delete"); !ok || alert.Description != "Delete these images?" {
 		t.Fatal("确认框没有保留读屏标题和说明")
 	}
-	if !tt.Focused(a.T("delete")) {
-		t.Fatal("确认操作没有默认键盘焦点")
+	if !tt.Focused(a.T("cancel")) || tt.Focused(a.T("delete")) {
+		t.Fatal("确认框默认焦点应在取消上，不能在危险按钮上")
 	}
 	tt.Key(0, ui.KeyEnter)
-	if a.ConfirmOpen || calls != 1 {
-		t.Fatal("默认确认操作应只执行一次")
-	}
-	tt.Frame()
-	if calls != 1 {
-		t.Fatal("下一帧重复执行确认")
+	if a.ConfirmOpen || calls != 0 {
+		t.Fatal("回车应取消确认，不能执行危险操作")
 	}
 	a.Confirm("Delete", "Delete these images?", a.T("delete"), func() { calls++ })
 	tt.Frame()
 	tt.ClickAt(12, 12)
-	if !a.ConfirmOpen || calls != 1 {
+	if !a.ConfirmOpen || calls != 0 {
 		t.Fatal("点击遮罩不应取消或执行确认")
 	}
 	tt.Key(0, ui.KeyEscape)
-	if a.ConfirmOpen || calls != 1 {
+	if a.ConfirmOpen || calls != 0 {
 		t.Fatal("Escape 应取消确认")
 	}
 }
@@ -143,14 +139,16 @@ func TestExportMaxEdgeAndPresets(t *testing.T) {
 	if len(a.Preferences.ExportPresets) != 1 || a.Preferences.ExportPresets[0].MaxEdge != 800 {
 		t.Fatalf("同名预设应覆盖：%+v", a.Preferences.ExportPresets)
 	}
-	// 关掉再打开，设置回到默认；点预设恢复。
+	// 关掉再打开，设置还是上次的；改回默认后点预设恢复。
 	a.ExportOpen = false
 	tt.Frame()
 	a.ExportOpen = true
 	tt.Frame()
-	if a.Dialog.Format != model.ExportOriginal || a.Dialog.MaxEdgeOn {
-		t.Fatal("重新打开应回到默认设置")
+	if a.Dialog.Format != model.ExportJPEG || !a.Dialog.MaxEdgeOn || a.Dialog.MaxEdge != "800" || a.Dialog.Quality != .8 {
+		t.Fatalf("重新打开应记着上次的导出设置：%+v", a.Dialog)
 	}
+	a.Dialog.Format, a.Dialog.MaxEdgeOn = model.ExportOriginal, false
+	tt.Frame()
 	if err := tt.Click("网页"); err != nil {
 		t.Fatal(err)
 	}

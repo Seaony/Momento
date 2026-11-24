@@ -22,8 +22,13 @@ func TestRemoteBatchFeedbackAfterAllItems(t *testing.T) {
 		t.Fatalf("没全部做完就提示了：%q %q", a.Notice, a.Error)
 	}
 	a.remoteFeedback(item(1), model.ImportResult{Skipped: 1, AssetIDs: []string{"c"}}, nil, a.generation)
-	if a.Notice != a.T("import_complete_failed", 1, 1, 1) {
-		t.Fatalf("汇总提示是 %q", a.Notice)
+	// 有失败时不弹模态框，提示上带「查看」。
+	if a.noticeAction == nil || a.noticeAction.message != a.T("import_complete_failed", 1, 1, 1) || a.Error != "" {
+		t.Fatalf("汇总提示是 %+v，错误框 %q", a.noticeAction, a.Error)
+	}
+	a.noticeAction.action()
+	if a.Error == "" {
+		t.Fatal("点「查看」后没列出失败的文件")
 	}
 	if len(a.remoteBatches) != 0 {
 		t.Fatal("这一批结束后记录没清掉")
@@ -42,8 +47,8 @@ func TestRemoteBatchCanceledStaysQuiet(t *testing.T) {
 	// 单张：扩展说不要提示就不提示，失败照样报。
 	quiet := false
 	a.remoteFeedback(browser.Request{PlayFeedback: &quiet}, model.ImportResult{Imported: 1}, nil, a.generation)
-	if a.Notice != "" {
-		t.Fatalf("不要提示时提示了 %q", a.Notice)
+	if a.Notice != "" || a.noticeAction != nil {
+		t.Fatalf("不要提示时提示了 %q %+v", a.Notice, a.noticeAction)
 	}
 	a.remoteFeedback(browser.Request{}, model.ImportResult{}, errors.New("boom"), a.generation)
 	if a.Error == "" {
@@ -68,8 +73,8 @@ func TestRemoteBatchStaysWithFirstLibrary(t *testing.T) {
 		t.Fatal("换了图库后，同一批剩下的应被拦下")
 	}
 	a.remoteFeedback(item(1), model.ImportResult{}, i18n.NewError("error_import_library_changed"), a.generation)
-	if a.Notice != a.T("import_complete_failed", 1, 0, 1) {
-		t.Fatalf("汇总提示是 %q", a.Notice)
+	if a.noticeAction == nil || a.noticeAction.message != a.T("import_complete_failed", 1, 0, 1) {
+		t.Fatalf("汇总提示是 %+v", a.noticeAction)
 	}
 	if a.Selected.Len() != 0 {
 		t.Fatal("不应在新图库里选中旧图库的素材")

@@ -99,7 +99,6 @@ var toolbarIconSource = map[string]string{
 	"sort-up":        `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 18L16 6M12 10.125L16 6L20 10.125" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
 	"sort-down":      `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 6L8 18M4 13.875L8 18L12 13.875" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
 	"thumbnail-size": `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 12C2 7.28595 2 4.92893 3.46447 3.46447C4.92893 2 7.28595 2 12 2C16.714 2 19.0711 2 20.5355 3.46447C22 4.92893 22 7.28595 22 12C22 16.714 22 19.0711 20.5355 20.5355C19.0711 22 16.714 22 12 22C7.28595 22 4.92893 22 3.46447 20.5355C2 19.0711 2 16.714 2 12Z" stroke="black" stroke-width="1.5"/><path d="M17 7H14M17 7V10M17 7L13.5 10.5M7 17H10M7 17V14M7 17L10.5 13.5" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-	"filter":         `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M22 7L2 7" stroke="black" stroke-width="1.5" stroke-linecap="round"/><path d="M19 12L5 12" stroke="black" stroke-width="1.5" stroke-linecap="round"/><path d="M16 17H8" stroke="black" stroke-width="1.5" stroke-linecap="round"/></svg>`,
 	"sidebar":        `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 11C2 7.22876 2 5.34315 3.17157 4.17157C4.34315 3 6.22876 3 10 3H14C17.7712 3 19.6569 3 20.8284 4.17157C22 5.34315 22 7.22876 22 11V13C22 16.7712 22 18.6569 20.8284 19.8284C19.6569 21 17.7712 21 14 21H10C6.22876 21 4.34315 21 3.17157 19.8284C2 18.6569 2 16.7712 2 13V11Z" stroke="black" stroke-width="1.5"/><path d="M15 21L15 3" stroke="black" stroke-width="1.5" stroke-linecap="round"/></svg>`,
 	"import":         `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 15C3 17.8284 3 19.2426 3.87868 20.1213C4.75736 21 6.17157 21 9 21H15C17.8284 21 19.2426 21 20.1213 20.1213C21 19.2426 21 17.8284 21 15" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 3V16M12 16L16 11.625M12 16L8 11.625" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
 	"sort":           `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 18L16 6M16 6L20 10.125M16 6L12 10.125" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 6L8 18M8 18L12 13.875M8 18L4 13.875" stroke="black" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
@@ -112,8 +111,8 @@ var toolbarIconSource = map[string]string{
 var toolbarIcons = func() map[string]*ui.SVG {
 	icons := parseIcons(toolbarIconSource, true)
 	icons["inspector"] = icons["sidebar"]
-	// 搜索、导入的加号、排序后的小箭头直接用通用图标的加粗版。
-	for name, source := range map[string]string{"search": "magnifying-glass", "caret-down": "caret-down"} {
+	// 搜索、筛选（漏斗）、更新（刷新箭头）、排序后的小箭头直接用通用图标的加粗版。
+	for name, source := range map[string]string{"search": "magnifying-glass", "caret-down": "caret-down", "filter": "funnel-simple", "update": "arrow-clockwise"} {
 		icons[name] = iconSidebar[source]
 	}
 	return icons

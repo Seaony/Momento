@@ -36,6 +36,8 @@ type previewState struct {
 	nextFrameAt, wheelAt            time.Time
 	slideDirection                  float32
 	slideFrames                     int
+	// zoomEase 为真时（双击、快捷键缩放）图片的框用弹簧过去；捏合、滚轮、拖动时为假，直接跟手。
+	zoomEase bool
 }
 
 type previewAnimation struct {
@@ -70,6 +72,7 @@ func (p *previewState) target(root, id string, rotation int) {
 	p.Bitmap, p.animation, p.errorText, p.limited = nil, nil, "", false
 	p.Loading, p.animationLoading, p.initialized = false, false, false
 	p.Zoom, p.Pan, p.fitZoom = 1, ui.Point{}, 1
+	p.zoomEase = false
 	p.nextFrameAt = time.Time{}
 	if root == "" {
 		p.wheelAt = time.Time{}
@@ -202,13 +205,16 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 		}
 		p.clampPan()
 		viewport.Children(func() {
-			photo := previewPhoto(c.Key(struct{ ID string }{asset.ID}), bitmap, previewPhotoRadius, a.Preferences.PreviewChecker, w.gray, ui.Contain).
+			// 缩略图换成原图时交叉淡化；动图逐帧换画面，不淡。
+			photo := previewPhoto(c.Key(struct{ ID string }{asset.ID}), bitmap, previewPhotoRadius, a.Preferences.PreviewChecker, w.gray, ui.Contain, p.animation == nil).
 				Absolute().Label(asset.Name)
 			if w.flipped {
 				photo.TransformOrigin(.5, .5).Scale(-1, 1)
 			}
 			photoWidth, photoHeight := float32(bw)*p.Zoom, float32(bh)*p.Zoom
 			photoLeft, photoTop := (p.viewport.W-photoWidth)/2+p.Pan.X, (p.viewport.H-photoHeight)/2+p.Pan.Y
+			shown := p.shownRect(photo, ui.Rect{X: photoLeft, Y: photoTop, W: photoWidth, H: photoHeight})
+			photoLeft, photoTop, photoWidth, photoHeight = shown.X, shown.Y, shown.W, shown.H
 			photo.Left(photoLeft).Top(photoTop).Size(photoWidth, photoHeight)
 			w.slideTransition(c, photo)
 			if isLiveAsset(asset) {
@@ -221,6 +227,13 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 			}
 			if w.gray {
 				modes = append(modes, a.T("preview_gray"))
+			}
+			// 先显示放大的缩略图、原图还在解码时，左下角标出来，免得以为原图就这么糊；清晰图出来就消失。
+			if p.Loading && p.Bitmap == nil {
+				ui.Row(c.Key("preview-original-loading")).Absolute().Bottom(space8).Left(space8).Height(22).Padding(0, space8).Radius(radiusSmall + 2).
+					Background(ui.RGBA(0, 0, 0, .55)).AlignItems(ui.Center).IgnoreInput(true).Transition(ui.ElementTransition{Duration: motionEnter, ExitDuration: motionExit, Enter: &ui.Motion{}, Exit: &ui.Motion{}}).Children(func() {
+					ui.Text(c, a.T("preview_loading")).FontSize(fontCaption).TextColor(ui.RGBA(255, 255, 255, .92)).SingleLine()
+				})
 			}
 			if len(modes) > 0 {
 				ui.Row(c.Key("preview-view-modes")).Absolute().Top(space8).Left(space8).Height(22).Padding(0, space8).Radius(radiusSmall + 2).
@@ -235,6 +248,7 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 				viewport.Cursor(ui.CursorGrabbing)
 				p.Pan.X += dx
 				p.Pan.Y += dy
+				p.zoomEase = false
 				p.clampPan()
 			}
 		}
@@ -259,7 +273,7 @@ func (w *previewWindow) viewport(c *ui.Context, a *App) {
 	}
 }
 
-func previewPhoto(c *ui.Context, bitmap *ui.Bitmap, radius float32, checker, gray bool, fit ui.Fit) ui.Element {
+func previewPhoto(c *ui.Context, bitmap *ui.Bitmap, radius float32, checker, gray bool, fit ui.Fit, crossfade bool) ui.Element {
 	photo := ui.Box(c).Radius(radius).Clip().Role(ui.RoleImage).Background(paletteFor(c.Theme()).Subtle)
 	if checker {
 		theme := c.Theme()
@@ -272,8 +286,29 @@ func previewPhoto(c *ui.Context, bitmap *ui.Bitmap, radius float32, checker, gra
 		if gray {
 			image.Grayscale()
 		}
+		if crossfade {
+			image.ContentTransition(pictureMotion)
+		}
 	})
 	return photo
+}
+
+// shownRect 返回这一帧图片实际画在哪：一下到位的缩放用弹簧过去，其余时候直接跟手，弹簧也随时从当前位置接着走。
+func (p *previewState) shownRect(e ui.Element, r ui.Rect) ui.Rect {
+	values := [4]float32{r.X, r.Y, r.W, r.H}
+	settled := true
+	for i, key := range [4]string{"zoom-x", "zoom-y", "zoom-w", "zoom-h"} {
+		if p.zoomEase {
+			values[i] = e.AnimateTo(key, values[i], motionSpring)
+			settled = settled && e.Settled(key)
+		} else {
+			values[i] = e.Jump(key, values[i])
+		}
+	}
+	if settled {
+		p.zoomEase = false
+	}
+	return ui.Rect{X: values[0], Y: values[1], W: values[2], H: values[3]}
 }
 
 func previewFitZoom(imageWidth, imageHeight, width, height float32) float32 {
@@ -311,6 +346,7 @@ func (p *previewState) zoomAt(scale, x, y float32) {
 		return
 	}
 	old := p.Zoom
+	p.zoomEase = false
 	p.Zoom = max(.01, min(32, p.Zoom*scale))
 	ratio := p.Zoom / old
 	p.Pan.X = (p.Pan.X-(x-p.viewport.W/2))*ratio + x - p.viewport.W/2
@@ -344,19 +380,20 @@ func (w *previewWindow) input(a *App, ev ui.InputEvent) bool {
 func (w *previewWindow) fitToWindow() {
 	p := &w.picture
 	if p.Bitmap != nil {
-		p.Zoom, p.Pan, p.fitMode = p.fitZoom, ui.Point{}, true
+		p.Zoom, p.Pan, p.fitMode, p.zoomEase = p.fitZoom, ui.Point{}, true, true
 	}
 }
 func (w *previewWindow) actualSize() {
 	p := &w.picture
 	if p.Bitmap != nil {
-		p.Zoom, p.Pan, p.fitMode = 1, ui.Point{}, false
+		p.Zoom, p.Pan, p.fitMode, p.zoomEase = 1, ui.Point{}, false, true
 	}
 }
 func (a *App) PreviewZoomIn() {
 	if w := a.previewTarget(); w != nil {
 		p := &w.picture
 		p.zoomAt(1.25, p.viewport.W/2, p.viewport.H/2)
+		p.zoomEase = true
 		w.invalidate()
 	}
 }
@@ -364,6 +401,7 @@ func (a *App) PreviewZoomOut() {
 	if w := a.previewTarget(); w != nil {
 		p := &w.picture
 		p.zoomAt(.8, p.viewport.W/2, p.viewport.H/2)
+		p.zoomEase = true
 		w.invalidate()
 	}
 }

@@ -193,7 +193,7 @@ func TestPasswordDialogCancelAndCooldown(t *testing.T) {
 	view := func(c *ui.Context) {
 		a.applyTheme(c)
 		ui.Column(c).Fill()
-		a.passwordSettingsDialog(c)
+		a.passwordSettingsDialog(c, true)
 	}
 	tt := ui.NewTester(view, 760, 560)
 	if err := tt.Click(a.T("password_new")); err != nil {

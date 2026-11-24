@@ -39,7 +39,7 @@ func TestPasswordSaveErrorDetailsAreLocalized(t *testing.T) {
 				}
 				if failure.err != nil {
 					a.Lock.ErrorKey, a.Lock.Detail = "password_save_failed", a.passwordErrorDetail(failure.err)
-					tt := ui.NewTester(a.passwordFeedback, 420, 180)
+					tt := ui.NewTester(func(c *ui.Context) { a.passwordFeedback(c, false) }, 420, 180)
 					if !tt.HasText(a.T("password_save_failed", failure.want)) {
 						t.Fatal("密码错误没有使用对应语言的详情")
 					}

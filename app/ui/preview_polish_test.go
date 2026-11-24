@@ -24,7 +24,7 @@ func polishedOverlayApp(language, theme, state string) (*App, func(*ui.Context))
 		view = a.lockScreen
 	case "password-change":
 		a.Lock.DialogOpen, a.Lock.Mode = true, "change"
-		view = a.passwordSettingsDialog
+		view = func(c *ui.Context) { a.passwordSettingsDialog(c, false) }
 	case "welcome":
 		a.Recent = []library.Recent{{Path: "/examples/design.momento", DisplayName: "设计灵感"}, {Path: "/examples/photos.momento", DisplayName: "旅行与摄影"}}
 		view = a.welcome
@@ -42,7 +42,7 @@ func polishedOverlayApp(language, theme, state string) (*App, func(*ui.Context))
 		a.ExportOpen = true
 		a.Selected.Add("sample")
 		a.Snapshot.Assets = []model.Asset{{ID: "sample", Name: "暖光", Extension: "jpg"}}
-		a.Dialog.ExportWasOpen, a.Dialog.Format, a.Dialog.Quality = true, model.ExportJPEG, .9
+		a.Dialog.ExportReady, a.Dialog.Format, a.Dialog.Quality = true, model.ExportJPEG, .9
 	case "error":
 		a.Error = a.T("error_import_busy")
 	case "extension-picker":

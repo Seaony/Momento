@@ -265,7 +265,8 @@ func (a *App) closeHoverVideo() {
 
 // finishHoverVideo 在每帧网格画完后调用：这一帧鼠标不在那张卡片上了就关掉播放器。
 func (a *App) finishHoverVideo() {
-	if h := &a.hoverVideoState; h.id != "" && (h.id != a.hovered || !a.Preferences.HoverPlayVideos) {
+	// 列表视图不放悬停视频：从网格切到列表时，鼠标还停在同一张上也要关掉，不留着后台解码。
+	if h := &a.hoverVideoState; h.id != "" && (h.id != a.hovered || !a.Preferences.HoverPlayVideos || a.ViewMode == 2) {
 		a.closeHoverVideo()
 	}
 }
