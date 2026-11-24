@@ -77,7 +77,7 @@
 | 图库 | Gallery Wide (`images-square`) |
 | 新建图库 | Add Folder (`folder-plus`) |
 | 密码锁 | Lock Keyhole Minimalistic (`lock-simple`) |
-| 操控 | Mouse Minimalistic (`mouse-simple`) |
+| 操作 | Mouse Minimalistic (`mouse-simple`) |
 | 快捷键 | Keyboard (`keyboard`) |
 | 通知 | Bell (`bell`) |
 | 外观 | Palette (`palette`) |

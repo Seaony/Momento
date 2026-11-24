@@ -1,6 +1,7 @@
 package i18n
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -321,5 +322,29 @@ func TestRelativeTime(t *testing.T) {
 	}
 	if got := en.DateTime(now); got != "Nov 15, 2026 at 12:00 PM" {
 		t.Errorf("英文日期时间 %q", got)
+	}
+}
+
+// 英文按数量选单复数：1 用单数，其他（含 0 和已格式化的 "1,234"）用复数；多个数量各管各的。
+func TestEnglishPlurals(t *testing.T) {
+	en := Catalog{Language: "en"}
+	for _, tc := range []struct {
+		format string
+		args   []any
+		want   string
+	}{
+		{"%d {image|images} selected", []any{1}, "1 image selected"},
+		{"%d {image|images} selected", []any{0}, "0 images selected"},
+		{"%s {item|items}", []any{"1"}, "1 item"},
+		{"%s {item|items}", []any{"1,234"}, "1,234 items"},
+		{"Imported %d {image|images}, skipped %d {duplicate|duplicates}", []any{2, 1}, "Imported 2 images, skipped 1 duplicate"},
+		{"100%% of %d {file|files}", []any{1}, "100% of 1 file"},
+	} {
+		if got := fmt.Sprintf(pluralize(tc.format, tc.args), tc.args...); got != tc.want {
+			t.Errorf("%q %v: got %q, want %q", tc.format, tc.args, got, tc.want)
+		}
+	}
+	if got := en.T("selected_assets", 1); strings.Contains(got, "{") || strings.Contains(got, "|") {
+		t.Fatalf("英文文案里的单复数没有替换：%q", got)
 	}
 }
