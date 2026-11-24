@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.2.0
+
+- Smoother, calmer motion. Cards morph between masonry and list views, layout changes settle on a slower curve, thumbnails fade in, counts roll, and you can grab a preview while it is still zooming.
+- Simpler everyday use. Moving items to the Trash can be undone, the filter button shows how many filters are on and clears them in one click, buttons that do nothing are hidden, and a single click opens a tag.
+- Settings are regrouped. Before adding an auto-import folder you see how many files it will import, and a conflicting shortcut can be kept anyway.
+- Rewrote the interface text in all three languages. English and Japanese now count "items", so videos are included, and English uses proper singular and plural forms.
+- New hamster menu bar icon on macOS.
+
+- 动效更顺、更稳。瀑布流和列表之间卡片直接变形过去，布局变化用更慢的收尾曲线，缩略图淡入，数字滚动，预览缩放到一半也能直接拖。
+- 日常操作更简单。移到回收站可以撤销，筛选按钮显示开了几个条件、点一下全部清空，用不上的按钮不再显示，单击就能打开标签。
+- 设置重新分组。添加自动导入文件夹前会先告诉你要导入多少个文件，快捷键冲突时也可以照样使用。
+- 中英日三种语言的界面文案重写了一遍。英文和日文的数量改按「项目」计，视频也算在内；英文的单复数也对了。
+- macOS 菜单栏图标换成仓鼠剪影。
+
 ## 1.1.0
 
 - New app icon: a sleeping felt hamster. The accent color is now blue, and the light theme uses neutral grays.
